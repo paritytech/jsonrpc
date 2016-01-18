@@ -5,8 +5,8 @@ use super::*;
 /// Should be used to handle jsonrpc io.
 /// 
 /// ```rust
-/// extern crate jsonrpc;
-/// use jsonrpc::*;
+/// extern crate jsonrpc_core;
+/// use jsonrpc_core::*;
 ///
 /// fn main() {
 /// 	let mut io = IoHandler::new();

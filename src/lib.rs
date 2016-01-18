@@ -3,8 +3,8 @@
 //! Right now it supports only server side handling requests.
 //! 
 //! ```rust
-//! extern crate jsonrpc;
-//! use jsonrpc::*;
+//! extern crate jsonrpc_core;
+//! use jsonrpc_core::*;
 //!
 //! fn main() {
 //! 	let mut io = IoHandler::new();
