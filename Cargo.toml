@@ -1,7 +1,11 @@
 [package]
+description = "Transport agnostic rust implementation of JSON-RPC 2.0 Specification."
+homepage = "https://github.com/debris/jsonrpc-core"
+license = "MIT"
 name = "jsonrpc-core"
 version = "0.1.0"
 authors = ["debris <marek.kotewicz@gmail.com>"]
+keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 
 [dependencies]
 # always carefully check serde versions before an update
