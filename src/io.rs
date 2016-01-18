@@ -29,7 +29,7 @@ pub struct IoHandler {
 	request_handler: RequestHandler
 }
 
-fn read_request<'a>(request_str: &'a str) -> Result<Request, Error> {
+fn read_request(request_str: &str) -> Result<Request, Error> {
 	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
