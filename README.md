@@ -1,8 +1,8 @@
 # jsonrpc-core
 Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
-- [x] - server side requests
-- [ ] - client side requests *(contributions are welcomed!)*
+- [x] - server side
+- [ ] - client side *(contributions are welcomed!)*
 
 ## Example
 
