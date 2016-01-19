@@ -44,9 +44,9 @@ pub enum Call {
 impl Deserialize for Call {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Call, D::Error>
 	where D: Deserializer {
-		ok!(MethodCall::deserialize(deserializer).map(Call::MethodCall));
-		ok!(Notification::deserialize(deserializer).map(Call::Notification));
-		Value::deserialize(deserializer).map(Call::Invalid)
+		MethodCall::deserialize(deserializer).map(Call::MethodCall)
+			.or(Notification::deserialize(deserializer).map(Call::Notification))
+			.or(Value::deserialize(deserializer).map(Call::Invalid))
 	}
 }
 
@@ -60,8 +60,8 @@ pub enum Request {
 impl Deserialize for Request {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Request, D::Error>
 	where D: Deserializer {
-		ok!(Call::deserialize(deserializer).map(Request::Single));
-		deserializer.visit(BatchVisitor)
+		Call::deserialize(deserializer).map(Request::Single)
+			.or(deserializer.visit(BatchVisitor))
 	}
 }
 

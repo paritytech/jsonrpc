@@ -29,13 +29,6 @@
 extern crate serde;
 extern crate serde_json;
 
-macro_rules! ok {
-	($expr:expr) => (match $expr {
-		Result::Err(_) => (),
-		res => return res
-	})
-}
-
 pub mod version;
 pub mod id;
 pub mod params;
