@@ -11,7 +11,7 @@ Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
 ```
 [dependencies]
-jsonrpc-core = "0.1"
+jsonrpc-core = "0.2"
 ```
 
 `main.rs`
