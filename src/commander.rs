@@ -4,12 +4,12 @@ use std::collections::HashMap;
 use super::{Params, Value, Error, ErrorCode};
 
 /// Should be used to handle single method call.
-pub trait MethodCommand {
+pub trait MethodCommand: Send + Sync {
 	fn execute(&mut self, params: Option<Params>) -> Result<Value, Error>;
 }
 
 /// Should be used to handle single notification.
-pub trait NotificationCommand {
+pub trait NotificationCommand: Send + Sync {
 	fn execute(&mut self, params: Option<Params>);
 }
 

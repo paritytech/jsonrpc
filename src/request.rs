@@ -45,8 +45,8 @@ impl Deserialize for Call {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Call, D::Error>
 	where D: Deserializer {
 		MethodCall::deserialize(deserializer).map(Call::MethodCall)
-			.or(Notification::deserialize(deserializer).map(Call::Notification))
-			.or(Value::deserialize(deserializer).map(Call::Invalid))
+			.or_else(|_| Notification::deserialize(deserializer).map(Call::Notification))
+			.or_else(|_| Value::deserialize(deserializer).map(Call::Invalid))
 	}
 }
 
@@ -61,7 +61,7 @@ impl Deserialize for Request {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Request, D::Error>
 	where D: Deserializer {
 		Call::deserialize(deserializer).map(Request::Single)
-			.or(deserializer.visit(BatchVisitor))
+			.or_else(|_| deserializer.visit(BatchVisitor))
 	}
 }
 
