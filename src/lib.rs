@@ -4,17 +4,18 @@
 //! 
 //! ```rust
 //! extern crate jsonrpc_core;
+//!
 //! use jsonrpc_core::*;
+//!
+//! struct SayHello;
+//! impl MethodCommand for SayHello {
+//!     fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+//!         Ok(Value::String("hello".to_string()))
+//!     }
+//! }
 //!
 //! fn main() {
 //! 	let mut io = IoHandler::new();
-//! 	struct SayHello;
-//! 	impl MethodCommand for SayHello {
-//! 		fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
-//! 			Ok(Value::String("hello".to_string()))
-//! 		}
-//! 	}
-//!
 //! 	io.add_method("say_hello", SayHello);
 //!
 //! 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
@@ -39,14 +40,14 @@ pub mod commander;
 pub mod request_handler;
 pub mod io;
 
+pub use serde_json::Value;
+
 pub use self::version::Version;
 pub use self::id::Id;
 pub use self::params::Params;
 pub use self::request::{Request, Call, MethodCall, Notification};
 pub use self::response::{Response, Output, Success, Failure};
 pub use self::error::{ErrorCode, Error};
-pub use serde_json::Value;
 pub use self::commander::{Commander, MethodCommand, NotificationCommand};
 pub use self::request_handler::RequestHandler;
 pub use self::io::IoHandler;
-
