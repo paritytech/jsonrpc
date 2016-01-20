@@ -8,15 +8,17 @@ use super::Value;
 #[derive(Debug, PartialEq)]
 pub enum Params {
 	Array(Vec<Value>),
-	Map(HashMap<String, Value>)
+	Map(HashMap<String, Value>),
+	None
 }
 
 impl Serialize for Params {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
 	where S: Serializer {
-		match self {
-			&Params::Array(ref vec) => vec.serialize(serializer),
-			&Params::Map(ref map) => map.serialize(serializer)
+		match *self {
+			Params::Array(ref vec) => vec.serialize(serializer),
+			Params::Map(ref map) => map.serialize(serializer),
+			Params::None => ([] as [u8; 0]).serialize(serializer)
 		}
 	}
 }
@@ -35,12 +37,18 @@ impl Visitor for ParamsVisitor {
 
 	fn visit_seq<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error> 
 	where V: SeqVisitor {
-		VecVisitor::new().visit_seq(visitor).map(Params::Array)
+		VecVisitor::new().visit_seq(visitor).and_then(|vec| match vec.is_empty() {
+			true => Ok(Params::None),
+			false => Ok(Params::Array(vec))
+		})
 	}
 
 	fn visit_map<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error> 
 	where V: MapVisitor {
-		HashMapVisitor::new().visit_map(visitor).map(Params::Map)
+		HashMapVisitor::new().visit_map(visitor).and_then(|map| match map.is_empty() {
+			true => Ok(Params::None),
+			false => Ok(Params::Map(map))
+		})
 	}
 }
 

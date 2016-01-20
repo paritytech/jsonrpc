@@ -53,9 +53,9 @@ impl Serialize for ErrorCode {
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct Error {
-	code: ErrorCode,
-	message: String,
-	data: Option<Value>
+	pub code: ErrorCode,
+	pub message: String,
+	pub data: Option<Value>
 }
 
 impl Error {

@@ -1,6 +1,76 @@
 //! jsonrpc io
+use std::sync::Arc;
+use std::collections::HashMap;
 use serde_json;
 use super::*;
+
+struct DelegateMethod<T, F> where
+	F: Fn(&T, Params) -> Result<Value, Error>,
+	F: Send + Sync,
+	T: Send + Sync {
+	delegate: Arc<T>,
+	closure: F
+}
+
+impl<T, F> MethodCommand for DelegateMethod <T, F> where 
+	F: Fn(&T, Params) -> Result<Value, Error>, 
+	F: Send + Sync,
+	T: Send + Sync {
+	fn execute(&mut self, params: Params) -> Result<Value, Error> {
+		let closure = &self.closure;
+		closure(&self.delegate, params)
+	}
+}
+
+struct DelegateNotification<T, F> where
+	F: Fn(&T, Params),
+	F: Send + Sync,
+	T: Send + Sync {
+	delegate: Arc<T>,
+	closure: F
+}
+
+impl<T, F> NotificationCommand for DelegateNotification<T, F> where 
+	F: Fn(&T, Params),
+	F: Send + Sync,
+	T: Send + Sync {
+	fn execute(&mut self, params: Params) {
+		let closure = &self.closure;
+		closure(&self.delegate, params)
+	}
+}
+
+pub struct IoDelegate<T> where T: Send + Sync + 'static {
+	delegate: Arc<T>,
+	methods: HashMap<String, Box<MethodCommand>>,
+	notifications: HashMap<String, Box<NotificationCommand>>
+}
+
+impl<T> IoDelegate<T> where T: Send + Sync + 'static {
+	pub fn new(delegate: Arc<T>) -> Self {
+		IoDelegate {
+			delegate: delegate,
+			methods: HashMap::new(),
+			notifications: HashMap::new()
+		}
+	}
+
+	pub fn add_method<F>(&mut self, name: &str, closure: F) where F: Fn(&T, Params) -> Result<Value, Error> + Send + Sync + 'static {
+		let delegate = self.delegate.clone();
+		self.methods.insert(name.to_owned(), Box::new(DelegateMethod {
+			delegate: delegate,
+			closure: closure
+		}));
+	}
+
+	pub fn add_notification<F>(&mut self, name: &str, closure: F) where F: Fn(&T, Params) + Send + Sync + 'static {
+		let delegate = self.delegate.clone();
+		self.notifications.insert(name.to_owned(), Box::new(DelegateNotification {
+			delegate: delegate,
+			closure: closure
+		}));
+	}
+}
 
 /// Should be used to handle jsonrpc io.
 /// 
@@ -12,7 +82,7 @@ use super::*;
 /// 	let mut io = IoHandler::new();
 /// 	struct SayHello;
 /// 	impl MethodCommand for SayHello {
-/// 		fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+/// 		fn execute(&mut self, _params: Params) -> Result<Value, Error> {
 /// 			Ok(Value::String("hello".to_string()))
 /// 		}
 /// 	}
@@ -47,12 +117,17 @@ impl IoHandler {
 
 	#[inline]
 	pub fn add_method<C>(&mut self, name: &str, command: C) where C: MethodCommand + 'static {
-		self.request_handler.add_method(name, command)
+		self.request_handler.add_method(name.to_owned(), Box::new(command))
 	}
 
 	#[inline]
 	pub fn add_notification<C>(&mut self, name: &str, command: C) where C: NotificationCommand + 'static {
-		self.request_handler.add_notification(name, command)
+		self.request_handler.add_notification(name.to_owned(), Box::new(command))
+	}
+
+	pub fn add_delegate<D>(&mut self, delegate: IoDelegate<D>) where D: Send + Sync {
+		self.request_handler.add_methods(delegate.methods);
+		self.request_handler.add_notifications(delegate.notifications);
 	}
 
 	pub fn handle_request<'a>(&mut self, request_str: &'a str) -> Option<String> {
@@ -77,7 +152,7 @@ mod tests {
 		
 		struct SayHello;
 		impl MethodCommand for SayHello {
-			fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+			fn execute(&mut self, _params: Params) -> Result<Value, Error> {
 				Ok(Value::String("hello".to_string()))
 			}
 		}

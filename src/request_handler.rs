@@ -1,4 +1,5 @@
 //! jsonrpc server request handler
+use std::collections::HashMap;
 use super::*;
 
 pub struct RequestHandler {
@@ -13,13 +14,23 @@ impl RequestHandler {
 	}
 
 	#[inline]
-	pub fn add_method<C>(&mut self, name: &str, command: C) where C: MethodCommand + 'static {
+	pub fn add_method<C>(&mut self, name: String, command: Box<C>) where C: MethodCommand + 'static {
 		self.commander.add_method(name, command)
 	}
 
 	#[inline]
-	pub fn add_notification<C>(&mut self, name: &str, command: C) where C: NotificationCommand + 'static {
+	pub fn add_methods(&mut self, methods: HashMap<String, Box<MethodCommand>>) {
+		self.commander.add_methods(methods);
+	}
+
+	#[inline]
+	pub fn add_notification<C>(&mut self, name: String, command: Box<C>) where C: NotificationCommand + 'static {
 		self.commander.add_notification(name, command)
+	}
+
+	#[inline]
+	pub fn add_notifications(&mut self, notifications: HashMap<String, Box<NotificationCommand>>) {
+		self.commander.add_notifications(notifications);
 	}
 
 	pub fn handle_request(&mut self, request: Request) -> Option<Response> {
@@ -51,7 +62,12 @@ impl RequestHandler {
 	}
 
 	fn handle_method_call(&mut self, method: MethodCall) -> Output {
-		match self.commander.execute_method(method.method, method.params) {
+		let params = match method.params {
+			Some(p) => p,
+			None => Params::None
+		};
+
+		match self.commander.execute_method(method.method, params) {
 			Ok(result) => Output::Success(Success {
 				id: method.id,
 				jsonrpc: method.jsonrpc,
@@ -66,6 +82,11 @@ impl RequestHandler {
 	}
 
 	fn handle_notification(&mut self, notification: Notification) {
-		self.commander.execute_notification(notification.method, notification.params)
+		let params = match notification.params {
+			Some(p) => p,
+			None => Params::None
+		};
+
+		self.commander.execute_notification(notification.method, params)
 	}
 }

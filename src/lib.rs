@@ -9,7 +9,7 @@
 //!
 //! struct SayHello;
 //! impl MethodCommand for SayHello {
-//!     fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+//!     fn execute(&mut self, _params: Params) -> Result<Value, Error> {
 //!         Ok(Value::String("hello".to_string()))
 //!     }
 //! }
@@ -50,4 +50,4 @@ pub use self::response::{Response, Output, Success, Failure};
 pub use self::error::{ErrorCode, Error};
 pub use self::commander::{Commander, MethodCommand, NotificationCommand};
 pub use self::request_handler::RequestHandler;
-pub use self::io::IoHandler;
+pub use self::io::{IoHandler, IoDelegate};
