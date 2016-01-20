@@ -9,7 +9,7 @@
 //! 
 //! struct SayHello;
 //! impl MethodCommand for SayHello {
-//! 	fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+//! 	fn execute(&mut self, _params: Params) -> Result<Value, Error> {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	}
 //! }
@@ -18,7 +18,7 @@
 //! 	let mut io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
 //! 	let server = Server::new(io, 1);
-//! 	server.start("127.0.0.1:3030".to_string());
+//! 	server.start("127.0.0.1:3030");
 //! }
 //! ```
 
@@ -74,7 +74,7 @@ impl hyper::server::Handler for ServerHandler {
 /// 
 /// struct SayHello;
 /// impl MethodCommand for SayHello {
-/// 	fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+/// 	fn execute(&mut self, _params: Params) -> Result<Value, Error> {
 /// 		Ok(Value::String("hello".to_string()))
 /// 	}
 /// }
@@ -83,7 +83,7 @@ impl hyper::server::Handler for ServerHandler {
 /// 	let mut io = IoHandler::new();
 /// 	io.add_method("say_hello", SayHello);
 /// 	let server = Server::new(io, 1);
-/// 	server.start("127.0.0.1:3030".to_string());
+/// 	server.start("127.0.0.1:3030");
 /// }
 /// ```
 pub struct Server {
@@ -99,13 +99,14 @@ impl Server {
 		}
 	}
 
-	pub fn start(self, addr: String) {
-		hyper::Server::http(addr.as_ref() as &str).unwrap().handle_threads(ServerHandler::new(self.jsonrpc_handler), self.threads).unwrap();
+	pub fn start(self, addr: &str) {
+		hyper::Server::http(addr).unwrap().handle_threads(ServerHandler::new(self.jsonrpc_handler), self.threads).unwrap();
 	}
 
-	pub fn start_async(self, addr: String) {
+	pub fn start_async(self, addr: &str) {
+		let address = addr.to_owned();
 		thread::Builder::new().name("jsonrpc_http".to_string()).spawn(move || {
-			self.start(addr);
+			self.start(address.as_ref());
 		}).unwrap();
 	}
 }
