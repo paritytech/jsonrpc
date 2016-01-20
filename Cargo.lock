@@ -1,10 +1,10 @@
 [root]
 name = "jsonrpc-core"
-version = "0.2.0"
+version = "1.0.0"
 dependencies = [
- "serde 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_macros 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_macros 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -22,8 +22,22 @@ version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "clippy"
+version = "0.0.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "semver 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "unicode-normalization 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "nom"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -72,8 +86,16 @@ version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "semver"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "nom 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "serde"
-version = "0.6.7"
+version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -81,10 +103,11 @@ dependencies = [
 
 [[package]]
 name = "serde_codegen"
-version = "0.6.9"
+version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "aster 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clippy 0.0.36 (registry+https://github.com/rust-lang/crates.io-index)",
  "quasi 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "quasi_macros 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -95,16 +118,22 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num 0.1.30 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 0.6.7 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "serde_macros"
-version = "0.6.5"
+version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "serde_codegen 0.6.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clippy 0.0.36 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_codegen 0.6.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "unicode-normalization"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "winapi"

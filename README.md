@@ -11,7 +11,7 @@ Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
 ```
 [dependencies]
-jsonrpc-core = "0.2"
+jsonrpc-core = "1.0"
 ```
 
 `main.rs`
@@ -23,7 +23,7 @@ use jsonrpc_core::*;
 
 struct SayHello;
 impl MethodCommand for SayHello {
-    fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+    fn execute(&mut self, _params: Params) -> Result<Value, Error> {
         Ok(Value::String("hello".to_string()))
     }
 }
