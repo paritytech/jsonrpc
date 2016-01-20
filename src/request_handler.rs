@@ -53,7 +53,7 @@ impl RequestHandler {
 				self.handle_notification(notification);
 				None
 			},
-			Call::Invalid(_) => Some(Output::Failure(Failure {
+			Call::Invalid => Some(Output::Failure(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
 				error: Error::new(ErrorCode::InvalidRequest)

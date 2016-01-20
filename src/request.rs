@@ -1,7 +1,7 @@
 //! jsonrpc request
 use serde::de::{Deserialize, Deserializer, Visitor, SeqVisitor, MapVisitor};
-use serde::de::impls::{VecVisitor};
 use super::{Id, Params, Version, Value};
+use super::peek::*;
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Debug, PartialEq, Deserialize)]
@@ -38,15 +38,15 @@ pub struct Notification {
 pub enum Call {
 	MethodCall(MethodCall),
 	Notification(Notification),
-	Invalid(Value)
+	Invalid
 }
 
 impl Deserialize for Call {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Call, D::Error>
 	where D: Deserializer {
-		MethodCall::deserialize(deserializer).map(Call::MethodCall)
-			.or_else(|_| Notification::deserialize(deserializer).map(Call::Notification))
-			.or_else(|_| Value::deserialize(deserializer).map(Call::Invalid))
+		Notification::peek(deserializer).map(Call::Notification)
+			.or_else(|_| MethodCall::peek(deserializer).map(Call::MethodCall))
+			.or_else(|_| Value::deserialize(deserializer).map(|_| Call::Invalid))
 	}
 }
 
@@ -60,19 +60,8 @@ pub enum Request {
 impl Deserialize for Request {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Request, D::Error>
 	where D: Deserializer {
-		Call::deserialize(deserializer).map(Request::Single)
-			.or_else(|_| deserializer.visit(BatchVisitor))
-	}
-}
-
-struct BatchVisitor;
-
-impl Visitor for BatchVisitor {
-	type Value = Request;
-
-	fn visit_seq<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error> 
-	where V: SeqVisitor {
-		VecVisitor::new().visit_seq(visitor).map(Request::Batch)
+		<Vec<Call> as Peek>::peek(deserializer).map(Request::Batch)
+			.or_else(|_| Call::deserialize(deserializer).map(Request::Single))
 	}
 }
 
@@ -102,4 +91,26 @@ fn notification_deserialize() {
 	let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [1,2], "id": 1}"#;
 	let deserialized: Result<Notification, _> = serde_json::from_str(s);
 	assert!(deserialized.is_err())
+}
+
+#[test]
+fn call_deserialize_batch() {
+	use serde_json;
+
+	let s = r#"[1, {"jsonrpc": "2.0", "method": "update", "params": [1,2], "id": 1},{"jsonrpc": "2.0", "method": "update", "params": [1]}]"#;
+	let deserialized: Request = serde_json::from_str(s).unwrap();
+	assert_eq!(deserialized, Request::Batch(vec![
+		Call::Invalid,
+		Call::MethodCall(MethodCall {
+			jsonrpc: Version::V2,
+			method: "update".to_owned(),
+			params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
+			id: Id::Num(1)
+		}),
+		Call::Notification(Notification {
+			jsonrpc: Version::V2,
+			method: "update".to_owned(),
+			params: Some(Params::Array(vec![Value::U64(1)]))
+		})
+	]))
 }
