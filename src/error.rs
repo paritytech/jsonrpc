@@ -59,11 +59,31 @@ pub struct Error {
 }
 
 impl Error {
-	pub fn new(code: ErrorCode) -> Error {
+	pub fn new(code: ErrorCode) -> Self {
 		Error {
 			message: code.description(),
 			code: code,
 			data: None
 		}
+	}
+
+	pub fn parse_error() -> Self {
+		Self::new(ErrorCode::ParseError)
+	}
+
+	pub fn invalid_request() -> Self {
+		Self::new(ErrorCode::InvalidRequest)
+	}
+
+	pub fn method_not_found() -> Self {
+		Self::new(ErrorCode::MethodNotFound)
+	}
+
+	pub fn invalid_params() -> Self {
+		Self::new(ErrorCode::InvalidParams)
+	}
+
+	pub fn internal_error() -> Self {
+		Self::new(ErrorCode::InternalError)
 	}
 }
