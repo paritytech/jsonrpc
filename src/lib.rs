@@ -39,7 +39,6 @@ pub mod error;
 pub mod commander;
 pub mod request_handler;
 pub mod io;
-mod peek;
 
 pub use serde_json::Value;
 

@@ -11,9 +11,9 @@ pub enum Id {
 impl Serialize for Id {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
 	where S: Serializer {
-		match self {
-			&Id::Null => serializer.visit_unit(),
-			&Id::Num(v) => serializer.visit_u64(v)
+		match *self {
+			Id::Null => serializer.visit_unit(),
+			Id::Num(v) => serializer.visit_u64(v)
 		}
 	}
 }
