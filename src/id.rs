@@ -39,7 +39,7 @@ impl Visitor for IdVisitor {
 	}
 
 	fn visit_str<E>(&mut self, value: &str) -> Result<Self::Value, E> where E: Error {
-		self.visit_string(value.to_string())
+		self.visit_string(value.to_owned())
 	}
 
 	fn visit_string<E>(&mut self, value: String) -> Result<Self::Value, E> where E: Error {
@@ -54,6 +54,10 @@ mod tests {
 
 	#[test]
 	fn id_deserialization() {
+		let s = r#""2""#;
+		let deserialized: Id = serde_json::from_str(s).unwrap();
+		assert_eq!(deserialized, Id::Num(2));
+
 		let s = r#"[null, 0, 2, "3"]"#;
 		let deserialized: Vec<Id> = serde_json::from_str(s).unwrap();
 		assert_eq!(deserialized, vec![Id::Null, Id::Num(0), Id::Num(2), Id::Num(3)]);
