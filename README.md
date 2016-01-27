@@ -8,7 +8,7 @@ Rust http server using JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-http-server = "1.0"
+jsonrpc-http-server = "1.1"
 ```
 
 `main.rs`
