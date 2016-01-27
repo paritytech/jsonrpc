@@ -1,14 +1,14 @@
 //! jsonrpc params field
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{Visitor, SeqVisitor, MapVisitor};
-use serde::de::impls::{VecVisitor, HashMapVisitor};
+use serde::de::impls::{VecVisitor, BTreeMapVisitor};
 use super::Value;
 
 #[derive(Debug, PartialEq)]
 pub enum Params {
 	Array(Vec<Value>),
-	Map(HashMap<String, Value>),
+	Map(BTreeMap<String, Value>),
 	None
 }
 
@@ -45,7 +45,7 @@ impl Visitor for ParamsVisitor {
 
 	fn visit_map<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error> 
 	where V: MapVisitor {
-		HashMapVisitor::new().visit_map(visitor).and_then(|map| match map.is_empty() {
+		BTreeMapVisitor::new().visit_map(visitor).and_then(|map| match map.is_empty() {
 			true => Ok(Params::None),
 			false => Ok(Params::Map(map))
 		})

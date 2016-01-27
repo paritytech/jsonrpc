@@ -39,6 +39,7 @@ pub mod error;
 pub mod commander;
 pub mod request_handler;
 pub mod io;
+pub mod util;
 
 pub use serde_json::Value;
 
@@ -51,3 +52,4 @@ pub use self::error::{ErrorCode, Error};
 pub use self::commander::{Commander, MethodCommand, NotificationCommand};
 pub use self::request_handler::RequestHandler;
 pub use self::io::{IoHandler, IoDelegate};
+pub use self::util::{from_params, to_value};
