@@ -1,7 +1,6 @@
 //! jsonrpc io
 use std::sync::Arc;
 use std::collections::HashMap;
-use serde_json;
 use super::*;
 
 struct DelegateMethod<T, F> where
