@@ -8,5 +8,5 @@ authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 
 [dependencies]
-jsonrpc-core = "1.1"
+jsonrpc-core = { git = "https://github.com/debris/jsonrpc-core" }
 hyper = { version = "0.7", default-features = false }
