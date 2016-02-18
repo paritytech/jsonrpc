@@ -9,3 +9,15 @@ matrix:
   - rust: stable
   - rust: beta
   - rust: nightly
+after_success: |
+  [ $TRAVIS_BRANCH = master ] &&
+  [ $TRAVIS_PULL_REQUEST = false ] &&
+  [ $TRAVIS_RUST_VERSION = stable ] &&
+  cargo doc --no-deps --verbose &&
+  echo '<meta http-equiv=refresh content=0;url=jsonrpc-core/index.html>' > target/doc/index.html &&
+  pip install --user ghp-import &&
+  /home/travis/.local/bin/ghp-import -n target/doc &&
+  git push -fq https://${GH_TOKEN}@github.com/${TRAVIS_REPO_SLUG}.git gh-pages
+env:
+  global:
+  - secure: TlFSOTdpIDg3/3UXiqvfTX1AZwFV51uPBbyAMJwMe0Ntyjt9d3OhaRKqOjbIXecHGl0BnwlrTYmYrDNvQwNWTnZgIOCxfUD3JH5u5j9LnJYUKGLjHZzJ2Ju6BEFPcBb/8jreQ5wJYfy9VMApXer0oXRcRd65diM34iw0sp64LcfDDSWEMg4/zmAsAT344w0QsL4y4bU0wdi5/UHg+qqC+S3dSKQH1HAdmAEZjp6aJ6t5jX4XoKapqkeNDqEllQuyFWZ0r0H4gKlutZRdTguXTuQ5o1T1WWig5E0IqMqLLeDTm0VKGqcn77dJuvKoo7p+i9plzZmrZ3L2Clt4wk6TS4YM4zn9Vq7whkotwjnLEF6SPCysx9zBOapXBa5fFXMywXTEASCXKV/2zcDZJYh6PAgPtxLoFgIXW5326kWa/LX8gkztNaUwCh/dT3ONPZA7c8Qu2ORmTlIupSotC2tO9UnWX1ZTeQnwrWVXhTH1Jl1kK1G1AsAVtEvcSUsQy1ovqjTGRFW6H4/ryjD8ff6hXAiy3JOpjgoQ482P7HONQwZqk1LA/Nw5Z3ASdohnQ7z7rZ+J6OsA0dvf0vpORXN26lUlmmEh5A94aVy5lAWVMnlvR5pwak72dmsA29IU6XXpohZUHTHrUjiWHyYiLK/eFh4UoHEDDScVP4uHGUdCa/E=
