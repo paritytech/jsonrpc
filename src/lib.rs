@@ -24,10 +24,6 @@
 //! 	assert_eq!(io.handle_request(request), Some(response.to_string()));
 //! }
 //! ```
-//#![feature(custom_derive, plugin)]
-//#![plugin(serde_macros)]
-
-//#![feature(custom_derive)]
 
 #![cfg_attr(nightly, feature(custom_derive, plugin))]
 #![cfg_attr(nightly, plugin(serde_macros))]
