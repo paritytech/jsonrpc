@@ -1,6 +1,13 @@
 # jsonrpc-core
 Rust http server using JSON-RPC 2.0.
 
+[![Build Status][travis-image]][travis-url]
+
+[travis-image]: https://travis-ci.org/debris/jsonrpc-http-server.svg?branch=master
+[travis-url]: https://travis-ci.org/debris/jsonrpc-http-server
+
+[Documentation](http://debris.github.io/jsonrpc-http-server/jsonrpc_http_server/index.html)
+
 ## Example
 
 `Cargo.toml`
