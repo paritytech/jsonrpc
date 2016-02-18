@@ -24,32 +24,19 @@
 //! 	assert_eq!(io.handle_request(request), Some(response.to_string()));
 //! }
 //! ```
-#![feature(custom_derive, plugin)]
-#![plugin(serde_macros)]
+//#![feature(custom_derive, plugin)]
+//#![plugin(serde_macros)]
+
+//#![feature(custom_derive)]
+
+#![cfg_attr(nightly, feature(custom_derive, plugin))]
+#![cfg_attr(nightly, plugin(serde_macros))]
 
 extern crate serde;
 extern crate serde_json;
 
-pub mod version;
-pub mod id;
-pub mod params;
-pub mod request;
-pub mod response;
-pub mod error;
-pub mod commander;
-pub mod request_handler;
-pub mod io;
-pub mod util;
+#[cfg(feature = "serde_macros")]
+include!("lib.rs.in");
 
-pub use serde_json::Value;
-
-pub use self::version::Version;
-pub use self::id::Id;
-pub use self::params::Params;
-pub use self::request::{Request, Call, MethodCall, Notification};
-pub use self::response::{Response, Output, Success, Failure};
-pub use self::error::{ErrorCode, Error};
-pub use self::commander::{Commander, MethodCommand, NotificationCommand};
-pub use self::request_handler::RequestHandler;
-pub use self::io::{IoHandler, IoDelegate};
-pub use self::util::{from_params, to_value};
+#[cfg(not(feature = "serde_macros"))]
+include!(concat!(env!("OUT_DIR"), "/lib.rs"));
