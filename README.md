@@ -1,6 +1,13 @@
 # jsonrpc-core
 Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
+[![Build Status][travis-image]][travis-url]
+
+[travis-image]: https://travis-ci.org/debris/jsonrpc-core.svg?branch=master
+[travis-url]: https://travis-ci.org/debris/jsonrpc-core
+
+[Documentation](http://debris.github.io/jsonrpc-core/jsonrpc_core/index.html)
+
 - [x] - server side
 - [ ] - client side *(contributions are welcomed!)*
 
