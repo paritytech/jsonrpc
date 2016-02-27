@@ -1,10 +1,11 @@
 //! jsonrpc request
-use serde::de::{Deserialize, Deserializer, Visitor, SeqVisitor, MapVisitor, Error};
+use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error};
 use serde_json::value;
 use super::{Id, Params, Version, Value};
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct MethodCall {
 	/// A String specifying the version of the JSON-RPC protocol. 
 	/// MUST be exactly "2.0".
@@ -22,6 +23,7 @@ pub struct MethodCall {
 
 /// Represents jsonrpc request which is a notification.
 #[derive(Debug, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Notification {
 	/// A String specifying the version of the JSON-RPC protocol. 
 	/// MUST be exactly "2.0".
@@ -47,7 +49,7 @@ impl Deserialize for Call {
 		let v = try!(Value::deserialize(deserializer));
 		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Call::Notification)
 			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Call::MethodCall))
-			.map_err(|_| Error::syntax("")) // types must match
+			.map_err(|_| Error::custom("")) // types must match
 			.or_else(|_: D::Error | Ok(Call::Invalid))
 	}
 }
@@ -65,7 +67,7 @@ impl Deserialize for Request {
 		let v = try!(Value::deserialize(deserializer));
 		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Batch)
 			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Single))
-			.map_err(|_| Error::syntax("")) // unreachable, but types must match
+			.map_err(|_| Error::custom("")) // unreachable, but types must match
 	}
 }
 

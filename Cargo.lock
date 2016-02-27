@@ -2,10 +2,10 @@
 name = "jsonrpc-core"
 version = "1.1.4"
 dependencies = [
- "serde 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_codegen 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_json 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_macros 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_codegen 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_json 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_macros 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "syntex 0.29.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -48,10 +48,6 @@ dependencies = [
 name = "num"
 version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "rand 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.18 (registry+https://github.com/rust-lang/crates.io-index)",
-]
 
 [[package]]
 name = "quasi"
@@ -80,29 +76,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "rand"
-version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "libc 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
 name = "rustc-serialize"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "serde"
-version = "0.6.14"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-dependencies = [
- "num 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
-]
 
 [[package]]
 name = "serde_codegen"
-version = "0.6.14"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "aster 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -115,19 +100,19 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "num 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "serde_macros"
-version = "0.6.14"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "serde_codegen 0.6.14 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_codegen 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]

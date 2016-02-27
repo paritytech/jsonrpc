@@ -28,7 +28,7 @@ struct ParamsVisitor;
 impl Deserialize for Params {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Params, D::Error>
 	where D: Deserializer {
-		deserializer.visit(ParamsVisitor)
+		deserializer.deserialize(ParamsVisitor)
 	}
 }
 

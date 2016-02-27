@@ -47,7 +47,7 @@ impl ErrorCode {
 impl Serialize for ErrorCode {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
 	where S: Serializer {
-		serializer.visit_i64(self.code())
+		serializer.serialize_i64(self.code())
 	}
 }
 

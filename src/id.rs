@@ -12,8 +12,8 @@ impl Serialize for Id {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
 	where S: Serializer {
 		match *self {
-			Id::Null => serializer.visit_unit(),
-			Id::Num(v) => serializer.visit_u64(v)
+			Id::Null => serializer.serialize_unit(),
+			Id::Num(v) => serializer.serialize_u64(v)
 		}
 	}
 }
@@ -21,7 +21,7 @@ impl Serialize for Id {
 impl Deserialize for Id {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Id, D::Error>
 	where D: Deserializer {
-		deserializer.visit(IdVisitor)
+		deserializer.deserialize(IdVisitor)
 	}
 }
 
@@ -43,7 +43,7 @@ impl Visitor for IdVisitor {
 	}
 
 	fn visit_string<E>(&mut self, value: String) -> Result<Self::Value, E> where E: Error {
-		value.parse::<u64>().map(Id::Num).map_err(|_| Error::syntax("invalid id"))
+		value.parse::<u64>().map(Id::Num).map_err(|_| Error::custom("invalid id"))
 	}
 }
 
