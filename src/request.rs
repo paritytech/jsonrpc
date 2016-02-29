@@ -1,7 +1,8 @@
 //! jsonrpc request
 use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error};
+use serde::ser::{Serialize, Serializer};
 use serde_json::value;
-use super::{Id, Params, Version, Value};
+use super::{Id, Params, Version, Value, ErrorCode};
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -41,6 +42,17 @@ pub enum Call {
 	MethodCall(MethodCall),
 	Notification(Notification),
 	Invalid
+}
+
+impl Serialize for Call {
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	where S: Serializer {
+		match * self {
+			Call::MethodCall(ref m) => m.serialize(serializer),
+			Call::Notification(ref n) => n.serialize(serializer),
+			Call::Invalid => ErrorCode::InvalidRequest.serialize(serializer)
+		}
+	}
 }
 
 impl Deserialize for Call {
@@ -84,9 +96,7 @@ fn method_call_serialize() {
 	};
 
 	let serialized = serde_json::to_string(&m).unwrap();
-
 	assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1,2],"id":1}"#);
-
 }
 
 #[test]
@@ -101,8 +111,22 @@ fn notification_serialize() {
 	};
 
 	let serialized = serde_json::to_string(&n).unwrap();
-
 	assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1,2]}"#);
+}
+
+#[test]
+fn call_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let n = Call::Notification(Notification {
+		jsonrpc: Version::V2,
+		method: "update".to_owned(),
+		params: Some(Params::Array(vec![Value::U64(1)]))
+	});
+
+	let serialized = serde_json::to_string(&n).unwrap();
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1]}"#);
 }
 
 #[test]
