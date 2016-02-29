@@ -4,7 +4,7 @@ use serde_json::value;
 use super::{Id, Params, Version, Value};
 
 /// Represents jsonrpc request which is a method call.
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MethodCall {
 	/// A String specifying the version of the JSON-RPC protocol. 
@@ -22,7 +22,7 @@ pub struct MethodCall {
 }
 
 /// Represents jsonrpc request which is a notification.
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Notification {
 	/// A String specifying the version of the JSON-RPC protocol. 
@@ -69,6 +69,40 @@ impl Deserialize for Request {
 			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Single))
 			.map_err(|_| Error::custom("")) // unreachable, but types must match
 	}
+}
+
+#[test]
+fn method_call_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let m = MethodCall {
+		jsonrpc: Version::V2,
+		method: "update".to_string(),
+		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
+		id: Id::Num(1)
+	};
+
+	let serialized = serde_json::to_string(&m).unwrap();
+
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1,2],"id":1}"#);
+
+}
+
+#[test]
+fn notification_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let n = Notification {
+		jsonrpc: Version::V2,
+		method: "update".to_string(),
+		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)]))
+	};
+
+	let serialized = serde_json::to_string(&n).unwrap();
+
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1,2]}"#);
 }
 
 #[test]
