@@ -73,6 +73,16 @@ pub enum Request {
 	Batch(Vec<Call>)
 }
 
+impl Serialize for Request {
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	where S: Serializer {
+		match * self {
+			Request::Single(ref call) => call.serialize(serializer),
+			Request::Batch(ref calls) => calls.serialize(serializer),
+		}
+	}
+}
+
 impl Deserialize for Request {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Request, D::Error>
 	where D: Deserializer {
@@ -127,6 +137,29 @@ fn call_serialize() {
 
 	let serialized = serde_json::to_string(&n).unwrap();
 	assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1]}"#);
+}
+
+#[test]
+fn request_serialize_batch() {
+	use serde_json;
+
+	let batch = Request::Batch(vec![
+		Call::MethodCall(MethodCall {
+			jsonrpc: Version::V2,
+			method: "update".to_owned(),
+			params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
+			id: Id::Num(1)
+		}),
+		Call::Notification(Notification {
+			jsonrpc: Version::V2,
+			method: "update".to_owned(),
+			params: Some(Params::Array(vec![Value::U64(1)]))
+		})
+	]);
+
+	let serialized = serde_json::to_string(&batch).unwrap();
+	assert_eq!(serialized, r#"[{"jsonrpc":"2.0","method":"update","params":[1,2],"id":1},{"jsonrpc":"2.0","method":"update","params":[1]}]"#);
+
 }
 
 #[test]
