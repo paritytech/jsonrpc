@@ -47,7 +47,7 @@ pub enum Call {
 impl Serialize for Call {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
-		match * self {
+		match *self {
 			Call::MethodCall(ref m) => m.serialize(serializer),
 			Call::Notification(ref n) => n.serialize(serializer),
 			Call::Invalid => ErrorCode::InvalidRequest.serialize(serializer)
@@ -100,7 +100,7 @@ fn method_call_serialize() {
 
 	let m = MethodCall {
 		jsonrpc: Version::V2,
-		method: "update".to_string(),
+		method: "update".to_owned(),
 		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
 		id: Id::Num(1)
 	};
@@ -116,7 +116,7 @@ fn notification_serialize() {
 
 	let n = Notification {
 		jsonrpc: Version::V2,
-		method: "update".to_string(),
+		method: "update".to_owned(),
 		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)]))
 	};
 
@@ -172,7 +172,7 @@ fn notification_deserialize() {
 
 	assert_eq!(deserialized, Notification {
 		jsonrpc: Version::V2,
-		method: "update".to_string(),
+		method: "update".to_owned(),
 		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)]))
 	});
 
@@ -181,7 +181,7 @@ fn notification_deserialize() {
 
 	assert_eq!(deserialized, Notification {
 		jsonrpc: Version::V2,
-		method: "foobar".to_string(),
+		method: "foobar".to_owned(),
 		params: None
 	});
 
