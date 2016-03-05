@@ -1,6 +1,6 @@
 //! jsonrpc request
-use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error};
-use serde::ser::{Serialize, Serializer};
+use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error as DeError};
+use serde::ser::{Serialize, Serializer, Error as SerError};
 use serde_json::value;
 use super::{Id, Params, Version, Value, ErrorCode};
 
@@ -50,7 +50,7 @@ impl Serialize for Call {
 		match *self {
 			Call::MethodCall(ref m) => m.serialize(serializer),
 			Call::Notification(ref n) => n.serialize(serializer),
-			Call::Invalid => ErrorCode::InvalidRequest.serialize(serializer)
+			Call::Invalid => Err(S::Error::custom("invalid call"))
 		}
 	}
 }
@@ -61,7 +61,7 @@ impl Deserialize for Call {
 		let v = try!(Value::deserialize(deserializer));
 		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Call::Notification)
 			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Call::MethodCall))
-			.map_err(|_| Error::custom("")) // types must match
+			.map_err(|_| D::Error::custom("")) // types must match
 			.or_else(|_: D::Error | Ok(Call::Invalid))
 	}
 }
@@ -89,7 +89,7 @@ impl Deserialize for Request {
 		let v = try!(Value::deserialize(deserializer));
 		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Batch)
 			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Single))
-			.map_err(|_| Error::custom("")) // unreachable, but types must match
+			.map_err(|_| D::Error::custom("")) // unreachable, but types must match
 	}
 }
 
