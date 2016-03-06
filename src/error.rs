@@ -1,5 +1,7 @@
 //! jsonrpc errors
-use serde::{Serialize, Serializer};
+use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error as DeError};
+use serde::ser::{Serialize, Serializer};
+use serde_json::value;
 use super::Value;
 
 #[derive(Debug, PartialEq)]
@@ -44,6 +46,23 @@ impl ErrorCode {
 	}
 }
 
+impl Deserialize for ErrorCode {
+	fn deserialize<D>(deserializer: &mut D) -> Result<ErrorCode, D::Error>
+	where D: Deserializer {
+		let v = try!(Value::deserialize(deserializer));
+		match v.as_i64() {
+			Some(-32700) => Ok(ErrorCode::ParseError),
+			Some(-32600) => Ok(ErrorCode::InvalidRequest),
+			Some(-32601) => Ok(ErrorCode::MethodNotFound),
+			Some(-32602) => Ok(ErrorCode::InvalidParams),
+			Some(-32603) => Ok(ErrorCode::InternalError),
+			Some(code) => Ok(ErrorCode::ServerError(code)),
+			_ => unreachable!()
+		}
+
+	}
+}
+
 impl Serialize for ErrorCode {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
 	where S: Serializer {
@@ -51,7 +70,7 @@ impl Serialize for ErrorCode {
 	}
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Error {
 	pub code: ErrorCode,
 	pub message: String,
