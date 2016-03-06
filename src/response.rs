@@ -48,3 +48,33 @@ impl Serialize for Response {
 	}
 }
 
+#[test]
+fn success_output_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let so = Output::Success(Success {
+		jsonrpc: Version::V2,
+		result: Value::U64(1),
+		id: Id::Num(1)
+	});
+
+	let serialized = serde_json::to_string(&so).unwrap();
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","result":1,"id":1}"#);
+}
+
+#[test]
+fn failure_output_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let fo = Output::Failure(Failure {
+		jsonrpc: Version::V2,
+		error: Error::parse_error(),
+		id: Id::Num(1)
+	});
+
+	let serialized = serde_json::to_string(&fo).unwrap();
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#);
+}
+
