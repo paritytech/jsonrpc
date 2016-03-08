@@ -1,15 +1,17 @@
 //! jsonrpc response
-use serde::{Serialize, Serializer};
+use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error as DeError};
+use serde::ser::{Serialize, Serializer};
+use serde_json::value;
 use super::{Id, Value, Error, Version};
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Success {
 	pub jsonrpc: Version,
 	pub result: Value,
 	pub id: Id
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Failure {
 	pub jsonrpc: Version,
 	pub error: Error,
@@ -20,6 +22,16 @@ pub struct Failure {
 pub enum Output {
 	Success(Success),
 	Failure(Failure)
+}
+
+impl Deserialize for Output {
+	fn deserialize<D>(deserializer: &mut D) -> Result<Output, D::Error>
+	where D: Deserializer {
+		let v = try!(Value::deserialize(deserializer));
+		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Output::Failure)
+			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Output::Success))
+			.map_err(|_| D::Error::custom("")) // types must match
+	}
 }
 
 impl Serialize for Output {
@@ -38,6 +50,16 @@ pub enum Response {
 	Batch(Vec<Output>)
 }
 
+impl Deserialize for Response {
+	fn deserialize<D>(deserializer: &mut D) -> Result<Response, D::Error>
+	where D: Deserializer {
+		let v = try!(Value::deserialize(deserializer));
+		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Response::Batch)
+			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Response::Single))
+			.map_err(|_| D::Error::custom("")) // types must match
+	}
+}
+
 impl Serialize for Response {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
 	where S: Serializer {
@@ -48,3 +70,99 @@ impl Serialize for Response {
 	}
 }
 
+#[test]
+fn success_output_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let so = Output::Success(Success {
+		jsonrpc: Version::V2,
+		result: Value::U64(1),
+		id: Id::Num(1)
+	});
+
+	let serialized = serde_json::to_string(&so).unwrap();
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","result":1,"id":1}"#);
+}
+
+#[test]
+fn success_output_deserialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let dso = r#"{"jsonrpc":"2.0","result":1,"id":1}"#;
+
+	let deserialized: Output = serde_json::from_str(dso).unwrap();
+	assert_eq!(deserialized, Output::Success(Success {
+		jsonrpc: Version::V2,
+		result: Value::U64(1),
+		id: Id::Num(1)
+	}));
+}
+
+#[test]
+fn failure_output_serialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let fo = Output::Failure(Failure {
+		jsonrpc: Version::V2,
+		error: Error::parse_error(),
+		id: Id::Num(1)
+	});
+
+	let serialized = serde_json::to_string(&fo).unwrap();
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error","data":null},"id":1}"#);
+}
+
+#[test]
+fn failure_output_deserialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let dfo = r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#;
+
+	let deserialized: Output = serde_json::from_str(dfo).unwrap();
+	assert_eq!(deserialized, Output::Failure(Failure {
+		jsonrpc: Version::V2,
+		error: Error::parse_error(),
+		id: Id::Num(1)
+	}));
+}
+
+#[test]
+fn single_response_deserialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let dsr = r#"{"jsonrpc":"2.0","result":1,"id":1}"#;
+
+	let deserialized: Response = serde_json::from_str(dsr).unwrap();
+	assert_eq!(deserialized, Response::Single(Output::Success(Success {
+		jsonrpc: Version::V2,
+		result: Value::U64(1),
+		id: Id::Num(1)
+	})));
+}
+
+#[test]
+fn batch_response_deserialize() {
+	use serde_json;
+	use serde_json::Value;
+
+	let dbr = r#"[{"jsonrpc":"2.0","result":1,"id":1},{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}]"#;
+
+	let deserialized: Response = serde_json::from_str(dbr).unwrap();
+	assert_eq!(deserialized, Response::Batch(vec![
+		Output::Success(Success {
+			jsonrpc: Version::V2,
+			result: Value::U64(1),
+			id: Id::Num(1)
+		}),
+		Output::Failure(Failure {
+			jsonrpc: Version::V2,
+			error: Error::parse_error(),
+			id: Id::Num(1)
+		})
+	]));
+}
