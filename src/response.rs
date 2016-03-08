@@ -1,5 +1,7 @@
 //! jsonrpc response
-use serde::{Serialize, Serializer};
+use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error as DeError};
+use serde::ser::{Serialize, Serializer};
+use serde_json::value;
 use super::{Id, Value, Error, Version};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -16,10 +18,20 @@ pub struct Failure {
 	pub id: Id
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq)]
 pub enum Output {
 	Success(Success),
 	Failure(Failure)
+}
+
+impl Deserialize for Output {
+	fn deserialize<D>(deserializer: &mut D) -> Result<Output, D::Error>
+	where D: Deserializer {
+		let v = try!(Value::deserialize(deserializer));
+		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Output::Failure)
+			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Output::Success))
+			.map_err(|_| D::Error::custom("")) // types must match
+	}
 }
 
 impl Serialize for Output {
@@ -32,10 +44,20 @@ impl Serialize for Output {
 	}
 }
 
-#[derive(Debug, PartialEq, Deserialize)]
+#[derive(Debug, PartialEq)]
 pub enum Response {
 	Single(Output),
 	Batch(Vec<Output>)
+}
+
+impl Deserialize for Response {
+	fn deserialize<D>(deserializer: &mut D) -> Result<Response, D::Error>
+	where D: Deserializer {
+		let v = try!(Value::deserialize(deserializer));
+		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Response::Batch)
+			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Response::Single))
+			.map_err(|_| D::Error::custom("")) // types must match
+	}
 }
 
 impl Serialize for Response {
@@ -144,6 +166,3 @@ fn batch_response_deserialize() {
 		})
 	]));
 }
-
-
-
