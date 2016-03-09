@@ -1,4 +1,4 @@
-# jsonrpc-core
+# jsonrpc-http-server
 Rust http server using JSON-RPC 2.0.
 
 [![Build Status][travis-image]][travis-url]
