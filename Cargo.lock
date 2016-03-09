@@ -1,6 +1,6 @@
 [root]
 name = "jsonrpc-core"
-version = "1.2.0"
+version = "2.0.0"
 dependencies = [
  "serde 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_codegen 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",

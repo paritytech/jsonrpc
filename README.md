@@ -9,7 +9,7 @@ Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 [Documentation](http://debris.github.io/jsonrpc-core/jsonrpc_core/index.html)
 
 - [x] - server side
-- [ ] - client side *(contributions are welcomed!)*
+- [x] - client side
 
 ## Example
 
@@ -18,7 +18,7 @@ Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
 ```
 [dependencies]
-jsonrpc-core = "1.1"
+jsonrpc-core = "2.0"
 ```
 
 `main.rs`
