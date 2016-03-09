@@ -2,23 +2,23 @@
 use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error as DeError};
 use serde::ser::{Serialize, Serializer, Error as SerError};
 use serde_json::value;
-use super::{Id, Params, Version, Value, ErrorCode};
+use super::{Id, Params, Version, Value};
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MethodCall {
-	/// A String specifying the version of the JSON-RPC protocol. 
+	/// A String specifying the version of the JSON-RPC protocol.
 	/// MUST be exactly "2.0".
 	pub jsonrpc: Version,
 	/// A String containing the name of the method to be invoked.
 	pub method: String,
-	/// A Structured value that holds the parameter values to be used 
+	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
 	pub params: Option<Params>,
 	/// An identifier established by the Client that MUST contain a String,
-	/// Number, or NULL value if included. If it is not included it is assumed 
-	/// to be a notification. 
+	/// Number, or NULL value if included. If it is not included it is assumed
+	/// to be a notification.
 	pub id: Id,
 }
 
@@ -26,12 +26,12 @@ pub struct MethodCall {
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Notification {
-	/// A String specifying the version of the JSON-RPC protocol. 
+	/// A String specifying the version of the JSON-RPC protocol.
 	/// MUST be exactly "2.0".
 	pub jsonrpc: Version,
 	/// A String containing the name of the method to be invoked.
 	pub method: String,
-	/// A Structured value that holds the parameter values to be used 
+	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
 	pub params: Option<Params>
 }

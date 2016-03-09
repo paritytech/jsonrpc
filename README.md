@@ -30,13 +30,13 @@ use jsonrpc_core::*;
 
 struct SayHello;
 impl MethodCommand for SayHello {
-    fn execute(&mut self, _params: Params) -> Result<Value, Error> {
+    fn execute(&self, _params: Params) -> Result<Value, Error> {
         Ok(Value::String("hello".to_string()))
     }
 }
 
 fn main() {
-	let mut io = IoHandler::new();
+	let io = IoHandler::new();
 	io.add_method("say_hello", SayHello);
 
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;

@@ -1,7 +1,6 @@
 //! jsonrpc errors
 use serde::de::{Deserialize, Deserializer, SeqVisitor, MapVisitor, Error as DeError};
 use serde::ser::{Serialize, Serializer};
-use serde_json::value;
 use super::Value;
 
 #[derive(Debug, PartialEq)]
@@ -64,7 +63,7 @@ impl Deserialize for ErrorCode {
 }
 
 impl Serialize for ErrorCode {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		serializer.serialize_i64(self.code())
 	}

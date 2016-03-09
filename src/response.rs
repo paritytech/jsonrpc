@@ -35,7 +35,7 @@ impl Deserialize for Output {
 }
 
 impl Serialize for Output {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
 			Output::Success(ref s) => s.serialize(serializer),
@@ -61,7 +61,7 @@ impl Deserialize for Response {
 }
 
 impl Serialize for Response {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
 			Response::Single(ref o) => o.serialize(serializer),
@@ -103,7 +103,6 @@ fn success_output_deserialize() {
 #[test]
 fn failure_output_serialize() {
 	use serde_json;
-	use serde_json::Value;
 
 	let fo = Output::Failure(Failure {
 		jsonrpc: Version::V2,
@@ -118,7 +117,6 @@ fn failure_output_serialize() {
 #[test]
 fn failure_output_deserialize() {
 	use serde_json;
-	use serde_json::Value;
 
 	let dfo = r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#;
 
