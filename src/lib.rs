@@ -4,21 +4,22 @@
 //! extern crate jsonrpc_core;
 //! extern crate jsonrpc_http_server;
 //! 
+//! use std::sync::Arc;
 //! use jsonrpc_core::*;
 //! use jsonrpc_http_server::*;
 //! 
 //! struct SayHello;
 //! impl MethodCommand for SayHello {
-//! 	fn execute(&mut self, _params: Params) -> Result<Value, Error> {
+//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	}
 //! }
 //! 
 //! fn main() {
-//! 	let mut io = IoHandler::new();
+//! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new(io, 1);
-//! 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null);
+//! 	let server = Server::new(Arc::new(io));
+//! 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null, 1);
 //! }
 //! ```
 
@@ -27,7 +28,7 @@ extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 
 use std::thread;
-use std::sync::Mutex;
+use std::sync::Arc;
 use std::io::Read;
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
@@ -38,15 +39,15 @@ pub use hyper::header::AccessControlAllowOrigin;
 
 /// jsonrpc http request handler.
 struct ServerHandler {
-	jsonrpc_handler: Mutex<IoHandler>,
+	jsonrpc_handler: Arc<IoHandler>,
 	cors_domain: AccessControlAllowOrigin,
 }
 
 impl ServerHandler {
 	/// Create new request handler.
-	fn new(jsonrpc_handler: IoHandler, cors_domain: AccessControlAllowOrigin) -> Self {
+	fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
 		ServerHandler {
-			jsonrpc_handler: Mutex::new(jsonrpc_handler),
+			jsonrpc_handler: jsonrpc_handler,
 			cors_domain: cors_domain
 		}
 	}
@@ -84,7 +85,7 @@ impl hyper::server::Handler for ServerHandler {
 					*res.status_mut() = hyper::status::StatusCode::MethodNotAllowed;
 					return;
 				}
-				if let Some(response) = self.jsonrpc_handler.lock().unwrap().handle_request(&body) {
+				if let Some(response) = self.jsonrpc_handler.handle_request(&body) {
 					*res.headers_mut() = self.response_headers();
 					res.send(response.as_ref()).unwrap();
 				}
@@ -100,45 +101,44 @@ impl hyper::server::Handler for ServerHandler {
 /// extern crate jsonrpc_core;
 /// extern crate jsonrpc_http_server;
 /// 
+/// use std::sync::Arc;
 /// use jsonrpc_core::*;
 /// use jsonrpc_http_server::*;
 /// 
 /// struct SayHello;
 /// impl MethodCommand for SayHello {
-/// 	fn execute(&mut self, _params: Params) -> Result<Value, Error> {
+/// 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 /// 		Ok(Value::String("hello".to_string()))
 /// 	}
 /// }
 /// 
 /// fn main() {
-/// 	let mut io = IoHandler::new();
+/// 	let io = IoHandler::new();
 /// 	io.add_method("say_hello", SayHello);
-/// 	let server = Server::new(io, 1);
-/// 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null);
+/// 	let server = Server::new(Arc::new(io));
+/// 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null, 1);
 /// }
 /// ```
 pub struct Server {
-	jsonrpc_handler: IoHandler,
-	threads: usize
+	jsonrpc_handler: Arc<IoHandler>,
 }
 
 impl Server {
-	pub fn new(jsonrpc_handler: IoHandler, threads: usize) -> Self { 
+	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self { 
 		Server {
 			jsonrpc_handler: jsonrpc_handler,
-			threads: threads
 		}
 	}
 
-	pub fn start(self, addr: &str, cors_domain: AccessControlAllowOrigin) {
-		hyper::Server::http(addr).unwrap().handle_threads(ServerHandler::new(self.jsonrpc_handler, cors_domain), self.threads).unwrap();
+	pub fn start(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) {
+		hyper::Server::http(addr).unwrap().handle_threads(ServerHandler::new(self.jsonrpc_handler.clone(), cors_domain), threads).unwrap();
 	}
 
-	pub fn start_async(self, addr: &str, cors_domain: AccessControlAllowOrigin) {
+	pub fn start_async(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) {
 		let address = addr.to_owned();
+		let handler = self.jsonrpc_handler.clone();
 		thread::Builder::new().name("jsonrpc_http".to_string()).spawn(move || {
-			self.start(address.as_ref(), cors_domain);
+			hyper::Server::http(address.as_ref() as &str).unwrap().handle_threads(ServerHandler::new(handler, cors_domain), threads).unwrap();
 		}).unwrap();
 	}
 }
-

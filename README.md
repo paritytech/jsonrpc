@@ -29,15 +29,15 @@ use jsonrpc_http_server::*;
  
 struct SayHello;
 impl MethodCommand for SayHello {
-    fn execute(&mut self, _params: Option<Params>) -> Result<Value, Error> {
+    fn execute(&self, _params: Option<Params>) -> Result<Value, Error> {
         Ok(Value::String("hello".to_string()))
     }
 }
  
 fn main() {
-    let mut io = IoHandler::new();
+    let io = IoHandler::new();
     io.add_method("say_hello", SayHello);
-    let server = Server::new(io, 1);
-    server.start("127.0.0.1:3030".to_string());
+    let server = Server::new(Arc::new(io));
+    server.start("127.0.0.1:3030".to_string(), AccessControlAllowOrigin::Null, 1);
 }
 ```
