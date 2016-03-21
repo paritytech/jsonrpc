@@ -38,7 +38,7 @@ use self::jsonrpc::{IoHandler};
 pub use hyper::header::AccessControlAllowOrigin;
 
 /// jsonrpc http request handler.
-struct ServerHandler {
+pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domain: AccessControlAllowOrigin,
 }
