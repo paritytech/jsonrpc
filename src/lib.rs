@@ -45,7 +45,7 @@ pub struct ServerHandler {
 
 impl ServerHandler {
 	/// Create new request handler.
-	fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
 		ServerHandler {
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domain: cors_domain
