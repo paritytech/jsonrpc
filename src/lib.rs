@@ -37,15 +37,17 @@ use self::jsonrpc::{IoHandler};
 
 pub use hyper::header::AccessControlAllowOrigin;
 
+pub type ServerResult = Result<hyper::server::Listening, hyper::error::Error>;
+
 /// jsonrpc http request handler.
-struct ServerHandler {
+pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domain: AccessControlAllowOrigin,
 }
 
 impl ServerHandler {
 	/// Create new request handler.
-	fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
 		ServerHandler {
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domain: cors_domain
@@ -116,7 +118,7 @@ impl hyper::server::Handler for ServerHandler {
 /// 	let io = IoHandler::new();
 /// 	io.add_method("say_hello", SayHello);
 /// 	let server = Server::new(Arc::new(io));
-/// 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null, 1);
+/// 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null, 1).unwrap();
 /// }
 /// ```
 pub struct Server {
@@ -130,15 +132,17 @@ impl Server {
 		}
 	}
 
-	pub fn start(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) {
-		hyper::Server::http(addr).unwrap().handle_threads(ServerHandler::new(self.jsonrpc_handler.clone(), cors_domain), threads).unwrap();
+	pub fn start(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) -> ServerResult {
+		try!(hyper::Server::http(addr))
+			.handle_threads(ServerHandler::new(self.jsonrpc_handler.clone(), cors_domain), threads)
 	}
 
-	pub fn start_async(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) {
+	pub fn start_async(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) -> thread::JoinHandle<ServerResult> {
 		let address = addr.to_owned();
 		let handler = self.jsonrpc_handler.clone();
 		thread::Builder::new().name("jsonrpc_http".to_string()).spawn(move || {
-			hyper::Server::http(address.as_ref() as &str).unwrap().handle_threads(ServerHandler::new(handler, cors_domain), threads).unwrap();
-		}).unwrap();
+			try!(hyper::Server::http(address.as_ref() as &str))
+				.handle_threads(ServerHandler::new(handler, cors_domain), threads)
+		}).expect("RPC thread spawned")
 	}
 }

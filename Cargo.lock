@@ -1,6 +1,6 @@
 [root]
 name = "jsonrpc-http-server"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "hyper 0.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "jsonrpc-core 2.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
