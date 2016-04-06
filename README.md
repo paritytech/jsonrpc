@@ -38,6 +38,6 @@ fn main() {
     let io = IoHandler::new();
     io.add_method("say_hello", SayHello);
     let server = Server::new(Arc::new(io));
-    server.start("127.0.0.1:3030".to_string(), AccessControlAllowOrigin::Null, 1);
+    server.start("127.0.0.1:3030".to_string(), AccessControlAllowOrigin::Null, 1).unwrap();
 }
 ```
