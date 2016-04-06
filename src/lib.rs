@@ -134,7 +134,7 @@ impl Server {
 
 	pub fn start(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) -> ServerResult {
 		try!(hyper::Server::http(addr))
-      .handle_threads(ServerHandler::new(self.jsonrpc_handler.clone(), cors_domain), threads)
+			.handle_threads(ServerHandler::new(self.jsonrpc_handler.clone(), cors_domain), threads)
 	}
 
 	pub fn start_async(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) -> thread::JoinHandle<ServerResult> {
@@ -142,7 +142,7 @@ impl Server {
 		let handler = self.jsonrpc_handler.clone();
 		thread::Builder::new().name("jsonrpc_http".to_string()).spawn(move || {
 			try!(hyper::Server::http(address.as_ref() as &str))
-        .handle_threads(ServerHandler::new(handler, cors_domain), threads)
+				.handle_threads(ServerHandler::new(handler, cors_domain), threads)
 		}).expect("RPC thread spawned")
 	}
 }
