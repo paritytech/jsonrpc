@@ -39,8 +39,23 @@ use self::jsonrpc::{IoHandler};
 
 pub use hyper::header::AccessControlAllowOrigin;
 
-pub type ServerResult = Result<Server, hyper::error::Error>;
+pub type ServerResult = Result<Server, RpcServerError>;
 
+/// RPC Server startup error
+#[derive(Debug)]
+pub enum RpcServerError {
+	IoError(std::io::Error),
+	Other(hyper::error::Error),
+}
+
+impl From<hyper::error::Error> for RpcServerError {
+	fn from(err: hyper::error::Error) -> Self {
+		match err {
+			hyper::error::Error::Io(e) => RpcServerError::IoError(e),
+			e => RpcServerError::Other(e)
+		}
+	}
+}
 /// jsonrpc http request handler.
 pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
