@@ -169,14 +169,20 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 /// }
 /// ```
 pub struct Server {
-	_server: hyper::server::Listening,
+	server: Option<hyper::server::Listening>,
 }
 
 impl Server {
 	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> ServerResult {
 		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone())));
 		Ok(Server {
-			_server: srv,
+			server: Some(srv),
 		})
+	}
+}
+
+impl Drop for Server {
+	fn drop(&mut self) {
+		self.server.take().unwrap().close()
 	}
 }
