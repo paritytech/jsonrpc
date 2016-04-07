@@ -39,8 +39,10 @@ use self::jsonrpc::{IoHandler};
 
 pub use hyper::header::AccessControlAllowOrigin;
 
+pub type ServerResult = Result<Server, hyper::error::Error>;
+
 /// jsonrpc http request handler.
-struct ServerHandler {
+pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domain: AccessControlAllowOrigin,
 	request: String,
@@ -49,7 +51,7 @@ struct ServerHandler {
 
 impl ServerHandler {
 	/// Create new request handler.
-	fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
 		ServerHandler {
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domain: cors_domain,
@@ -156,10 +158,10 @@ pub struct Server {
 }
 
 impl Server {
-	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Server {
-		let srv = hyper::Server::http(addr).unwrap().handle(move |_| ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone())).unwrap();
-		Server {
+	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> ServerResult {
+		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone())));
+		Ok(Server {
 			_server: srv,
-		}
+		})
 	}
 }
