@@ -18,8 +18,7 @@
 //! fn main() {
 //! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new(Arc::new(io));
-//! 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null, 1);
+//! 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), AccessControlAllowOrigin::Null);
 //! }
 //! ```
 
@@ -27,11 +26,14 @@ extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 
-use std::thread;
 use std::sync::Arc;
-use std::io::Read;
+use std::io::{Read, Write};
+use std::net::SocketAddr;
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
+use hyper::server::{Request, Response};
+use hyper::{Next, Encoder, Decoder};
+use hyper::net::HttpStream;
 use unicase::UniCase;
 use self::jsonrpc::{IoHandler};
 
@@ -41,6 +43,8 @@ pub use hyper::header::AccessControlAllowOrigin;
 struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domain: AccessControlAllowOrigin,
+	request: String,
+	response: Option<String>,
 }
 
 impl ServerHandler {
@@ -48,7 +52,9 @@ impl ServerHandler {
 	fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
 		ServerHandler {
 			jsonrpc_handler: jsonrpc_handler,
-			cors_domain: cors_domain
+			cors_domain: cors_domain,
+			request: String::new(),
+			response: None,
 		}
 	}
 
@@ -72,73 +78,88 @@ impl ServerHandler {
 	}
 }
 
-impl hyper::server::Handler for ServerHandler {
-	fn handle(&self, mut req: hyper::server::Request, mut res: hyper::server::Response) {
-		match req.method {
+impl hyper::server::Handler<HttpStream> for ServerHandler {
+    fn on_request(&mut self, request: Request) -> Next {
+		match *request.method() {
 			Method::Options => {
-				*res.headers_mut() = self.response_headers();
+				self.response = Some(String::new());
+				Next::write()
 			},
-			Method::Post => { 
-				let mut body = String::new();
-				if let Err(_) = req.read_to_string(&mut body) {
-					// TODO: return proper jsonrpc error instead
-					*res.status_mut() = hyper::status::StatusCode::MethodNotAllowed;
-					return;
-				}
-				if let Some(response) = self.jsonrpc_handler.handle_request(&body) {
-					*res.headers_mut() = self.response_headers();
-					res.send(response.as_ref()).unwrap();
-				}
-			},
-			_ => *res.status_mut() = hyper::status::StatusCode::MethodNotAllowed
+			Method::Post => Next::read(),
+			_ => Next::write(),
 		}
+	}
+
+    /// This event occurs each time the `Request` is ready to be read from.
+    fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
+		match decoder.read_to_string(&mut self.request) {
+			Ok(0) => {
+				self.response = self.jsonrpc_handler.handle_request(&self.request);
+				Next::write()
+			}
+			Ok(_) => {
+				Next::read()
+			}
+			Err(e) => match e.kind() {
+				::std::io::ErrorKind::WouldBlock => Next::read(),
+				_ => {
+					//trace!("Read error: {}", e);
+					Next::end()
+				}
+			}
+		}
+	}
+
+    /// This event occurs after the first time this handled signals `Next::write()`.
+    fn on_response(&mut self, response: &mut Response) -> Next {
+		*response.headers_mut() = self.response_headers();
+		if self.response.is_none() {
+			response.set_status(hyper::status::StatusCode::MethodNotAllowed);
+		}
+		Next::write()
+	}
+
+    /// This event occurs each time the `Response` is ready to be written to.
+    fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
+		if let Some(ref response) = self.response {
+			encoder.write(response.as_bytes()).unwrap();
+		}
+		Next::end()
 	}
 }
 
 /// jsonrpc http server.
-/// 
+///
 /// ```no_run
 /// extern crate jsonrpc_core;
 /// extern crate jsonrpc_http_server;
-/// 
+///
 /// use std::sync::Arc;
 /// use jsonrpc_core::*;
 /// use jsonrpc_http_server::*;
-/// 
+///
 /// struct SayHello;
 /// impl MethodCommand for SayHello {
 /// 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 /// 		Ok(Value::String("hello".to_string()))
 /// 	}
 /// }
-/// 
+///
 /// fn main() {
 /// 	let io = IoHandler::new();
 /// 	io.add_method("say_hello", SayHello);
-/// 	let server = Server::new(Arc::new(io));
-/// 	server.start("127.0.0.1:3030", AccessControlAllowOrigin::Null, 1);
+/// 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), AccessControlAllowOrigin::Null);
 /// }
 /// ```
 pub struct Server {
-	jsonrpc_handler: Arc<IoHandler>,
+	_server: hyper::server::Listening,
 }
 
 impl Server {
-	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self { 
+	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Server {
+		let srv = hyper::Server::http(addr).unwrap().handle(move |_| ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone())).unwrap();
 		Server {
-			jsonrpc_handler: jsonrpc_handler,
+			_server: srv,
 		}
-	}
-
-	pub fn start(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) {
-		hyper::Server::http(addr).unwrap().handle_threads(ServerHandler::new(self.jsonrpc_handler.clone(), cors_domain), threads).unwrap();
-	}
-
-	pub fn start_async(&self, addr: &str, cors_domain: AccessControlAllowOrigin, threads: usize) {
-		let address = addr.to_owned();
-		let handler = self.jsonrpc_handler.clone();
-		thread::Builder::new().name("jsonrpc_http".to_string()).spawn(move || {
-			hyper::Server::http(address.as_ref() as &str).unwrap().handle_threads(ServerHandler::new(handler, cors_domain), threads).unwrap();
-		}).unwrap();
 	}
 }
