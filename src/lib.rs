@@ -140,6 +140,7 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
     fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
 		if let Some(ref response) = self.response {
 			encoder.write(response.as_bytes()).unwrap();
+      encoder.write(b"\n").unwrap();
 		}
 		Next::end()
 	}
