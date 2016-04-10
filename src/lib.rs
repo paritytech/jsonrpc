@@ -96,7 +96,7 @@ impl ServerHandler {
 }
 
 impl hyper::server::Handler<HttpStream> for ServerHandler {
-    fn on_request(&mut self, request: Request) -> Next {
+	fn on_request(&mut self, request: Request) -> Next {
 		match *request.method() {
 			Method::Options => {
 				self.response = Some(String::new());
@@ -107,8 +107,8 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 		}
 	}
 
-    /// This event occurs each time the `Request` is ready to be read from.
-    fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
+	/// This event occurs each time the `Request` is ready to be read from.
+	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
 		match decoder.read_to_string(&mut self.request) {
 			Ok(0) => {
 				self.response = self.jsonrpc_handler.handle_request(&self.request);
@@ -127,8 +127,8 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 		}
 	}
 
-    /// This event occurs after the first time this handled signals `Next::write()`.
-    fn on_response(&mut self, response: &mut Response) -> Next {
+		/// This event occurs after the first time this handled signals `Next::write()`.
+	fn on_response(&mut self, response: &mut Response) -> Next {
 		*response.headers_mut() = self.response_headers();
 		if self.response.is_none() {
 			response.set_status(hyper::status::StatusCode::MethodNotAllowed);
@@ -136,11 +136,11 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 		Next::write()
 	}
 
-    /// This event occurs each time the `Response` is ready to be written to.
-    fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
+		/// This event occurs each time the `Response` is ready to be written to.
+		fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
 		if let Some(ref response) = self.response {
 			encoder.write(response.as_bytes()).unwrap();
-      encoder.write(b"\n").unwrap();
+			encoder.write(b"\n").unwrap();
 		}
 		Next::end()
 	}
