@@ -62,6 +62,7 @@ pub struct ServerHandler {
 	cors_domain: AccessControlAllowOrigin,
 	request: String,
 	response: Option<String>,
+	write_pos: usize,
 }
 
 impl ServerHandler {
@@ -72,6 +73,7 @@ impl ServerHandler {
 			cors_domain: cors_domain,
 			request: String::new(),
 			response: None,
+			write_pos: 0,
 		}
 	}
 
@@ -139,9 +141,30 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
     /// This event occurs each time the `Response` is ready to be written to.
     fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
 		if let Some(ref response) = self.response {
-			encoder.write(response.as_bytes()).unwrap();
+			let bytes = response.as_bytes();
+			if bytes.len() == self.write_pos {
+				Next::end()
+			} else {
+				match encoder.write(&bytes[self.write_pos ..]) {
+					Ok(0) => {
+						Next::write()
+					}
+					Ok(bytes) => {
+						self.write_pos += bytes;
+						Next::write()
+					}
+					Err(e) => match e.kind() {
+						::std::io::ErrorKind::WouldBlock => Next::write(),
+						_ => {
+							//trace!("Write error: {}", e);
+							Next::end()
+						}
+					}
+				}
+			}
+		} else {
+			Next::end()
 		}
-		Next::end()
 	}
 }
 
