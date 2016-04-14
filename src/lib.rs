@@ -18,7 +18,7 @@
 //! fn main() {
 //! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
-//! 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), AccessControlAllowOrigin::Null);
+//! 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), Some(AccessControlAllowOrigin::Null));
 //! }
 //! ```
 
@@ -59,7 +59,7 @@ impl From<hyper::error::Error> for RpcServerError {
 /// jsonrpc http request handler.
 pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
-	cors_domain: AccessControlAllowOrigin,
+	cors_domain: Option<AccessControlAllowOrigin>,
 	request: String,
 	response: Option<String>,
 	write_pos: usize,
@@ -67,7 +67,7 @@ pub struct ServerHandler {
 
 impl ServerHandler {
 	/// Create new request handler.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>) -> Self {
 		ServerHandler {
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domain: cors_domain,
@@ -92,7 +92,10 @@ impl ServerHandler {
 				UniCase("accept".to_owned()),
 			])
 		);
-		headers.set(self.cors_domain.clone());
+
+		if let Some(ref cors_domain) = self.cors_domain {
+			headers.set(cors_domain.clone());
+		}
 		headers
 	}
 }
@@ -192,7 +195,7 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 /// fn main() {
 /// 	let io = IoHandler::new();
 /// 	io.add_method("say_hello", SayHello);
-/// 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), AccessControlAllowOrigin::Null);
+/// 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), Some(AccessControlAllowOrigin::Null));
 /// }
 /// ```
 pub struct Server {
@@ -200,7 +203,7 @@ pub struct Server {
 }
 
 impl Server {
-	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: AccessControlAllowOrigin) -> ServerResult {
+	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>) -> ServerResult {
 		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone())));
 		Ok(Server {
 			server: Some(srv),
