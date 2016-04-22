@@ -26,7 +26,8 @@ extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 
-use std::sync::Arc;
+use std::ops::Deref;
+use std::sync::{Arc, Mutex};
 use std::io::{Read, Write};
 use std::net::SocketAddr;
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
@@ -56,8 +57,15 @@ impl From<hyper::error::Error> for RpcServerError {
 		}
 	}
 }
+
+/// PanicHandling function
+pub struct PanicHandler {
+  handler: Arc<Mutex<Option<Box<Fn() -> () + Send + 'static>>>>
+}
+
 /// jsonrpc http request handler.
 pub struct ServerHandler {
+  panic_handler: PanicHandler,
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domain: Option<AccessControlAllowOrigin>,
 	request: String,
@@ -65,10 +73,22 @@ pub struct ServerHandler {
 	write_pos: usize,
 }
 
+impl Drop for ServerHandler {
+  fn drop(&mut self) {
+    if ::std::thread::panicking() {
+      let handler = self.panic_handler.handler.lock().unwrap();
+      if let Some(ref h) = *handler.deref() {
+        h();
+      }
+    }
+  }
+}
+
 impl ServerHandler {
 	/// Create new request handler.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>, panic_handler: PanicHandler) -> Self {
 		ServerHandler {
+      panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domain: cors_domain,
 			request: String::new(),
@@ -200,15 +220,27 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 /// ```
 pub struct Server {
 	server: Option<hyper::server::Listening>,
+  panic_handler: Arc<Mutex<Option<Box<Fn() -> () + Send>>>>
 }
 
 impl Server {
 	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>) -> ServerResult {
-		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone())));
+    let panic_handler = Arc::new(Mutex::new(None));
+    let panic_for_server = panic_handler.clone();
+		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| {
+      let handler = PanicHandler { handler: panic_for_server.clone() };
+      ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone(), handler)
+    }));
 		Ok(Server {
 			server: Some(srv),
+      panic_handler: panic_handler,
 		})
 	}
+  
+  pub fn set_panic_handler<F>(&self, handler: F) 
+    where F : Fn() -> () + Send + 'static {
+    *self.panic_handler.lock().unwrap() = Some(Box::new(handler));
+  }
 }
 
 impl Drop for Server {
