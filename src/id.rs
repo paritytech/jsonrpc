@@ -5,14 +5,16 @@ use serde::de::Visitor;
 #[derive(Debug, PartialEq)]
 pub enum Id {
 	Null,
+	Str(String),
 	Num(u64),
 }
 
 impl Serialize for Id {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
 			Id::Null => serializer.serialize_unit(),
+			Id::Str(ref v) => serializer.serialize_str(v),
 			Id::Num(v) => serializer.serialize_u64(v)
 		}
 	}
@@ -43,7 +45,7 @@ impl Visitor for IdVisitor {
 	}
 
 	fn visit_string<E>(&mut self, value: String) -> Result<Self::Value, E> where E: Error {
-		value.parse::<u64>().map(Id::Num).map_err(|_| Error::custom("invalid id"))
+		value.parse::<u64>().map(Id::Num).or(Ok(Id::Str(value)))
 	}
 }
 
@@ -58,6 +60,10 @@ mod tests {
 		let deserialized: Id = serde_json::from_str(s).unwrap();
 		assert_eq!(deserialized, Id::Num(2));
 
+		let s = r#""2x""#;
+		let deserialized: Id = serde_json::from_str(s).unwrap();
+		assert_eq!(deserialized, Id::Str("2x".to_owned()));
+
 		let s = r#"[null, 0, 2, "3"]"#;
 		let deserialized: Vec<Id> = serde_json::from_str(s).unwrap();
 		assert_eq!(deserialized, vec![Id::Null, Id::Num(0), Id::Num(2), Id::Num(3)]);
@@ -65,8 +71,8 @@ mod tests {
 
 	#[test]
 	fn id_serialization() {
-		let d = vec![Id::Null, Id::Num(0), Id::Num(2), Id::Num(3)];
+		let d = vec![Id::Null, Id::Num(0), Id::Num(2), Id::Num(3), Id::Str("3".to_owned()), Id::Str("test".to_owned())];
 		let serialized = serde_json::to_string(&d).unwrap();
-		assert_eq!(serialized, r#"[null,0,2,3]"#);
+		assert_eq!(serialized, r#"[null,0,2,3,"3","test"]"#);
 	}
 }
