@@ -1,0 +1,10 @@
+[package]
+name = "json-ipc-server"
+version = "0.1.0"
+authors = ["Nikolay Volf <nikvolf@gmail.com>"]
+
+[dependencies]
+jsonrpc-core = "2.0"
+mio = "0.5"
+slab   = "0.1.0"
+bytes  = "0.3.0"
