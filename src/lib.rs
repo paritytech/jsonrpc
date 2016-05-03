@@ -1,4 +1,4 @@
-//! jsonrpc http server.
+//! jsonrpc server over unix sockets (todo: ... and later pipes)
 //!
 //! ```no_run
 //! extern crate jsonrpc_core;
@@ -32,7 +32,7 @@ use mio::*;
 use mio::unix::*;
 use bytes::{Buf, ByteBuf, MutByteBuf};
 use std::io;
-use jsonrpc_core::io::IoHandler;
+use jsonrpc_core::IoHandler;
 use std::sync::*;
 
 const SERVER: Token = Token(0);
