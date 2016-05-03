@@ -32,7 +32,7 @@ use mio::*;
 use mio::unix::*;
 use bytes::{Buf, ByteBuf, MutByteBuf};
 use std::io;
-use jsonrpc_core::IoHandler;
+use jsonrpc_core::io::IoHandler;
 use std::sync::*;
 
 const SERVER: Token = Token(0);
