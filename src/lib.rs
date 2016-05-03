@@ -12,7 +12,6 @@ use jsonrpc_core::IoHandler;
 use std::sync::*;
 
 const SERVER: Token = Token(0);
-const CLIENT: Token = Token(1);
 
 struct SocketConnection {
     socket: UnixStream,
@@ -37,22 +36,12 @@ impl SocketConnection {
 
     fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, handler: &IoHandler) -> io::Result<()> {
         let mut buf = self.buf.take().unwrap();
+        use std::io::Write;
+        try!(self.socket.write_all(&buf.bytes()));
+        self.buf = None;
 
-        match self.socket.try_write_buf(&mut buf) {
-            Ok(None) => {
-                self.buf = Some(buf);
-                self.interest.insert(EventSet::writable());
-            },
-            Ok(Some(r)) => {
-                self.mut_buf = Some(buf.flip());
-                self.interest.insert(EventSet::readable());
-                self.interest.remove(EventSet::writable());
-            },
-            Err(e) => {
-                //warn!(target: "ipc", "Error sending data: {:?}", e);
-                //::std::io::Error::last_os_error()
-            },
-        }
+        self.interest.remove(EventSet::writable());
+        self.interest.insert(EventSet::readable());
 
         event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
     }
@@ -73,7 +62,7 @@ impl SocketConnection {
                             let response_bytes = response_str.into_bytes();
                             self.buf = Some(ByteBuf::from_slice(&response_bytes));
                         }
-                    });
+                    }).unwrap();
 
                 self.interest.remove(EventSet::readable());
                 self.interest.insert(EventSet::writable());
@@ -101,7 +90,7 @@ struct Server {
 }
 
 impl Server {
-    fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Server {
+    pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Server {
         let (server, event_loop) = RpcServer::start(socket_addr, io_handler);
         Server {
             rpc_server: RwLock::new(server),
@@ -109,17 +98,17 @@ impl Server {
         }
     }
 
-    fn run(&self) {
+    pub fn run(&self) {
         let mut event_loop = self.event_loop.write().unwrap();
         let mut server = self.rpc_server.write().unwrap();
-        event_loop.run(&mut server);
+        event_loop.run(&mut server).unwrap();
     }
 
-    fn poll(&self) {
+    pub fn poll(&self) {
         let mut event_loop = self.event_loop.write().unwrap();
         let mut server = self.rpc_server.write().unwrap();
 
-        event_loop.run_once(&mut server, Some(100));
+        event_loop.run_once(&mut server, Some(100)).unwrap();
     }
 }
 
@@ -128,10 +117,10 @@ impl RpcServer {
     /// start ipc rpc server (blocking)
     pub fn start(addr: &str, io_handler: &Arc<IoHandler>) -> (RpcServer, EventLoop<RpcServer>) {
         let mut event_loop = EventLoop::new().unwrap();
-        ::std::fs::remove_file(addr); // ignore error (if no file)
+        ::std::fs::remove_file(addr).unwrap_or_else(|_| {} ); // ignore error (if no file)
         let socket = UnixListener::bind(&addr).unwrap();
         event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-        let mut server = RpcServer {
+        let server = RpcServer {
             socket: socket,
             connections: Slab::new_starting_at(Token(1), 8),
             io_handler: io_handler.clone(),
@@ -198,12 +187,14 @@ fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
     let mut poll = Poll::new().unwrap();
     let mut sock = UnixStream::connect(addr).unwrap();
     poll.register(&sock, Token(0), EventSet::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-    poll.poll(Some(500));
-    sock.write(buf);
+    poll.poll(Some(500)).unwrap();
+    sock.write(buf).unwrap();
     poll.reregister(&sock, Token(0), EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-    poll.poll(Some(500));
+    poll.poll(Some(500)).unwrap();
+
     let mut buf = Vec::new();
-    sock.read(&mut buf);
+    sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
+//    sock.read_to_end(&mut buf).unwrap();
     buf
 }
 
@@ -226,6 +217,34 @@ pub fn test_reqrep() {
 
     std::thread::spawn(move || {
         server.run()
+    });
+
+
+    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
+    let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
+}
+#[test]
+pub fn test_reqrep_poll() {
+    use std::sync::Arc;
+    use jsonrpc_core::*;
+
+    struct SayHello;
+    impl MethodCommand for SayHello {
+        fn execute(&self, _params: Params) -> Result<Value, Error> {
+            Ok(Value::String("hello".to_string()))
+        }
+    }
+
+    let addr = "/tmp/test10.ipc";
+    let io = IoHandler::new();
+    io.add_method("say_hello", SayHello);
+    let server = Server::new(addr, &Arc::new(io));
+
+    std::thread::spawn(move || {
+        loop {
+            server.poll();
+        }
     });
 
 
