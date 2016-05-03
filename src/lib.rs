@@ -1,3 +1,28 @@
+//! jsonrpc http server.
+//!
+//! ```no_run
+//! extern crate jsonrpc_core;
+//! extern crate json_ipc_server;
+//!
+//! use std::sync::Arc;
+//! use jsonrpc_core::*;
+//! use json_ipc_server::*;
+//!
+//! struct SayHello;
+//! impl MethodCommand for SayHello {
+//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
+//! 		Ok(Value::String("hello".to_string()))
+//! 	}
+//! }
+//!
+//! fn main() {
+//! 	let io = IoHandler::new();
+//! 	io.add_method("say_hello", SayHello);
+//! 	let server = Server::new("/tmp/json-ipc-test.ipc", &Arc::new(io));
+//!     ::std::thread::spawn(move || server.run());
+//! }
+//! ```
+
 extern crate mio;
 extern crate jsonrpc_core;
 extern crate bytes;
@@ -84,12 +109,13 @@ struct RpcServer {
     io_handler: Arc<IoHandler>,
 }
 
-struct Server {
+pub struct Server {
     rpc_server: RwLock<RpcServer>,
     event_loop: RwLock<EventLoop<RpcServer>>,
 }
 
 impl Server {
+    /// New server
     pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Server {
         let (server, event_loop) = RpcServer::start(socket_addr, io_handler);
         Server {
@@ -98,12 +124,14 @@ impl Server {
         }
     }
 
+    /// Run server (blocking)
     pub fn run(&self) {
         let mut event_loop = self.event_loop.write().unwrap();
         let mut server = self.rpc_server.write().unwrap();
         event_loop.run(&mut server).unwrap();
     }
 
+    /// Poll server requests
     pub fn poll(&self) {
         let mut event_loop = self.event_loop.write().unwrap();
         let mut server = self.rpc_server.write().unwrap();
@@ -174,7 +202,7 @@ impl Handler for RpcServer {
         if events.is_writable() {
             match token {
                 SERVER => { },
-                _ => { self.connection_writable(event_loop, token); }
+                _ => self.connection_writable(event_loop, token).unwrap_or_else(|_| {}), // todo: disqualify connection from list on error
             };
         }
     }
@@ -194,7 +222,6 @@ fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
 
     let mut buf = Vec::new();
     sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
-//    sock.read_to_end(&mut buf).unwrap();
     buf
 }
 
