@@ -5,8 +5,7 @@ extern crate slab;
 
 use mio::*;
 use mio::unix::*;
-use bytes::{Buf, ByteBuf, MutByteBuf, SliceBuf};
-use std::path::PathBuf;
+use bytes::{Buf, ByteBuf, MutByteBuf};
 use std::io;
 use jsonrpc_core::IoHandler;
 use std::sync::*;
@@ -34,11 +33,11 @@ impl SocketConnection {
         }
     }
 
-    fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, handler: &IoHandler) -> io::Result<()> {
-        let mut buf = self.buf.take().unwrap();
+    fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, _handler: &IoHandler) -> io::Result<()> {
         use std::io::Write;
-        try!(self.socket.write_all(&buf.bytes()));
-        self.buf = None;
+        if let Some(buf) = self.buf.take() {
+            try!(self.socket.write_all(&buf.bytes()));
+        }
 
         self.interest.remove(EventSet::writable());
         self.interest.insert(EventSet::readable());
@@ -47,14 +46,13 @@ impl SocketConnection {
     }
 
     fn readable(&mut self, event_loop: &mut EventLoop<RpcServer>, handler: &IoHandler) -> io::Result<()> {
-        let mut buf = self.mut_buf.take().unwrap();
+        let mut buf = self.mut_buf.take().unwrap_or_else(|| panic!("unwrapping mutable buffer which is None"));
 
         match self.socket.try_read_buf(&mut buf) {
             Ok(None) => {
                 self.mut_buf = Some(buf);
             }
-            Ok(Some(r)) => {
-
+            Ok(Some(_)) => {
                 String::from_utf8(buf.bytes().to_vec())
                     .map(|rpc_msg| {
                         let response: Option<String> = handler.handle_request(&rpc_msg);
@@ -64,10 +62,12 @@ impl SocketConnection {
                         }
                     }).unwrap();
 
+                self.mut_buf = Some(buf);
+
                 self.interest.remove(EventSet::readable());
                 self.interest.insert(EventSet::writable());
             }
-            Err(e) => {
+            Err(_) => {
                 //warn!(target: "ipc", "Error receiving data: {:?}", e);
                 self.interest.remove(EventSet::readable());
             }
@@ -174,7 +174,7 @@ impl Handler for RpcServer {
         if events.is_writable() {
             match token {
                 SERVER => { },
-                _ => self.connection_writable(event_loop, token).unwrap()
+                _ => { self.connection_writable(event_loop, token); }
             };
         }
     }
@@ -188,7 +188,7 @@ fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
     let mut sock = UnixStream::connect(addr).unwrap();
     poll.register(&sock, Token(0), EventSet::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
     poll.poll(Some(500)).unwrap();
-    sock.write(buf).unwrap();
+    sock.write_all(buf).unwrap();
     poll.reregister(&sock, Token(0), EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
     poll.poll(Some(500)).unwrap();
 
@@ -198,8 +198,8 @@ fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
     buf
 }
 
-#[test]
-pub fn test_reqrep() {
+#[cfg(test)]
+fn dummy_io_handler() -> Arc<IoHandler> {
     use std::sync::Arc;
     use jsonrpc_core::*;
 
@@ -210,45 +210,39 @@ pub fn test_reqrep() {
         }
     }
 
-    let addr = "/tmp/test.ipc";
     let io = IoHandler::new();
     io.add_method("say_hello", SayHello);
-    let server = Server::new(addr, &Arc::new(io));
+    Arc::new(io)
+}
 
+#[test]
+pub fn test_reqrep() {
+    let addr = "/tmp/test10";
+    let io = dummy_io_handler();
+    let server = Server::new(addr, &io);
     std::thread::spawn(move || {
         server.run()
     });
 
-
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
     let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+
     assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
 }
 #[test]
 pub fn test_reqrep_poll() {
-    use std::sync::Arc;
-    use jsonrpc_core::*;
-
-    struct SayHello;
-    impl MethodCommand for SayHello {
-        fn execute(&self, _params: Params) -> Result<Value, Error> {
-            Ok(Value::String("hello".to_string()))
-        }
-    }
-
-    let addr = "/tmp/test10.ipc";
-    let io = IoHandler::new();
-    io.add_method("say_hello", SayHello);
-    let server = Server::new(addr, &Arc::new(io));
-
+    let addr = "/tmp/test20";
+    let io = dummy_io_handler();
+    let server = Server::new(addr, &io);
     std::thread::spawn(move || {
         loop {
             server.poll();
         }
     });
 
-
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
     let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
     assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
+
+    std::thread::sleep(std::time::Duration::from_millis(500));
 }
