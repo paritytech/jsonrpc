@@ -34,6 +34,7 @@ use bytes::{Buf, ByteBuf, MutByteBuf};
 use std::io;
 use jsonrpc_core::IoHandler;
 use std::sync::*;
+use std::sync::atomic::*;
 
 const SERVER: Token = Token(0);
 
@@ -110,13 +111,19 @@ struct RpcServer {
 }
 
 pub struct Server {
-    rpc_server: RwLock<RpcServer>,
-    event_loop: RwLock<EventLoop<RpcServer>>,
+    rpc_server: Arc<RwLock<RpcServer>>,
+    event_loop: Arc<RwLock<EventLoop<RpcServer>>>,
+    is_stopping: Arc<AtomicBool>,
+    is_stopped: Arc<AtomicBool>,
 }
 
 #[derive(Debug)]
 pub enum Error {
     Io(std::io::Error),
+    NotStarted,
+    AlreadyStopping,
+    NotStopped,
+    IsStopping,
 }
 
 impl std::convert::From<std::io::Error> for Error {
@@ -130,25 +137,57 @@ impl Server {
     pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Result<Server, Error> {
         let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler));
         Ok(Server {
-            rpc_server: RwLock::new(server),
-            event_loop: RwLock::new(event_loop),
+            rpc_server: Arc::new(RwLock::new(server)),
+            event_loop: Arc::new(RwLock::new(event_loop)),
+            is_stopping: Arc::new(AtomicBool::new(false)),
+            is_stopped: Arc::new(AtomicBool::new(true)),
         })
     }
 
-    /// Run server (blocking)
+    /// Run server (in current thread)
     pub fn run(&self) {
         let mut event_loop = self.event_loop.write().unwrap();
         let mut server = self.rpc_server.write().unwrap();
         event_loop.run(&mut server).unwrap();
     }
 
-    /// Poll server requests
+    /// Poll server requests (for manual async scenarios)
     pub fn poll(&self) {
         let mut event_loop = self.event_loop.write().unwrap();
         let mut server = self.rpc_server.write().unwrap();
 
         event_loop.run_once(&mut server, Some(100)).unwrap();
     }
+
+    /// Run server (in separate thread)
+    pub fn run_async(&self) -> Result<(), Error> {
+        if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::IsStopping) }
+        if !self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStopped) }
+
+        self.is_stopped.store(false, Ordering::Relaxed);
+
+        let event_loop = self.event_loop.clone();
+        let server = self.rpc_server.clone();
+        let thread_stopping = self.is_stopping.clone();
+        let thread_stopped = self.is_stopped.clone();
+        std::thread::spawn(move || {
+            let mut event_loop = event_loop.write().unwrap();
+            let mut server = server.write().unwrap();
+            while !thread_stopping.load(Ordering::Relaxed) {
+                event_loop.run_once(&mut server, Some(100)).unwrap();
+            }
+            thread_stopped.store(true, Ordering::Relaxed);
+        });
+        Ok(())
+    }
+
+    pub fn stop_async(&self) -> Result<(), Error> {
+        if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
+        if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
+        self.is_stopping.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+
 }
 
 impl RpcServer {
