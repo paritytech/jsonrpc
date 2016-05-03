@@ -6,7 +6,7 @@
 //!
 //! use std::sync::Arc;
 //! use jsonrpc_core::*;
-//! use json_ipc_server::*;
+//! use json_ipc_server::Server;
 //!
 //! struct SayHello;
 //! impl MethodCommand for SayHello {
@@ -18,7 +18,7 @@
 //! fn main() {
 //! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new("/tmp/json-ipc-test.ipc", &Arc::new(io));
+//! 	let server = Server::new("/tmp/json-ipc-test.ipc", &Arc::new(io)).unwrap();
 //!     ::std::thread::spawn(move || server.run());
 //! }
 //! ```
@@ -114,14 +114,25 @@ pub struct Server {
     event_loop: RwLock<EventLoop<RpcServer>>,
 }
 
+#[derive(Debug)]
+pub enum Error {
+    Io(std::io::Error),
+}
+
+impl std::convert::From<std::io::Error> for Error {
+    fn from(io_error: std::io::Error) -> Error {
+        Error::Io(io_error)
+    }
+}
+
 impl Server {
     /// New server
-    pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Server {
-        let (server, event_loop) = RpcServer::start(socket_addr, io_handler);
-        Server {
+    pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Result<Server, Error> {
+        let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler));
+        Ok(Server {
             rpc_server: RwLock::new(server),
             event_loop: RwLock::new(event_loop),
-        }
+        })
     }
 
     /// Run server (blocking)
@@ -143,17 +154,17 @@ impl Server {
 impl RpcServer {
 
     /// start ipc rpc server (blocking)
-    pub fn start(addr: &str, io_handler: &Arc<IoHandler>) -> (RpcServer, EventLoop<RpcServer>) {
-        let mut event_loop = EventLoop::new().unwrap();
+    pub fn start(addr: &str, io_handler: &Arc<IoHandler>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
+        let mut event_loop = try!(EventLoop::new());
         ::std::fs::remove_file(addr).unwrap_or_else(|_| {} ); // ignore error (if no file)
-        let socket = UnixListener::bind(&addr).unwrap();
+        let socket = try!(UnixListener::bind(&addr));
         event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
         let server = RpcServer {
             socket: socket,
             connections: Slab::new_starting_at(Token(1), 8),
             io_handler: io_handler.clone(),
         };
-        (server, event_loop)
+        Ok((server, event_loop))
     }
 
     fn accept(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
@@ -246,7 +257,7 @@ fn dummy_io_handler() -> Arc<IoHandler> {
 pub fn test_reqrep() {
     let addr = "/tmp/test10";
     let io = dummy_io_handler();
-    let server = Server::new(addr, &io);
+    let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         server.run()
     });
@@ -260,7 +271,7 @@ pub fn test_reqrep() {
 pub fn test_reqrep_poll() {
     let addr = "/tmp/test20";
     let io = dummy_io_handler();
-    let server = Server::new(addr, &io);
+    let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         loop {
             server.poll();
