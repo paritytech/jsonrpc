@@ -88,7 +88,7 @@ impl SocketConnection {
                         }
                     }).unwrap();
 
-                self.mut_buf = Some(buf);
+                self.mut_buf = Some(ByteBuf::mut_with_capacity(2048));
 
                 self.interest.remove(EventSet::readable());
                 self.interest.insert(EventSet::writable());
