@@ -37,6 +37,7 @@ use std::sync::*;
 use std::sync::atomic::*;
 
 const SERVER: Token = Token(0);
+const MAX_CONCURRENT_CONNECTIONS: usize = 16;
 
 struct SocketConnection {
     socket: UnixStream,
@@ -200,7 +201,7 @@ impl RpcServer {
         event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
         let server = RpcServer {
             socket: socket,
-            connections: Slab::new_starting_at(Token(1), 8),
+            connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
             io_handler: io_handler.clone(),
         };
         Ok((server, event_loop))
@@ -209,6 +210,12 @@ impl RpcServer {
     fn accept(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
         let new_client_socket = self.socket.accept().unwrap().unwrap();
         let connection = SocketConnection::new(new_client_socket);
+        if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
+            let oldest_token = self.connections.iter().nth(0)
+                .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request first one")
+                .token.unwrap().clone();
+            self.connections.remove(oldest_token);
+        }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
 
         self.connections[token].token = Some(token);
@@ -351,8 +358,24 @@ pub fn test_reqrep_three_sequental_connections() {
 }
 
 #[test]
+pub fn test_reqrep_100_connections() {
+    let addr = "/tmp/test45";
+    let io = dummy_io_handler();
+    let server = Server::new(addr, &io).unwrap();
+    std::thread::spawn(move || {
+        server.run()
+    });
+
+    for i in 0..100 {
+        let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;
+        let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent "#.to_owned() + &format!("{}", i)  + r#"","id":1}"#;
+        assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
+    }
+}
+
+#[test]
 pub fn test_reqrep_poll() {
-    let addr = "/tmp/test20";
+    let addr = "/tmp/test40";
     let io = dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
