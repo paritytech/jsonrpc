@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 
 [dependencies]
-jsonrpc-core = { git = "https://github.com/tomusdrw/jsonrpc-core.git" }
+jsonrpc-core = { git = "https://github.com/ethcore/jsonrpc-core.git" }
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
