@@ -18,7 +18,7 @@
 //! fn main() {
 //! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
-//! 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), Some(AccessControlAllowOrigin::Null));
+//! 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), vec![AccessControlAllowOrigin::Null]);
 //! }
 //! ```
 
@@ -67,7 +67,7 @@ pub struct PanicHandler {
 pub struct ServerHandler {
 	panic_handler: PanicHandler,
 	jsonrpc_handler: Arc<IoHandler>,
-	cors_domain: Option<AccessControlAllowOrigin>,
+	cors_domains: Vec<AccessControlAllowOrigin>,
 	request: String,
 	response: Option<String>,
 	write_pos: usize,
@@ -86,11 +86,11 @@ impl Drop for ServerHandler {
 
 impl ServerHandler {
 	/// Create new request handler.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>, panic_handler: PanicHandler) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>, panic_handler: PanicHandler) -> Self {
 		ServerHandler {
 			panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,
-			cors_domain: cors_domain,
+			cors_domains: cors_domains,
 			request: String::new(),
 			response: None,
 			write_pos: 0,
@@ -113,9 +113,10 @@ impl ServerHandler {
 			])
 		);
 
-		if let Some(ref cors_domain) = self.cors_domain {
+		for cors_domain in &self.cors_domains {
 			headers.set(cors_domain.clone());
 		}
+
 		headers
 	}
 }
@@ -215,7 +216,7 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 /// fn main() {
 /// 	let io = IoHandler::new();
 /// 	io.add_method("say_hello", SayHello);
-/// 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), Some(AccessControlAllowOrigin::Null));
+/// 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), vec![AccessControlAllowOrigin::Null]);
 /// }
 /// ```
 pub struct Server {
@@ -224,12 +225,12 @@ pub struct Server {
 }
 
 impl Server {
-	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domain: Option<AccessControlAllowOrigin>) -> ServerResult {
+	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>) -> ServerResult {
 		let panic_handler = Arc::new(Mutex::new(None));
 		let panic_for_server = panic_handler.clone();
 		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
-			ServerHandler::new(jsonrpc_handler.clone(), cors_domain.clone(), handler)
+			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), handler)
 		}));
 		Ok(Server {
 			server: Some(srv),
