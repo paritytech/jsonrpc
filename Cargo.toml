@@ -1,7 +1,7 @@
 [package]
 description = "Transport agnostic rust implementation of JSON-RPC 2.0 Specification."
-homepage = "https://github.com/debris/jsonrpc-core"
-repository = "https://github.com/debris/jsonrpc-core"
+homepage = "https://github.com/ethcore/jsonrpc-core"
+repository = "https://github.com/ethcore/jsonrpc-core"
 license = "MIT"
 name = "jsonrpc-core"
 version = "2.0.4"
