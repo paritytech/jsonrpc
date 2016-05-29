@@ -116,6 +116,7 @@ pub struct Server {
     event_loop: Arc<RwLock<EventLoop<RpcServer>>>,
     is_stopping: Arc<AtomicBool>,
     is_stopped: Arc<AtomicBool>,
+    addr: String,
 }
 
 #[derive(Debug)]
@@ -142,6 +143,7 @@ impl Server {
             event_loop: Arc::new(RwLock::new(event_loop)),
             is_stopping: Arc::new(AtomicBool::new(false)),
             is_stopped: Arc::new(AtomicBool::new(true)),
+            addr: socket_addr.to_owned(),
         })
     }
 
@@ -189,6 +191,22 @@ impl Server {
         Ok(())
     }
 
+    pub fn stop(&self) -> Result<(), Error> {
+        if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
+        if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
+        self.is_stopping.store(true, Ordering::Relaxed);
+        while !self.is_stopped.load(Ordering::Relaxed) { std::thread::sleep(std::time::Duration::new(0, 10)); }
+        Ok(())
+    }
+}
+
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        println!("Drop!");
+        self.stop().unwrap_or_else(|_| {}); // ignore error - can be stopped already
+        ::std::fs::remove_file(&self.addr).unwrap_or_else(|_| {}); // ignoer error - server could have never been started
+    }
 }
 
 impl RpcServer {
@@ -243,6 +261,7 @@ impl RpcServer {
         &mut self.connections[tok]
     }
 }
+
 
 impl Handler for RpcServer {
     type Timeout = usize;
@@ -389,4 +408,20 @@ pub fn test_reqrep_poll() {
     assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
 
     std::thread::sleep(std::time::Duration::from_millis(500));
+}
+
+#[test]
+pub fn test_file_removed() {
+    let addr = "/tmp/test50";
+    let io = dummy_io_handler();
+    {
+        let server = Server::new(addr, &io).unwrap();
+        server.run_async().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
+        let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
+        assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
+    }
+    assert!(::std::fs::metadata(addr).is_err()); // err is file not exists
 }
