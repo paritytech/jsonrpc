@@ -203,7 +203,6 @@ impl Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
-        println!("Drop!");
         self.stop().unwrap_or_else(|_| {}); // ignore error - can be stopped already
         ::std::fs::remove_file(&self.addr).unwrap_or_else(|_| {}); // ignoer error - server could have never been started
     }
