@@ -32,6 +32,7 @@ use std::io::{Read, Write};
 use std::net::SocketAddr;
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
+use hyper::mime;
 use hyper::server::{Request, Response};
 use hyper::{Next, Encoder, Decoder};
 use hyper::net::HttpStream;
@@ -70,6 +71,7 @@ pub struct ServerHandler {
 	cors_domains: Vec<AccessControlAllowOrigin>,
 	request: String,
 	response: Option<String>,
+	error_code:  hyper::status::StatusCode,
 	write_pos: usize,
 }
 
@@ -93,6 +95,7 @@ impl ServerHandler {
 			cors_domains: cors_domains,
 			request: String::new(),
 			response: None,
+			error_code: hyper::status::StatusCode::MethodNotAllowed,
 			write_pos: 0,
 		}
 	}
@@ -123,13 +126,22 @@ impl ServerHandler {
 
 impl hyper::server::Handler<HttpStream> for ServerHandler {
 	fn on_request(&mut self, request: Request) -> Next {
-		match *request.method() {
-			Method::Options => {
-				self.response = Some(String::new());
-				Next::write()
-			},
-			Method::Post => Next::read(),
-			_ => Next::write(),
+		// Validate the ContentType header
+		// to prevent Cross-Origin XHRs with text/plain
+		let content_type = request.headers().get::<ContentType>();
+		if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
+			match *request.method() {
+				Method::Options => {
+					self.response = Some(String::new());
+					Next::write()
+				},
+				Method::Post => Next::read(),
+				_ => Next::write(),
+			}
+		} else {
+			self.error_code = hyper::status::StatusCode::UnsupportedMediaType;
+			// Just return error
+			Next::write()
 		}
 	}
 
@@ -140,7 +152,9 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 				self.response = self.jsonrpc_handler.handle_request(&self.request);
 				match self.response {
 					Some(ref mut r) => r.push('\n'),
-					_ => ()
+					_ => {
+						self.error_code = hyper::status::StatusCode::BadRequest;
+					}
 				}
 				Next::write()
 			}
@@ -161,7 +175,7 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 	fn on_response(&mut self, response: &mut Response) -> Next {
 		*response.headers_mut() = self.response_headers();
 		if self.response.is_none() {
-			response.set_status(hyper::status::StatusCode::MethodNotAllowed);
+			response.set_status(self.error_code);
 		}
 		Next::write()
 	}
