@@ -1,17 +1,13 @@
-use std::str;
 use hyper::header::AccessControlAllowOrigin;
 use hyper::server::Request;
 
 pub fn read_origin(req: &Request) -> Option<String> {
-	req.headers().get_raw("origin")
-		.and_then(|v| {
-			if v.len() != 1 {
-				None
-			} else {
-				str::from_utf8(&v[0]).ok()
-			}
-		})
-		.map(|v| v.into())
+	match req.headers().get_raw("origin") {
+		Some(ref v) if v.len() == 1 => {
+				String::from_utf8(&v[0]).ok()
+		},
+		_ => None
+	}
 }
 
 pub fn get_cors_header(allowed: &[AccessControlAllowOrigin], origin: &Option<String>) -> Option<AccessControlAllowOrigin> {
@@ -100,10 +96,10 @@ mod tests {
 		let origin = Some("http://ethcore.io".into());
 
 		// when
-		let res = get_cors_header(&vec![
-															AccessControlAllowOrigin::Value("http://ethereum.org".into()),
-															AccessControlAllowOrigin::Value("http://ethcore.io".into()),
-															], &origin);
+		let res = get_cors_header(
+			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://ethcore.io".into())],
+			&origin
+		);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
