@@ -1,5 +1,5 @@
 //! jsonrpc request
-use serde::de::{Deserialize, Deserializer, Error as _DeError};
+use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer, Error as SerError};
 use serde_json::value;
 use super::{Id, Params, Version, Value};

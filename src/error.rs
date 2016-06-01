@@ -1,5 +1,5 @@
 //! jsonrpc errors
-use serde::de::{Deserialize, Deserializer};
+use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer};
 use super::Value;
 
