@@ -1,20 +1,20 @@
 //! jsonrpc http server.
-//! 
+//!
 //! ```no_run
 //! extern crate jsonrpc_core;
 //! extern crate jsonrpc_http_server;
-//! 
+//!
 //! use std::sync::Arc;
 //! use jsonrpc_core::*;
 //! use jsonrpc_http_server::*;
-//! 
+//!
 //! struct SayHello;
 //! impl MethodCommand for SayHello {
 //! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	}
 //! }
-//! 
+//!
 //! fn main() {
 //! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
@@ -25,6 +25,8 @@
 extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
+
+mod cors;
 
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
@@ -70,6 +72,7 @@ pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domains: Vec<AccessControlAllowOrigin>,
 	request: String,
+	origin: Option<String>,
 	response: Option<String>,
 	error_code:  hyper::status::StatusCode,
 	write_pos: usize,
@@ -86,6 +89,7 @@ impl Drop for ServerHandler {
 	}
 }
 
+
 impl ServerHandler {
 	/// Create new request handler.
 	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>, panic_handler: PanicHandler) -> Self {
@@ -94,13 +98,14 @@ impl ServerHandler {
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domains: cors_domains,
 			request: String::new(),
+			origin: None,
 			response: None,
 			error_code: hyper::status::StatusCode::MethodNotAllowed,
 			write_pos: 0,
 		}
 	}
 
-	fn response_headers(&self) -> Headers {
+	fn response_headers(&self, origin: &Option<String>) -> Headers {
 		let mut headers = Headers::new();
 		headers.set(
 			Allow(vec![
@@ -116,8 +121,8 @@ impl ServerHandler {
 			])
 		);
 
-		for cors_domain in &self.cors_domains {
-			headers.set(cors_domain.clone());
+		if let Some(cors_domain) = cors::get_cors_header(&self.cors_domains, origin) {
+			headers.set(cors_domain);
 		}
 
 		headers
@@ -126,6 +131,8 @@ impl ServerHandler {
 
 impl hyper::server::Handler<HttpStream> for ServerHandler {
 	fn on_request(&mut self, request: Request) -> Next {
+		// Read origin
+		self.origin = cors::read_origin(&request);
 		// Validate the ContentType header
 		// to prevent Cross-Origin XHRs with text/plain
 		let content_type = request.headers().get::<ContentType>();
@@ -173,7 +180,7 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 
 		/// This event occurs after the first time this handled signals `Next::write()`.
 	fn on_response(&mut self, response: &mut Response) -> Next {
-		*response.headers_mut() = self.response_headers();
+		*response.headers_mut() = self.response_headers(&self.origin);
 		if self.response.is_none() {
 			response.set_status(self.error_code);
 		}
@@ -251,8 +258,8 @@ impl Server {
 			panic_handler: panic_handler,
 		})
 	}
-	
-	pub fn set_panic_handler<F>(&self, handler: F) 
+
+	pub fn set_panic_handler<F>(&self, handler: F)
 		where F : Fn() -> () + Send + 'static {
 		*self.panic_handler.lock().unwrap() = Some(Box::new(handler));
 	}
