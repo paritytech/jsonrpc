@@ -4,7 +4,7 @@ use hyper::server::Request;
 pub fn read_origin(req: &Request) -> Option<String> {
 	match req.headers().get_raw("origin") {
 		Some(ref v) if v.len() == 1 => {
-			String::from_utf8(&v[0]).ok()
+			String::from_utf8(v[0].clone()).ok()
 		},
 		_ => None
 	}
