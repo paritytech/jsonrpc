@@ -133,22 +133,26 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 	fn on_request(&mut self, request: Request) -> Next {
 		// Read origin
 		self.origin = cors::read_origin(&request);
-		// Validate the ContentType header
-		// to prevent Cross-Origin XHRs with text/plain
-		let content_type = request.headers().get::<ContentType>();
-		if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
-			match *request.method() {
-				Method::Options => {
-					self.response = Some(String::new());
+
+		match *request.method() {
+			// Don't validate content type on options
+			Method::Options => {
+				self.response = Some(String::new());
+				Next::write()
+			},
+			Method::Post => {
+				// Validate the ContentType header
+				// to prevent Cross-Origin XHRs with text/plain
+				let content_type = request.headers().get::<ContentType>();
+				if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
+					Next::read()
+				} else {
+					self.error_code = hyper::status::StatusCode::UnsupportedMediaType;
+					// Just return error
 					Next::write()
-				},
-				Method::Post => Next::read(),
-				_ => Next::write(),
-			}
-		} else {
-			self.error_code = hyper::status::StatusCode::UnsupportedMediaType;
-			// Just return error
-			Next::write()
+				}
+			},
+			_ => Next::write(),
 		}
 	}
 
