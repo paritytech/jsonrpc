@@ -14,6 +14,35 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
+//! jsonrpc server over unix sockets
+//!
+//! ```no_run
+//! extern crate jsonrpc_core;
+//! extern crate json_ipc_server;
+//! extern crate rand;
+//!
+//! use std::sync::Arc;
+//! use jsonrpc_core::*;
+//! use json_ipc_server::Server;
+//!
+//! struct SayHello;
+//! impl MethodCommand for SayHello {
+//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
+//! 		Ok(Value::String("hello".to_string()))
+//! 	}
+//! }
+//!
+//! fn main() {
+//! 	let io = IoHandler::new();
+//! 	io.add_method("say_hello", SayHello);
+//! 	let server = Server::new("/tmp/json-ipc-test.ipc", &Arc::new(io)).unwrap();
+//!     ::std::thread::spawn(move || server.run());
+//! }
+//! ```
+
+extern crate mio;
+extern crate bytes;
+
 use mio::*;
 use mio::unix::*;
 use bytes::{Buf, ByteBuf, MutByteBuf};
@@ -21,7 +50,6 @@ use std::io;
 use jsonrpc_core::IoHandler;
 use std::sync::*;
 use std::sync::atomic::*;
-use slab;
 use std;
 
 const SERVER: Token = Token(0);
@@ -288,29 +316,10 @@ fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
     buf
 }
 
-#[cfg(test)]
-fn dummy_io_handler() -> Arc<IoHandler> {
-    use std::sync::Arc;
-    use jsonrpc_core::*;
-
-    struct SayHello;
-    impl MethodCommand for SayHello {
-        fn execute(&self, params: Params) -> Result<Value, Error> {
-            let (request_p1, request_p2) = from_params::<(u64, u64)>(params).unwrap();
-            let response_str = format!("hello {}! you sent {}", request_p1, request_p2);
-            Ok(Value::String(response_str))
-        }
-    }
-
-    let io = IoHandler::new();
-    io.add_method("say_hello", SayHello);
-    Arc::new(io)
-}
-
 #[test]
 pub fn test_reqrep() {
     let addr = "/tmp/test10";
-    let io = dummy_io_handler();
+    let io = test::dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         server.run()
@@ -325,7 +334,7 @@ pub fn test_reqrep() {
 #[test]
 pub fn test_reqrep_two_sequental_connections() {
     let addr = "/tmp/test15";
-    let io = dummy_io_handler();
+    let io = test::dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         server.run()
@@ -345,7 +354,7 @@ pub fn test_reqrep_two_sequental_connections() {
 #[test]
 pub fn test_reqrep_three_sequental_connections() {
     let addr = "/tmp/test25";
-    let io = dummy_io_handler();
+    let io = test::dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         server.run()
@@ -366,7 +375,7 @@ pub fn test_reqrep_three_sequental_connections() {
 #[test]
 pub fn test_reqrep_100_connections() {
     let addr = "/tmp/test45";
-    let io = dummy_io_handler();
+    let io = test::dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         server.run()
@@ -382,7 +391,7 @@ pub fn test_reqrep_100_connections() {
 #[test]
 pub fn test_reqrep_poll() {
     let addr = "/tmp/test40";
-    let io = dummy_io_handler();
+    let io = test::dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
         loop {
@@ -400,7 +409,7 @@ pub fn test_reqrep_poll() {
 #[test]
 pub fn test_file_removed() {
     let addr = "/tmp/test50";
-    let io = dummy_io_handler();
+    let io = test::dummy_io_handler();
     {
         let server = Server::new(addr, &io).unwrap();
         server.run_async().unwrap();
