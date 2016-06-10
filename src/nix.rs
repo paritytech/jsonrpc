@@ -299,98 +299,9 @@ impl Handler for RpcServer {
     }
 }
 
-#[cfg(test)]
-fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
-    use std::io::{Read, Write};
-
-    let mut poll = Poll::new().unwrap();
-    let mut sock = UnixStream::connect(addr).unwrap();
-    poll.register(&sock, Token(0), EventSet::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-    poll.poll(Some(500)).unwrap();
-    sock.write_all(buf).unwrap();
-    poll.reregister(&sock, Token(0), EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-    poll.poll(Some(500)).unwrap();
-
-    let mut buf = Vec::new();
-    sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
-    buf
-}
-
-#[test]
-pub fn test_reqrep() {
-    let addr = "/tmp/test10";
-    let io = test::dummy_io_handler();
-    let server = Server::new(addr, &io).unwrap();
-    std::thread::spawn(move || {
-        server.run()
-    });
-
-    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-
-    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-}
-
-#[test]
-pub fn test_reqrep_two_sequental_connections() {
-    let addr = "/tmp/test15";
-    let io = test::dummy_io_handler();
-    let server = Server::new(addr, &io).unwrap();
-    std::thread::spawn(move || {
-        server.run()
-    });
-
-    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-
-    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [555, 666], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 555! you sent 666","id":1}"#;
-    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-
-    std::thread::sleep(std::time::Duration::from_millis(500));
-}
-
-#[test]
-pub fn test_reqrep_three_sequental_connections() {
-    let addr = "/tmp/test25";
-    let io = test::dummy_io_handler();
-    let server = Server::new(addr, &io).unwrap();
-    std::thread::spawn(move || {
-        server.run()
-    });
-
-    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-
-    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [555, 666], "id": 1}"#;
-    String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap();
-
-    let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [9999, 1111], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 9999! you sent 1111","id":1}"#;
-    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-}
-
-#[test]
-pub fn test_reqrep_100_connections() {
-    let addr = "/tmp/test45";
-    let io = test::dummy_io_handler();
-    let server = Server::new(addr, &io).unwrap();
-    std::thread::spawn(move || {
-        server.run()
-    });
-
-    for i in 0..100 {
-        let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;
-        let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent "#.to_owned() + &format!("{}", i)  + r#"","id":1}"#;
-        assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-    }
-}
-
 #[test]
 pub fn test_reqrep_poll() {
-    let addr = "/tmp/test40";
+    let addr = tests::random_ipc_endpoint();
     let io = test::dummy_io_handler();
     let server = Server::new(addr, &io).unwrap();
     std::thread::spawn(move || {
@@ -401,14 +312,14 @@ pub fn test_reqrep_poll() {
 
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
     let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-    assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
+    assert_eq!(String::from_utf8(tests::dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 }
 
 #[test]
 pub fn test_file_removed() {
-    let addr = "/tmp/test50";
+    let addr = tests::random_ipc_endpoint();
     let io = test::dummy_io_handler();
     {
         let server = Server::new(addr, &io).unwrap();
@@ -417,7 +328,7 @@ pub fn test_file_removed() {
 
         let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
         let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-        assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
+        assert_eq!(String::from_utf8(tests::dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
     }
     assert!(::std::fs::metadata(addr).is_err()); // err is file not exists
 }

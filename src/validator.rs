@@ -14,26 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-extern crate jsonrpc_core;
-extern crate slab;
-extern crate miow;
-#[cfg(test)]
-extern crate rand;
+//! Request boundary validator
 
-#[cfg(not(windows))]
-mod nix;
-
-#[cfg(windows)]
-mod win;
-
-mod validator;
-
-#[cfg(test)]
-pub mod tests;
-
-#[cfg(not(windows))]
-pub use nix::{Server, Error};
-
-#[cfg(windows)]
-pub use win::{Server, Error, Result as PipeResult};
-
+pub fn is_valid(_buf: &[u8]) -> bool {
+    true
+}
