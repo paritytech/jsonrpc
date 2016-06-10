@@ -42,6 +42,8 @@ pub fn dummy_io_handler() -> Arc<IoHandler> {
 #[cfg(not(windows))]
 pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
     use std::io::{Read, Write};
+	use mio::*;
+	use mio::unix::*;
 
     let mut poll = Poll::new().unwrap();
     let mut sock = UnixStream::connect(addr).unwrap();
@@ -74,7 +76,7 @@ pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
 }
 
 
-fn random_ipc_endpoint() -> String {
+pub fn random_ipc_endpoint() -> String {
     let name = thread_rng().gen_ascii_chars().take(30).collect::<String>();
     if cfg!(windows) {
         format!(r"\\.\pipe\{}", name)
@@ -140,7 +142,7 @@ pub fn test_reqrep_100_connections() {
     let addr = random_ipc_endpoint();
     let io = dummy_io_handler();
     let server = Server::new(&addr, &io).unwrap();
-    server.run_async();
+    server.run_async().unwrap();
 
     for i in 0..100 {
         let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;

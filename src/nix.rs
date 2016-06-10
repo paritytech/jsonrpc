@@ -48,6 +48,9 @@ use jsonrpc_core::IoHandler;
 use std::sync::*;
 use std::sync::atomic::*;
 use std;
+use slab;
+#[cfg(test)]
+use tests;
 
 const SERVER: Token = Token(0);
 const MAX_CONCURRENT_CONNECTIONS: usize = 16;
@@ -299,8 +302,8 @@ impl Handler for RpcServer {
 #[test]
 pub fn test_reqrep_poll() {
     let addr = tests::random_ipc_endpoint();
-    let io = test::dummy_io_handler();
-    let server = Server::new(addr, &io).unwrap();
+    let io = tests::dummy_io_handler();
+    let server = Server::new(&addr, &io).unwrap();
     std::thread::spawn(move || {
         loop {
             server.poll();
@@ -317,9 +320,9 @@ pub fn test_reqrep_poll() {
 #[test]
 pub fn test_file_removed() {
     let addr = tests::random_ipc_endpoint();
-    let io = test::dummy_io_handler();
+    let io = tests::dummy_io_handler();
     {
-        let server = Server::new(addr, &io).unwrap();
+        let server = Server::new(&addr, &io).unwrap();
         server.run_async().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(500));
 
