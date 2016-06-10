@@ -84,7 +84,17 @@ impl PipeHandler {
     /// start ipc rpc server (blocking)
     pub fn start(addr: &str, io_handler: &Arc<IoHandler>) -> Result<PipeHandler> {
         Ok(PipeHandler {
-            waiting_pipe: try!(NamedPipe::new(addr)),
+            waiting_pipe: try!(
+                NamedPipeBuilder::new(addr)
+                    .first(true)
+                    .accept_remote(true)
+                    .max_instances(255)
+                    .inbound(true)
+                    .outbound(true)
+                    .out_buffer_size(MAX_REQUEST_LEN)
+                    .in_buffer_size(MAX_REQUEST_LEN)
+                    .create()
+            ),
             io_handler: io_handler.clone(),
             handle_counter: STARTING_PIPE_TOKEN,
         })
@@ -117,6 +127,7 @@ impl PipeHandler {
         let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe,
             try!(NamedPipeBuilder::new(addr)
                 .first(false)
+                .accept_remote(true)
                 .inbound(true)
                 .outbound(true)
                 .out_buffer_size(MAX_REQUEST_LEN)
