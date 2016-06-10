@@ -57,8 +57,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 const MAX_REQUEST_LEN: u32 = 65536;
 const REQUEST_READ_BATCH: usize = 4096;
 const POLL_PARK_TIMEOUT_MS: u64 = 10;
-const COMPLETION_PORT_TOKEN: u32 = 1;
-const WAITING_PIPE_TOKEN: usize = 2;
+const STARTING_PIPE_TOKEN: u32 = 1;
 
 #[derive(Debug)]
 pub enum Error {
@@ -78,6 +77,7 @@ impl std::convert::From<std::io::Error> for Error {
 pub struct PipeHandler {
     waiting_pipe: NamedPipe,
     io_handler: Arc<IoHandler>,
+    handle_counter: u32,
 }
 
 impl PipeHandler {
@@ -86,26 +86,33 @@ impl PipeHandler {
         Ok(PipeHandler {
             waiting_pipe: try!(NamedPipe::new(addr)),
             io_handler: io_handler.clone(),
+            handle_counter: STARTING_PIPE_TOKEN,
         })
     }
 
     fn handle_incoming(&mut self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
-        let cp = try!(CompletionPort::new(COMPLETION_PORT_TOKEN));
-        try!(cp.add_handle(WAITING_PIPE_TOKEN, &self.waiting_pipe));
+        let cp = try!(CompletionPort::new(self.handle_counter));
+        let pipe_token = self.handle_counter as usize + 1;
+        try!(cp.add_handle(pipe_token, &self.waiting_pipe));
 
         let mut overlapped = Overlapped::zero();
         unsafe { try!(self.waiting_pipe.connect_overlapped(&mut overlapped)); };
+        trace!(target: "ipc", "Waiting for client: [{}, {}] [{}]", self.handle_counter, pipe_token, addr);
         while !stop.load(Ordering::Relaxed) {
             if let Ok(status) = cp.get(None) {
-                if status.token() == WAITING_PIPE_TOKEN
+                if status.token() == pipe_token
                 {
+                    trace!(target: "ipc", "Received connection to address [{}]", addr);
                     break;
                 }
             }
             std::thread::park_timeout(std::time::Duration::from_millis(POLL_PARK_TIMEOUT_MS));
         }
 
-        if stop.load(Ordering::Relaxed) { return Ok(()) }
+        if stop.load(Ordering::Relaxed) {
+            trace!(target: "ipc", "Stopped listening sequence [{}]", addr);
+            return Ok(())
+        }
 
         let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe,
             try!(NamedPipeBuilder::new(addr)
@@ -115,6 +122,7 @@ impl PipeHandler {
                 .out_buffer_size(MAX_REQUEST_LEN)
                 .in_buffer_size(MAX_REQUEST_LEN)
                 .create()));
+        self.handle_counter += 2;
 
         let thread_handler = self.io_handler.clone();
         std::thread::spawn(move || {
@@ -129,34 +137,31 @@ impl PipeHandler {
                         if !validator::is_valid(effective) {
                             continue;
                         }
-                        // todo : no stable logging for windows?
-                        // println!("received request: [] bytes", effective.len());
+                        trace!(target: "ipc", "Received rpc request: {} bytes", effective.len());
 
-                        if let Err(_parse_err) = String::from_utf8(effective.to_vec())
+                        if let Err(parse_err) = String::from_utf8(effective.to_vec())
                             .map(|rpc_msg|
                                  {
                                     let response: Option<String> = thread_handler.handle_request(&rpc_msg);
                                     if let Some(response_str) = response {
                                         let response_bytes = response_str.into_bytes();
-                                        if let Err(_write_err) = connected_pipe.write_all(&response_bytes[..]) {
-                                            // todo : no stable logging for windows?
-                                            // println!("Response write error: {:?}", write_err);
+                                        if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]) {
+                                            trace!(target: "ipc", "Response write error: {:?}", write_err);
                                         }
-                                        // todo : no stable logging for windows?
-                                        // println!("sent response: [] bytes", response_bytes.len());
+                                        trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
                                         connected_pipe.flush().unwrap();
                                     }
                                 }
                             )
                         {
-                            // todo : no stable logging for windows?
-                            // println!("Response decode error: {:?}", parse_err);
+                            trace!(target: "ipc", "Response decode error: {:?}", parse_err);
                         }
 
                         fin = REQUEST_READ_BATCH;
                     },
-                    Err(_) => {
+                    Err(e) => {
                         // closed connection
+                        trace!(target: "ipc", "Dropped connection {:?}", e);
                         break;
                     }
                 }
@@ -205,9 +210,8 @@ impl Server {
         std::thread::spawn(move || {
             let mut pipe_handler = PipeHandler::start(&addr, &thread_handler).unwrap();
             while !thread_stopping.load(Ordering::Relaxed) {
-                if let Err(_pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
-                    // todo : no stable logging for windows?
-                    // println!("Pipe listening error: {:?}", pipe_listener_error);
+                if let Err(pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
+                    trace!(target: "ipc", "Pipe listening error: {:?}", pipe_listener_error);
                 }
             }
             thread_stopped.store(true, Ordering::Relaxed);
@@ -237,6 +241,6 @@ impl Drop for Server {
     fn drop(&mut self) {
         self.stop_async().unwrap_or_else(|_| {}); // ignore error - can be stopped already
         // todo : no stable logging for windows?
-        // println!("stopping server");
+        trace!(target: "ipc", "IPC Server : shutdown");
     }
 }
