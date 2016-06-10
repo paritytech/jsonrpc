@@ -1,6 +1,6 @@
 [package]
 name = "json-ipc-server"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 
 [dependencies]
