@@ -141,6 +141,7 @@ impl PipeHandler {
             let mut fin = REQUEST_READ_BATCH;
             loop {
                 let start = fin - REQUEST_READ_BATCH;
+                trace!(target: "ipc", "Reading {} - {} of the buffer", start, fin);
                 match connected_pipe.read(&mut buf[start..fin]) {
                     Ok(size) => {
                         let effective = &buf[0..start + size];
@@ -157,13 +158,13 @@ impl PipeHandler {
                                      let response: Option<String> = thread_handler.handle_request(&rpc_msg);
 
                                      if let Some(response_str) = response {
-                                        trace!(target: "ipc", "Response: {}", &response_str);
-                                        let response_bytes = response_str.into_bytes();
-                                        if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]) {
-                                            trace!(target: "ipc", "Response write error: {:?}", write_err);
-                                        }
-                                        trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
-                                        connected_pipe.flush().unwrap();
+                                         trace!(target: "ipc", "Response: {}", &response_str);
+                                         let response_bytes = response_str.into_bytes();
+                                         if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]) {
+                                             trace!(target: "ipc", "Response write error: {:?}", write_err);
+                                         }
+                                         trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
+                                         connected_pipe.flush().unwrap();
                                     }
                                 }
                             )
