@@ -9,6 +9,9 @@ mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
 miow = "0.1"
+log = "0.3"
+env_logger = "0.3"
+lazy_static = "0.1"
 
 [dev-dependencies]
 rand = "0.3"

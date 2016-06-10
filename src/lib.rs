@@ -15,6 +15,9 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate jsonrpc_core;
+#[macro_use] extern crate log;
+#[macro_use] extern crate lazy_static;
+extern crate env_logger;
 
 #[cfg(windows)]
 extern crate miow;
@@ -40,3 +43,27 @@ mod validator;
 
 #[cfg(windows)] pub use win::{Server, Error, Result as PipeResult};
 
+use std::env;
+use log::LogLevelFilter;
+use env_logger::LogBuilder;
+
+lazy_static! {
+	static ref LOG_DUMMY: bool = {
+		let mut builder = LogBuilder::new();
+		builder.filter(None, LogLevelFilter::Info);
+
+		if let Ok(log) = env::var("RUST_LOG") {
+			builder.parse(&log);
+		}
+
+		if let Ok(_) = builder.init() {
+			println!("logger initialized");
+		}
+		true
+	};
+}
+
+/// Intialize log with default settings
+pub fn init_log() {
+    let _ = *LOG_DUMMY;
+}
