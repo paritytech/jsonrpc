@@ -14,38 +14,24 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-//! jsonrpc server over unix sockets (todo: ... and later pipes)
-//!
-//! ```no_run
-//! extern crate jsonrpc_core;
-//! extern crate json_ipc_server;
-//!
-//! use std::sync::Arc;
-//! use jsonrpc_core::*;
-//! use json_ipc_server::Server;
-//!
-//! struct SayHello;
-//! impl MethodCommand for SayHello {
-//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	}
-//! }
-//!
-//! fn main() {
-//! 	let io = IoHandler::new();
-//! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new("/tmp/json-ipc-test.ipc", &Arc::new(io)).unwrap();
-//!     ::std::thread::spawn(move || server.run());
-//! }
-//! ```
-
-extern crate mio;
 extern crate jsonrpc_core;
-extern crate bytes;
 extern crate slab;
+extern crate miow;
+#[cfg(test)]
+extern crate rand;
 
 #[cfg(not(windows))]
 mod nix;
 
+#[cfg(windows)]
+mod win;
+
+#[cfg(test)]
+pub mod tests;
+
 #[cfg(not(windows))]
 pub use nix::{Server, Error};
+
+#[cfg(windows)]
+pub use win::{Server, Error, Result as PipeResult};
+
