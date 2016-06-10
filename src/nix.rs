@@ -40,9 +40,6 @@
 //! }
 //! ```
 
-extern crate mio;
-extern crate bytes;
-
 use mio::*;
 use mio::unix::*;
 use bytes::{Buf, ByteBuf, MutByteBuf};
