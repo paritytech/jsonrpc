@@ -101,6 +101,8 @@ pub fn test_reqrep() {
 
 #[test]
 pub fn test_reqrep_two_sequental_connections() {
+    super::init_log();
+
     let addr = random_ipc_endpoint();
     let io = dummy_io_handler();
     let server = Server::new(&addr, &io).unwrap();

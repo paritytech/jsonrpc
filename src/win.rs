@@ -203,6 +203,8 @@ impl Server {
         if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::IsStopping) }
         if !self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStopped) }
 
+        trace!(target: "ipc", "Started named pipes server [{}]", self.addr);
+
         let thread_stopping = self.is_stopping.clone();
         let thread_stopped = self.is_stopped.clone();
         let thread_handler = self.io_handler.clone();
