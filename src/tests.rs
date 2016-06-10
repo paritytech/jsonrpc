@@ -91,7 +91,7 @@ pub fn test_reqrep() {
     let io = dummy_io_handler();
     let server = Server::new(&addr, &io).unwrap();
     server.run_async().unwrap();
-
+    std::thread::park_timeout(std::time::Duration::from_millis(50));
 
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
     let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
@@ -105,6 +105,7 @@ pub fn test_reqrep_two_sequental_connections() {
     let io = dummy_io_handler();
     let server = Server::new(&addr, &io).unwrap();
     server.run_async().unwrap();
+    std::thread::park_timeout(std::time::Duration::from_millis(50));
 
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
     let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
@@ -123,6 +124,7 @@ pub fn test_reqrep_three_sequental_connections() {
     let io = dummy_io_handler();
     let server = Server::new(&addr, &io).unwrap();
     server.run_async().unwrap();
+    std::thread::park_timeout(std::time::Duration::from_millis(50));
 
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
     let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
@@ -144,6 +146,7 @@ pub fn test_reqrep_100_connections() {
     let io = dummy_io_handler();
     let server = Server::new(&addr, &io).unwrap();
     server.run_async().unwrap();
+    std::thread::park_timeout(std::time::Duration::from_millis(50));
 
     for i in 0..100 {
         let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;

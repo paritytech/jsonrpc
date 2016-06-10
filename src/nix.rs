@@ -324,7 +324,7 @@ pub fn test_file_removed() {
     {
         let server = Server::new(&addr, &io).unwrap();
         server.run_async().unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        std::thread::sleep(std::time::Duration::from_millis(50));
 
         let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
         let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
