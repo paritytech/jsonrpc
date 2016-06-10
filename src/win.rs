@@ -42,14 +42,23 @@
 //! Named pipes library
 
 use miow::pipe::{NamedPipe, NamedPipeBuilder};
+use miow::Overlapped;
+use miow::iocp::CompletionPort;
 use std;
 use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::*;
 use std::sync::Arc;
 use jsonrpc_core::IoHandler;
+use validator;
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+const MAX_REQUEST_LEN: u32 = 65536;
+const REQUEST_READ_BATCH: usize = 4096;
+const POLL_PARK_TIMEOUT_MS: u64 = 10;
+const COMPLETION_PORT_TOKEN: u32 = 1;
+const WAITING_PIPE_TOKEN: usize = 2;
 
 #[derive(Debug)]
 pub enum Error {
@@ -80,41 +89,76 @@ impl PipeHandler {
         })
     }
 
-    fn handle_incoming(&mut self, addr: &str) -> io::Result<()> {
-        try!(self.waiting_pipe.connect());
+    fn handle_incoming(&mut self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
+        let cp = try!(CompletionPort::new(COMPLETION_PORT_TOKEN));
+        try!(cp.add_handle(WAITING_PIPE_TOKEN, &self.waiting_pipe));
+
+        let mut overlapped = Overlapped::zero();
+        unsafe { try!(self.waiting_pipe.connect_overlapped(&mut overlapped)); };
+        while !stop.load(Ordering::Relaxed) {
+            if let Ok(status) = cp.get(None) {
+                if status.token() == WAITING_PIPE_TOKEN
+                {
+                    break;
+                }
+            }
+            std::thread::park_timeout(std::time::Duration::from_millis(POLL_PARK_TIMEOUT_MS));
+        }
+
+        if stop.load(Ordering::Relaxed) { return Ok(()) }
+
         let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe,
             try!(NamedPipeBuilder::new(addr)
                 .first(false)
                 .inbound(true)
                 .outbound(true)
-                .out_buffer_size(65536)
-                .in_buffer_size(65536)
+                .out_buffer_size(MAX_REQUEST_LEN)
+                .in_buffer_size(MAX_REQUEST_LEN)
                 .create()));
 
         let thread_handler = self.io_handler.clone();
         std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            match connected_pipe.read_to_end(&mut buf) {
-                Ok(_) => {
-                    if let Err(parse_err) = String::from_utf8(buf)
-                    .map(|rpc_msg| {
-                        let response: Option<String> = thread_handler.handle_request(&rpc_msg);
-                        if let Some(response_str) = response {
-                            let response_bytes = response_str.into_bytes();
-                            if let Err(write_err) = connected_pipe.write(&response_bytes[..]) {
-                                // todo : no stable logging for windows?
-                                println!("Response write error: {:?}", write_err);
-                            }
+            let mut buf = vec![0u8; MAX_REQUEST_LEN as usize];
+            let mut fin = REQUEST_READ_BATCH;
+            loop {
+                let start = fin - REQUEST_READ_BATCH;
+                match connected_pipe.read(&mut buf[start..fin]) {
+                    Ok(size) => {
+                        let effective = &buf[0..start + size];
+                        fin = fin + REQUEST_READ_BATCH;
+                        if !validator::is_valid(effective) {
+                            continue;
                         }
-                    })
-                    {
                         // todo : no stable logging for windows?
-                        println!("Response decode error: {:?}", parse_err);
+                        // println!("received request: [] bytes", effective.len());
+
+                        if let Err(_parse_err) = String::from_utf8(effective.to_vec())
+                            .map(|rpc_msg|
+                                 {
+                                    let response: Option<String> = thread_handler.handle_request(&rpc_msg);
+                                    if let Some(response_str) = response {
+                                        let response_bytes = response_str.into_bytes();
+                                        if let Err(_write_err) = connected_pipe.write_all(&response_bytes[..]) {
+                                            // todo : no stable logging for windows?
+                                            // println!("Response write error: {:?}", write_err);
+                                        }
+                                        // todo : no stable logging for windows?
+                                        // println!("sent response: [] bytes", response_bytes.len());
+                                        connected_pipe.flush().unwrap();
+                                    }
+                                }
+                            )
+                        {
+                            // todo : no stable logging for windows?
+                            // println!("Response decode error: {:?}", parse_err);
+                        }
+
+                        fin = REQUEST_READ_BATCH;
+                    },
+                    Err(_) => {
+                        // closed connection
+                        break;
                     }
-                },
-                Err(read_err) => {
-                    // todo : no stable logging for windows?
-                    println!("Response decode error: {:?}", read_err);
                 }
             }
         });
@@ -145,7 +189,7 @@ impl Server {
     pub fn run(&self) -> Result<()> {
         let mut pipe_handler = try!(PipeHandler::start(&self.addr, &self.io_handler));
         loop  {
-            try!(pipe_handler.handle_incoming(&self.addr))
+            try!(pipe_handler.handle_incoming(&self.addr, Arc::new(AtomicBool::new(false))));
         }
     }
 
@@ -161,9 +205,9 @@ impl Server {
         std::thread::spawn(move || {
             let mut pipe_handler = PipeHandler::start(&addr, &thread_handler).unwrap();
             while !thread_stopping.load(Ordering::Relaxed) {
-                if let Err(pipe_listener_error) = pipe_handler.handle_incoming(&addr) {
+                if let Err(_pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
                     // todo : no stable logging for windows?
-                    println!("Pipe listening error: {:?}", pipe_listener_error);
+                    // println!("Pipe listening error: {:?}", pipe_listener_error);
                 }
             }
             thread_stopped.store(true, Ordering::Relaxed);
@@ -191,37 +235,8 @@ impl Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
-        self.stop().unwrap_or_else(|_| {}); // ignore error - can be stopped already
-    }
-}
-
-
-#[cfg(test)]
-mod tests {
-
-    use rand::{thread_rng, Rng};
-    use std;
-    use tests::dummy_request;
-    use super::Server;
-    use tests;
-
-    fn random_pipe_name() -> String {
-        let name = thread_rng().gen_ascii_chars().take(30).collect::<String>();
-        format!(r"\\.\pipe\{}", name)
-    }
-
-
-    #[test]
-    pub fn test_reqrep_poll() {
-        let addr = &random_pipe_name();
-        let io = tests::dummy_io_handler();
-        let server = Server::new(addr, &io).unwrap();
-        server.run_async().unwrap();
-
-        let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-        let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-        assert_eq!(String::from_utf8(dummy_request(addr, request.as_bytes())).unwrap(), response.to_string());
-
-        std::thread::sleep(std::time::Duration::from_millis(500));
+        self.stop_async().unwrap_or_else(|_| {}); // ignore error - can be stopped already
+        // todo : no stable logging for windows?
+        // println!("stopping server");
     }
 }
