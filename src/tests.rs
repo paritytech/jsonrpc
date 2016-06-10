@@ -64,7 +64,6 @@ pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
     use miow::pipe::NamedPipe;
     use std::fs::OpenOptions;
 
-    println!("connecting to {}", addr);
     NamedPipe::wait(addr, None).unwrap();
     let mut f = OpenOptions::new().read(true).write(true).open(addr).unwrap();
     f.write_all(buf).unwrap();
