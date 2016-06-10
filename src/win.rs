@@ -153,8 +153,11 @@ impl PipeHandler {
                         if let Err(parse_err) = String::from_utf8(effective.to_vec())
                             .map(|rpc_msg|
                                  {
-                                    let response: Option<String> = thread_handler.handle_request(&rpc_msg);
-                                    if let Some(response_str) = response {
+                                     trace!(target: "ipc", "Request: {}", &rpc_msg);
+                                     let response: Option<String> = thread_handler.handle_request(&rpc_msg);
+
+                                     if let Some(response_str) = response {
+                                        trace!(target: "ipc", "Response: {}", &response_str);
                                         let response_bytes = response_str.into_bytes();
                                         if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]) {
                                             trace!(target: "ipc", "Response write error: {:?}", write_err);
