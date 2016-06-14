@@ -113,7 +113,7 @@ impl SocketConnection {
                 self.interest.remove(EventSet::readable());
                 self.interest.insert(EventSet::writable());
             }
-            Err(_) => {
+            Err(e) => {
                 trace!(target: "ipc", "Error receiving data: {:?}", e);
                 self.interest.remove(EventSet::readable());
             }
