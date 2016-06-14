@@ -54,6 +54,7 @@ use tests;
 
 const SERVER: Token = Token(0);
 const MAX_CONCURRENT_CONNECTIONS: usize = 16;
+const MAX_WRITE_LENGTH: usize = 8192;
 
 struct SocketConnection {
     socket: UnixStream,
@@ -79,11 +80,16 @@ impl SocketConnection {
     fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, _handler: &IoHandler) -> io::Result<()> {
         use std::io::Write;
         if let Some(buf) = self.buf.take() {
-            try!(self.socket.write_all(&buf.bytes()));
+			if buf.remaining() < MAX_WRITE_LENGTH {
+	            try!(self.socket.write_all(&buf.bytes()));
+				self.interest.remove(EventSet::writable());
+				self.interest.insert(EventSet::readable());
+			}
+			else {
+				try!(self.socket.write_all(&buf.bytes()[0..MAX_WRITE_LENGTH]));
+				self.buf = Some(ByteBuf::from_slice(&buf.bytes()[MAX_WRITE_LENGTH..]));
+			}
         }
-
-        self.interest.remove(EventSet::writable());
-        self.interest.insert(EventSet::readable());
 
         event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
     }
