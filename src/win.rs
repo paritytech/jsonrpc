@@ -56,7 +56,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 const MAX_REQUEST_LEN: u32 = 65536;
 const REQUEST_READ_BATCH: usize = 4096;
-const POLL_PARK_TIMEOUT_MS: u64 = 10;
+const POLL_PARK_TIMEOUT_MS: u64 = 100;
 const STARTING_PIPE_TOKEN: u32 = 1;
 
 #[derive(Debug)]
@@ -145,7 +145,7 @@ impl PipeHandler {
                 match connected_pipe.read(&mut buf[start..fin]) {
                     Ok(size) => {
                         let effective = &buf[0..start + size];
-                        fin = fin + REQUEST_READ_BATCH;
+                        fin = fin + size;
                         if !validator::is_valid(effective) {
                             continue;
                         }
@@ -163,8 +163,10 @@ impl PipeHandler {
                                          if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]) {
                                              trace!(target: "ipc", "Response write error: {:?}", write_err);
                                          }
-                                         trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
-                                         connected_pipe.flush().unwrap();
+                                         else {
+                                             trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
+                                             connected_pipe.flush().unwrap();
+                                         }
                                     }
                                 }
                             )

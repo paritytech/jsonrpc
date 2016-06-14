@@ -79,7 +79,8 @@ impl SocketConnection {
     fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, _handler: &IoHandler) -> io::Result<()> {
         use std::io::Write;
         if let Some(buf) = self.buf.take() {
-            try!(self.socket.write_all(&buf.bytes()));
+            let result = try!(self.socket.write_all(&buf.bytes()));
+            trace!(target: "ipc", "Write response: {} bytes", result);
         }
 
         self.interest.remove(EventSet::writable());
@@ -98,10 +99,12 @@ impl SocketConnection {
             Ok(Some(_)) => {
                 String::from_utf8(buf.bytes().to_vec())
                     .map(|rpc_msg| {
+                        trace!(target: "ipc", "Request: {}", rpc_msg);
                         let response: Option<String> = handler.handle_request(&rpc_msg);
                         if let Some(response_str) = response {
                             let response_bytes = response_str.into_bytes();
                             self.buf = Some(ByteBuf::from_slice(&response_bytes));
+                            trace!(target: "ipc", "Response: {}", response_str);
                         }
                     }).unwrap();
 
@@ -111,7 +114,7 @@ impl SocketConnection {
                 self.interest.insert(EventSet::writable());
             }
             Err(_) => {
-                //warn!(target: "ipc", "Error receiving data: {:?}", e);
+                trace!(target: "ipc", "Error receiving data: {:?}", e);
                 self.interest.remove(EventSet::readable());
             }
 
