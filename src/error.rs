@@ -3,7 +3,7 @@ use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use super::Value;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ErrorCode {
 	/// Invalid JSON was received by the server.
 	/// An error occurred on the server while parsing the JSON text.
@@ -69,7 +69,7 @@ impl Serialize for ErrorCode {
 	}
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Error {
 	pub code: ErrorCode,
 	pub message: String,
