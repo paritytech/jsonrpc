@@ -79,8 +79,7 @@ impl SocketConnection {
     fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, _handler: &IoHandler) -> io::Result<()> {
         use std::io::Write;
         if let Some(buf) = self.buf.take() {
-            let result = try!(self.socket.write_all(&buf.bytes()));
-            trace!(target: "ipc", "Write response: {} bytes", result);
+            try!(self.socket.write_all(&buf.bytes()));
         }
 
         self.interest.remove(EventSet::writable());
