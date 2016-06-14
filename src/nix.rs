@@ -101,9 +101,9 @@ impl SocketConnection {
                         trace!(target: "ipc", "Request: {}", rpc_msg);
                         let response: Option<String> = handler.handle_request(&rpc_msg);
                         if let Some(response_str) = response {
+                            trace!(target: "ipc", "Response: {}", &response_str);
                             let response_bytes = response_str.into_bytes();
                             self.buf = Some(ByteBuf::from_slice(&response_bytes));
-                            trace!(target: "ipc", "Response: {}", response_str);
                         }
                     }).unwrap();
 
