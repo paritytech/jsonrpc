@@ -182,7 +182,7 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 		}
 	}
 
-		/// This event occurs after the first time this handled signals `Next::write()`.
+	/// This event occurs after the first time this handled signals `Next::write()`.
 	fn on_response(&mut self, response: &mut Response) -> Next {
 		*response.headers_mut() = self.response_headers(&self.origin);
 		if self.response.is_none() {
@@ -191,14 +191,17 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 		Next::write()
 	}
 
-		/// This event occurs each time the `Response` is ready to be written to.
-		fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
+	/// This event occurs each time the `Response` is ready to be written to.
+	fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
+		if self.error_code == hyper::status::StatusCode::UnsupportedMediaType {
+			self.response = Some("Content-Type: application/json required\n".into());
+		}
 		if let Some(ref response) = self.response {
 			let bytes = response.as_bytes();
 			if bytes.len() == self.write_pos {
 				Next::end()
 			} else {
-				match encoder.write(&bytes[self.write_pos ..]) {
+				match encoder.write(&bytes[self.write_pos..]) {
 					Ok(0) => {
 						Next::write()
 					}
