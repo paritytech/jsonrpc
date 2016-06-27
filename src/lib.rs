@@ -130,7 +130,7 @@ impl ServerHandler {
 }
 
 impl hyper::server::Handler<HttpStream> for ServerHandler {
-	fn on_request(&mut self, request: Request) -> Next {
+	fn on_request(&mut self, request: Request<HttpStream>) -> Next {
 		// Read origin
 		self.origin = cors::read_origin(&request);
 
@@ -198,9 +198,10 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 		}
 		if let Some(ref response) = self.response {
 			let bytes = response.as_bytes();
-			if bytes.len() == self.write_pos {
+            if bytes.len() == self.write_pos {
 				Next::end()
 			} else {
+				println!("Writing {}..{}", self.write_pos, bytes.len());
 				match encoder.write(&bytes[self.write_pos..]) {
 					Ok(0) => {
 						Next::write()
@@ -256,12 +257,15 @@ impl Server {
 	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>) -> ServerResult {
 		let panic_handler = Arc::new(Mutex::new(None));
 		let panic_for_server = panic_handler.clone();
-		let srv = try!(try!(hyper::Server::http(addr)).handle(move |_| {
+		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |_| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
 			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), handler)
 		}));
+		::std::thread::spawn(move || {
+			srv.run();
+ 		});
 		Ok(Server {
-			server: Some(srv),
+			server: Some(l),
 			panic_handler: panic_handler,
 		})
 	}
