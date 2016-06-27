@@ -201,7 +201,6 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
             if bytes.len() == self.write_pos {
 				Next::end()
 			} else {
-				println!("Writing {}..{}", self.write_pos, bytes.len());
 				match encoder.write(&bytes[self.write_pos..]) {
 					Ok(0) => {
 						Next::write()
