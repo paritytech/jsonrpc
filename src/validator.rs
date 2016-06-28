@@ -38,10 +38,10 @@ pub fn extract_requests(buf: &[u8]) -> (Vec<String>, usize) {
     for (idx, char) in utf8.char_indices() {
         str_buf.push(char);
 
-        if char == '{' && !in_str {
+        if (char == '{' || char == '[') && !in_str {
             depth += 1;
         }
-        else if char == '}' && !in_str {
+        else if (char == '}' || char == ']') && !in_str {
             depth -= 1;
         }
         else if char == '"' && !is_escaped {
@@ -84,7 +84,14 @@ fn can_extract_requests_with_slash() {
 }
 
 #[test]
-fn can_extract_requests_with_bracket() {
+fn can_extract_requests_with_brackets() {
+    let buf = b"[{ \"val_s1\" : 10 }{ \"val_s2\" : 20 }]";
+    let res = extract_requests(buf);
+    assert_eq!(res.0[0], "[{ \"val_s1\" : 10 }{ \"val_s2\" : 20 }]");
+}
+
+#[test]
+fn can_extract_requests_with_braces() {
     let buf = b"{ \"va{l\" : 1 }{ \"va}l2\" : 2 }";
     let res = extract_requests(buf);
     assert_eq!(res.0[0], "{ \"va{l\" : 1 }");
