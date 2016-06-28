@@ -42,8 +42,6 @@
 //! Named pipes library
 
 use miow::pipe::{NamedPipe, NamedPipeBuilder};
-use miow::Overlapped;
-use miow::iocp::CompletionPort;
 use std;
 use std::io;
 use std::io::{Read, Write};
@@ -56,8 +54,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 const MAX_REQUEST_LEN: u32 = 65536;
 const REQUEST_READ_BATCH: usize = 4096;
-const POLL_PARK_TIMEOUT_MS: u64 = 100;
-const STARTING_PIPE_TOKEN: u32 = 1;
 
 #[derive(Debug)]
 pub enum Error {
@@ -77,7 +73,6 @@ impl std::convert::From<std::io::Error> for Error {
 pub struct PipeHandler {
     waiting_pipe: NamedPipe,
     io_handler: Arc<IoHandler>,
-    handle_counter: u32,
 }
 
 impl PipeHandler {
@@ -96,29 +91,13 @@ impl PipeHandler {
                     .create()
             ),
             io_handler: io_handler.clone(),
-            handle_counter: STARTING_PIPE_TOKEN,
         })
     }
 
     fn handle_incoming(&mut self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
-        let cp = try!(CompletionPort::new(self.handle_counter));
-        let pipe_token = self.handle_counter as usize + 1;
-        try!(cp.add_handle(pipe_token, &self.waiting_pipe));
-
-        let mut overlapped = Overlapped::zero();
-        unsafe { try!(self.waiting_pipe.connect_overlapped(&mut overlapped)); };
-        trace!(target: "ipc", "Waiting for client: [{}, {}] [{}]", self.handle_counter, pipe_token, addr);
-        while !stop.load(Ordering::Relaxed) {
-            if let Ok(status) = cp.get(None) {
-                if status.token() == pipe_token
-                {
-                    trace!(target: "ipc", "Received connection to address [{}]", addr);
-                    break;
-                }
-            }
-            std::thread::park_timeout(std::time::Duration::from_millis(POLL_PARK_TIMEOUT_MS));
-        }
-
+        trace!(target: "ipc", "Waiting for client: [{}]", addr);
+		try!(self.waiting_pipe.connect());
+		trace!(target: "ipc", "Received connection to address [{}]", addr);
         if stop.load(Ordering::Relaxed) {
             trace!(target: "ipc", "Stopped listening sequence [{}]", addr);
             return Ok(())
@@ -133,7 +112,6 @@ impl PipeHandler {
                 .out_buffer_size(MAX_REQUEST_LEN)
                 .in_buffer_size(MAX_REQUEST_LEN)
                 .create()));
-        self.handle_counter += 2;
 
         let thread_handler = self.io_handler.clone();
         std::thread::spawn(move || {
@@ -160,18 +138,17 @@ impl PipeHandler {
                                      if let Some(response_str) = response {
                                          trace!(target: "ipc", "Response: {}", &response_str);
                                          let response_bytes = response_str.into_bytes();
-                                         if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]) {
+                                         if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]).and_then(|_| connected_pipe.flush()) {
                                              trace!(target: "ipc", "Response write error: {:?}", write_err);
                                          }
                                          else {
                                              trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
-                                             connected_pipe.flush().unwrap();
                                          }
                                     }
                                 }
                             )
                         {
-                            trace!(target: "ipc", "Response decode error: {:?}", parse_err);
+                            trace!(target: "ipc", "Request decode error: {:?}", parse_err);
                         }
 
                         fin = REQUEST_READ_BATCH;
@@ -229,6 +206,7 @@ impl Server {
         std::thread::spawn(move || {
             let mut pipe_handler = PipeHandler::start(&addr, &thread_handler).unwrap();
             while !thread_stopping.load(Ordering::Relaxed) {
+				trace!(target: "ipc", "Accepting pipe connection");
                 if let Err(pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
                     trace!(target: "ipc", "Pipe listening error: {:?}", pipe_listener_error);
                 }
