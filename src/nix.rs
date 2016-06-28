@@ -49,6 +49,7 @@ use std::sync::*;
 use std::sync::atomic::*;
 use std;
 use slab;
+use validator;
 #[cfg(test)]
 use tests;
 
@@ -71,7 +72,7 @@ impl SocketConnection {
         SocketConnection {
             socket: sock,
             buf: None,
-            mut_buf: Some(ByteBuf::mut_with_capacity(2048)),
+            mut_buf: Some(ByteBuf::mut_with_capacity(4096)),
             token: None,
             interest: EventSet::hup(),
         }
@@ -102,21 +103,29 @@ impl SocketConnection {
                 self.mut_buf = Some(buf);
             }
             Ok(Some(_)) => {
-                String::from_utf8(buf.bytes().to_vec())
-                    .map(|rpc_msg| {
+                let (requests, last_index) = validator::extract_requests(buf.bytes());
+                if requests.len() > 0 {
+                    let mut response_bytes = Vec::new();
+                    for rpc_msg in requests {
                         trace!(target: "ipc", "Request: {}", rpc_msg);
                         let response: Option<String> = handler.handle_request(&rpc_msg);
                         if let Some(response_str) = response {
                             trace!(target: "ipc", "Response: {}", &response_str);
-                            let response_bytes = response_str.into_bytes();
-                            self.buf = Some(ByteBuf::from_slice(&response_bytes));
+                            response_bytes.extend(response_str.into_bytes());
                         }
-                    }).unwrap();
+                    }
+                    self.buf = Some(ByteBuf::from_slice(&response_bytes[..]));
 
-                self.mut_buf = Some(ByteBuf::mut_with_capacity(2048));
+                    let mut new_buf = ByteBuf::mut_with_capacity(4096);
+                    new_buf.write_slice(&buf.bytes()[last_index..]);
+                    self.mut_buf = Some(new_buf);
 
-                self.interest.remove(EventSet::readable());
-                self.interest.insert(EventSet::writable());
+                    self.interest.remove(EventSet::readable());
+                    self.interest.insert(EventSet::writable());
+                }
+                else {
+                    self.mut_buf = Some(buf);
+                }
             }
             Err(e) => {
                 trace!(target: "ipc", "Error receiving data: {:?}", e);
