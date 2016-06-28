@@ -97,3 +97,11 @@ fn can_extract_requests_with_braces() {
     assert_eq!(res.0[0], "{ \"va{l\" : 1 }");
     assert_eq!(res.0[1], "{ \"va}l2\" : 2 }");
 }
+
+#[test]
+fn can_extract_vitro1() {
+    let buf = b"[{\"jsonrpc\":\"2.0\",\"id\":\"3a3472c0-c7be-4070-a05c-8042c0a94892\",\"method\":\"eth_accounts\",\"params\":[]}][{\"jsonrpc\":\"2.0\",\"id\":\"a7329aff-888e-4aa7-a925-651c9545f356\",\"method\":\"net_peerCount\",\"params\":[]}]";
+    let res = extract_requests(buf);
+    assert_eq!(res.0[0], "[{\"jsonrpc\":\"2.0\",\"id\":\"3a3472c0-c7be-4070-a05c-8042c0a94892\",\"method\":\"eth_accounts\",\"params\":[]}]");
+    assert_eq!(res.0[1], "[{\"jsonrpc\":\"2.0\",\"id\":\"a7329aff-888e-4aa7-a925-651c9545f356\",\"method\":\"net_peerCount\",\"params\":[]}]");
+}
