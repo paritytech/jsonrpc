@@ -16,6 +16,77 @@
 
 //! Request boundary validator
 
+use std::mem;
+
 pub fn is_valid(_buf: &[u8]) -> bool {
     true
+}
+
+pub fn extract_requests(buf: &[u8]) -> (Vec<String>, usize) {
+    let utf8 = match String::from_utf8(buf.to_vec()) {
+        Ok(val) => val,
+        Err(_) => { return (Vec::new(), 0) }
+    };
+
+    let mut str_buf = String::new();
+    let mut depth = 0;
+    let mut res = Vec::new();
+    let mut last_req = 0;
+    let mut in_str = false;
+    let mut is_escaped = false;
+
+    for (idx, char) in utf8.char_indices() {
+        str_buf.push(char);
+
+        if char == '{' && !in_str {
+            depth += 1;
+        }
+        else if char == '}' && !in_str {
+            depth -= 1;
+        }
+        else if char == '"' && !is_escaped {
+            in_str = !in_str;
+        }
+        else if char == '\\' && is_escaped && !in_str {
+            is_escaped = !is_escaped;
+        }
+
+        if depth == 0 && str_buf.len() > 0 {
+            res.push(mem::replace(&mut str_buf, String::new()));
+            last_req = idx;
+        }
+    }
+
+    (res, last_req)
+}
+
+#[test]
+fn can_extract_request() {
+    let buf = b"{ \"val\" : 1 } ffuuu";
+    let res = extract_requests(buf);
+    assert_eq!(res.0[0], "{ \"val\" : 1 }");
+}
+
+#[test]
+fn can_extract_requests() {
+    let buf = b"{ \"val\" : 1 }{ \"val2\" : 2 }";
+    let res = extract_requests(buf);
+    assert_eq!(res.0[0], "{ \"val\" : 1 }");
+    assert_eq!(res.0[1], "{ \"val2\" : 2 }");
+}
+
+#[test]
+fn can_extract_requests_with_slash() {
+    let buf = b"{ \"va\\l\" : 1 }{ \"va\\l2\" : 2 }";
+    let res = extract_requests(buf);
+    assert_eq!(res.0[0], "{ \"va\\l\" : 1 }");
+    assert_eq!(res.0[1], "{ \"va\\l2\" : 2 }");
+}
+
+#[test]
+fn can_extract_requests_with_bracket() {
+    let buf = b"{ \"va{l\" : 1 }{ \"va}l2\" : 2 }";
+    let res = extract_requests(buf);
+    assert_eq!(res.0[0], "{ \"va{l\" : 1 }");
+    assert_eq!(res.0[1], "{ \"va}l2\" : 2 }");
 }
