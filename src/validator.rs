@@ -18,10 +18,6 @@
 
 use std::mem;
 
-pub fn is_valid(_buf: &[u8]) -> bool {
-    true
-}
-
 pub fn extract_requests(buf: &[u8]) -> (Vec<String>, usize) {
     let utf8 = match String::from_utf8(buf.to_vec()) {
         Ok(val) => val,
