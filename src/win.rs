@@ -122,36 +122,40 @@ impl PipeHandler {
                 trace!(target: "ipc", "Reading {} - {} of the buffer", start, fin);
                 match connected_pipe.read(&mut buf[start..fin]) {
                     Ok(size) => {
-                        let effective = &buf[0..start + size];
-                        fin = fin + size;
-                        if !validator::is_valid(effective) {
-                            continue;
-                        }
-                        trace!(target: "ipc", "Received rpc request: {} bytes", effective.len());
+                        let (requests, last_index) = {
+                            let effective = &buf[0..start + size];
+                            fin = fin + size;
+                            trace!(target: "ipc", "Received rpc request: {} bytes", effective.len());
 
-                        if let Err(parse_err) = String::from_utf8(effective.to_vec())
-                            .map(|rpc_msg|
-                                 {
-                                     trace!(target: "ipc", "Request: {}", &rpc_msg);
-                                     let response: Option<String> = thread_handler.handle_request(&rpc_msg);
+                            validator::extract_requests(effective)
+                        };
 
-                                     if let Some(response_str) = response {
-                                         trace!(target: "ipc", "Response: {}", &response_str);
-                                         let response_bytes = response_str.into_bytes();
-                                         if let Err(write_err) = connected_pipe.write_all(&response_bytes[..]).and_then(|_| connected_pipe.flush()) {
-                                             trace!(target: "ipc", "Response write error: {:?}", write_err);
-                                         }
-                                         else {
-                                             trace!(target: "ipc", "Sent rpc response:  {} bytes", response_bytes.len());
-                                         }
-                                    }
+                        if requests.len() > 0 {
+                            let mut response_buf = Vec::new();
+                            for rpc_msg in requests  {
+                                let response: Option<String> = thread_handler.handle_request(&rpc_msg);
+
+                                if let Some(response_str) = response {
+                                    trace!(target: "ipc", "Response: {}", &response_str);
+                                    response_buf.extend(response_str.into_bytes());
                                 }
-                            )
-                        {
-                            trace!(target: "ipc", "Request decode error: {:?}", parse_err);
-                        }
+                            }
 
-                        fin = REQUEST_READ_BATCH;
+                            if let Err(write_err) = connected_pipe.write_all(&response_buf[..]).and_then(|_| connected_pipe.flush()) {
+                                trace!(target: "ipc", "Response write error: {:?}", write_err);
+                            }
+                            else {
+                                trace!(target: "ipc", "Sent rpc response: {} bytes", response_buf.len());
+                            }
+
+                            let leftover_len = start + size - (last_index + 1);
+                            if leftover_len > 0 {
+                                let leftover = buf[last_index + 1..start + size].to_vec();
+                                buf[0..leftover_len].copy_from_slice(&leftover[..]);
+                            }
+                            fin = leftover_len + REQUEST_READ_BATCH;
+                        }
+                        else { continue; }
                     },
                     Err(e) => {
                         // closed connection
