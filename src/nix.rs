@@ -117,7 +117,7 @@ impl SocketConnection {
                     self.buf = Some(ByteBuf::from_slice(&response_bytes[..]));
 
                     let mut new_buf = ByteBuf::mut_with_capacity(4096);
-                    new_buf.write_slice(&buf.bytes()[last_index..]);
+                    new_buf.write_slice(&buf.bytes()[last_index+1..]);
                     self.mut_buf = Some(new_buf);
 
                     self.interest.remove(EventSet::readable());
