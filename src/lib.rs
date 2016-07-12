@@ -27,19 +27,22 @@ extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 
 mod cors;
+mod request_response;
+#[cfg(test)]
+mod tests;
 
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::io::{Read, Write};
 use std::net::SocketAddr;
+use std::thread;
+use unicase::UniCase;
+use request_response::{Request, Response};
+use hyper::{mime, server, Next, Encoder, Decoder};
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
-use hyper::mime;
-use hyper::server::{Request, Response};
-use hyper::{Next, Encoder, Decoder};
 use hyper::net::HttpStream;
-use unicase::UniCase;
-use self::jsonrpc::{IoHandler};
+use jsonrpc::{IoHandler};
 
 pub use hyper::header::AccessControlAllowOrigin;
 
@@ -71,11 +74,8 @@ pub struct ServerHandler {
 	panic_handler: PanicHandler,
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domains: Vec<AccessControlAllowOrigin>,
-	request: String,
-	origin: Option<String>,
-	response: Option<String>,
-	error_code:  hyper::status::StatusCode,
-	write_pos: usize,
+	request: Request,
+	response: Response,
 }
 
 impl Drop for ServerHandler {
@@ -89,7 +89,6 @@ impl Drop for ServerHandler {
 	}
 }
 
-
 impl ServerHandler {
 	/// Create new request handler.
 	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>, panic_handler: PanicHandler) -> Self {
@@ -97,11 +96,8 @@ impl ServerHandler {
 			panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domains: cors_domains,
-			request: String::new(),
-			origin: None,
-			response: None,
-			error_code: hyper::status::StatusCode::MethodNotAllowed,
-			write_pos: 0,
+			request: Request::empty(),
+			response: Response::method_not_allowed(),
 		}
 	}
 
@@ -112,7 +108,7 @@ impl ServerHandler {
 				Method::Options, Method::Post
 			])
 		);
-		headers.set(ContentType::json());
+		headers.set(self.response.content_type.clone());
 		headers.set(
 			AccessControlAllowHeaders(vec![
 				UniCase("origin".to_owned()),
@@ -129,15 +125,15 @@ impl ServerHandler {
 	}
 }
 
-impl hyper::server::Handler<HttpStream> for ServerHandler {
-	fn on_request(&mut self, request: Request<HttpStream>) -> Next {
+impl server::Handler<HttpStream> for ServerHandler {
+	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Read origin
-		self.origin = cors::read_origin(&request);
+		self.request.origin = cors::read_origin(&request);
 
 		match *request.method() {
 			// Don't validate content type on options
 			Method::Options => {
-				self.response = Some(String::new());
+				self.response = Response::empty();
 				Next::write()
 			},
 			Method::Post => {
@@ -147,35 +143,31 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 				if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
 					Next::read()
 				} else {
-					self.error_code = hyper::status::StatusCode::UnsupportedMediaType;
 					// Just return error
+					self.response = Response::unsupported_content_type();
 					Next::write()
 				}
 			},
-			_ => Next::write(),
+			_ => {
+				self.response = Response::method_not_allowed();
+				Next::write()
+			}
 		}
 	}
 
 	/// This event occurs each time the `Request` is ready to be read from.
 	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
-		match decoder.read_to_string(&mut self.request) {
+		match decoder.read_to_string(&mut self.request.content) {
 			Ok(0) => {
-				self.response = self.jsonrpc_handler.handle_request(&self.request);
-				match self.response {
-					Some(ref mut r) => r.push('\n'),
-					_ => {
-						self.error_code = hyper::status::StatusCode::BadRequest;
-					}
-				}
+				self.response = Response::ok(self.jsonrpc_handler.handle_request(&self.request.content).unwrap_or_else(String::new));
 				Next::write()
 			}
 			Ok(_) => {
 				Next::read()
 			}
 			Err(e) => match e.kind() {
-				::std::io::ErrorKind::WouldBlock => Next::read(),
+				std::io::ErrorKind::WouldBlock => Next::read(),
 				_ => {
-					//trace!("Read error: {}", e);
 					Next::end()
 				}
 			}
@@ -183,72 +175,41 @@ impl hyper::server::Handler<HttpStream> for ServerHandler {
 	}
 
 	/// This event occurs after the first time this handled signals `Next::write()`.
-	fn on_response(&mut self, response: &mut Response) -> Next {
-		*response.headers_mut() = self.response_headers(&self.origin);
-		if self.response.is_none() {
-			response.set_status(self.error_code);
-		}
+	fn on_response(&mut self, response: &mut server::Response) -> Next {
+		*response.headers_mut() = self.response_headers(&self.request.origin);
+		response.set_status(self.response.code);
 		Next::write()
 	}
 
 	/// This event occurs each time the `Response` is ready to be written to.
 	fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
-		if self.error_code == hyper::status::StatusCode::UnsupportedMediaType {
-			self.response = Some("Content-Type: application/json required\n".into());
+		let bytes = self.response.content.as_bytes();
+		if bytes.len() == self.response.write_pos {
+			return Next::end();
 		}
-		if let Some(ref response) = self.response {
-			let bytes = response.as_bytes();
-            if bytes.len() == self.write_pos {
-				Next::end()
-			} else {
-				match encoder.write(&bytes[self.write_pos..]) {
-					Ok(0) => {
-						Next::write()
-					}
-					Ok(bytes) => {
-						self.write_pos += bytes;
-						Next::write()
-					}
-					Err(e) => match e.kind() {
-						::std::io::ErrorKind::WouldBlock => Next::write(),
-						_ => {
-							//trace!("Write error: {}", e);
-							Next::end()
-						}
-					}
+
+		match encoder.write(&bytes[self.response.write_pos..]) {
+			Ok(0) => {
+				Next::write()
+			}
+			Ok(bytes) => {
+				self.response.write_pos += bytes;
+				Next::write()
+			}
+			Err(e) => match e.kind() {
+				std::io::ErrorKind::WouldBlock => Next::write(),
+				_ => {
+					//trace!("Write error: {}", e);
+					Next::end()
 				}
 			}
-		} else {
-			Next::end()
 		}
 	}
 }
 
 /// jsonrpc http server.
-///
-/// ```no_run
-/// extern crate jsonrpc_core;
-/// extern crate jsonrpc_http_server;
-///
-/// use std::sync::Arc;
-/// use jsonrpc_core::*;
-/// use jsonrpc_http_server::*;
-///
-/// struct SayHello;
-/// impl MethodCommand for SayHello {
-/// 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-/// 		Ok(Value::String("hello".to_string()))
-/// 	}
-/// }
-///
-/// fn main() {
-/// 	let io = IoHandler::new();
-/// 	io.add_method("say_hello", SayHello);
-/// 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), vec![AccessControlAllowOrigin::Null]);
-/// }
-/// ```
 pub struct Server {
-	server: Option<hyper::server::Listening>,
+	server: Option<server::Listening>,
 	panic_handler: Arc<Mutex<Option<Box<Fn() -> () + Send>>>>
 }
 
@@ -260,9 +221,11 @@ impl Server {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
 			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), handler)
 		}));
-		::std::thread::spawn(move || {
+
+		thread::spawn(move || {
 			srv.run();
  		});
+
 		Ok(Server {
 			server: Some(l),
 			panic_handler: panic_handler,
