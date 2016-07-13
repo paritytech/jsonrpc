@@ -8,10 +8,10 @@ use self::jsonrpc_core::IoHandler;
 use super::*;
 
 fn serve() -> Server {
-		let rpc = Arc::new(IoHandler::new());
-		let cors_domains = vec![AccessControlAllowOrigin::Value("ethcore.io".into())];
+	let rpc = Arc::new(IoHandler::new());
+	let cors_domains = vec![AccessControlAllowOrigin::Value("ethcore.io".into())];
 
-		Server::start(&"127.0.0.1:0".parse().unwrap(), rpc, cors_domains).unwrap()
+	Server::start(&"127.0.0.1:0".parse().unwrap(), rpc, cors_domains).unwrap()
 }
 
 struct Response {

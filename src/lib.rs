@@ -103,19 +103,16 @@ impl ServerHandler {
 
 	fn response_headers(&self, origin: &Option<String>) -> Headers {
 		let mut headers = Headers::new();
-		headers.set(
-			Allow(vec![
-				Method::Options, Method::Post
-			])
-		);
 		headers.set(self.response.content_type.clone());
-		headers.set(
-			AccessControlAllowHeaders(vec![
-				UniCase("origin".to_owned()),
-				UniCase("content-type".to_owned()),
-				UniCase("accept".to_owned()),
-			])
-		);
+		headers.set(Allow(vec![
+			Method::Options,
+			Method::Post,
+		]));
+		headers.set(AccessControlAllowHeaders(vec![
+			UniCase("origin".to_owned()),
+			UniCase("content-type".to_owned()),
+			UniCase("accept".to_owned()),
+		]));
 
 		if let Some(cors_domain) = cors::get_cors_header(&self.cors_domains, origin) {
 			headers.set(cors_domain);
@@ -230,7 +227,7 @@ impl Server {
 
 		thread::spawn(move || {
 			srv.run();
- 		});
+		});
 
 		Ok(Server {
 			server: Some(l),
@@ -238,13 +235,12 @@ impl Server {
 		})
 	}
 
-	pub fn set_panic_handler<F>(&self, handler: F)
-		where F : Fn() -> () + Send + 'static {
+	pub fn set_panic_handler<F>(&self, handler: F) where F : Fn() -> () + Send + 'static {
 		*self.panic_handler.lock().unwrap() = Some(Box::new(handler));
 	}
 
 	pub fn addr(&self) -> &SocketAddr {
-			self.server.as_ref().unwrap().addr()
+		self.server.as_ref().unwrap().addr()
 	}
 }
 

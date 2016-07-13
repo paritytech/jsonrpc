@@ -58,7 +58,7 @@ mod tests {
 		let res = get_cors_header(
 			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())],
 			&origin
-		);
+			);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
@@ -73,7 +73,7 @@ mod tests {
 		let res = get_cors_header(
 			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())],
 			&origin
-		);
+			);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
@@ -100,7 +100,7 @@ mod tests {
 		let res = get_cors_header(
 			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://ethcore.io".into())],
 			&origin
-		);
+			);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
