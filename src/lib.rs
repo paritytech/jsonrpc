@@ -42,7 +42,7 @@ use hyper::{mime, server, Next, Encoder, Decoder};
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
 use hyper::net::HttpStream;
-use jsonrpc::{IoHandler};
+use jsonrpc::IoHandler;
 
 pub use hyper::header::AccessControlAllowOrigin;
 
@@ -123,6 +123,14 @@ impl ServerHandler {
 
 		headers
 	}
+
+	fn is_json(&self, content_type: Option<&ContentType>) -> bool {
+		if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
+			true
+		} else {
+			false
+		}
+	}
 }
 
 impl server::Handler<HttpStream> for ServerHandler {
@@ -136,17 +144,15 @@ impl server::Handler<HttpStream> for ServerHandler {
 				self.response = Response::empty();
 				Next::write()
 			},
+			// Validate the ContentType header
+			// to prevent Cross-Origin XHRs with text/plain
+			Method::Post if self.is_json(request.headers().get::<ContentType>()) => {
+				Next::read()
+			},
 			Method::Post => {
-				// Validate the ContentType header
-				// to prevent Cross-Origin XHRs with text/plain
-				let content_type = request.headers().get::<ContentType>();
-				if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
-					Next::read()
-				} else {
-					// Just return error
-					self.response = Response::unsupported_content_type();
-					Next::write()
-				}
+				// Just return error
+				self.response = Response::unsupported_content_type();
+				Next::write()
 			},
 			_ => {
 				self.response = Response::method_not_allowed();
@@ -235,6 +241,10 @@ impl Server {
 	pub fn set_panic_handler<F>(&self, handler: F)
 		where F : Fn() -> () + Send + 'static {
 		*self.panic_handler.lock().unwrap() = Some(Box::new(handler));
+	}
+
+	pub fn addr(&self) -> &SocketAddr {
+			self.server.as_ref().unwrap().addr()
 	}
 }
 
