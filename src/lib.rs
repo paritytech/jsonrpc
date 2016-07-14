@@ -28,9 +28,10 @@ extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 
+pub mod request_response;
 mod cors;
-mod request_response;
 mod handler;
+mod hosts_validator;
 #[cfg(test)]
 mod tests;
 
@@ -42,6 +43,7 @@ use jsonrpc::IoHandler;
 
 pub use hyper::header::AccessControlAllowOrigin;
 pub use handler::{PanicHandler, ServerHandler};
+pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, RpcServerError>;
@@ -116,10 +118,11 @@ impl ServerBuilder {
 		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let jsonrpc_handler = self.jsonrpc_handler;
 		let cors_domains = self.cors_domains;
+		let hosts = self.allowed_hosts;
 
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |_| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
-			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), handler)
+			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts.clone(), handler)
 		}));
 
 		thread::spawn(move || {

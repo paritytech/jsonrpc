@@ -7,6 +7,14 @@ use std::io::{Read, Write};
 use self::jsonrpc_core::IoHandler;
 use super::*;
 
+fn serve_hosts(hosts: Vec<String>) -> Server {
+	ServerBuilder::new(Arc::new(IoHandler::new()))
+		.cors_domains(vec![AccessControlAllowOrigin::Value("ethcore.io".into())])
+		.allowed_hosts(hosts)
+		.start_http(&"127.0.0.1:0".parse().unwrap())
+		.unwrap()
+}
+
 fn serve() -> Server {
 	ServerBuilder::new(Arc::new(IoHandler::new()))
 		.cors_domains(vec![AccessControlAllowOrigin::Value("ethcore.io".into())])
@@ -245,11 +253,85 @@ fn should_not_add_cors_headers() {
 	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
 }
 
+#[test]
+fn should_reject_invalid_hosts() {
+	// given
+	let server = serve_hosts(vec!["ethcore.io".into()]);
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.body, invalid_host());
+}
+
+#[test]
+fn should_reject_missing_host() {
+	// given
+	let server = serve_hosts(vec!["ethcore.io".into()]);
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.body, invalid_host());
+}
+
+#[test]
+fn should_allow_if_host_is_valid() {
+	// given
+	let server = serve_hosts(vec!["ethcore.io".into()]);
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: ethcore.io\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, method_not_found());
+}
+
+fn invalid_host() -> String {
+	"29\nProvided Host header is not whitelisted.\n".into()
+}
 
 fn method_not_found() -> String {
- "59\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\",\"data\":null},\"id\":1}\n0\n".to_owned()
+ "59\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\",\"data\":null},\"id\":1}\n0\n".into()
 }
 
 fn invalid_request() -> String {
- "5B\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}\n0\n".to_owned()
+ "5B\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}\n0\n".into()
 }

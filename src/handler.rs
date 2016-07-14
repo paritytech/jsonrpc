@@ -4,14 +4,14 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::io::{self, Read, Write};
 use unicase::UniCase;
-use request_response::{Request, Response};
 use hyper::{mime, server, Next, Encoder, Decoder};
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
 use hyper::net::HttpStream;
-use jsonrpc::IoHandler;
 use hyper::header::AccessControlAllowOrigin;
-
+use jsonrpc::IoHandler;
+use request_response::{Request, Response};
+use hosts_validator::is_host_header_valid;
 
 /// PanicHandling function
 pub struct PanicHandler {
@@ -24,6 +24,7 @@ pub struct ServerHandler {
 	panic_handler: PanicHandler,
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
+	allowed_hosts: Option<Vec<String>>,
 	request: Request,
 	response: Response,
 }
@@ -41,11 +42,17 @@ impl Drop for ServerHandler {
 
 impl ServerHandler {
 	/// Create new request handler.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domains: Option<Vec<AccessControlAllowOrigin>>, panic_handler: PanicHandler) -> Self {
+	pub fn new(
+		jsonrpc_handler: Arc<IoHandler>,
+		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
+		allowed_hosts: Option<Vec<String>>,
+		panic_handler: PanicHandler
+	) -> Self {
 		ServerHandler {
 			panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domains: cors_domains,
+			allowed_hosts: allowed_hosts,
 			request: Request::empty(),
 			response: Response::method_not_allowed(),
 		}
@@ -82,6 +89,14 @@ impl ServerHandler {
 
 impl server::Handler<HttpStream> for ServerHandler {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
+		// Validate host
+		if let Some(ref allowed_hosts) = self.allowed_hosts {
+			if !is_host_header_valid(&request, allowed_hosts) {
+				self.response = Response::host_not_allowed();
+				return Next::write();
+			}
+		}
+
 		// Read origin
 		self.request.origin = cors::read_origin(&request);
 
