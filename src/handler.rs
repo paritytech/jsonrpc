@@ -23,7 +23,7 @@ pub struct PanicHandler {
 pub struct ServerHandler {
 	panic_handler: PanicHandler,
 	jsonrpc_handler: Arc<IoHandler>,
-	cors_domains: Vec<AccessControlAllowOrigin>,
+	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	request: Request,
 	response: Response,
 }
@@ -41,7 +41,7 @@ impl Drop for ServerHandler {
 
 impl ServerHandler {
 	/// Create new request handler.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>, panic_handler: PanicHandler) -> Self {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>, cors_domains: Option<Vec<AccessControlAllowOrigin>>, panic_handler: PanicHandler) -> Self {
 		ServerHandler {
 			panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,

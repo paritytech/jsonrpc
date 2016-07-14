@@ -11,11 +11,12 @@ pub fn read_origin(req: &Request<HttpStream>) -> Option<String> {
 	}
 }
 
-pub fn get_cors_header(allowed: &[AccessControlAllowOrigin], origin: &Option<String>) -> Option<AccessControlAllowOrigin> {
+pub fn get_cors_header(allowed: &Option<Vec<AccessControlAllowOrigin>>, origin: &Option<String>) -> Option<AccessControlAllowOrigin> {
 
-	if allowed.is_empty() {
+	if allowed.is_none() {
 		return None;
 	}
+	let allowed = allowed.as_ref().unwrap();
 
 	if let Some(ref origin) = *origin {
 		for cors in allowed  {
@@ -38,12 +39,12 @@ mod tests {
 	use hyper::header::AccessControlAllowOrigin;
 
 	#[test]
-	fn should_return_none_for_empty_list() {
+	fn should_return_none_when_there_are_no_cors_domains() {
 		// given
 		let origin = None;
 
 		// when
-		let res = get_cors_header(&Vec::new(), &origin);
+		let res = get_cors_header(&None, &origin);
 
 		// then
 		assert_eq!(res, None);
@@ -56,9 +57,21 @@ mod tests {
 
 		// when
 		let res = get_cors_header(
-			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())],
+			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())]),
 			&origin
-			);
+		);
+
+		// then
+		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
+	}
+
+	#[test]
+	fn should_return_null_for_empty_list() {
+		// given
+		let origin = None;
+
+		// when
+		let res = get_cors_header(&Some(Vec::new()), &origin);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
@@ -71,9 +84,9 @@ mod tests {
 
 		// when
 		let res = get_cors_header(
-			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())],
+			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())]),
 			&origin
-			);
+		);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
@@ -85,7 +98,7 @@ mod tests {
 		let origin = Some("http://ethcore.io".into());
 
 		// when
-		let res = get_cors_header(&vec![AccessControlAllowOrigin::Any], &origin);
+		let res = get_cors_header(&Some(vec![AccessControlAllowOrigin::Any]), &origin);
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
@@ -98,7 +111,7 @@ mod tests {
 
 		// when
 		let res = get_cors_header(
-			&vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://ethcore.io".into())],
+			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://ethcore.io".into())]),
 			&origin
 			);
 

@@ -67,16 +67,22 @@ impl From<hyper::error::Error> for RpcServerError {
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder {
 	jsonrpc_handler: Arc<IoHandler>,
-	cors: Vec<AccessControlAllowOrigin>,
+	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
+	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
 impl ServerBuilder {
 	/// Creates new `ServerBuilder` with specified `IoHandler`.
+	///
+	/// By default:
+	/// 1. Server is not sending any CORS headers.
+	/// 2. Server is validating `Host` header.
 	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self {
 		ServerBuilder {
 			jsonrpc_handler: jsonrpc_handler,
-			cors: Vec::new(),
+			cors_domains: None,
+			allowed_hosts: None,
 			panic_handler: None,
 		}
 	}
@@ -88,8 +94,20 @@ impl ServerBuilder {
 	}
 
 	/// Configures a list of allowed CORS origins.
-	pub fn cors_domains(mut self, cors: Vec<AccessControlAllowOrigin>) -> Self {
-		self.cors = cors;
+	pub fn cors_domains(mut self, cors_domains: Vec<AccessControlAllowOrigin>) -> Self {
+		self.cors_domains = Some(cors_domains);
+		self
+	}
+
+	/// Allow connections only with `Host` header set to binding address.
+	pub fn allow_only_bind_host(mut self) -> Self {
+		self.allowed_hosts = Some(Vec::new());
+		self
+	}
+
+	/// Specify a list of valid `Host` headers. Binding address is allowed automatically.
+	pub fn allowed_hosts(mut self, allowed_hosts: Vec<String>) -> Self {
+		self.allowed_hosts = Some(allowed_hosts);
 		self
 	}
 
@@ -97,7 +115,7 @@ impl ServerBuilder {
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
 		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let jsonrpc_handler = self.jsonrpc_handler;
-		let cors_domains = self.cors;
+		let cors_domains = self.cors_domains;
 
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |_| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
