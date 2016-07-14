@@ -18,7 +18,7 @@
 //! fn main() {
 //! 	let io = IoHandler::new();
 //! 	io.add_method("say_hello", SayHello);
-//! 	let _server = Server::start(&"127.0.0.1:3030".parse().unwrap(), Arc::new(io), vec![AccessControlAllowOrigin::Null]);
+//! 	let _server = ServerBuilder::new(Arc::new(io)).start_http(&"127.0.0.1:3030".parse().unwrap());
 //! }
 //! ```
 
@@ -59,16 +59,37 @@ impl From<hyper::error::Error> for RpcServerError {
 	}
 }
 
-/// jsonrpc http server.
-pub struct Server {
-	server: Option<server::Listening>,
-	panic_handler: Arc<Mutex<Option<Box<Fn() -> () + Send>>>>
+/// Convenient JSON-RPC HTTP Server builder.
+pub struct ServerBuilder {
+	jsonrpc_handler: Arc<IoHandler>,
+	cors: Vec<AccessControlAllowOrigin>,
+	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
-impl Server {
-	pub fn start(addr: &SocketAddr, jsonrpc_handler: Arc<IoHandler>, cors_domains: Vec<AccessControlAllowOrigin>) -> ServerResult {
-		let panic_handler = Arc::new(Mutex::new(None));
-		let panic_for_server = panic_handler.clone();
+impl ServerBuilder {
+	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self {
+		ServerBuilder {
+			jsonrpc_handler: jsonrpc_handler,
+			cors: Vec::new(),
+			panic_handler: None,
+		}
+	}
+
+	pub fn panic_handler<F>(mut self, handler: F) -> Self where F : Fn() -> () + Send + 'static {
+		self.panic_handler = Some(Box::new(handler));
+		self
+	}
+
+	pub fn cors_domains(mut self, cors: Vec<AccessControlAllowOrigin>) -> Self {
+		self.cors = cors;
+		self
+	}
+
+	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
+		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
+		let jsonrpc_handler = self.jsonrpc_handler;
+		let cors_domains = self.cors;
+
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |_| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
 			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), handler)
@@ -80,14 +101,16 @@ impl Server {
 
 		Ok(Server {
 			server: Some(l),
-			panic_handler: panic_handler,
 		})
 	}
+}
 
-	pub fn set_panic_handler<F>(&self, handler: F) where F : Fn() -> () + Send + 'static {
-		*self.panic_handler.lock().unwrap() = Some(Box::new(handler));
-	}
+/// jsonrpc http server instance
+pub struct Server {
+	server: Option<server::Listening>,
+}
 
+impl Server {
 	pub fn addr(&self) -> &SocketAddr {
 		self.server.as_ref().unwrap().addr()
 	}

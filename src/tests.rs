@@ -1,17 +1,17 @@
 extern crate jsonrpc_core;
 
+use std::sync::Arc;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use std::sync::Arc;
 use self::jsonrpc_core::IoHandler;
 use super::*;
 
 fn serve() -> Server {
-	let rpc = Arc::new(IoHandler::new());
-	let cors_domains = vec![AccessControlAllowOrigin::Value("ethcore.io".into())];
-
-	Server::start(&"127.0.0.1:0".parse().unwrap(), rpc, cors_domains).unwrap()
+	ServerBuilder::new(Arc::new(IoHandler::new()))
+		.cors_domains(vec![AccessControlAllowOrigin::Value("ethcore.io".into())])
+		.start_http(&"127.0.0.1:0".parse().unwrap())
+		.unwrap()
 }
 
 struct Response {
