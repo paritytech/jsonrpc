@@ -15,6 +15,7 @@ use hyper::header::AccessControlAllowOrigin;
 
 /// PanicHandling function
 pub struct PanicHandler {
+	/// Actual handler
 	pub handler: Arc<Mutex<Option<Box<Fn() -> () + Send + 'static>>>>
 }
 

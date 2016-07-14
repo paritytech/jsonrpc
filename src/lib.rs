@@ -22,6 +22,8 @@
 //! }
 //! ```
 
+#![warn(missing_docs)]
+
 extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
@@ -41,12 +43,15 @@ use jsonrpc::IoHandler;
 pub use hyper::header::AccessControlAllowOrigin;
 pub use handler::{PanicHandler, ServerHandler};
 
+/// Result of starting the Server.
 pub type ServerResult = Result<Server, RpcServerError>;
 
-/// RPC Server startup error
+/// RPC Server startup error.
 #[derive(Debug)]
 pub enum RpcServerError {
+	/// IO Error
 	IoError(std::io::Error),
+	/// Other Error (hyper)
 	Other(hyper::error::Error),
 }
 
@@ -67,6 +72,7 @@ pub struct ServerBuilder {
 }
 
 impl ServerBuilder {
+	/// Creates new `ServerBuilder` with specified `IoHandler`.
 	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self {
 		ServerBuilder {
 			jsonrpc_handler: jsonrpc_handler,
@@ -75,16 +81,19 @@ impl ServerBuilder {
 		}
 	}
 
+	/// Sets handler invoked in case of server panic.
 	pub fn panic_handler<F>(mut self, handler: F) -> Self where F : Fn() -> () + Send + 'static {
 		self.panic_handler = Some(Box::new(handler));
 		self
 	}
 
+	/// Configures a list of allowed CORS origins.
 	pub fn cors_domains(mut self, cors: Vec<AccessControlAllowOrigin>) -> Self {
 		self.cors = cors;
 		self
 	}
 
+	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
 		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let jsonrpc_handler = self.jsonrpc_handler;
@@ -111,6 +120,7 @@ pub struct Server {
 }
 
 impl Server {
+	/// Returns address of this server
 	pub fn addr(&self) -> &SocketAddr {
 		self.server.as_ref().unwrap().addr()
 	}
