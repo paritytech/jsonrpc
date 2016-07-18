@@ -84,6 +84,15 @@ impl<T> Into<Option<Vec<T>>> for DomainsValidation<T> {
 	}
 }
 
+impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
+	fn from(other: Option<Vec<T>>) -> Self {
+		match other {
+			Some(list) => DomainsValidation::AllowOnly(list),
+			None => DomainsValidation::Disabled,
+		}
+	}
+}
+
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder {
 	jsonrpc_handler: Arc<IoHandler>,
