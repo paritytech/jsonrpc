@@ -40,7 +40,7 @@ fn main() {
     io.add_method("say_hello", SayHello);
 
     let server = ServerBuilder::new(Arc::new(io))
-			.cors_domain(vec![AccessControlAllowOrigin::Null])
+			.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
 			.start_http(&"127.0.0.1:3030".parse().unwrap())
 			.expect("Unable to start RPC server");
 }
