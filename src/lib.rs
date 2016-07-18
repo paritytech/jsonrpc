@@ -66,6 +66,33 @@ impl From<hyper::error::Error> for RpcServerError {
 	}
 }
 
+/// Specifies if domains should be validated.
+pub enum DomainsValidation<T> {
+	/// Allow only domains on the list.
+	AllowOnly(Vec<T>),
+	/// Disable domains validation completely.
+	Disabled,
+}
+
+impl<T> Into<Option<Vec<T>>> for DomainsValidation<T> {
+	fn into(self) -> Option<Vec<T>> {
+		use DomainsValidation::*;
+		match self {
+			AllowOnly(list) => Some(list),
+			Disabled => None,
+		}
+	}
+}
+
+impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
+	fn from(other: Option<Vec<T>>) -> Self {
+		match other {
+			Some(list) => DomainsValidation::AllowOnly(list),
+			None => DomainsValidation::Disabled,
+		}
+	}
+}
+
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder {
 	jsonrpc_handler: Arc<IoHandler>,
@@ -96,8 +123,8 @@ impl ServerBuilder {
 	}
 
 	/// Configures a list of allowed CORS origins.
-	pub fn cors_domains(mut self, cors_domains: Vec<AccessControlAllowOrigin>) -> Self {
-		self.cors_domains = Some(cors_domains);
+	pub fn cors(mut self, cors_domains: DomainsValidation<AccessControlAllowOrigin>) -> Self {
+		self.cors_domains = cors_domains.into();
 		self
 	}
 
@@ -108,8 +135,8 @@ impl ServerBuilder {
 	}
 
 	/// Specify a list of valid `Host` headers. Binding address is allowed automatically.
-	pub fn allowed_hosts(mut self, allowed_hosts: Vec<String>) -> Self {
-		self.allowed_hosts = Some(allowed_hosts);
+	pub fn allowed_hosts(mut self, allowed_hosts: DomainsValidation<String>) -> Self {
+		self.allowed_hosts = allowed_hosts.into();
 		self
 	}
 
@@ -118,12 +145,24 @@ impl ServerBuilder {
 		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let jsonrpc_handler = self.jsonrpc_handler;
 		let cors_domains = self.cors_domains;
-		let hosts = self.allowed_hosts;
+		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
+		let hosts_setter = hosts.clone();
 
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |_| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
-			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts.clone(), handler)
+			let hosts = hosts.lock().unwrap().clone();
+			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts, handler)
 		}));
+
+		// Add current host to allowed headers.
+		// NOTE: we need to use `l.addr()` instead of `addr`
+		// it might be different!
+		{
+			let mut hosts = hosts_setter.lock().unwrap();
+			if let Some(ref mut hosts) = *hosts {
+				hosts.push(format!("{}", l.addr()));
+			}
+		}
 
 		thread::spawn(move || {
 			srv.run();
