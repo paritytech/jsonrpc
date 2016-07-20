@@ -349,6 +349,32 @@ fn should_always_allow_the_bind_address() {
 	assert_eq!(response.body, method_not_found());
 }
 
+#[test]
+fn should_always_allow_the_bind_address_as_localhost() {
+	// given
+	let server = serve_hosts(vec![]);
+	let addr = server.addr().clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, method_not_found());
+}
+
+
 fn invalid_host() -> String {
 	"29\nProvided Host header is not whitelisted.\n".into()
 }
