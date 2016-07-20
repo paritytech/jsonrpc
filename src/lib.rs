@@ -160,7 +160,9 @@ impl ServerBuilder {
 		{
 			let mut hosts = hosts_setter.lock().unwrap();
 			if let Some(ref mut hosts) = *hosts {
-				hosts.push(format!("{}", l.addr()));
+				let address = l.addr().to_string();
+				hosts.push(address.clone());
+				hosts.push(address.replace("127.0.0.1", "localhost"));
 			}
 		}
 
