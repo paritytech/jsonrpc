@@ -100,7 +100,9 @@ impl SocketConnection {
 
         match self.socket.try_read_buf(&mut buf) {
             Ok(None) => {
+				trace!(target: "ipc", "Empty read ({:?})", self.token);
                 self.mut_buf = Some(buf);
+				return Ok(());
             }
             Ok(Some(_)) => {
                 let (requests, last_index) = validator::extract_requests(buf.bytes());
@@ -128,12 +130,11 @@ impl SocketConnection {
                 }
             }
             Err(e) => {
-                trace!(target: "ipc", "Error receiving data: {:?}", e);
+                trace!(target: "ipc", "Error receiving data ({:?}): {:?}", self.token, e);
                 self.interest.remove(EventSet::readable());
             }
 
         };
-
         event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
     }
 }
@@ -264,9 +265,14 @@ impl RpcServer {
             let oldest_token = self.connections.iter().nth(0)
                 .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request first one")
                 .token.unwrap().clone();
-            self.connections.remove(oldest_token);
+
+            let old_connection = self.connections.remove(oldest_token).expect("There is max connections here");
+			trace!(target: "ipc", "Recycled old socket {:?}", oldest_token);
+			try!(event_loop.deregister(&old_connection.socket));
         }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
+
+		trace!(target: "ipc", "Accepted connection with token {:?}", token);
 
         self.connections[token].token = Some(token);
         event_loop.register(
