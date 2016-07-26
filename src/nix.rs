@@ -52,6 +52,7 @@ use slab;
 use validator;
 #[cfg(test)]
 use tests;
+use std::collections::VecDeque;
 
 const SERVER: Token = Token(0);
 const MAX_CONCURRENT_CONNECTIONS: usize = 16;
@@ -143,6 +144,7 @@ struct RpcServer {
     socket: UnixListener,
     connections: Slab<SocketConnection>,
     io_handler: Arc<IoHandler>,
+	tokens: VecDeque<Token>,
 }
 
 pub struct Server {
@@ -254,6 +256,7 @@ impl RpcServer {
             socket: socket,
             connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
             io_handler: io_handler.clone(),
+			tokens: VecDeque::new(),
         };
         Ok((server, event_loop))
     }
@@ -262,15 +265,16 @@ impl RpcServer {
         let new_client_socket = self.socket.accept().unwrap().unwrap();
         let connection = SocketConnection::new(new_client_socket);
         if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
-            let oldest_token = self.connections.iter().nth(0)
-                .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request first one")
-                .token.unwrap().clone();
+            let oldest_token = self.tokens.pop_front()
+                .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request the oldest one")
+                .clone();
 
-            let old_connection = self.connections.remove(oldest_token).expect("There is max connections here");
+            let oldest_connection = self.connections.remove(oldest_token).expect("There is max connections here");
 			trace!(target: "ipc", "Recycled old socket {:?}", oldest_token);
-			try!(event_loop.deregister(&old_connection.socket));
+			try!(event_loop.deregister(&oldest_connection.socket));
         }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
+		self.tokens.push_back(token);
 
 		trace!(target: "ipc", "Accepted connection with token {:?}", token);
 
