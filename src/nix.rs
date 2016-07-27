@@ -271,7 +271,6 @@ impl RpcServer {
 
             let oldest_connection = self.connections.remove(oldest_token).expect("There is max connections here");
 			trace!(target: "ipc", "Recycled old socket {:?}", oldest_token);
-			try!(event_loop.deregister(&oldest_connection.socket));
         }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
 		self.tokens.push_back(token);
