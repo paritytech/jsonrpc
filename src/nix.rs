@@ -269,6 +269,7 @@ impl RpcServer {
                 .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request the oldest one")
                 .clone();
 
+            self.connections.remove(oldest_token).expect("There is max connections here");
 			trace!(target: "ipc", "Reusing the most old token {:?}", oldest_token);
         }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
