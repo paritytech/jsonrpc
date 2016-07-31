@@ -55,7 +55,7 @@ use tests;
 use std::collections::VecDeque;
 
 const SERVER: Token = Token(0);
-const MAX_CONCURRENT_CONNECTIONS: usize = 16;
+const MAX_CONCURRENT_CONNECTIONS: usize = 1024;
 const MAX_WRITE_LENGTH: usize = 8192;
 
 struct SocketConnection {
