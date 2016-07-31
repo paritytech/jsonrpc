@@ -301,6 +301,11 @@ impl RpcServer {
     fn connection<'a>(&'a mut self, tok: Token) -> &'a mut SocketConnection {
         &mut self.connections[tok]
     }
+
+    fn drop_connection(&mut self, tok: Token) {
+        trace!(target: "ipc", "Dropping connection {:?}", tok);
+        self.connections.remove(tok);
+    }
 }
 
 
@@ -314,6 +319,15 @@ impl Handler for RpcServer {
                 SERVER => self.accept(event_loop).unwrap(),
                 _ => self.connection_readable(event_loop, token).unwrap()
             };
+        }
+
+        if events.is_hup() {
+            match token {
+                SERVER => { trace!(target: "ipc", "Server hup"); },
+                other_token => {
+                    self.drop_connection(other_token)
+                }
+            }
         }
 
         if events.is_writable() {
