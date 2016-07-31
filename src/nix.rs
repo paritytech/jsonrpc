@@ -103,7 +103,7 @@ impl SocketConnection {
             Ok(None) => {
 				trace!(target: "ipc", "Empty read ({:?})", self.token);
                 self.mut_buf = Some(buf);
-				return Ok(());
+				//return Ok(());
             }
             Ok(Some(_)) => {
                 let (requests, last_index) = validator::extract_requests(buf.bytes());
@@ -265,12 +265,8 @@ impl RpcServer {
         let new_client_socket = self.socket.accept().unwrap().unwrap();
         let connection = SocketConnection::new(new_client_socket);
         if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
-            let oldest_token = self.tokens.pop_front()
-                .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request the oldest one")
-                .clone();
-
-            self.connections.remove(oldest_token).expect("There is max connections here");
-			trace!(target: "ipc", "Reusing the most old token {:?}", oldest_token);
+            // max connections
+            return Ok(());
         }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
 		self.tokens.push_back(token);
