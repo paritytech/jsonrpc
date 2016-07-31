@@ -55,7 +55,7 @@ use tests;
 use std::collections::VecDeque;
 
 const SERVER: Token = Token(0);
-const MAX_CONCURRENT_CONNECTIONS: usize = 16;
+const MAX_CONCURRENT_CONNECTIONS: usize = 1024;
 const MAX_WRITE_LENGTH: usize = 8192;
 
 struct SocketConnection {
@@ -103,7 +103,7 @@ impl SocketConnection {
             Ok(None) => {
 				trace!(target: "ipc", "Empty read ({:?})", self.token);
                 self.mut_buf = Some(buf);
-				return Ok(());
+				//return Ok(());
             }
             Ok(Some(_)) => {
                 let (requests, last_index) = validator::extract_requests(buf.bytes());
@@ -265,12 +265,8 @@ impl RpcServer {
         let new_client_socket = self.socket.accept().unwrap().unwrap();
         let connection = SocketConnection::new(new_client_socket);
         if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
-            let oldest_token = self.tokens.pop_front()
-                .expect("fatal: impossible since count > MAX_CONCURRENT_CONNECTIONS and we request the oldest one")
-                .clone();
-
-            self.connections.remove(oldest_token).expect("There is max connections here");
-			trace!(target: "ipc", "Reusing the most old token {:?}", oldest_token);
+            // max connections
+            return Ok(());
         }
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
 		self.tokens.push_back(token);
@@ -301,6 +297,11 @@ impl RpcServer {
     fn connection<'a>(&'a mut self, tok: Token) -> &'a mut SocketConnection {
         &mut self.connections[tok]
     }
+
+    fn drop_connection(&mut self, tok: Token) {
+        trace!(target: "ipc", "Dropping connection {:?}", tok);
+        self.connections.remove(tok);
+    }
 }
 
 
@@ -314,6 +315,15 @@ impl Handler for RpcServer {
                 SERVER => self.accept(event_loop).unwrap(),
                 _ => self.connection_readable(event_loop, token).unwrap()
             };
+        }
+
+        if events.is_hup() {
+            match token {
+                SERVER => { trace!(target: "ipc", "Server hup"); },
+                other_token => {
+                    self.drop_connection(other_token)
+                }
+            }
         }
 
         if events.is_writable() {

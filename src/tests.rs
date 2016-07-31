@@ -141,6 +141,7 @@ pub fn test_reqrep_three_sequental_connections() {
 }
 
 #[test]
+#[ignore]
 pub fn test_reqrep_100_connections() {
     super::init_log();
 
