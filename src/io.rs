@@ -140,7 +140,7 @@ impl IoHandler {
 				error: error
 			}))))
 		};
-		trace!(target: "rpc", "Response: {:?}", response);
+		debug!(target: "rpc", "Response: {:?}", response);
 		response
 	}
 }
