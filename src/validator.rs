@@ -30,11 +30,15 @@ pub fn extract_requests(buf: &[u8]) -> (Vec<String>, usize) {
     let mut last_req = 0;
     let mut in_str = false;
     let mut is_escaped = false;
+    let mut ever_started = false;
 
     for (idx, char) in utf8.char_indices() {
         str_buf.push(char);
 
         if (char == '{' || char == '[') && !in_str {
+            if depth == 0 {
+                ever_started = true;
+            }
             depth += 1;
         }
         else if (char == '}' || char == ']') && !in_str {
@@ -48,7 +52,10 @@ pub fn extract_requests(buf: &[u8]) -> (Vec<String>, usize) {
         }
 
         if depth == 0 && str_buf.len() > 0 {
-            res.push(mem::replace(&mut str_buf, String::new()));
+            if ever_started {
+                res.push(mem::replace(&mut str_buf, String::new()));
+            }
+            ever_started = false;
             last_req = idx;
         }
     }
