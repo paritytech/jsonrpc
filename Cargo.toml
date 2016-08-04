@@ -11,6 +11,7 @@ build = "build.rs"
 documentation = "https://ethcore.github.io/jsonrpc-core/jsonrpc_core/index.html"
 
 [dependencies]
+log = "0.3"
 # always carefully check serde versions before an update
 serde = "0.7.0"
 serde_json = "0.7.0"
@@ -18,7 +19,6 @@ serde_macros = { "version" = "0.7.0", "optional" = true }
 
 [build-dependencies]
 serde_codegen = { "version" = "0.7.0", "optional" = true }
-syntex = "0.35.0"
 
 [features]
 default = ["serde_codegen"]

@@ -131,14 +131,17 @@ impl IoHandler {
 	}
 
 	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<String> {
-		match read_request(request_str) {
+		trace!(target: "rpc", "Request: {}", request_str);
+		let response = match read_request(request_str) {
 			Ok(request) => self.request_handler.handle_request(request).map(write_response),
 			Err(error) => Some(write_response(Response::Single(Output::Failure(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
 				error: error
 			}))))
-		}
+		};
+		trace!(target: "rpc", "Response: {:?}", response);
+		response
 	}
 }
 

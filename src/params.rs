@@ -13,7 +13,7 @@ pub enum Params {
 }
 
 impl Serialize for Params {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error> 
+	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
 			Params::Array(ref vec) => vec.serialize(serializer),
@@ -35,7 +35,7 @@ impl Deserialize for Params {
 impl Visitor for ParamsVisitor {
 	type Value = Params;
 
-	fn visit_seq<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error> 
+	fn visit_seq<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error>
 	where V: SeqVisitor {
 		VecVisitor::new().visit_seq(visitor).and_then(|vec| match vec.is_empty() {
 			true => Ok(Params::None),
@@ -43,7 +43,7 @@ impl Visitor for ParamsVisitor {
 		})
 	}
 
-	fn visit_map<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error> 
+	fn visit_map<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error>
 	where V: MapVisitor {
 		BTreeMapVisitor::new().visit_map(visitor).and_then(|map| match map.is_empty() {
 			true => Ok(Params::None),
