@@ -125,14 +125,15 @@ impl PipeHandler {
                         let (requests, last_index) = {
                             let effective = &buf[0..start + size];
                             fin = fin + size;
-                            trace!(target: "ipc", "Received rpc request: {} bytes", effective.len());
+                            trace!(target: "ipc", "Received rpc data: {} bytes", effective.len());
 
                             validator::extract_requests(effective)
                         };
-
                         if requests.len() > 0 {
                             let mut response_buf = Vec::new();
                             for rpc_msg in requests  {
+                                trace!(target: "ipc", "Request: {}", rpc_msg);
+
                                 let response: Option<String> = thread_handler.handle_request(&rpc_msg);
 
                                 if let Some(response_str) = response {
