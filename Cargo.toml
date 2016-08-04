@@ -4,13 +4,14 @@ homepage = "https://github.com/ethcore/jsonrpc-core"
 repository = "https://github.com/ethcore/jsonrpc-core"
 license = "MIT"
 name = "jsonrpc-core"
-version = "2.1.0"
+version = "2.1.1"
 authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 build = "build.rs"
 documentation = "https://ethcore.github.io/jsonrpc-core/jsonrpc_core/index.html"
 
 [dependencies]
+log = "0.3"
 # always carefully check serde versions before an update
 serde = "0.7.0"
 serde_json = "0.7.0"
@@ -18,7 +19,6 @@ serde_macros = { "version" = "0.7.0", "optional" = true }
 
 [build-dependencies]
 serde_codegen = { "version" = "0.7.0", "optional" = true }
-syntex = "0.35.0"
 
 [features]
 default = ["serde_codegen"]
