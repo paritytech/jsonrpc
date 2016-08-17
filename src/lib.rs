@@ -101,7 +101,7 @@ struct SocketConnection {
     mut_buf: Option<MutByteBuf>,
     token: Option<Token>,
     interest: EventSet,
-    addr: SocketAddr,
+    _addr: SocketAddr,
 }
 
 type Slab<T> = slab::Slab<T, Token>;
@@ -114,7 +114,7 @@ impl SocketConnection {
             mut_buf: Some(ByteBuf::mut_with_capacity(4096)),
             token: None,
             interest: EventSet::hup(),
-            addr: addr,
+            _addr: addr,
         }
     }
 
@@ -190,7 +190,7 @@ pub struct Server {
     event_loop: Arc<RwLock<EventLoop<RpcServer>>>,
     is_stopping: Arc<AtomicBool>,
     is_stopped: Arc<AtomicBool>,
-    addr: SocketAddr,
+    _addr: SocketAddr,
 }
 
 #[derive(Debug)]
@@ -217,7 +217,7 @@ impl Server {
             event_loop: Arc::new(RwLock::new(event_loop)),
             is_stopping: Arc::new(AtomicBool::new(false)),
             is_stopped: Arc::new(AtomicBool::new(true)),
-            addr: socket_addr.clone(),
+            _addr: socket_addr.clone(),
         })
     }
 
