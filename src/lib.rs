@@ -101,7 +101,7 @@ struct SocketConnection {
     mut_buf: Option<MutByteBuf>,
     token: Option<Token>,
     interest: EventSet,
-    _addr: SocketAddr,
+    addr: SocketAddr,
 }
 
 type Slab<T> = slab::Slab<T, Token>;
@@ -114,7 +114,7 @@ impl SocketConnection {
             mut_buf: Some(ByteBuf::mut_with_capacity(4096)),
             token: None,
             interest: EventSet::hup(),
-            _addr: addr,
+            addr: addr,
         }
     }
 
@@ -178,11 +178,22 @@ impl SocketConnection {
     }
 }
 
+struct TcpContext {
+    request: RwLock<Option<RequestContext>>,
+}
+
+impl TcpContext {
+    fn new() -> Arc<TcpContext> {
+        Arc::new(TcpContext { request: RwLock::new(None) })
+    }
+}
+
 struct RpcServer {
     socket: TcpListener,
     connections: Slab<SocketConnection>,
     io_handler: Arc<IoHandler>,
 	tokens: VecDeque<Token>,
+    context: Arc<TcpContext>,
 }
 
 pub struct Server {
@@ -191,6 +202,7 @@ pub struct Server {
     is_stopping: Arc<AtomicBool>,
     is_stopped: Arc<AtomicBool>,
     _addr: SocketAddr,
+    context: Arc<TcpContext>,
 }
 
 #[derive(Debug)]
@@ -211,13 +223,15 @@ impl std::convert::From<std::io::Error> for Error {
 impl Server {
     /// New server
     pub fn new(socket_addr: &SocketAddr, io_handler: &Arc<IoHandler>) -> Result<Server, Error> {
-        let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler));
+        let tcp_context = TcpContext::new();
+        let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler, tcp_context.clone()));
         Ok(Server {
             rpc_server: Arc::new(RwLock::new(server)),
             event_loop: Arc::new(RwLock::new(event_loop)),
             is_stopping: Arc::new(AtomicBool::new(false)),
             is_stopped: Arc::new(AtomicBool::new(true)),
             _addr: socket_addr.clone(),
+            context: tcp_context,
         })
     }
 
@@ -272,6 +286,10 @@ impl Server {
         while !self.is_stopped.load(Ordering::Relaxed) { std::thread::sleep(std::time::Duration::new(0, 10)); }
         Ok(())
     }
+
+    pub fn request_context(&self) -> Option<RequestContext> {
+        self.context.request.read().unwrap().clone()
+    }
 }
 
 // listener (RpcServer.socket) is never used except initializer, but have to be stored inside RpcServer and is not `Sync`
@@ -283,9 +301,14 @@ impl Drop for Server {
     }
 }
 
+#[derive(Clone)]
+pub struct RequestContext {
+    pub socket_addr: SocketAddr,
+}
+
 impl RpcServer {
     /// start ipc rpc server (blocking)
-    pub fn start(addr: &SocketAddr, io_handler: &Arc<IoHandler>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
+    pub fn start(addr: &SocketAddr, io_handler: &Arc<IoHandler>, tcp_context: Arc<TcpContext>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
         let mut event_loop = try!(EventLoop::new());
         let socket = try!(TcpListener::bind(&addr));
         event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
@@ -294,6 +317,7 @@ impl RpcServer {
             connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
             io_handler: io_handler.clone(),
 			tokens: VecDeque::new(),
+            context: tcp_context,
         };
         Ok((server, event_loop))
     }
@@ -323,6 +347,8 @@ impl RpcServer {
 
     fn connection_readable(&mut self, event_loop: &mut EventLoop<RpcServer>, tok: Token) -> io::Result<()> {
         let io_handler = self.io_handler.clone();
+        *self.context.request.write().unwrap() =
+            Some(RequestContext { socket_addr: self.connection(tok).addr.clone() });
         self.connection(tok).readable(event_loop, &io_handler)
     }
 

@@ -60,7 +60,11 @@ pub fn dummy_request(addr: &SocketAddr, buf: &[u8]) -> Vec<u8> {
 pub fn random_endpoint() -> SocketAddr {
     use std::str::FromStr;
 
-    let port = (thread_rng().next_u32() % 65536) as u16;
+    let port;
+    loop {
+        let nport = (thread_rng().next_u32() % 65536) as u16;
+        if nport > 1000 { port = nport; break }
+    }
     SocketAddr::from_str(&format!("0.0.0.0:{}", port)).unwrap()
 }
 
