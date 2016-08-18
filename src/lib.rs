@@ -303,7 +303,7 @@ impl Server {
                         Some(token) => {
                             let mut connection = server.connection(token);
                             if let Err(e) = connection.send(&mut event_loop, &msg_data) {
-                                trace!(target: "tcp", "{:?}: failed to send data to socket", &msg_addr);
+                                trace!(target: "tcp", "{:?}: failed to send data to socket ({:?})", &msg_addr, e);
                             }
                         }
                     }
@@ -331,6 +331,11 @@ impl Server {
 
     pub fn request_context(&self) -> Option<RequestContext> {
         self.context.request.read().unwrap().clone()
+    }
+
+    pub fn push_message(&self, socket_addr: &SocketAddr, data: &[u8]) -> io::Result<()> {
+        self.messages.write().unwrap().push((socket_addr.clone(), data.to_vec()));
+        Ok(())
     }
 }
 
