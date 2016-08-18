@@ -130,7 +130,7 @@ impl SocketConnection {
         else {
             self.buf = Some(ByteBuf::from_slice(data));
         }
-        self.interest.remove(EventSet::writable());
+        trace!(target: "tcp", "Received socket payload: {} bytes", data.len());
         self.interest.insert(EventSet::writable());
         event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
     }
@@ -140,12 +140,13 @@ impl SocketConnection {
         if let Some(buf) = self.buf.take() {
             if buf.remaining() < MAX_WRITE_LENGTH {
                 try!(self.socket.write_all(&buf.bytes()));
+                trace!(target: "tcp", "sent {} bytes", buf.bytes().len());
                 self.interest.remove(EventSet::writable());
-                self.interest.insert(EventSet::readable());
             }
             else {
                 try!(self.socket.write_all(&buf.bytes()[0..MAX_WRITE_LENGTH]));
                 self.buf = Some(ByteBuf::from_slice(&buf.bytes()[MAX_WRITE_LENGTH..]));
+                trace!(target: "tcp", "sent {} bytes", MAX_WRITE_LENGTH);
             }
         }
 
@@ -291,9 +292,11 @@ impl Server {
                 let total_handled =
                     if all_messages.len() > MAX_MESSAGES_DISPATCH { MAX_MESSAGES_DISPATCH }
                     else { all_messages.len() };
-                if total_handled <= 0 { continue; }
+                if total_handled == 0 { continue; }
 
-                let batch = all_messages.drain(0..MAX_MESSAGES_DISPATCH);
+                trace!(target: "tcp", "Writing {} queued messages for connections", total_handled);
+
+                let batch = all_messages.drain(0..total_handled);
                 for (msg_addr, msg_data) in batch {
                     let token = server.addr_index.get(&msg_addr).and_then(|t| Some(*t));
                     match token {
@@ -334,6 +337,7 @@ impl Server {
     }
 
     pub fn push_message(&self, socket_addr: &SocketAddr, data: &[u8]) -> io::Result<()> {
+        trace!(target: "tcp", "Received payload for '{:?}' ({} bytes)", socket_addr, data.len());
         self.messages.write().unwrap().push((socket_addr.clone(), data.to_vec()));
         Ok(())
     }
