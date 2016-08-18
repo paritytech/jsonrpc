@@ -69,6 +69,7 @@ use std::env;
 use log::LogLevelFilter;
 use env_logger::LogBuilder;
 use std::net::SocketAddr;
+use std::collections::HashMap;
 
 lazy_static! {
 	static ref LOG_DUMMY: bool = {
@@ -94,6 +95,8 @@ pub fn init_log() {
 const SERVER: Token = Token(0);
 const MAX_CONCURRENT_CONNECTIONS: usize = 1024;
 const MAX_WRITE_LENGTH: usize = 8192;
+const MAX_MESSAGES_DISPATCH: usize = 128; // per max of POLL_INTERVAL
+const POLL_INTERVAL: usize = 100;
 
 struct SocketConnection {
     socket: TcpStream,
@@ -118,6 +121,20 @@ impl SocketConnection {
         }
     }
 
+    fn send(&mut self, event_loop: &mut EventLoop<RpcServer>, data: &[u8]) -> io::Result<()> {
+        if let Some(buf) = self.buf.take() {
+            let mut mut_buf = buf.flip();
+            mut_buf.write_slice(data);
+            self.buf = Some(mut_buf.flip());
+        }
+        else {
+            self.buf = Some(ByteBuf::from_slice(data));
+        }
+        self.interest.remove(EventSet::writable());
+        self.interest.insert(EventSet::writable());
+        event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
+    }
+
     fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, _handler: &IoHandler) -> io::Result<()> {
         use std::io::Write;
         if let Some(buf) = self.buf.take() {
@@ -140,7 +157,7 @@ impl SocketConnection {
 
         match self.socket.try_read_buf(&mut buf) {
             Ok(None) => {
-                trace!(target: "ipc", "Empty read ({:?})", self.token);
+                trace!(target: "tcp", "Empty read ({:?})", self.token);
                 self.mut_buf = Some(buf);
             }
             Ok(Some(_)) => {
@@ -148,10 +165,10 @@ impl SocketConnection {
                 if requests.len() > 0 {
                     let mut response_bytes = Vec::new();
                     for rpc_msg in requests {
-                        trace!(target: "ipc", "Request: {}", rpc_msg);
+                        trace!(target: "tcp", "Request: {}", rpc_msg);
                         let response: Option<String> = handler.handle_request(&rpc_msg);
                         if let Some(response_str) = response {
-                            trace!(target: "ipc", "Response: {}", &response_str);
+                            trace!(target: "tcp", "Response: {}", &response_str);
                             response_bytes.extend(response_str.into_bytes());
                         }
                     }
@@ -169,7 +186,7 @@ impl SocketConnection {
                 }
             }
             Err(e) => {
-                trace!(target: "ipc", "Error receiving data ({:?}): {:?}", self.token, e);
+                trace!(target: "tcp", "Error receiving data ({:?}): {:?}", self.token, e);
                 self.interest.remove(EventSet::readable());
             }
 
@@ -194,6 +211,7 @@ struct RpcServer {
     io_handler: Arc<IoHandler>,
 	tokens: VecDeque<Token>,
     context: Arc<TcpContext>,
+    addr_index: HashMap<SocketAddr, Token>,
 }
 
 pub struct Server {
@@ -203,6 +221,7 @@ pub struct Server {
     is_stopped: Arc<AtomicBool>,
     _addr: SocketAddr,
     context: Arc<TcpContext>,
+    messages: Arc<RwLock<Vec<(SocketAddr, Vec<u8>)>>>,
 }
 
 #[derive(Debug)]
@@ -232,6 +251,7 @@ impl Server {
             is_stopped: Arc::new(AtomicBool::new(true)),
             _addr: socket_addr.clone(),
             context: tcp_context,
+            messages: Arc::new(RwLock::new(Vec::new())),
         })
     }
 
@@ -261,11 +281,33 @@ impl Server {
         let server = self.rpc_server.clone();
         let thread_stopping = self.is_stopping.clone();
         let thread_stopped = self.is_stopped.clone();
+        let messages = self.messages.clone();
         std::thread::spawn(move || {
             let mut event_loop = event_loop.write().unwrap();
             let mut server = server.write().unwrap();
             while !thread_stopping.load(Ordering::Relaxed) {
-                event_loop.run_once(&mut server, Some(100)).unwrap();
+                event_loop.run_once(&mut server, Some(POLL_INTERVAL)).unwrap();
+                let mut all_messages = messages.write().unwrap();
+                let total_handled =
+                    if all_messages.len() > MAX_MESSAGES_DISPATCH { MAX_MESSAGES_DISPATCH }
+                    else { all_messages.len() };
+                if total_handled <= 0 { continue; }
+
+                let batch = all_messages.drain(0..MAX_MESSAGES_DISPATCH);
+                for (msg_addr, msg_data) in batch {
+                    let token = server.addr_index.get(&msg_addr).and_then(|t| Some(*t));
+                    match token {
+                        None => {
+                            trace!(target: "tcp", "{:?}: not connected to receive message", &msg_addr);
+                        },
+                        Some(token) => {
+                            let mut connection = server.connection(token);
+                            if let Err(e) = connection.send(&mut event_loop, &msg_data) {
+                                trace!(target: "tcp", "{:?}: failed to send data to socket", &msg_addr);
+                            }
+                        }
+                    }
+                }
             }
             thread_stopped.store(true, Ordering::Relaxed);
         });
@@ -318,6 +360,7 @@ impl RpcServer {
             io_handler: io_handler.clone(),
 			tokens: VecDeque::new(),
             context: tcp_context,
+            addr_index: HashMap::new(),
         };
         Ok((server, event_loop))
     }
@@ -332,7 +375,9 @@ impl RpcServer {
         let token = self.connections.insert(connection).ok().expect("fatal: Could not add connection to slab (memory issue?)");
 		self.tokens.push_back(token);
 
-		trace!(target: "ipc", "Accepted connection with token {:?}, socket address: {:?}", token, addr);
+        self.addr_index.insert(addr.clone(), token);
+
+		trace!(target: "tcp", "Accepted connection with token {:?}, socket address: {:?}", token, addr);
 
         self.connections[token].token = Some(token);
         event_loop.register(
@@ -362,7 +407,7 @@ impl RpcServer {
     }
 
     fn drop_connection(&mut self, tok: Token) {
-        trace!(target: "ipc", "Dropping connection {:?}", tok);
+        trace!(target: "tcp", "Dropping connection {:?}", tok);
         self.connections.remove(tok);
     }
 }
@@ -382,7 +427,7 @@ impl Handler for RpcServer {
 
         if events.is_hup() {
             match token {
-                SERVER => { trace!(target: "ipc", "Server hup"); },
+                SERVER => { trace!(target: "tcp", "Server hup"); },
                 other_token => {
                     self.drop_connection(other_token)
                 }
