@@ -93,6 +93,18 @@ impl Serialize for SyncResponse {
 	}
 }
 
+impl From<Failure> for SyncResponse {
+	fn from(failure: Failure) -> Self {
+		SyncResponse::Single(SyncOutput::Failure(failure))
+	}
+}
+
+impl From<Success> for SyncResponse {
+	fn from(success: Success) -> Self {
+		SyncResponse::Single(SyncOutput::Success(success))
+	}
+}
+
 #[test]
 fn success_output_serialize() {
 	use serde_json;

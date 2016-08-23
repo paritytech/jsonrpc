@@ -1,7 +1,7 @@
 //! jsonrpc io
 use std::sync::Arc;
 use std::collections::HashMap;
-use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, SyncOutput, Version, Id, ErrorCode, RequestHandler, Request, Failure};
+use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, Version, Id, ErrorCode, RequestHandler, Request, Failure, Response};
 use serde_json;
 
 struct DelegateMethod<T, F> where
@@ -95,6 +95,32 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 /// 	assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
 /// }
 /// ```
+
+#[derive(Debug)]
+pub struct AsyncStringResponse {
+	response: Response,
+}
+
+impl AsyncStringResponse {
+	pub fn on_result<F>(&self, f: F) where F: Fn() + Send + Sync + 'static {
+		self.response.on_result(f);
+	}
+
+	pub fn await(self) -> String {
+		let response = write_response(self.response.await());
+		debug!(target: "rpc", "Response: {:?}", response);
+		response
+	}
+}
+
+impl From<Response> for AsyncStringResponse {
+	fn from(response: Response) -> Self {
+		AsyncStringResponse {
+			response: response,
+		}
+	}
+}
+
 pub struct IoHandler {
 	request_handler: RequestHandler
 }
@@ -140,19 +166,29 @@ impl IoHandler {
 				Some(response) => Some(write_response(response.await())),
 				_ => None,
 			},
-			Err(error) => Some(write_response(SyncResponse::Single(SyncOutput::Failure(Failure {
+			Err(error) => Some(write_response(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
 				error: error
-			})))),
+			}.into())),
 		};
 		debug!(target: "rpc", "Response: {:?}", response);
 		response
 	}
 
 	/// Handle given request asynchronously.
-	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<String> {
-		unimplemented!()
+	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<AsyncStringResponse> {
+		trace!(target: "rpc", "Request: {}", request_str);
+		let response = match read_request(request_str) {
+			Ok(request) => self.request_handler.handle_request(request).map(AsyncStringResponse::from),
+			Err(error) => Some(Response::from(Failure {
+				id: Id::Null,
+				jsonrpc: Version::V2,
+				error: error
+			}).into()),
+		};
+		debug!(target: "rpc", "AsyncResponse: {:?}", response);
+		response
 	}
 }
 

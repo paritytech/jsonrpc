@@ -1,7 +1,7 @@
 use std::{mem, fmt, thread};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output};
+use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure};
 
 type Res = Result<Value, Error>;
 
@@ -121,10 +121,12 @@ impl Response {
 				output.on_result(f);
 			},
 			Response::Batch(ref outputs) => {
+				let mut async = true;
 				let callback = Arc::new(f);
 				let count = Arc::new(AtomicUsize::new(0));
 				for output in outputs {
 					if let Output::Async(ref output) = *output {
+						async = true;
 						count.fetch_add(1, Ordering::Relaxed);
 
 						let count = count.clone();
@@ -139,11 +141,13 @@ impl Response {
 						});
 					}
 				}
+				if !async {
+					callback()
+				}
 			}
 		}
 	}
 
-	// TODO [todr] test me
 	pub fn await(self) -> SyncResponse {
 		match self {
 			Response::Single(Output::Sync(output)) => SyncResponse::Single(output),
@@ -163,6 +167,19 @@ impl Response {
 		}
 	}
 }
+
+impl From<Failure> for Response {
+	fn from(res: Failure) -> Self {
+		Response::Single(Output::Sync(SyncOutput::Failure(res)))
+	}
+}
+
+impl From<Success> for Response {
+	fn from(res: Success) -> Self {
+		Response::Single(Output::Sync(SyncOutput::Success(res)))
+	}
+}
+
 
 #[cfg(test)]
 mod tests {
