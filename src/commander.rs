@@ -2,17 +2,74 @@
 
 use std::sync::RwLock;
 use std::collections::HashMap;
-use super::{Params, Value, Error, ErrorCode};
+use async::AsyncResultHandler;
+use super::{Params, Value, Error, ErrorCode, AsyncResult};
 
-/// Should be used to handle single method call.
-pub trait MethodCommand: Send + Sync {
+pub struct Ready {
+	result: AsyncResult,
+}
+
+impl Ready {
+	pub fn ready(self, result: Result<Value, Error>) {
+		self.result.set_result(result);
+	}
+}
+
+pub enum MethodResult {
+	Sync(Result<Value, Error>),
+	Async(AsyncResult),
+}
+
+/// Should be used to handle single synchronous method call.
+pub trait SyncMethodCommand: Send + Sync {
 	fn execute(&self, params: Params) -> Result<Value, Error>;
 }
 
-/// Default method command implementation for closure.
-impl<F> MethodCommand for F where F: Fn(Params) -> Result<Value, Error>, F: Sync + Send {
+/// Default method command implementation for closure handling sync call.
+impl<F> SyncMethodCommand for F where F: Fn(Params) -> Result<Value, Error>, F: Sync + Send {
 	fn execute(&self, params: Params) -> Result<Value, Error> {
 		self(params)
+	}
+}
+
+pub trait AsyncMethodCommand: Send + Sync {
+	fn execute(&self, params: Params, ready: Ready);
+}
+
+impl<F> AsyncMethodCommand for F where F: Fn(Params, Ready), F: Sync + Send {
+	fn execute(&self, params: Params, ready: Ready) {
+		self(params, ready)
+	}
+}
+
+pub struct AsyncMethod<F> where F: AsyncMethodCommand {
+	command: F,
+}
+
+impl<F> AsyncMethod<F> where F: AsyncMethodCommand {
+	pub fn new(command: F) -> Self {
+		AsyncMethod {
+			command: command,
+		}
+	}
+}
+
+/// Should be used to handle single method call.
+pub trait MethodCommand: Send + Sync {
+	fn execute(&self, params: Params) -> MethodResult;
+}
+
+impl<F> MethodCommand for F where F: SyncMethodCommand {
+	fn execute(&self, params: Params) -> MethodResult {
+		MethodResult::Sync(self.execute(params))
+	}
+}
+
+impl<F> MethodCommand for AsyncMethod<F> where F: AsyncMethodCommand {
+	fn execute(&self, params: Params) -> MethodResult {
+		let res = AsyncResultHandler::new();
+		self.command.execute(params, Ready { result: res.clone() });
+		MethodResult::Async(res)
 	}
 }
 
@@ -58,10 +115,10 @@ impl Commander {
 		self.notifications.write().unwrap().extend(notifications);
 	}
 
-	pub fn execute_method(&self, name: String, params: Params) -> Result<Value, Error> {
+	pub fn execute_method(&self, name: String, params: Params) -> MethodResult {
 		match self.methods.read().unwrap().get(&name) {
 			Some(command) => command.execute(params),
-			None => Err(Error::new(ErrorCode::MethodNotFound))
+			None => MethodResult::Sync(Err(Error::new(ErrorCode::MethodNotFound)))
 		}
 	}
 

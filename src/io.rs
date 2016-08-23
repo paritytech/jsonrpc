@@ -1,7 +1,7 @@
 //! jsonrpc io
 use std::sync::Arc;
 use std::collections::HashMap;
-use super::{MethodCommand, NotificationCommand, Params, Value, Error, Response, Output, Version, Id, ErrorCode, RequestHandler, Request, Failure};
+use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, SyncOutput, Version, Id, ErrorCode, RequestHandler, Request, Failure};
 use serde_json;
 
 struct DelegateMethod<T, F> where
@@ -16,9 +16,9 @@ impl<T, F> MethodCommand for DelegateMethod <T, F> where
 	F: Fn(&T, Params) -> Result<Value, Error>,
 	F: Send + Sync,
 	T: Send + Sync {
-	fn execute(&self, params: Params) -> Result<Value, Error> {
+	fn execute(&self, params: Params) -> MethodResult {
 		let closure = &self.closure;
-		closure(&self.delegate, params)
+		MethodResult::Sync(closure(&self.delegate, params))
 	}
 }
 
@@ -81,8 +81,8 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 /// fn main() {
 /// 	let io = IoHandler::new();
 /// 	struct SayHello;
-/// 	impl MethodCommand for SayHello {
-/// 		fn execute(&self, _params: Params) -> Result<Value, Error> {
+/// 	impl SyncMethodCommand for SayHello {
+/// 		fn execute(&self, _params: Params) -> Result<Value, Error>  {
 /// 			Ok(Value::String("hello".to_string()))
 /// 		}
 /// 	}
@@ -92,7 +92,7 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 /// 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 /// 	let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
 ///
-/// 	assert_eq!(io.handle_request(request), Some(response.to_string()));
+/// 	assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
 /// }
 /// ```
 pub struct IoHandler {
@@ -103,7 +103,7 @@ fn read_request(request_str: &str) -> Result<Request, Error> {
 	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
-fn write_response(response: Response) -> String {
+fn write_response(response: SyncResponse) -> String {
 	// this should never fail
 	serde_json::to_string(&response).unwrap()
 }
@@ -115,12 +115,14 @@ impl IoHandler {
 		}
 	}
 
-	#[inline]
 	pub fn add_method<C>(&self, name: &str, command: C) where C: MethodCommand + 'static {
 		self.request_handler.add_method(name.to_owned(), Box::new(command))
 	}
 
-	#[inline]
+	pub fn add_async_method<C>(&self, name: &str, command: C) where C: AsyncMethodCommand + 'static {
+		self.request_handler.add_method(name.to_owned(), Box::new(AsyncMethod::new(command)))
+	}
+
 	pub fn add_notification<C>(&self, name: &str, command: C) where C: NotificationCommand + 'static {
 		self.request_handler.add_notification(name.to_owned(), Box::new(command))
 	}
@@ -130,18 +132,27 @@ impl IoHandler {
 		self.request_handler.add_notifications(delegate.notifications);
 	}
 
-	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<String> {
+	/// Handle given request synchronously - will block until response is available.
+	pub fn handle_request_sync<'a>(&self, request_str: &'a str) -> Option<String> {
 		trace!(target: "rpc", "Request: {}", request_str);
 		let response = match read_request(request_str) {
-			Ok(request) => self.request_handler.handle_request(request).map(write_response),
-			Err(error) => Some(write_response(Response::Single(Output::Failure(Failure {
+			Ok(request) => match self.request_handler.handle_request(request) {
+				Some(response) => Some(write_response(response.await())),
+				_ => None,
+			},
+			Err(error) => Some(write_response(SyncResponse::Single(SyncOutput::Failure(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
 				error: error
-			}))))
+			})))),
 		};
 		debug!(target: "rpc", "Response: {:?}", response);
 		response
+	}
+
+	/// Handle given request asynchronously.
+	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<String> {
+		unimplemented!()
 	}
 }
 
@@ -154,7 +165,7 @@ mod tests {
 		let io = IoHandler::new();
 
 		struct SayHello;
-		impl MethodCommand for SayHello {
+		impl SyncMethodCommand for SayHello {
 			fn execute(&self, _params: Params) -> Result<Value, Error> {
 				Ok(Value::String("hello".to_string()))
 			}
@@ -165,6 +176,25 @@ mod tests {
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
 
-		assert_eq!(io.handle_request(request), Some(response.to_string()));
+		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
+	}
+
+	#[test]
+	fn test_async_io_handler() {
+		let io = IoHandler::new();
+
+		struct SayHelloAsync;
+		impl AsyncMethodCommand for SayHelloAsync {
+			fn execute(&self, _params: Params, ready: Ready) {
+				ready.ready(Ok(Value::String("hello".to_string())))
+			}
+		}
+
+		io.add_async_method("say_hello", SayHelloAsync);
+
+		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
+		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+
+		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
 	}
 }

@@ -53,11 +53,11 @@ impl RequestHandler {
 				self.handle_notification(notification);
 				None
 			},
-			Call::Invalid => Some(Output::Failure(Failure {
+			Call::Invalid => Some(Output::Sync(SyncOutput::Failure(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
 				error: Error::new(ErrorCode::InvalidRequest)
-			}))
+			})))
 		}
 	}
 
@@ -68,16 +68,8 @@ impl RequestHandler {
 		};
 
 		match self.commander.execute_method(method.method, params) {
-			Ok(result) => Output::Success(Success {
-				id: method.id,
-				jsonrpc: method.jsonrpc,
-				result: result
-			}),
-			Err(error) => Output::Failure(Failure {
-				id: method.id,
-				jsonrpc: method.jsonrpc,
-				error: error
-			})
+			MethodResult::Sync(res) => Output::Sync(SyncOutput::from(res, method.id, method.jsonrpc)),
+			MethodResult::Async(result) => Output::Async(AsyncOutput::from(result, method.id, method.jsonrpc)),
 		}
 	}
 
