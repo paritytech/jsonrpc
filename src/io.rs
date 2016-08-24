@@ -1,6 +1,7 @@
 //! jsonrpc io
 use std::sync::Arc;
 use std::collections::HashMap;
+use async::{AsyncResultHandler, Ready};
 use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, Version, Id, ErrorCode, RequestHandler, Request, Failure, Response};
 use serde_json;
 
@@ -19,6 +20,26 @@ impl<T, F> MethodCommand for DelegateMethod <T, F> where
 	fn execute(&self, params: Params) -> MethodResult {
 		let closure = &self.closure;
 		MethodResult::Sync(closure(&self.delegate, params))
+	}
+}
+
+struct DelegateAsyncMethod<T, F> where
+	F: Fn(&T, Params, Ready),
+	F: Send + Sync,
+	T: Send + Sync {
+	delegate: Arc<T>,
+	closure: F
+}
+
+impl<T, F> MethodCommand for DelegateAsyncMethod <T, F> where
+	F: Fn(&T, Params, Ready),
+	F: Send + Sync,
+	T: Send + Sync {
+	fn execute(&self, params: Params) -> MethodResult {
+		let (res, ready) = AsyncResultHandler::new();
+		let closure = &self.closure;
+		closure(&self.delegate, params, ready);
+		MethodResult::Async(res)
 	}
 }
 
@@ -58,6 +79,14 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 	pub fn add_method<F>(&mut self, name: &str, closure: F) where F: Fn(&T, Params) -> Result<Value, Error> + Send + Sync + 'static {
 		let delegate = self.delegate.clone();
 		self.methods.insert(name.to_owned(), Box::new(DelegateMethod {
+			delegate: delegate,
+			closure: closure
+		}));
+	}
+
+	pub fn add_async_method<F>(&mut self, name: &str, closure: F) where F: Fn(&T, Params, Ready) + Send + Sync + 'static {
+		let delegate = self.delegate.clone();
+		self.methods.insert(name.to_owned(), Box::new(DelegateAsyncMethod {
 			delegate: delegate,
 			closure: closure
 		}));

@@ -22,11 +22,14 @@ impl fmt::Debug for AsyncResultHandler {
 }
 
 impl AsyncResultHandler {
-	pub fn new() -> Arc<Self> {
-		Arc::new(AsyncResultHandler {
+	pub fn new() -> (Arc<Self>, Ready) {
+		let res = Arc::new(AsyncResultHandler {
 			result: Mutex::new(None),
 			listeners: Mutex::new(Vec::new()),
-		})
+		});
+		let result = res.clone();
+
+		(res, Ready { result: result })
 	}
 
 	pub fn set_result(&self, res: Res) {
@@ -83,6 +86,17 @@ impl AsyncResultHandler {
 }
 
 pub type AsyncResult = Arc<AsyncResultHandler>;
+
+#[derive(Debug, Clone)]
+pub struct Ready {
+	result: AsyncResult,
+}
+
+impl Ready {
+	pub fn ready(self, result: Result<Value, Error>) {
+		self.result.set_result(result);
+	}
+}
 
 #[derive(Debug)]
 pub struct AsyncOutput {
@@ -217,8 +231,8 @@ mod tests {
 	#[test]
 	fn should_wait_for_all_results_in_batch() {
 		// given
-		let res1 = AsyncResultHandler::new();
-		let res2 = AsyncResultHandler::new();
+		let res1 = AsyncResultHandler::new().0;
+		let res2 = AsyncResultHandler::new().0;
 		let output1 = AsyncOutput::from(res1.clone(), Id::Null, Version::V2);
 		let output2 = AsyncOutput::from(res2.clone(), Id::Null, Version::V2);
 
@@ -245,7 +259,7 @@ mod tests {
 
 	#[test]
 	fn should_call_on_result_if_available() {
-		let res = AsyncResultHandler::new();
+		let res = AsyncResultHandler::new().0;
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
 		res.set_result(Ok(Value::String("hello".into())));
 
@@ -258,7 +272,7 @@ mod tests {
 
 	#[test]
 	fn should_wait_for_output() {
-		let res = AsyncResultHandler::new();
+		let res = AsyncResultHandler::new().0;
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
 		thread::spawn(move || {
 			res.set_result(Ok(Value::String("hello".into())));
@@ -272,7 +286,7 @@ mod tests {
 
 	#[test]
 	fn should_return_output_if_available() {
-		let res = AsyncResultHandler::new();
+		let res = AsyncResultHandler::new().0;
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
 		res.set_result(Ok(Value::String("hello".into())));
 
