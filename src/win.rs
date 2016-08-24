@@ -25,7 +25,7 @@
 //! use json_ipc_server::Server;
 //!
 //! struct SayHello;
-//! impl MethodCommand for SayHello {
+//! impl SyncMethodCommand for SayHello {
 //! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	}

@@ -26,7 +26,7 @@
 //! use json_ipc_server::Server;
 //!
 //! struct SayHello;
-//! impl MethodCommand for SayHello {
+//! impl SyncMethodCommand for SayHello {
 //! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	}
@@ -111,7 +111,7 @@ impl SocketConnection {
                     let mut response_bytes = Vec::new();
                     for rpc_msg in requests {
                         trace!(target: "ipc", "Request: {}", rpc_msg);
-                        let response: Option<String> = handler.handle_request(&rpc_msg);
+                        let response: Option<String> = handler.handle_request_sync(&rpc_msg);
                         if let Some(response_str) = response {
                             trace!(target: "ipc", "Response: {}", &response_str);
                             response_bytes.extend(response_str.into_bytes());
