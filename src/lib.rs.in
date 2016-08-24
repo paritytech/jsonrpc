@@ -21,5 +21,5 @@ pub use self::response::{Output, SyncResponse, SyncOutput, Success, Failure};
 pub use self::error::{ErrorCode, Error};
 pub use self::commander::{Commander, MethodCommand, SyncMethodCommand, AsyncMethodCommand, AsyncMethod, NotificationCommand, MethodResult, Ready};
 pub use self::request_handler::RequestHandler;
-pub use self::io::{IoHandler, IoDelegate};
+pub use self::io::{IoHandler, IoDelegate, AsyncStringResponse};
 pub use self::util::{from_params, to_value};

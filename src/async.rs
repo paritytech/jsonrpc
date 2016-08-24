@@ -41,7 +41,7 @@ impl AsyncResultHandler {
 		};
 
 		for on_result in listeners.into_iter() {
-			on_result();
+			on_result()
 		}
 	}
 
@@ -123,7 +123,7 @@ impl Response {
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + Sync + 'static {
+	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
 		match *self {
 			Response::Single(Output::Sync(_)) => {
 				f();
@@ -134,21 +134,27 @@ impl Response {
 			},
 			Response::Batch(ref outputs) => {
 				let mut async = true;
-				let callback = Arc::new(f);
-				let count = Arc::new(AtomicUsize::new(0));
+				let mut count = 0;
+				// First count
+				for output in outputs {
+					if let Output::Async(_) = *output {
+						async = true;
+						count += 1;
+					}
+				}
 
+				// Then assign callbacks
+				let callback = Arc::new(Mutex::new(Some(f)));
+				let count = Arc::new(AtomicUsize::new(count));
 				for output in outputs {
 					if let Output::Async(ref output) = *output {
-						async = true;
-						count.fetch_add(1, Ordering::Relaxed);
-
 						let count = count.clone();
 						let callback = callback.clone();
 						output.on_result(move || {
 							let res = count.fetch_sub(1, Ordering::Relaxed);
 							// Last output resolved
 							if res == 1 {
-								callback();
+								callback.lock().unwrap().take().expect("Callback called only once.")();
 							}
 						});
 					}
@@ -156,7 +162,7 @@ impl Response {
 
 				// If there are no async calls just fire callback
 				if !async {
-					callback();
+					callback.lock().unwrap().take().expect("Callback called only once.")();
 					true
 				} else {
 					// if all async calls were already available

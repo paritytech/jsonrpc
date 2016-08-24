@@ -102,8 +102,11 @@ pub struct AsyncStringResponse {
 }
 
 impl AsyncStringResponse {
-	pub fn on_result<F>(&self, f: F) where F: Fn() + Send + Sync + 'static {
-		self.response.on_result(f);
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
+		self.response.on_result(f)
 	}
 
 	pub fn await(self) -> String {
