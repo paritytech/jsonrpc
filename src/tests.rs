@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use self::jsonrpc_core::IoHandler;
+use self::jsonrpc_core::{IoHandler, Params, Ready, Value};
 use super::*;
 
 fn serve_hosts(hosts: Vec<String>) -> Server {
@@ -16,7 +16,20 @@ fn serve_hosts(hosts: Vec<String>) -> Server {
 }
 
 fn serve() -> Server {
-	ServerBuilder::new(Arc::new(IoHandler::new()))
+	use std::thread;
+	let io = IoHandler::new();
+	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
+	io.add_async_method("hello_async", |_params: Params, ready: Ready| {
+		ready.ready(Ok(Value::String("world".into())));
+	});
+	io.add_async_method("hello_async2", |_params: Params, ready: Ready| {
+		thread::spawn(move || {
+			thread::sleep(::std::time::Duration::from_millis(10));
+			ready.ready(Ok(Value::String("world".into())));
+		});
+	});
+
+	ServerBuilder::new(Arc::new(io))
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
@@ -374,6 +387,80 @@ fn should_always_allow_the_bind_address_as_localhost() {
 	assert_eq!(response.body, method_not_found());
 }
 
+#[test]
+fn should_handle_sync_requests_correctly() {
+	// given
+	let server = serve();
+	let addr = server.addr().clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world());
+}
+
+#[test]
+fn should_handle_async_requests_with_immediate_response_correctly() {
+	// given
+	let server = serve();
+	let addr = server.addr().clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world());
+}
+
+#[test]
+fn should_handle_async_requests_correctly() {
+	// given
+	let server = serve();
+	let addr = server.addr().clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world());
+}
 
 fn invalid_host() -> String {
 	"29\nProvided Host header is not whitelisted.\n".into()
@@ -385,4 +472,7 @@ fn method_not_found() -> String {
 
 fn invalid_request() -> String {
  "5B\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}\n0\n".into()
+}
+fn world() -> String {
+ "29\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n0\n".into()
 }

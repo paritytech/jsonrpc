@@ -4,7 +4,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::io::{self, Read, Write};
 use unicase::UniCase;
-use hyper::{mime, server, Next, Encoder, Decoder};
+use hyper::{mime, server, Next, Encoder, Decoder, Control};
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
 use hyper::net::HttpStream;
@@ -27,6 +27,9 @@ pub struct ServerHandler {
 	allowed_hosts: Option<Vec<String>>,
 	request: Request,
 	response: Response,
+	/// Asynchronous response waiting to be moved into `response` field.
+	waiting: Arc<Mutex<Option<Response>>>,
+	control: Option<Control>,
 }
 
 impl Drop for ServerHandler {
@@ -46,7 +49,8 @@ impl ServerHandler {
 		jsonrpc_handler: Arc<IoHandler>,
 		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<String>>,
-		panic_handler: PanicHandler
+		panic_handler: PanicHandler,
+		control: Control,
 	) -> Self {
 		ServerHandler {
 			panic_handler: panic_handler,
@@ -55,6 +59,8 @@ impl ServerHandler {
 			allowed_hosts: allowed_hosts,
 			request: Request::empty(),
 			response: Response::method_not_allowed(),
+			control: Some(control),
+			waiting: Arc::new(Mutex::new(None)),
 		}
 	}
 
@@ -127,8 +133,31 @@ impl server::Handler<HttpStream> for ServerHandler {
 	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
 		match decoder.read_to_string(&mut self.request.content) {
 			Ok(0) => {
-				self.response = Response::ok(self.jsonrpc_handler.handle_request(&self.request.content).unwrap_or_else(String::new));
-				Next::write()
+				let response = self.jsonrpc_handler.handle_request(&self.request.content);
+				match response {
+					None => {
+						self.response = Response::ok(String::new());
+						Next::write()
+					}
+					Some(async) => {
+						let control = self.control.take()
+							.expect("on_request_readable is called only once and this is the only place accessing control");
+						let res = self.waiting.clone();
+						let invoked = async.on_result(move |result| {
+							*res.lock().unwrap() = Some(Response::ok(result));
+							let result = control.ready(Next::write());
+							if let Err(e) = result {
+								warn!("Error while resuming async call: {:?}", e);
+							}
+						});
+
+						if invoked {
+							Next::write()
+						} else {
+							Next::wait()
+						}
+					}
+				}
 			}
 			Ok(_) => {
 				Next::read()
@@ -144,6 +173,11 @@ impl server::Handler<HttpStream> for ServerHandler {
 
 	/// This event occurs after the first time this handled signals `Next::write()`.
 	fn on_response(&mut self, response: &mut server::Response) -> Next {
+		// Check if there is a response pending
+		if let Some(output) = self.waiting.lock().unwrap().take() {
+			self.response = output;
+		}
+
 		*response.headers_mut() = self.response_headers(&self.request.origin);
 		response.set_status(self.response.code);
 		Next::write()

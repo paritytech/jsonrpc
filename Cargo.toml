@@ -8,6 +8,7 @@ authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 
 [dependencies]
-jsonrpc-core = "2.0"
+log = "0.3"
+jsonrpc-core = "3.0"
 hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
 unicase = "1.3"
