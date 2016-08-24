@@ -45,11 +45,16 @@ impl AsyncResultHandler {
 		}
 	}
 
-	pub fn on_result<F>(&self, f: F) where F: Fn() + Send + 'static {
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
 		if self.result.lock().unwrap().is_some() {
 			f();
+			true
 		} else {
 			self.listeners.lock().unwrap().push(Box::new(f));
+			false
 		}
 	}
 
@@ -92,7 +97,10 @@ impl AsyncOutput {
 		SyncOutput::from(result, self.id, self.jsonrpc)
 	}
 
-	pub fn on_result<F>(&self, f: F) where F: Fn() + Send + 'static {
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
 		self.result.on_result(f)
 	}
 
@@ -112,18 +120,23 @@ pub enum Response {
 }
 
 impl Response {
-	pub fn on_result<F>(&self, f: F) where F: Fn() + Send + Sync + 'static {
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + Sync + 'static {
 		match *self {
 			Response::Single(Output::Sync(_)) => {
 				f();
+				true
 			},
 			Response::Single(Output::Async(ref output)) => {
-				output.on_result(f);
+				output.on_result(f)
 			},
 			Response::Batch(ref outputs) => {
 				let mut async = true;
 				let callback = Arc::new(f);
 				let count = Arc::new(AtomicUsize::new(0));
+
 				for output in outputs {
 					if let Output::Async(ref output) = *output {
 						async = true;
@@ -136,13 +149,18 @@ impl Response {
 							// Last output resolved
 							if res == 1 {
 								callback();
-								return;
 							}
 						});
 					}
 				}
+
+				// If there are no async calls just fire callback
 				if !async {
-					callback()
+					callback();
+					true
+				} else {
+					// if all async calls were already available
+					count.load(Ordering::Relaxed) == 0
 				}
 			}
 		}
@@ -201,7 +219,7 @@ mod tests {
 		let response = Response::Batch(vec![Output::Async(output1), Output::Async(output2)]);
 		let val = Arc::new(AtomicBool::new(false));
 		let v = val.clone();
-		response.on_result(move || { v.store(true, Ordering::Relaxed) });
+		assert!(!response.on_result(move || { v.store(true, Ordering::Relaxed) }));
 		assert_eq!(val.load(Ordering::Relaxed), false);
 
 		// when
@@ -227,8 +245,8 @@ mod tests {
 
 		let val = Arc::new(AtomicBool::new(false));
 		let v = val.clone();
-		res.on_result(move || { v.store(true, Ordering::Relaxed) });
 
+		assert!(output.on_result(move || { v.store(true, Ordering::Relaxed) }));
 		assert_eq!(val.load(Ordering::Relaxed), true);
 	}
 
