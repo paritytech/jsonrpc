@@ -39,7 +39,7 @@ impl<T, F> MethodCommand for DelegateAsyncMethod <T, F> where
 		let (res, ready) = AsyncResult::new();
 		let closure = &self.closure;
 		closure(&self.delegate, params, ready);
-		MethodResult::Async(res)
+		res.into()
 	}
 }
 

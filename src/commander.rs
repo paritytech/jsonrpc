@@ -59,7 +59,7 @@ impl<F> MethodCommand for AsyncMethod<F> where F: AsyncMethodCommand {
 	fn execute(&self, params: Params) -> MethodResult {
 		let (res, ready) = AsyncResult::new();
 		self.command.execute(params, ready);
-		MethodResult::Async(res)
+		res.into()
 	}
 }
 

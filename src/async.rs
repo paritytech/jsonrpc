@@ -1,21 +1,18 @@
-use std::{mem, fmt, thread};
+use std::{fmt, thread};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure};
+use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure, MethodResult};
 
 type Res = Result<Value, Error>;
 
 #[derive(Debug, Clone)]
 pub struct AsyncResult {
-	result: Arc<AsyncResultHandler>,
+	result: Arc<Mutex<AsyncResultHandler>>,
 }
 
 impl AsyncResult {
 	pub fn new() -> (AsyncResult, Ready) {
-		let res = Arc::new(AsyncResultHandler {
-			result: Mutex::new(None),
-			listeners: Mutex::new(Vec::new()),
-		});
+		let res = Arc::new(Mutex::new(AsyncResultHandler::default()));
 
 		(AsyncResult { result: res.clone() }, Ready { result: res })
 	}
@@ -24,34 +21,63 @@ impl AsyncResult {
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
 	pub fn on_result<F>(self, f: F) -> bool where F: Fn(Res) + Send + 'static {
-		let result = self.result.clone();
-		self.result.on_result(move || {
-			f(result.await())
+		self.result.lock().unwrap().on_result(move |res| {
+			f(res)
 		})
 	}
 
 	pub fn await(self) -> Res {
-		self.result.await()
+		// Check if there is a result already
+		{
+			let mut result = self.result.lock().unwrap();
+			if let Some(res) = result.try_result() {
+				return res;
+			}
+			// Park the thread
+			let current = thread::current();
+			// Make sure to keep the lock so result cannot be inserted in between (try_result and on_result)
+			result.notify(move || {
+				current.unpark();
+			});
+		}
+
+		loop {
+			if let Some(res) = self.result.lock().unwrap().try_result() {
+				return res;
+			}
+			thread::park();
+		}
 	}
 }
 
-
+impl Into<MethodResult> for AsyncResult {
+	fn into(self) -> MethodResult {
+		let result = self.result.lock().unwrap().try_result();
+		if let Some(result) = result {
+			MethodResult::Sync(result)
+		} else {
+			MethodResult::Async(self)
+		}
+	}
+}
 
 #[derive(Debug, Clone)]
 pub struct Ready {
-	result: Arc<AsyncResultHandler>,
+	result: Arc<Mutex<AsyncResultHandler>>,
 }
 
 impl Ready {
 	pub fn ready(self, result: Result<Value, Error>) {
-		self.result.set_result(result);
+		self.result.lock().unwrap().set_result(result);
 	}
 }
 
 
+#[derive(Default)]
 struct AsyncResultHandler {
-	result: Mutex<Option<Res>>,
-	listeners: Mutex<Vec<Box<Fn() + Send>>>
+	result: Option<Res>,
+	listener: Option<Box<Fn(Res) + Send>>,
+	notifier: Option<Box<Fn() + Send>>,
 }
 
 impl fmt::Debug for AsyncResultHandler {
@@ -59,63 +85,46 @@ impl fmt::Debug for AsyncResultHandler {
 		write!(
 			formatter,
 			"AsyncResult: {:?}",
-			*self.result.lock().unwrap(),
+			self.result,
 		)
 	}
 }
 
 impl AsyncResultHandler {
-	pub fn set_result(&self, res: Res) {
-		{
-			let mut result = self.result.lock().unwrap();
-			*result = Some(res);
+	pub fn set_result(&mut self, res: Res) {
+		// set result
+		if let Some(listener) = self.listener.take() {
+			listener(res);
+		} else {
+			self.result = Some(res);
 		}
-
-		let listeners = {
-			let mut listeners = self.listeners.lock().unwrap();
-			mem::replace(&mut *listeners, Vec::new())
-		};
-
-		for on_result in listeners.into_iter() {
-			on_result()
+		// and notify
+		if let Some(notifier) = self.notifier.take() {
+			notifier();
 		}
 	}
 
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
-		let has_result = self.result.lock().unwrap().is_some();
-		if has_result {
-			f();
+	pub fn on_result<F>(&mut self, f: F) -> bool where F: Fn(Res) + Send + 'static {
+		if let Some(result) = self.result.take() {
+			f(result);
 			true
 		} else {
-			self.listeners.lock().unwrap().push(Box::new(f));
+			self.listener = Some(Box::new(f));
 			false
 		}
 	}
 
-	pub fn await(&self) -> Res {
-		// Check if there is a result already
-		{
-			if let Some(ref res) = *self.result.lock().unwrap() {
-				return res.clone();
-			}
-		}
-		// Park the thread
-		let current = thread::current();
-		self.on_result(move || {
-			current.unpark();
-		});
-
-		loop {
-			if let Some(ref res) = *self.result.lock().unwrap() {
-				return res.clone();
-			}
-			thread::park();
-		}
+	pub fn notify<F>(&mut self, f: F) where F: Fn() + Send + 'static {
+		assert!(self.result.is_none());
+		self.notifier = Some(Box::new(f));
 	}
 
+	pub fn try_result(&mut self) -> Option<Res> {
+		self.result.take()
+	}
 
 }
 
