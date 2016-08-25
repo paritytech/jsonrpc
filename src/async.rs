@@ -5,7 +5,51 @@ use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success
 
 type Res = Result<Value, Error>;
 
-pub struct AsyncResultHandler {
+#[derive(Debug, Clone)]
+pub struct AsyncResult {
+	result: Arc<AsyncResultHandler>,
+}
+
+impl AsyncResult {
+	pub fn new() -> (AsyncResult, Ready) {
+		let res = Arc::new(AsyncResultHandler {
+			result: Mutex::new(None),
+			listeners: Mutex::new(Vec::new()),
+		});
+
+		(AsyncResult { result: res.clone() }, Ready { result: res })
+	}
+
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(self, f: F) -> bool where F: Fn(Res) + Send + 'static {
+		let result = self.result.clone();
+		self.result.on_result(move || {
+			f(result.await())
+		})
+	}
+
+	pub fn await(self) -> Res {
+		self.result.await()
+	}
+}
+
+
+
+#[derive(Debug, Clone)]
+pub struct Ready {
+	result: Arc<AsyncResultHandler>,
+}
+
+impl Ready {
+	pub fn ready(self, result: Result<Value, Error>) {
+		self.result.set_result(result);
+	}
+}
+
+
+struct AsyncResultHandler {
 	result: Mutex<Option<Res>>,
 	listeners: Mutex<Vec<Box<Fn() + Send>>>
 }
@@ -14,24 +58,13 @@ impl fmt::Debug for AsyncResultHandler {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
 		write!(
 			formatter,
-			"AsyncResult: {:?}, Listeners: {}",
-			self.result,
-			self.listeners.lock().unwrap().len()
+			"AsyncResult: {:?}",
+			*self.result.lock().unwrap(),
 		)
 	}
 }
 
 impl AsyncResultHandler {
-	pub fn new() -> (Arc<Self>, Ready) {
-		let res = Arc::new(AsyncResultHandler {
-			result: Mutex::new(None),
-			listeners: Mutex::new(Vec::new()),
-		});
-		let result = res.clone();
-
-		(res, Ready { result: result })
-	}
-
 	pub fn set_result(&self, res: Res) {
 		{
 			let mut result = self.result.lock().unwrap();
@@ -52,7 +85,8 @@ impl AsyncResultHandler {
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
 	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
-		if self.result.lock().unwrap().is_some() {
+		let has_result = self.result.lock().unwrap().is_some();
+		if has_result {
 			f();
 			true
 		} else {
@@ -85,19 +119,6 @@ impl AsyncResultHandler {
 
 }
 
-pub type AsyncResult = Arc<AsyncResultHandler>;
-
-#[derive(Debug, Clone)]
-pub struct Ready {
-	result: AsyncResult,
-}
-
-impl Ready {
-	pub fn ready(self, result: Result<Value, Error>) {
-		self.result.set_result(result);
-	}
-}
-
 #[derive(Debug)]
 pub struct AsyncOutput {
 	result: AsyncResult,
@@ -106,16 +127,20 @@ pub struct AsyncOutput {
 }
 
 impl AsyncOutput {
-	pub fn await(self) -> SyncOutput {
-		let result = self.result.await();
-		SyncOutput::from(result, self.id, self.jsonrpc)
-	}
-
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
-		self.result.on_result(f)
+	pub fn on_result<F>(self, f: F) -> bool where F: Fn(SyncOutput) + Send + 'static {
+		let id = self.id;
+		let jsonrpc = self.jsonrpc;
+		self.result.on_result(move |result| {
+			f(SyncOutput::from(result, id.clone(), jsonrpc.clone()))
+		})
+	}
+
+	pub fn await(self) -> SyncOutput {
+		let result = self.result.await();
+		SyncOutput::from(result, self.id, self.jsonrpc)
 	}
 
 	pub fn from(result: AsyncResult, id: Id, jsonrpc: Version) -> Self {
@@ -134,58 +159,6 @@ pub enum Response {
 }
 
 impl Response {
-	/// Adds closure to be invoked when result is available.
-	/// Callback is invoked right away if result is instantly available and `true` is returned.
-	/// `false` is returned when listener has been added
-	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
-		match *self {
-			Response::Single(Output::Sync(_)) => {
-				f();
-				true
-			},
-			Response::Single(Output::Async(ref output)) => {
-				output.on_result(f)
-			},
-			Response::Batch(ref outputs) => {
-				let mut async = true;
-				let mut count = 0;
-				// First count
-				for output in outputs {
-					if let Output::Async(_) = *output {
-						async = true;
-						count += 1;
-					}
-				}
-
-				// Then assign callbacks
-				let callback = Arc::new(Mutex::new(Some(f)));
-				let count = Arc::new(AtomicUsize::new(count));
-				for output in outputs {
-					if let Output::Async(ref output) = *output {
-						let count = count.clone();
-						let callback = callback.clone();
-						output.on_result(move || {
-							let res = count.fetch_sub(1, Ordering::Relaxed);
-							// Last output resolved
-							if res == 1 {
-								callback.lock().unwrap().take().expect("Callback called only once.")();
-							}
-						});
-					}
-				}
-
-				// If there are no async calls just fire callback
-				if !async {
-					callback.lock().unwrap().take().expect("Callback called only once.")();
-					true
-				} else {
-					// if all async calls were already available
-					count.load(Ordering::Relaxed) == 0
-				}
-			}
-		}
-	}
-
 	pub fn await(self) -> SyncResponse {
 		match self {
 			Response::Single(Output::Sync(output)) => SyncResponse::Single(output),
@@ -202,6 +175,76 @@ impl Response {
 				}
 				SyncResponse::Batch(res)
 			},
+		}
+	}
+
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(self, f: F) -> bool where F: Fn(SyncResponse) + Send + 'static {
+		match self {
+			Response::Single(Output::Sync(output)) => {
+				f(SyncResponse::Single(output));
+				true
+			},
+			Response::Single(Output::Async(output)) => {
+				output.on_result(move |res| f(SyncResponse::Single(res)))
+			},
+			Response::Batch(outputs) => {
+				let mut async = true;
+				let mut count = 0;
+				// First count async requests
+				for output in &outputs {
+					if let Output::Async(_) = *output {
+						async = true;
+						count += 1;
+					}
+				}
+
+				// Then assign callbacks
+				let callback = Arc::new(Mutex::new(Some(f)));
+				let responses = Arc::new(Mutex::new(Some(Vec::new())));
+				let count = Arc::new(AtomicUsize::new(count));
+
+				for output in outputs {
+					match output {
+						Output::Async(output) => {
+							let count = count.clone();
+							let callback = callback.clone();
+							let responses = responses.clone();
+							output.on_result(move |res| {
+								// add response
+								{
+									let mut response = responses.lock().unwrap();
+									response.as_mut().expect("Callback called only once.").push(res);
+								}
+								// Check if it's the last output resolved
+								let result = count.fetch_sub(1, Ordering::Relaxed);
+								if result == 1 {
+									let callback = callback.lock().unwrap().take().expect("Callback called only once.");
+									let responses = responses.lock().unwrap().take().expect("Callback called only once.");
+									callback(SyncResponse::Batch(responses));
+								}
+							});
+						},
+						Output::Sync(output) => {
+							let mut res = responses.lock().unwrap();
+							res.as_mut().expect("Callback called only once").push(output);
+						},
+					}
+				}
+
+				// If there are no async calls just fire callback
+				if !async {
+					let responses = responses.lock().unwrap().take().expect("Callback called only once.");
+					let callback = callback.lock().unwrap().take().expect("Callback called only once.");
+					callback(SyncResponse::Batch(responses));
+					true
+				} else {
+					// if all async calls were already available
+					count.load(Ordering::Relaxed) == 0
+				}
+			}
 		}
 	}
 }
@@ -221,37 +264,38 @@ impl From<Success> for Response {
 
 #[cfg(test)]
 mod tests {
-	use std::sync::Arc;
+	use std::sync::{Arc, Mutex};
 	use std::sync::atomic::{AtomicBool, Ordering};
 	use std::thread;
 	use super::super::*;
-	use super::AsyncResultHandler;
 
 
 	#[test]
 	fn should_wait_for_all_results_in_batch() {
 		// given
-		let res1 = AsyncResultHandler::new().0;
-		let res2 = AsyncResultHandler::new().0;
+		let (res1, ready1) = AsyncResult::new();
+		let (res2, ready2) = AsyncResult::new();
 		let output1 = AsyncOutput::from(res1.clone(), Id::Null, Version::V2);
 		let output2 = AsyncOutput::from(res2.clone(), Id::Null, Version::V2);
 
 		let response = Response::Batch(vec![Output::Async(output1), Output::Async(output2)]);
-		let val = Arc::new(AtomicBool::new(false));
+		let val = Arc::new(Mutex::new(None));
 		let v = val.clone();
-		assert!(!response.on_result(move || { v.store(true, Ordering::Relaxed) }));
-		assert_eq!(val.load(Ordering::Relaxed), false);
+		assert!(!response.on_result(move |result| {
+			*v.lock().unwrap() = Some(result);
+		}));
+		assert_eq!(val.lock().unwrap().is_none(), true);
 
 		// when
 		// resolve first
-		res1.set_result(Ok(Value::U64(1)));
-		assert_eq!(val.load(Ordering::Relaxed), false);
+		ready1.ready(Ok(Value::U64(1)));
+		assert_eq!(val.lock().unwrap().is_none(), true);
 		// resolve second
-		res2.set_result(Ok(Value::U64(2)));
-		assert_eq!(val.load(Ordering::Relaxed), true);
+		ready2.ready(Ok(Value::U64(2)));
+		assert_eq!(val.lock().unwrap().is_none(), false);
 
 		// then
-		assert_eq!(response.await(), SyncResponse::Batch(vec![
+		assert_eq!(val.lock().unwrap().as_ref().unwrap(), &SyncResponse::Batch(vec![
 			SyncOutput::Success(Success { result: Value::U64(1), id: Id::Null, jsonrpc: Version::V2 }),
 			SyncOutput::Success(Success { result: Value::U64(2), id: Id::Null, jsonrpc: Version::V2 }),
 		]));
@@ -259,23 +303,23 @@ mod tests {
 
 	#[test]
 	fn should_call_on_result_if_available() {
-		let res = AsyncResultHandler::new().0;
+		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
-		res.set_result(Ok(Value::String("hello".into())));
+		ready.ready(Ok(Value::String("hello".into())));
 
 		let val = Arc::new(AtomicBool::new(false));
 		let v = val.clone();
 
-		assert!(output.on_result(move || { v.store(true, Ordering::Relaxed) }));
+		assert!(output.on_result(move |_| { v.store(true, Ordering::Relaxed) }));
 		assert_eq!(val.load(Ordering::Relaxed), true);
 	}
 
 	#[test]
 	fn should_wait_for_output() {
-		let res = AsyncResultHandler::new().0;
+		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
 		thread::spawn(move || {
-			res.set_result(Ok(Value::String("hello".into())));
+			ready.ready(Ok(Value::String("hello".into())));
 		});
 		assert_eq!(output.await(), SyncOutput::Success(Success {
 			id: Id::Null,
@@ -286,9 +330,9 @@ mod tests {
 
 	#[test]
 	fn should_return_output_if_available() {
-		let res = AsyncResultHandler::new().0;
+		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
-		res.set_result(Ok(Value::String("hello".into())));
+		ready.ready(Ok(Value::String("hello".into())));
 
 		assert_eq!(output.await(), SyncOutput::Success(Success {
 			id: Id::Null,

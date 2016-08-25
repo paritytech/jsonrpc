@@ -2,8 +2,8 @@
 
 use std::sync::RwLock;
 use std::collections::HashMap;
-use async::AsyncResultHandler;
-use super::{Params, Value, Error, ErrorCode, AsyncResult, Ready};
+use async::{AsyncResult, Ready};
+use super::{Params, Value, Error, ErrorCode};
 
 pub enum MethodResult {
 	Sync(Result<Value, Error>),
@@ -57,7 +57,7 @@ impl<F> MethodCommand for F where F: SyncMethodCommand {
 
 impl<F> MethodCommand for AsyncMethod<F> where F: AsyncMethodCommand {
 	fn execute(&self, params: Params) -> MethodResult {
-		let (res, ready) = AsyncResultHandler::new();
+		let (res, ready) = AsyncResult::new();
 		self.command.execute(params, ready);
 		MethodResult::Async(res)
 	}

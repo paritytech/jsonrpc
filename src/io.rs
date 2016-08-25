@@ -1,7 +1,7 @@
 //! jsonrpc io
 use std::sync::Arc;
 use std::collections::HashMap;
-use async::{AsyncResultHandler, Ready};
+use async::{AsyncResult, Ready};
 use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, Version, Id, ErrorCode, RequestHandler, Request, Failure, Response};
 use serde_json;
 
@@ -36,7 +36,7 @@ impl<T, F> MethodCommand for DelegateAsyncMethod <T, F> where
 	F: Send + Sync,
 	T: Send + Sync {
 	fn execute(&self, params: Params) -> MethodResult {
-		let (res, ready) = AsyncResultHandler::new();
+		let (res, ready) = AsyncResult::new();
 		let closure = &self.closure;
 		closure(&self.delegate, params, ready);
 		MethodResult::Async(res)
@@ -131,17 +131,23 @@ pub struct AsyncStringResponse {
 }
 
 impl AsyncStringResponse {
+	fn wrap(res: SyncResponse) -> String {
+		let response = write_response(res);
+		debug!(target: "rpc", "Response: {:?}", response);
+		response
+	}
+
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(&self, f: F) -> bool where F: Fn() + Send + 'static {
-		self.response.on_result(f)
+	pub fn on_result<F>(self, f: F) -> bool where F: Fn(String) + Send + 'static {
+		self.response.on_result(move |res| {
+			f(Self::wrap(res))
+		})
 	}
 
 	pub fn await(self) -> String {
-		let response = write_response(self.response.await());
-		debug!(target: "rpc", "Response: {:?}", response);
-		response
+		Self::wrap(self.response.await())
 	}
 }
 
