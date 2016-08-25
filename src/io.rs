@@ -1,5 +1,5 @@
 //! jsonrpc io
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::collections::HashMap;
 use async::{AsyncResult, Ready};
 use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, Version, Id, ErrorCode, RequestHandler, Request, Failure, Response};
@@ -140,14 +140,10 @@ impl AsyncStringResponse {
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(self, f: F) -> bool where F: Fn(String) + Send + 'static {
+	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(String) + Send + 'static {
 		self.response.on_result(move |res| {
 			f(Self::wrap(res))
 		})
-	}
-
-	pub fn await(self) -> String {
-		Self::wrap(self.response.await())
 	}
 }
 
@@ -198,24 +194,19 @@ impl IoHandler {
 
 	/// Handle given request synchronously - will block until response is available.
 	pub fn handle_request_sync<'a>(&self, request_str: &'a str) -> Option<String> {
-		trace!(target: "rpc", "Request: {}", request_str);
-		let response = match read_request(request_str) {
-			Ok(request) => match self.request_handler.handle_request(request) {
-				Some(response) => Some(write_response(response.await())),
-				_ => None,
-			},
-			Err(error) => Some(write_response(Failure {
-				id: Id::Null,
-				jsonrpc: Version::V2,
-				error: error
-			}.into())),
-		};
-		debug!(target: "rpc", "Response: {:?}", response);
-		response
+		if let Some(response) = self.handle_request(request_str) {
+			let (tx, rx) = mpsc::channel();
+			response.on_result(move |res| {
+				tx.send(res).unwrap();
+			});
+			Some(rx.recv().unwrap())
+		} else {
+			None
+		}
 	}
 
 	/// Handle given request asynchronously.
-	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<AsyncStringResponse> {
+	pub fn handle_request<'a>(&self, request_str: &'a str, ) -> Option<AsyncStringResponse> {
 		trace!(target: "rpc", "Request: {}", request_str);
 		let response = match read_request(request_str) {
 			Ok(request) => self.request_handler.handle_request(request).map(AsyncStringResponse::from),

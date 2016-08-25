@@ -1,4 +1,5 @@
-use std::{fmt, thread};
+use std::cell::RefCell;
+use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure, MethodResult};
@@ -20,43 +21,19 @@ impl AsyncResult {
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(self, f: F) -> bool where F: Fn(Res) + Send + 'static {
+	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(Res) + Send + 'static {
 		self.result.lock().unwrap().on_result(move |res| {
 			f(res)
 		})
-	}
-
-	pub fn await(self) -> Res {
-		// Check if there is a result already
-		{
-			let mut result = self.result.lock().unwrap();
-			if let Some(res) = result.try_result() {
-				return res;
-			}
-			// Park the thread
-			let current = thread::current();
-			// Make sure to keep the lock so result cannot be inserted in between (try_result and on_result)
-			result.notify(move || {
-				current.unpark();
-			});
-		}
-
-		loop {
-			if let Some(res) = self.result.lock().unwrap().try_result() {
-				return res;
-			}
-			thread::park();
-		}
 	}
 }
 
 impl Into<MethodResult> for AsyncResult {
 	fn into(self) -> MethodResult {
 		let result = self.result.lock().unwrap().try_result();
-		if let Some(result) = result {
-			MethodResult::Sync(result)
-		} else {
-			MethodResult::Async(self)
+		match result {
+			Some(result) => MethodResult::Sync(result),
+			None => MethodResult::Async(self)
 		}
 	}
 }
@@ -76,50 +53,39 @@ impl Ready {
 #[derive(Default)]
 struct AsyncResultHandler {
 	result: Option<Res>,
-	listener: Option<Box<Fn(Res) + Send>>,
-	notifier: Option<Box<Fn() + Send>>,
+	listener: Option<Box<FnMut(Res) + Send>>,
 }
 
 impl fmt::Debug for AsyncResultHandler {
     fn fmt(&self, formatter: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-		write!(
-			formatter,
-			"AsyncResult: {:?}",
-			self.result,
-		)
+		write!(formatter, "AsyncResult: {:?}", self.result)
 	}
 }
 
 impl AsyncResultHandler {
 	pub fn set_result(&mut self, res: Res) {
 		// set result
-		if let Some(listener) = self.listener.take() {
+		if let Some(mut listener) = self.listener.take() {
 			listener(res);
 		} else {
 			self.result = Some(res);
-		}
-		// and notify
-		if let Some(notifier) = self.notifier.take() {
-			notifier();
 		}
 	}
 
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(&mut self, f: F) -> bool where F: Fn(Res) + Send + 'static {
+	pub fn on_result<F>(&mut self, f: F) -> bool where F: FnOnce(Res) + Send + 'static {
 		if let Some(result) = self.result.take() {
 			f(result);
 			true
 		} else {
-			self.listener = Some(Box::new(f));
+			let listener = RefCell::new(Some(f));
+			self.listener = Some(Box::new(move |res| {
+				listener.borrow_mut().take().unwrap()(res);
+			}));
 			false
 		}
-	}
-
-	pub fn notify<F>(&mut self, f: F) where F: Fn() + Send + 'static {
-		assert!(self.result.is_none());
-		self.notifier = Some(Box::new(f));
 	}
 
 	pub fn try_result(&mut self) -> Option<Res> {
@@ -139,17 +105,12 @@ impl AsyncOutput {
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(self, f: F) -> bool where F: Fn(SyncOutput) + Send + 'static {
+	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(SyncOutput) + Send + 'static {
 		let id = self.id;
 		let jsonrpc = self.jsonrpc;
 		self.result.on_result(move |result| {
-			f(SyncOutput::from(result, id.clone(), jsonrpc.clone()))
+			f(SyncOutput::from(result, id, jsonrpc))
 		})
-	}
-
-	pub fn await(self) -> SyncOutput {
-		let result = self.result.await();
-		SyncOutput::from(result, self.id, self.jsonrpc)
 	}
 
 	pub fn from(result: AsyncResult, id: Id, jsonrpc: Version) -> Self {
@@ -168,29 +129,10 @@ pub enum Response {
 }
 
 impl Response {
-	pub fn await(self) -> SyncResponse {
-		match self {
-			Response::Single(Output::Sync(output)) => SyncResponse::Single(output),
-			Response::Single(Output::Async(output)) => SyncResponse::Single(output.await()),
-			Response::Batch(outputs) => {
-				let mut res = Vec::new();
-				for output in outputs.into_iter() {
-					match output {
-						// unwrap sync responses
-						Output::Sync(output) => res.push(output),
-						// await response
-						Output::Async(output) => res.push(output.await()),
-					};
-				}
-				SyncResponse::Batch(res)
-			},
-		}
-	}
-
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
-	pub fn on_result<F>(self, f: F) -> bool where F: Fn(SyncResponse) + Send + 'static {
+	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(SyncResponse) + Send + 'static {
 		match self {
 			Response::Single(Output::Sync(output)) => {
 				f(SyncResponse::Single(output));
@@ -273,7 +215,7 @@ impl From<Success> for Response {
 
 #[cfg(test)]
 mod tests {
-	use std::sync::{Arc, Mutex};
+	use std::sync::{mpsc, Arc, Mutex};
 	use std::sync::atomic::{AtomicBool, Ordering};
 	use std::thread;
 	use super::super::*;
@@ -327,10 +269,14 @@ mod tests {
 	fn should_wait_for_output() {
 		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
+		let (tx, rx) = mpsc::channel();
+		output.on_result(move |res| {
+			tx.send(res).unwrap();
+		});
 		thread::spawn(move || {
 			ready.ready(Ok(Value::String("hello".into())));
 		});
-		assert_eq!(output.await(), SyncOutput::Success(Success {
+		assert_eq!(rx.recv().unwrap(), SyncOutput::Success(Success {
 			id: Id::Null,
 			jsonrpc: Version::V2,
 			result: Value::String("hello".into()),
@@ -342,8 +288,12 @@ mod tests {
 		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
 		ready.ready(Ok(Value::String("hello".into())));
+		let (tx, rx) = mpsc::channel();
+		output.on_result(move |res| {
+			tx.send(res).unwrap();
+		});
 
-		assert_eq!(output.await(), SyncOutput::Success(Success {
+		assert_eq!(rx.recv().unwrap(), SyncOutput::Success(Success {
 			id: Id::Null,
 			jsonrpc: Version::V2,
 			result: Value::String("hello".into()),
