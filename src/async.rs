@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure, MethodResult};
 
-type Res = Result<Value, Error>;
+pub type Res = Result<Value, Error>;
 
 #[derive(Debug, Clone)]
 pub struct AsyncResult {
