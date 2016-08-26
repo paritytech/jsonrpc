@@ -39,8 +39,11 @@ pub struct Notification {
 /// Represents single jsonrpc call.
 #[derive(Debug, PartialEq)]
 pub enum Call {
+	/// Call method
 	MethodCall(MethodCall),
+	/// Fire notification
 	Notification(Notification),
+	/// Invalid call
 	Invalid
 }
 
@@ -69,7 +72,9 @@ impl Deserialize for Call {
 /// Represents jsonrpc request.
 #[derive(Debug, PartialEq)]
 pub enum Request {
+	/// Single request (call)
 	Single(Call),
+	/// Batch of requests (calls)
 	Batch(Vec<Call>)
 }
 

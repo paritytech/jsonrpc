@@ -4,33 +4,48 @@ use serde::ser::{Serialize, Serializer};
 use serde_json::value;
 use super::{Id, Value, Error, Version, AsyncOutput};
 
+/// Successful response
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Success {
+	/// Protocol version
 	pub jsonrpc: Version,
+	/// Result
 	pub result: Value,
+	/// Correlation id
 	pub id: Id
 }
 
+/// Unsuccessful response
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Failure {
+	/// Protocol Version
 	pub jsonrpc: Version,
+	/// Error
 	pub error: Error,
+	/// Correlation id
 	pub id: Id
 }
 
+/// Represents synchronous output - failure or success
 #[derive(Debug, PartialEq)]
 pub enum SyncOutput {
+	/// Success
 	Success(Success),
+	/// Failure
 	Failure(Failure),
 }
 
+/// Represents synchronous or asynchronous output
 #[derive(Debug)]
 pub enum Output {
+	/// Synchronous
 	Sync(SyncOutput),
+	/// Asynchronous
 	Async(AsyncOutput),
 }
 
 impl SyncOutput {
+	/// Creates new synchronous output given `Result`, `Id` and `Version`.
 	pub fn from(result: Result<Value, Error>, id: Id, jsonrpc: Version) -> Self {
 		match result {
 			Ok(result) => SyncOutput::Success(Success {
@@ -67,9 +82,12 @@ impl Serialize for SyncOutput {
 	}
 }
 
+/// Synchronous response
 #[derive(Debug, PartialEq)]
 pub enum SyncResponse {
+	/// Single response
 	Single(SyncOutput),
+	/// Response to batch request (batch of responses)
 	Batch(Vec<SyncOutput>)
 }
 

@@ -35,6 +35,7 @@
 //! }
 //! ```
 
+#![warn(missing_docs)]
 #![cfg_attr(feature="nightly", feature(custom_derive, plugin))]
 #![cfg_attr(feature="nightly", plugin(serde_macros))]
 

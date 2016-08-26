@@ -1,17 +1,21 @@
+//! Asynchronous results, outputs and responses.
 use std::cell::RefCell;
-use std::fmt;
+use std::{fmt, thread};
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure, MethodResult};
 
+/// Convinience type for Synchronous Result
 pub type Res = Result<Value, Error>;
 
+/// Asynchronous result receiving end
 #[derive(Debug, Clone)]
 pub struct AsyncResult {
 	result: Arc<Mutex<AsyncResultHandler>>,
 }
 
 impl AsyncResult {
+	/// Creates new `AsyncResult` (receiver) and `Ready` (transmitter)
 	pub fn new() -> (AsyncResult, Ready) {
 		let res = Arc::new(Mutex::new(AsyncResultHandler::default()));
 
@@ -26,24 +30,49 @@ impl AsyncResult {
 			f(res)
 		})
 	}
+
+	pub fn await(self) -> Res {
+		// Check if there is a result already
+		{
+			let mut result = self.result.lock().unwrap();
+			if let Some(res) = result.try_result() {
+				return res;
+			}
+			// Park the thread
+			let current = thread::current();
+			// Make sure to keep the lock so result cannot be inserted in between (try_result and on_result)
+			result.notify(move || {
+				current.unpark();
+			});
+		}
+
+		loop {
+			if let Some(res) = self.result.lock().unwrap().try_result() {
+				return res;
+			}
+			thread::park();
+		}
+	}
 }
 
 impl Into<MethodResult> for AsyncResult {
 	fn into(self) -> MethodResult {
 		let result = self.result.lock().unwrap().try_result();
 		match result {
-			Some(result) => MethodResult::Sync(result),
+			Some(result) => MethodResult::Sync(),
 			None => MethodResult::Async(self)
 		}
 	}
 }
 
+/// Asynchronous result transmitting end
 #[derive(Debug, Clone)]
 pub struct Ready {
 	result: Arc<Mutex<AsyncResultHandler>>,
 }
 
 impl Ready {
+	/// Submit asynchronous result
 	pub fn ready(self, result: Result<Value, Error>) {
 		self.result.lock().unwrap().set_result(result);
 	}
@@ -54,6 +83,7 @@ impl Ready {
 struct AsyncResultHandler {
 	result: Option<Res>,
 	listener: Option<Box<FnMut(Res) + Send>>,
+	notifier: Option<Box<FnMut() + Send>>,
 }
 
 impl fmt::Debug for AsyncResultHandler {
@@ -63,12 +93,17 @@ impl fmt::Debug for AsyncResultHandler {
 }
 
 impl AsyncResultHandler {
+	/// Set result
 	pub fn set_result(&mut self, res: Res) {
 		// set result
 		if let Some(mut listener) = self.listener.take() {
 			listener(res);
 		} else {
 			self.result = Some(res);
+			// and notify
+			if let Some(mut notifier) = self.notifier.take() {
+				notifier();
+			}
 		}
 	}
 
@@ -76,6 +111,7 @@ impl AsyncResultHandler {
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
 	pub fn on_result<F>(&mut self, f: F) -> bool where F: FnOnce(Res) + Send + 'static {
+		assert!(self.notifier.is_none());
 		if let Some(result) = self.result.take() {
 			f(result);
 			true
@@ -88,12 +124,22 @@ impl AsyncResultHandler {
 		}
 	}
 
+	pub fn notify<F>(&mut self, f: F) where F: FnOnce() + Send + 'static {
+		assert!(self.result.is_none());
+		assert!(self.listener.is_none());
+		let notifier = RefCell::new(Some(f));
+		self.notifier = Some(Box::new(move || {
+			notifier.borrow_mut().take().unwrap()();
+		}));
+	}
+
 	pub fn try_result(&mut self) -> Option<Res> {
 		self.result.take()
 	}
 
 }
 
+/// Asynchronous `Output`
 #[derive(Debug)]
 pub struct AsyncOutput {
 	result: AsyncResult,
@@ -113,6 +159,13 @@ impl AsyncOutput {
 		})
 	}
 
+	/// Awaits a result
+	pub fn await(self) -> SyncOutput {
+		let result = self.result.await();
+		SyncOutput::from(result, self.id, self.jsonrpc)
+	}
+
+	/// Create new `AsyncOutput` given `AsyncResult`, `Id` and `Version`
 	pub fn from(result: AsyncResult, id: Id, jsonrpc: Version) -> Self {
 		AsyncOutput {
 			result: result,
@@ -122,13 +175,35 @@ impl AsyncOutput {
 	}
 }
 
+/// Response type (potentially asynchronous)
 #[derive(Debug)]
 pub enum Response {
+	/// Single response
 	Single(Output),
+	/// Batch response
 	Batch(Vec<Output>),
 }
 
 impl Response {
+	pub fn await(self) -> SyncResponse {
+		match self {
+			Response::Single(Output::Sync(output)) => SyncResponse::Single(output),
+			Response::Single(Output::Async(output)) => SyncResponse::Single(output.await()),
+			Response::Batch(outputs) => {
+				let mut res = Vec::new();
+				for output in outputs.into_iter() {
+					match output {
+						// unwrap sync responses
+						Output::Sync(output) => res.push(output),
+						// await response
+						Output::Async(output) => res.push(output.await()),
+					};
+				}
+				SyncResponse::Batch(res)
+			},
+		}
+	}
+
 	/// Adds closure to be invoked when result is available.
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
@@ -215,7 +290,7 @@ impl From<Success> for Response {
 
 #[cfg(test)]
 mod tests {
-	use std::sync::{mpsc, Arc, Mutex};
+	use std::sync::{Arc, Mutex};
 	use std::sync::atomic::{AtomicBool, Ordering};
 	use std::thread;
 	use super::super::*;
@@ -269,14 +344,10 @@ mod tests {
 	fn should_wait_for_output() {
 		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
-		let (tx, rx) = mpsc::channel();
-		output.on_result(move |res| {
-			tx.send(res).unwrap();
-		});
 		thread::spawn(move || {
 			ready.ready(Ok(Value::String("hello".into())));
 		});
-		assert_eq!(rx.recv().unwrap(), SyncOutput::Success(Success {
+		assert_eq!(output.await(), SyncOutput::Success(Success {
 			id: Id::Null,
 			jsonrpc: Version::V2,
 			result: Value::String("hello".into()),
@@ -288,12 +359,8 @@ mod tests {
 		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
 		ready.ready(Ok(Value::String("hello".into())));
-		let (tx, rx) = mpsc::channel();
-		output.on_result(move |res| {
-			tx.send(res).unwrap();
-		});
 
-		assert_eq!(rx.recv().unwrap(), SyncOutput::Success(Success {
+		assert_eq!(output.await(), SyncOutput::Success(Success {
 			id: Id::Null,
 			jsonrpc: Version::V2,
 			result: Value::String("hello".into()),
