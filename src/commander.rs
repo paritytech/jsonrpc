@@ -1,6 +1,6 @@
 //! method and notification commands executor
 
-use std::sync::RwLock;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use async::{AsyncResult, Ready};
 use super::{Params, Value, Error, ErrorCode};
@@ -102,27 +102,27 @@ impl Commander {
 
 	/// Add supported method to this executor
 	pub fn add_method<C>(&self, name: String, command: Box<C>) where C: MethodCommand + 'static {
-		self.methods.write().unwrap().insert(name, command);
+		self.methods.write().insert(name, command);
 	}
 
 	/// Add supported methods to this executor
 	pub fn add_methods(&self, methods: HashMap<String, Box<MethodCommand>>) {
-		self.methods.write().unwrap().extend(methods);
+		self.methods.write().extend(methods);
 	}
 
 	/// Add supported notification to this executor
 	pub fn add_notification<C>(&self, name: String, command: Box<C>) where C: NotificationCommand + 'static {
-		self.notifications.write().unwrap().insert(name, command);
+		self.notifications.write().insert(name, command);
 	}
 
 	/// Add supported notifications to this executor
 	pub fn add_notifications(&self, notifications: HashMap<String, Box<NotificationCommand>>) {
-		self.notifications.write().unwrap().extend(notifications);
+		self.notifications.write().extend(notifications);
 	}
 
 	/// Execute method identified by `name` with given `params`.
 	pub fn execute_method(&self, name: String, params: Params) -> MethodResult {
-		match self.methods.read().unwrap().get(&name) {
+		match self.methods.read().get(&name) {
 			Some(command) => command.execute(params),
 			None => MethodResult::Sync(Err(Error::new(ErrorCode::MethodNotFound)))
 		}
@@ -130,7 +130,7 @@ impl Commander {
 
 	/// Execute notification identified by `name` with given `params`.
 	pub fn execute_notification(&self, name: String, params: Params) {
-		if let Some(command) = self.notifications.read().unwrap().get(&name) {
+		if let Some(command) = self.notifications.read().get(&name) {
 			command.execute(params)
 		}
 	}

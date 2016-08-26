@@ -12,6 +12,7 @@ documentation = "https://ethcore.github.io/jsonrpc-core/jsonrpc_core/index.html"
 
 [dependencies]
 log = "0.3"
+parking_lot = "0.2"
 # always carefully check serde versions before an update
 serde = "0.7.0"
 serde_json = "0.7.0"

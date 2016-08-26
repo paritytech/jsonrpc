@@ -129,6 +129,7 @@ impl AsyncStringResponse {
 		})
 	}
 
+	/// Blocks current thread and awaits for a result.
 	pub fn await(self) -> String {
 		Self::wrap(self.response.await())
 	}
@@ -152,6 +153,8 @@ impl From<Response> for AsyncStringResponse {
 /// fn main() {
 /// 	let io = IoHandler::new();
 /// 	struct SayHello;
+///
+/// 	// Implement `SyncMethodCommand` or `AsyncMethodCommand`
 /// 	impl SyncMethodCommand for SayHello {
 /// 		fn execute(&self, _params: Params) -> Result<Value, Error>  {
 /// 			Ok(Value::String("hello".to_string()))
@@ -159,6 +162,7 @@ impl From<Response> for AsyncStringResponse {
 /// 	}
 ///
 /// 	io.add_method("say_hello", SayHello);
+/// 	// Or just use closures
 /// 	io.add_async_method("say_hello_async", |_params: Params, ready: Ready| {
 ///			ready.ready(Ok(Value::String("hello".to_string())))
 /// 	});

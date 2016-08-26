@@ -41,6 +41,7 @@
 
 extern crate serde;
 extern crate serde_json;
+extern crate parking_lot;
 #[macro_use] extern crate log;
 
 #[cfg(feature = "serde_macros")]

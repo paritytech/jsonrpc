@@ -1,7 +1,8 @@
 //! Asynchronous results, outputs and responses.
 use std::cell::RefCell;
 use std::{fmt, thread};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success, Failure, MethodResult};
 
@@ -26,28 +27,29 @@ impl AsyncResult {
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
 	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(Res) + Send + 'static {
-		self.result.lock().unwrap().on_result(move |res| {
+		self.result.lock().on_result(move |res| {
 			f(res)
 		})
 	}
 
+	/// Blocks current thread and awaits for result.
 	pub fn await(self) -> Res {
 		// Check if there is a result already
 		{
-			let mut result = self.result.lock().unwrap();
+			let mut result = self.result.lock();
 			if let Some(res) = result.try_result() {
 				return res;
 			}
 			// Park the thread
 			let current = thread::current();
-			// Make sure to keep the lock so result cannot be inserted in between (try_result and on_result)
+			// Make sure to keep the lock so result cannot be inserted in between (try_result and notify)
 			result.notify(move || {
 				current.unpark();
 			});
 		}
 
 		loop {
-			if let Some(res) = self.result.lock().unwrap().try_result() {
+			if let Some(res) = self.result.lock().try_result() {
 				return res;
 			}
 			thread::park();
@@ -57,9 +59,9 @@ impl AsyncResult {
 
 impl Into<MethodResult> for AsyncResult {
 	fn into(self) -> MethodResult {
-		let result = self.result.lock().unwrap().try_result();
+		let result = self.result.lock().try_result();
 		match result {
-			Some(result) => MethodResult::Sync(),
+			Some(result) => MethodResult::Sync(result),
 			None => MethodResult::Async(self)
 		}
 	}
@@ -74,16 +76,19 @@ pub struct Ready {
 impl Ready {
 	/// Submit asynchronous result
 	pub fn ready(self, result: Result<Value, Error>) {
-		self.result.lock().unwrap().set_result(result);
+		self.result.lock().set_result(result);
 	}
 }
 
+enum ListenerType {
+	Result(Box<FnMut(Res) + Send>),
+	Notify(Box<FnMut() + Send>),
+}
 
 #[derive(Default)]
 struct AsyncResultHandler {
 	result: Option<Res>,
-	listener: Option<Box<FnMut(Res) + Send>>,
-	notifier: Option<Box<FnMut() + Send>>,
+	listener: Option<ListenerType>,
 }
 
 impl fmt::Debug for AsyncResultHandler {
@@ -96,13 +101,14 @@ impl AsyncResultHandler {
 	/// Set result
 	pub fn set_result(&mut self, res: Res) {
 		// set result
-		if let Some(mut listener) = self.listener.take() {
-			listener(res);
-		} else {
-			self.result = Some(res);
-			// and notify
-			if let Some(mut notifier) = self.notifier.take() {
+		match self.listener.take() {
+			Some(ListenerType::Result(mut listener)) => listener(res),
+			Some(ListenerType::Notify(mut notifier)) => {
+				self.result = Some(res);
 				notifier();
+			},
+			None => {
+				self.result = Some(res);
 			}
 		}
 	}
@@ -111,29 +117,27 @@ impl AsyncResultHandler {
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
 	pub fn on_result<F>(&mut self, f: F) -> bool where F: FnOnce(Res) + Send + 'static {
-		assert!(self.notifier.is_none());
 		if let Some(result) = self.result.take() {
 			f(result);
 			true
 		} else {
 			let listener = RefCell::new(Some(f));
-			self.listener = Some(Box::new(move |res| {
+			self.listener = Some(ListenerType::Result(Box::new(move |res| {
 				listener.borrow_mut().take().unwrap()(res);
-			}));
+			})));
 			false
 		}
 	}
 
-	pub fn notify<F>(&mut self, f: F) where F: FnOnce() + Send + 'static {
+	fn notify<F>(&mut self, f: F) where F: FnOnce() + Send + 'static {
 		assert!(self.result.is_none());
-		assert!(self.listener.is_none());
 		let notifier = RefCell::new(Some(f));
-		self.notifier = Some(Box::new(move || {
+		self.listener = Some(ListenerType::Notify(Box::new(move || {
 			notifier.borrow_mut().take().unwrap()();
 		}));
 	}
 
-	pub fn try_result(&mut self) -> Option<Res> {
+	fn try_result(&mut self) -> Option<Res> {
 		self.result.take()
 	}
 
@@ -159,7 +163,7 @@ impl AsyncOutput {
 		})
 	}
 
-	/// Awaits a result
+	/// Blocks current thread and awaits a result
 	pub fn await(self) -> SyncOutput {
 		let result = self.result.await();
 		SyncOutput::from(result, self.id, self.jsonrpc)
@@ -185,6 +189,7 @@ pub enum Response {
 }
 
 impl Response {
+	/// Blocks current thread and awaits a result.
 	pub fn await(self) -> SyncResponse {
 		match self {
 			Response::Single(Output::Sync(output)) => SyncResponse::Single(output),
@@ -241,20 +246,20 @@ impl Response {
 							output.on_result(move |res| {
 								// add response
 								{
-									let mut response = responses.lock().unwrap();
+									let mut response = responses.lock();
 									response.as_mut().expect("Callback called only once.").push(res);
 								}
 								// Check if it's the last output resolved
 								let result = count.fetch_sub(1, Ordering::Relaxed);
 								if result == 1 {
-									let callback = callback.lock().unwrap().take().expect("Callback called only once.");
-									let responses = responses.lock().unwrap().take().expect("Callback called only once.");
+									let callback = callback.lock().take().expect("Callback called only once.");
+									let responses = responses.lock().take().expect("Callback called only once.");
 									callback(SyncResponse::Batch(responses));
 								}
 							});
 						},
 						Output::Sync(output) => {
-							let mut res = responses.lock().unwrap();
+							let mut res = responses.lock();
 							res.as_mut().expect("Callback called only once").push(output);
 						},
 					}
@@ -262,8 +267,8 @@ impl Response {
 
 				// If there are no async calls just fire callback
 				if !async {
-					let responses = responses.lock().unwrap().take().expect("Callback called only once.");
-					let callback = callback.lock().unwrap().take().expect("Callback called only once.");
+					let responses = responses.lock().take().expect("Callback called only once.");
+					let callback = callback.lock().take().expect("Callback called only once.");
 					callback(SyncResponse::Batch(responses));
 					true
 				} else {
