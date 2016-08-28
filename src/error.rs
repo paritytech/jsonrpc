@@ -3,6 +3,7 @@ use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use super::Value;
 
+/// JSONRPC error code
 #[derive(Debug, PartialEq, Clone)]
 pub enum ErrorCode {
 	/// Invalid JSON was received by the server.
@@ -21,6 +22,7 @@ pub enum ErrorCode {
 }
 
 impl ErrorCode {
+	/// Returns integer code value
 	pub fn code(&self) -> i64 {
 		match *self {
 			ErrorCode::ParseError => -32700,
@@ -32,6 +34,7 @@ impl ErrorCode {
 		}
 	}
 
+	/// Returns human-readable description
 	pub fn description(&self) -> String {
 		let desc = match *self {
 			ErrorCode::ParseError => "Parse error",
@@ -69,14 +72,19 @@ impl Serialize for ErrorCode {
 	}
 }
 
+/// Error object as defined in Spec
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Error {
+	/// Code
 	pub code: ErrorCode,
+	/// Message
 	pub message: String,
+	/// Optional data
 	pub data: Option<Value>
 }
 
 impl Error {
+	/// Wraps given `ErrorCode`
 	pub fn new(code: ErrorCode) -> Self {
 		Error {
 			message: code.description(),
@@ -85,22 +93,27 @@ impl Error {
 		}
 	}
 
+	/// Creates new `ParseError`
 	pub fn parse_error() -> Self {
 		Self::new(ErrorCode::ParseError)
 	}
 
+	/// Creates new `InvalidRequest`
 	pub fn invalid_request() -> Self {
 		Self::new(ErrorCode::InvalidRequest)
 	}
 
+	/// Creates new `MethodNotFound`
 	pub fn method_not_found() -> Self {
 		Self::new(ErrorCode::MethodNotFound)
 	}
 
+	/// Creates new `InvalidParams`
 	pub fn invalid_params() -> Self {
 		Self::new(ErrorCode::InvalidParams)
 	}
 
+	/// Creates new `InternalError`
 	pub fn internal_error() -> Self {
 		Self::new(ErrorCode::InternalError)
 	}
