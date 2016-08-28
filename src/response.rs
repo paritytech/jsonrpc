@@ -1,7 +1,7 @@
 //! jsonrpc response
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer};
-use serde_json::value;
+use serde_json::value::from_value;
 use super::{Id, Value, Error, Version, AsyncOutput};
 
 /// Successful response
@@ -66,8 +66,8 @@ impl Deserialize for SyncOutput {
 	fn deserialize<D>(deserializer: &mut D) -> Result<SyncOutput, D::Error>
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
-		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(SyncOutput::Failure)
-			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(SyncOutput::Success))
+		from_value(v.clone()).map(SyncOutput::Failure)
+			.or_else(|_| from_value(v).map(SyncOutput::Success))
 			.map_err(|_| D::Error::custom("")) // types must match
 	}
 }
@@ -95,8 +95,8 @@ impl Deserialize for SyncResponse {
 	fn deserialize<D>(deserializer: &mut D) -> Result<SyncResponse, D::Error>
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
-		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(SyncResponse::Batch)
-			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(SyncResponse::Single))
+		from_value(v.clone()).map(SyncResponse::Batch)
+			.or_else(|_| from_value(v).map(SyncResponse::Single))
 			.map_err(|_| D::Error::custom("")) // types must match
 	}
 }

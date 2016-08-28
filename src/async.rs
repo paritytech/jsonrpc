@@ -134,7 +134,7 @@ impl AsyncResultHandler {
 		let notifier = RefCell::new(Some(f));
 		self.listener = Some(ListenerType::Notify(Box::new(move || {
 			notifier.borrow_mut().take().unwrap()();
-		}));
+		})));
 	}
 
 	fn try_result(&mut self) -> Option<Res> {
