@@ -189,7 +189,12 @@ impl Server {
 		self.server.as_ref().unwrap().addr()
 	}
 
-	/// Will block waiting for the server to finish.
+	/// Closes the server.
+	pub fn close(mut self) {
+		self.server.take().unwrap().close()
+	}
+
+	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) -> thread::Result<()> {
 		self.handle.take().unwrap().join()
 	}
