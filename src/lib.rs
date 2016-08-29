@@ -167,12 +167,13 @@ impl ServerBuilder {
 			}
 		}
 
-		thread::spawn(move || {
+		let handle = thread::spawn(move || {
 			srv.run();
 		});
 
 		Ok(Server {
 			server: Some(l),
+			handle: Some(handle),
 		})
 	}
 }
@@ -180,12 +181,23 @@ impl ServerBuilder {
 /// jsonrpc http server instance
 pub struct Server {
 	server: Option<server::Listening>,
+	handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Server {
 	/// Returns address of this server
 	pub fn addr(&self) -> &SocketAddr {
 		self.server.as_ref().unwrap().addr()
+	}
+
+	/// Closes the server.
+	pub fn close(mut self) {
+		self.server.take().unwrap().close()
+	}
+
+	/// Will block, waiting for the server to finish.
+	pub fn wait(mut self) -> thread::Result<()> {
+		self.handle.take().unwrap().join()
 	}
 }
 
