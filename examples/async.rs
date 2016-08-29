@@ -6,15 +6,15 @@ use jsonrpc_core::*;
 use jsonrpc_http_server::*;
 
 struct SayHello;
-impl SyncMethodCommand for SayHello {
-    fn execute(&self, _params: Params) -> Result<Value, Error> {
-        Ok(Value::String("hello".to_string()))
+impl AsyncMethodCommand for SayHello {
+    fn execute(&self, _params: Params, ready: Ready) {
+       ready.ready(Ok(Value::String("hello".to_string())))
     }
 }
 
 fn main() {
     let io = IoHandler::new();
-    io.add_method("say_hello", SayHello);
+    io.add_async_method("say_hello", SayHello);
 
     let server = ServerBuilder::new(Arc::new(io))
 			.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
