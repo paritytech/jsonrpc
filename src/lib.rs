@@ -9,7 +9,7 @@
 //! use jsonrpc_http_server::*;
 //!
 //! struct SayHello;
-//! impl MethodCommand for SayHello {
+//! impl SyncMethodCommand for SayHello {
 //! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	}
@@ -24,6 +24,7 @@
 
 #![warn(missing_docs)]
 
+#[macro_use] extern crate log;
 extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
@@ -148,10 +149,10 @@ impl ServerBuilder {
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
 
-		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |_| {
+		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |control| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
 			let hosts = hosts.lock().unwrap().clone();
-			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts, handler)
+			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts, handler, control)
 		}));
 
 		// Add current host to allowed headers.
