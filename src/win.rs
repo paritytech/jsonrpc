@@ -134,7 +134,7 @@ impl PipeHandler {
                             for rpc_msg in requests  {
                                 trace!(target: "ipc", "Request: {}", rpc_msg);
 
-                                let response: Option<String> = thread_handler.handle_request(&rpc_msg);
+                                let response: Option<String> = thread_handler.handle_request_sync(&rpc_msg);
 
                                 if let Some(response_str) = response {
                                     trace!(target: "ipc", "Response: {}", &response_str);
