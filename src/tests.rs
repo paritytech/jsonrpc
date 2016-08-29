@@ -26,7 +26,7 @@ pub fn dummy_io_handler() -> Arc<IoHandler> {
     use jsonrpc_core::*;
 
     struct SayHello;
-    impl MethodCommand for SayHello {
+    impl SyncMethodCommand for SayHello {
         fn execute(&self, params: Params) -> Result<Value, Error> {
             let (request_p1, request_p2) = from_params::<(u64, u64)>(params).unwrap();
             let response_str = format!("hello {}! you sent {}", request_p1, request_p2);
