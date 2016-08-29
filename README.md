@@ -70,8 +70,8 @@ fn main() {
 	let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
 
 	io.handle_request(request).map(|async_response| {
-		async_response.on_result(|res| {
-			assert_eq!(res, Some(response.to_string()));
+		async_response.on_result(move |res| {
+			assert_eq!(res, response.to_string());
 		})
 	});
 }

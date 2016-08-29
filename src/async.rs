@@ -27,9 +27,7 @@ impl AsyncResult {
 	/// Callback is invoked right away if result is instantly available and `true` is returned.
 	/// `false` is returned when listener has been added
 	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(Res) + Send + 'static {
-		self.result.lock().on_result(move |res| {
-			f(res)
-		})
+		self.result.lock().on_result(f)
 	}
 
 	/// Blocks current thread and awaits for result.
