@@ -1,7 +1,7 @@
 //! jsonrpc request
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer, Error as SerError};
-use serde_json::value;
+use serde_json::value::from_value;
 use super::{Id, Params, Version, Value};
 
 /// Represents jsonrpc request which is a method call.
@@ -62,8 +62,8 @@ impl Deserialize for Call {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Call, D::Error>
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
-		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Call::Notification)
-			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Call::MethodCall))
+		from_value(v.clone()).map(Call::Notification)
+			.or_else(|_| from_value(v).map(Call::MethodCall))
 			.map_err(|_| D::Error::custom("")) // types must match
 			.or_else(|_: D::Error | Ok(Call::Invalid))
 	}
@@ -81,7 +81,7 @@ pub enum Request {
 impl Serialize for Request {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
-		match * self {
+		match *self {
 			Request::Single(ref call) => call.serialize(serializer),
 			Request::Batch(ref calls) => calls.serialize(serializer),
 		}
@@ -92,8 +92,8 @@ impl Deserialize for Request {
 	fn deserialize<D>(deserializer: &mut D) -> Result<Request, D::Error>
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
-		Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Batch)
-			.or_else(|_| Deserialize::deserialize(&mut value::Deserializer::new(v.clone())).map(Request::Single))
+		from_value(v.clone()).map(Request::Batch)
+			.or_else(|_| from_value(v).map(Request::Single))
 			.map_err(|_| D::Error::custom("")) // unreachable, but types must match
 	}
 }
