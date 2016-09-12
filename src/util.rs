@@ -16,7 +16,7 @@ pub fn from_params<D>(params: Params) -> Result<D, Error> where D: Deserialize {
 
 /// Converts serializable output into `Value`
 #[inline]
-pub fn to_value<S>(s: &S) -> Value where S: Serialize {
-	value::to_value(s)
+pub fn to_value<S>(s: S) -> Value where S: Serialize {
+	value::to_value(&s)
 }
 
