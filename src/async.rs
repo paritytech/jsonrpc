@@ -222,7 +222,7 @@ impl Response {
 				output.on_result(move |res| f(SyncResponse::Single(res)))
 			},
 			Response::Batch(outputs) => {
-				let mut async = true;
+				let mut async = false;
 				let mut count = 0;
 				// First count async requests
 				for output in &outputs {
@@ -333,6 +333,18 @@ mod tests {
 	}
 
 	#[test]
+	fn should_fire_callback_for_single_sync_batch_request() {
+		let output = SyncOutput::from(Ok(Value::String("hello".into())), Id::Null, Version::V2);
+		let response = Response::Batch(vec![Output::Sync(output)]);
+
+		let val = Arc::new(AtomicBool::new(false));
+		let v = val.clone();
+
+		assert!(response.on_result(move |_| { v.store(true, Ordering::SeqCst) }));
+		assert_eq!(val.load(Ordering::SeqCst), true);
+	}
+
+	#[test]
 	fn should_call_on_result_if_available() {
 		let (res, ready) = AsyncResult::new();
 		let output = AsyncOutput::from(res.clone(), Id::Null, Version::V2);
@@ -341,8 +353,8 @@ mod tests {
 		let val = Arc::new(AtomicBool::new(false));
 		let v = val.clone();
 
-		assert!(output.on_result(move |_| { v.store(true, Ordering::Relaxed) }));
-		assert_eq!(val.load(Ordering::Relaxed), true);
+		assert!(output.on_result(move |_| { v.store(true, Ordering::SeqCst) }));
+		assert_eq!(val.load(Ordering::SeqCst), true);
 	}
 
 	#[test]
