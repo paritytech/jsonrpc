@@ -144,7 +144,8 @@ impl server::Handler<HttpStream> for ServerHandler {
 							.expect("on_request_readable is called only once and this is the only place accessing control");
 						let res = self.waiting.clone();
 						let invoked = async.on_result(move |result| {
-							*res.lock().unwrap() = Some(Response::ok(result));
+							// Add new line to have nice output when using CLI clients (curl)
+							*res.lock().unwrap() = Some(Response::ok(format!("{}\n", result)));
 							let result = control.ready(Next::write());
 							if let Err(e) = result {
 								warn!("Error while resuming async call: {:?}", e);
