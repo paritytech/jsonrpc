@@ -462,6 +462,31 @@ fn should_handle_async_requests_correctly() {
 	assert_eq!(response.body, world());
 }
 
+#[test]
+fn should_handle_sync_batch_requests_correctly() {
+	// given
+	let server = serve();
+	let addr = server.addr().clone();
+
+	// when
+	let req = r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world_batch());
+}
+
 fn invalid_host() -> String {
 	"29\nProvided Host header is not whitelisted.\n".into()
 }
@@ -475,4 +500,7 @@ fn invalid_request() -> String {
 }
 fn world() -> String {
  "29\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n0\n".into()
+}
+fn world_batch() -> String {
+ "2B\n[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n0\n".into()
 }
