@@ -49,6 +49,7 @@ extern crate env_logger;
 extern crate slab;
 extern crate mio;
 extern crate bytes;
+extern crate serde_json;
 
 #[cfg(test)]
 extern crate rand;
@@ -138,19 +139,36 @@ impl SocketConnection {
     fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>, _handler: &IoHandler) -> io::Result<()> {
         use std::io::Write;
         if let Some(buf) = self.buf.take() {
+            trace!(target: "tcp", "{} bytes in write buffer", buf.remaining());
             if buf.remaining() < MAX_WRITE_LENGTH {
                 try!(self.socket.write_all(&buf.bytes()));
-                trace!(target: "tcp", "sent {} bytes", buf.bytes().len());
                 self.interest.remove(EventSet::writable());
+                trace!(target: "tcp", "sent {} bytes", buf.bytes().len());
             }
             else {
                 try!(self.socket.write_all(&buf.bytes()[0..MAX_WRITE_LENGTH]));
                 self.buf = Some(ByteBuf::from_slice(&buf.bytes()[MAX_WRITE_LENGTH..]));
+                self.interest.remove(EventSet::writable());
                 trace!(target: "tcp", "sent {} bytes", MAX_WRITE_LENGTH);
             }
         }
 
         event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
+            .map_err(|e| { trace!(target: "tcp", "Error reregistering: {:?}", e); e })
+    }
+
+    fn inject_protocol_note(&self, msg: &str) -> Result<String, ()> {
+        use serde_json::Value;
+
+        let mut data: Value = try!(serde_json::from_str(msg).map_err(|_| () ));
+        if data.is_object() {
+            if data.as_object().unwrap().get("jsonrpc").is_none() {
+                let data_mut = data.as_object_mut().unwrap();
+                data_mut.insert("jsonrpc".to_owned(), Value::String("2.0".to_owned()));
+                return Ok(try!(serde_json::to_string(&data_mut).map_err(|_| ())));
+            }
+        }
+        Ok(msg.to_owned())
     }
 
     fn readable(&mut self, event_loop: &mut EventLoop<RpcServer>, handler: &IoHandler) -> io::Result<()> {
@@ -167,10 +185,11 @@ impl SocketConnection {
                     let mut response_bytes = Vec::new();
                     for rpc_msg in requests {
                         trace!(target: "tcp", "Request: {}", rpc_msg);
-                        let response: Option<String> = handler.handle_request_sync(&rpc_msg);
+                        let response: Option<String> = handler.handle_request_sync(&self.inject_protocol_note(&rpc_msg).unwrap());
                         if let Some(response_str) = response {
                             trace!(target: "tcp", "Response: {}", &response_str);
                             response_bytes.extend(response_str.into_bytes());
+                            response_bytes.extend(b"\n"); // eol
                         }
                     }
                     self.buf = Some(ByteBuf::from_slice(&response_bytes[..]));
@@ -179,20 +198,25 @@ impl SocketConnection {
                     new_buf.write_slice(&buf.bytes()[last_index+1..]);
                     self.mut_buf = Some(new_buf);
 
-                    self.interest.remove(EventSet::readable());
                     self.interest.insert(EventSet::writable());
                 }
                 else {
+                    trace!(
+                        target: "tcp",
+                        "Received incompelte msg ({})",
+                         String::from_utf8(buf.bytes().to_vec()).unwrap_or("<non utf-8 or incomplete>".to_owned()),
+                    );
                     self.mut_buf = Some(buf);
                 }
             }
             Err(e) => {
                 trace!(target: "tcp", "Error receiving data ({:?}): {:?}", self.token, e);
-                self.interest.remove(EventSet::readable());
             }
 
         };
+        self.interest.insert(EventSet::readable());
         event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
+            .map_err(|e| { trace!(target: "tcp", "Error reregistering: {:?}", e); e })
     }
 }
 
