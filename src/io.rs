@@ -1,45 +1,47 @@
 //! jsonrpc io
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::collections::HashMap;
-use async::{AsyncResult, Ready};
-use super::{MethodCommand, AsyncMethodCommand, AsyncMethod, MethodResult, NotificationCommand, Params, Value, Error, SyncResponse, Version, Id, ErrorCode, RequestHandler, Request, Failure, Response};
+use super::{Value, Params, Id, Version, Response, Failure, ErrorCode, Error, Request};
+use request_handler::RequestHandler;
+use flow::{Ready, ResponseHandler, Handler, Data, Subscription};
+use commander::{MethodCommand, SyncMethod, SyncMethodCommand, NotificationCommand, SubscriptionCommand};
 use serde_json;
 
 struct DelegateMethod<T, F> where
-	F: Fn(&T, Params) -> Result<Value, Error>,
+	F: Fn(&T, Params) -> Data,
 	F: Send + Sync,
 	T: Send + Sync {
 	delegate: Arc<T>,
-	closure: F
+	closure: F,
 }
 
-impl<T, F> MethodCommand for DelegateMethod <T, F> where
-	F: Fn(&T, Params) -> Result<Value, Error>,
+impl<T, F> MethodCommand for DelegateMethod<T, F> where
+	F: Fn(&T, Params) -> Data,
 	F: Send + Sync,
 	T: Send + Sync {
-	fn execute(&self, params: Params) -> MethodResult {
+	fn execute(&self, params: Params, ready: Ready) {
 		let closure = &self.closure;
-		MethodResult::Sync(closure(&self.delegate, params))
+		ready.ready(closure(&self.delegate, params))
 	}
 }
+
 
 struct DelegateAsyncMethod<T, F> where
 	F: Fn(&T, Params, Ready),
 	F: Send + Sync,
 	T: Send + Sync {
 	delegate: Arc<T>,
-	closure: F
+	closure: F,
 }
 
-impl<T, F> MethodCommand for DelegateAsyncMethod <T, F> where
+impl<T, F> MethodCommand for DelegateAsyncMethod<T, F> where
 	F: Fn(&T, Params, Ready),
 	F: Send + Sync,
 	T: Send + Sync {
-	fn execute(&self, params: Params) -> MethodResult {
-		let (res, ready) = AsyncResult::new();
+	fn execute(&self, params: Params, ready: Ready) {
 		let closure = &self.closure;
-		closure(&self.delegate, params, ready);
-		res.into()
+		closure(&self.delegate, params, ready)
 	}
 }
 
@@ -48,7 +50,7 @@ struct DelegateNotification<T, F> where
 	F: Send + Sync,
 	T: Send + Sync {
 	delegate: Arc<T>,
-	closure: F
+	closure: F,
 }
 
 impl<T, F> NotificationCommand for DelegateNotification<T, F> where
@@ -61,11 +63,30 @@ impl<T, F> NotificationCommand for DelegateNotification<T, F> where
 	}
 }
 
+struct DelegateSubscription<T, F> where
+	F: Fn(&T, Subscription),
+	F: Send + Sync,
+	T: Send + Sync {
+	delegate: Arc<T>,
+	closure: F,
+}
+
+impl<T, F> SubscriptionCommand for DelegateSubscription<T, F> where
+	F: Fn(&T, Subscription),
+	F: Send + Sync,
+	T: Send + Sync {
+	fn execute(&self, subscription: Subscription) {
+		let closure = &self.closure;
+		closure(&self.delegate, subscription)
+	}
+}
+
 /// A set of RPC methods and notifications tied to single `delegate` struct.
 pub struct IoDelegate<T> where T: Send + Sync + 'static {
 	delegate: Arc<T>,
 	methods: HashMap<String, Box<MethodCommand>>,
-	notifications: HashMap<String, Box<NotificationCommand>>
+	notifications: HashMap<String, Box<NotificationCommand>>,
+	subscriptions: HashMap<(String, String), Box<SubscriptionCommand>>,
 }
 
 impl<T> IoDelegate<T> where T: Send + Sync + 'static {
@@ -74,7 +95,8 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 		IoDelegate {
 			delegate: delegate,
 			methods: HashMap::new(),
-			notifications: HashMap::new()
+			notifications: HashMap::new(),
+			subscriptions: HashMap::new(),
 		}
 	}
 
@@ -96,6 +118,15 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 		}));
 	}
 
+	/// Add new supported subscription
+	pub fn add_subscription<F>(&mut self, subscribe: &str, unsubscribe: &str, closure: F) where F: Fn(&T, Subscription) + Send + Sync + 'static {
+		let delegate = self.delegate.clone();
+		self.subscriptions.insert((subscribe.into(), unsubscribe.into()), Box::new(DelegateSubscription {
+			delegate: delegate,
+			closure: closure,
+		}));
+	}
+
 	/// Add new supported notification
 	pub fn add_notification<F>(&mut self, name: &str, closure: F) where F: Fn(&T, Params) + Send + Sync + 'static {
 		let delegate = self.delegate.clone();
@@ -105,44 +136,6 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 		}));
 	}
 }
-
-/// Asynchronous string response
-#[derive(Debug)]
-pub struct AsyncStringResponse {
-	response: Response,
-}
-
-impl AsyncStringResponse {
-	/// wraps sync response
-	fn wrap(res: SyncResponse) -> String {
-		let response = write_response(res);
-		debug!(target: "rpc", "Response: {:?}", response);
-		response
-	}
-
-	/// Adds closure to be invoked when result is available.
-	/// Callback is invoked right away if result is instantly available and `true` is returned.
-	/// `false` is returned when listener has been added
-	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(String) + Send + 'static {
-		self.response.on_result(move |res| {
-			f(Self::wrap(res))
-		})
-	}
-
-	/// Blocks current thread and awaits for a result.
-	pub fn await(self) -> String {
-		Self::wrap(self.response.await())
-	}
-}
-
-impl From<Response> for AsyncStringResponse {
-	fn from(response: Response) -> Self {
-		AsyncStringResponse {
-			response: response,
-		}
-	}
-}
-
 
 /// Should be used to handle jsonrpc io.
 ///
@@ -183,7 +176,7 @@ fn read_request(request_str: &str) -> Result<Request, Error> {
 	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
-fn write_response(response: SyncResponse) -> String {
+fn write_response(response: Response) -> String {
 	// this should never fail
 	serde_json::to_string(&response).unwrap()
 }
@@ -197,46 +190,65 @@ impl IoHandler {
 	}
 
 	/// Add supported method
-	pub fn add_method<C>(&self, name: &str, command: C) where C: MethodCommand + 'static {
-		self.request_handler.add_method(name.to_owned(), Box::new(command))
+	pub fn add_method<C>(&self, name: &str, command: C) where C: SyncMethodCommand + 'static {
+		self.request_handler.add_method(name.into(), SyncMethod {
+			command: command
+		})
 	}
 
 	/// Add supported asynchronous method
-	pub fn add_async_method<C>(&self, name: &str, command: C) where C: AsyncMethodCommand + 'static {
-		self.request_handler.add_method(name.to_owned(), Box::new(AsyncMethod::new(command)))
+	pub fn add_async_method<C>(&self, name: &str, command: C) where C: MethodCommand + 'static {
+		self.request_handler.add_method(name.into(), command)
 	}
 
 	/// Add supported notification
 	pub fn add_notification<C>(&self, name: &str, command: C) where C: NotificationCommand + 'static {
-		self.request_handler.add_notification(name.to_owned(), Box::new(command))
+		self.request_handler.add_notification(name.into(), command)
+	}
+
+	/// Add supported subscription
+	pub fn add_subscription<C>(&self, subscribe: &str, unsubscribe: &str, command: C) where C: SubscriptionCommand + 'static {
+		self.request_handler.add_subscription(subscribe.into(), unsubscribe.into(), command);
 	}
 
 	/// Add delegate with supported methods.
 	pub fn add_delegate<D>(&self, delegate: IoDelegate<D>) where D: Send + Sync {
 		self.request_handler.add_methods(delegate.methods);
 		self.request_handler.add_notifications(delegate.notifications);
+		self.request_handler.add_subscriptions(delegate.subscriptions);
 	}
 
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
-	pub fn handle_request_sync<'a>(&self, request_str: &'a str) -> Option<String> {
-		self.handle_request(request_str).map(|res| res.await())
+	pub fn handle_request_sync(&self, request_str: &str) -> Option<String> {
+		let (tx, rx) = mpsc::channel();
+		self.handle_request(request_str, move |response: Option<String>| {
+			tx.send(response).expect("Receiver is never dropped.");
+		});
+		// Wait for response.
+		rx.recv().expect("Transmitting end is never dropped.")
 	}
 
 	/// Handle given request asynchronously.
-	pub fn handle_request<'a>(&self, request_str: &'a str) -> Option<AsyncStringResponse> {
+	pub fn handle_request<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, response_handler: H) {
 		trace!(target: "rpc", "Request: {}", request_str);
-		let response = match read_request(request_str) {
-			Ok(request) => self.request_handler.handle_request(request).map(AsyncStringResponse::from),
-			Err(error) => Some(Response::from(Failure {
+
+		let handler = Handler::new(response_handler, move |response: Option<Response>| {
+			let response = response.map(write_response);
+			debug!(target: "rpc", "Response: {:?}", response);
+			response
+		});
+
+		let request = read_request(request_str);
+		match request {
+			Ok(request) => self.request_handler.handle_request(request, handler, None),
+			Err(error) => handler.send(Some(Response::from(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
 				error: error
-			}).into()),
-		};
-		trace!(target: "rpc", "AsyncResponse: {:?}", response);
-		response
+			}))),
+		}
 	}
 }
 
@@ -270,7 +282,7 @@ mod tests {
 		let io = IoHandler::new();
 
 		struct SayHelloAsync;
-		impl AsyncMethodCommand for SayHelloAsync {
+		impl MethodCommand for SayHelloAsync {
 			fn execute(&self, _params: Params, ready: Ready) {
 				ready.ready(Ok(Value::String("hello".to_string())))
 			}
@@ -289,7 +301,7 @@ mod tests {
 		let io = IoHandler::new();
 
 		struct SayHelloAsync;
-		impl AsyncMethodCommand for SayHelloAsync {
+		impl MethodCommand for SayHelloAsync {
 			fn execute(&self, _params: Params, ready: Ready) {
 				thread::spawn(|| {
 					thread::sleep(Duration::from_secs(1));

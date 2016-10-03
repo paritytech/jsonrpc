@@ -9,6 +9,44 @@ use super::{Value, Error, Version, Id, SyncOutput, SyncResponse, Output, Success
 /// Convinience type for Synchronous Result
 pub type Res = Result<Value, Error>;
 
+
+/// Asynchronous string response
+#[derive(Debug)]
+pub struct AsyncStringResponse {
+	response: Response,
+}
+
+impl AsyncStringResponse {
+	/// wraps sync response
+	fn wrap(res: SyncResponse) -> String {
+		let response = write_response(res);
+		debug!(target: "rpc", "Response: {:?}", response);
+		response
+	}
+
+	/// Adds closure to be invoked when result is available.
+	/// Callback is invoked right away if result is instantly available and `true` is returned.
+	/// `false` is returned when listener has been added
+	pub fn on_result<F>(self, f: F) -> bool where F: FnOnce(String) + Send + 'static {
+		self.response.on_result(move |res| {
+			f(Self::wrap(res))
+		})
+	}
+
+	/// Blocks current thread and awaits for a result.
+	pub fn await(self) -> String {
+		Self::wrap(self.response.await())
+	}
+}
+
+impl From<Response> for AsyncStringResponse {
+	fn from(response: Response) -> Self {
+		AsyncStringResponse {
+			response: response,
+		}
+	}
+}
+
 /// Asynchronous result receiving end
 #[derive(Debug, Clone)]
 pub struct AsyncResult {
