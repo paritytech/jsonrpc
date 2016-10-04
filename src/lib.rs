@@ -65,5 +65,5 @@ lazy_static! {
 
 /// Intialize log with default settings
 pub fn init_log() {
-    let _ = *LOG_DUMMY;
+	let _ = *LOG_DUMMY;
 }
