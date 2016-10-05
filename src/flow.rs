@@ -1,9 +1,10 @@
 //! Response processing functions.
 
-use std::iter;
+use std::fmt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
+
 use commander::SubscriptionCommand;
 use super::{Value, Error, Params};
 
@@ -28,12 +29,47 @@ pub enum Subscription {
 	},
 }
 
+impl fmt::Debug for Subscription {
+	fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
+		let mut builder = f.debug_struct("Subscription");
+
+		match *self {
+			Subscription::Open { ref params, .. } => {
+				builder.field("variant", &"open").field("params", params)
+			},
+			Subscription::Close { ref id, .. } => {
+				builder.field("variant", &"close").field("id", id)
+			},
+		}.finish()
+	}
+}
+
+impl PartialEq for Subscription {
+	fn eq(&self, other: &Self) -> bool {
+		match (self, other) {
+			(&Subscription::Open { params: ref p1, .. }, &Subscription::Open { params: ref p2, ..}) => {
+				p1.eq(p2)
+			},
+			(&Subscription::Close { id: ref id1, ..}, &Subscription::Close { id: ref id2, ..}) => {
+				id1.eq(id2)
+			},
+			_ => false,
+		}
+	}
+}
+
 /// Asynchronous method response.
 pub struct Ready {
 	handler: Box<ResponseHandler<Data>>,
 }
 
 impl Ready {
+	fn discard() -> Self {
+		Ready {
+			handler: Box::new(|_| {}),
+		}
+	}
+
 	/// Return a response to the caller
 	pub fn ready(self, data: Data) {
 		self.handler.send(data)
@@ -92,27 +128,47 @@ impl<A: 'static> From<Handler<A, Data>> for Ready {
 ///
 /// Subscriptions are only possible when session is provided.
 /// Dropping session object will automatically unsubscribe from all previously opened subscriptions.
-/// TODO [ToDr] Will leak when Session is dropped before subscription ID is assigned.
-#[derive(Debug, Clone)]
+#[derive(Clone, Default)]
 pub struct Session {
+	session: Arc<Mutex<SessionInternal>>,
 }
 
 impl Session {
 	/// Adds new subscription to this session for auto-unsubscribe.
 	fn add_subscription(&self, name: String, id: Value, unsubscribe: Arc<Box<SubscriptionCommand>>) {
-		unimplemented!()
+		self.session.lock().add_subscription(name, id, unsubscribe);
 	}
 
 	/// Removes a subscription from auto-unsubscribe. Client has manually unsubscribed.
 	pub fn remove_subscription(&self, name: String, id: Value) {
-		unimplemented!()
+		self.session.lock().remove_subscription(name, id);
 	}
 }
 
-impl Drop for Session {
+#[derive(Default)]
+struct SessionInternal {
+	subscriptions: Vec<(String, Value, Arc<Box<SubscriptionCommand>>)>,
+}
+
+impl SessionInternal {
+	fn add_subscription(&mut self, name: String, id: Value, unsubscribe: Arc<Box<SubscriptionCommand>>) {
+		self.subscriptions.push((name, id, unsubscribe));
+	}
+
+	fn remove_subscription(&mut self, name: String, id: Value) {
+		let new = self.subscriptions.drain(..).filter(|&(ref name1, ref id1, _)| name1 != &name && id1 != &id).collect();
+		self.subscriptions = new;
+	}
+}
+
+impl Drop for SessionInternal {
 	fn drop(&mut self) {
-		// TODO Clear all subscriptions
-		unimplemented!()
+		for (_name, id, unsubscribe) in self.subscriptions.drain(..) {
+			unsubscribe.execute(Subscription::Close {
+				id: id,
+				ready: Ready::discard(),
+			});
+		}
 	}
 }
 
@@ -135,6 +191,8 @@ pub struct Handler<A, B> {
 }
 
 impl<A: 'static> Handler<A, A> {
+	/// Creates new identity handler.
+	/// There is no mapping, same type is send upstream.
 	pub fn id<X>(handler: X) -> Self where
 		X: ResponseHandler<A> + 'static {
 			Handler {
@@ -166,19 +224,48 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 	}
 
 	/// Split this handler into `count` handlers.
-	/// Upstream `ResponseHandler` will be called only when all sub-handlers receive a response.
-	pub fn split_map<C, G>(self, count: usize, map: G) -> Vec<Handler<C, C>> where
+	/// Upstream `ResponseHandler` will be called only when all sub-handlers receive a response for the first time.
+	///
+	/// Some handlers may return more then one response - in such case:
+	/// 1. First response of each handler is included in initial upstream response (`map_many`).
+	/// 2. All subsequent responses are mapped using `map_single`.
+	/// 3. Responses arriving after FIRST but before sending INITIAL upstream response are discarded.
+	pub fn split_map<C, G, H>(self, count: usize, map_many: G, map_single: H) -> Vec<Handler<C, C>> where
 		G: Fn(Vec<C>) -> B + Send + 'static,
+		H: Fn(C) -> B + Send + 'static,
 		C: Send + 'static {
-		let outputs = Arc::new(Mutex::new(Some(Vec::with_capacity(count))));
-		let handler = Arc::new(Mutex::new(Some((self, map))));
 
-		(0..count).into_iter().map(|i| {
+		// Handle empty batch
+		if count == 0 {
+			self.send(map_many(vec![]));
+			return vec![];
+		}
+
+		let outputs = Arc::new(Mutex::new(Some(Vec::with_capacity(count))));
+		let handler = Arc::new(Mutex::new((self, map_many, map_single)));
+		let initial = Arc::new(AtomicBool::new(false));
+
+		(0..count).into_iter().map(|_| {
 			let outputs = outputs.clone();
 			let handler = handler.clone();
+			let initial_sent = initial.clone();
+			let my_response_sent = AtomicBool::new(false);
 
-			// / TODO [ToDr] What will happen in case of subscriptions?
 			Handler::id(move |res| {
+				if initial_sent.load(Ordering::SeqCst) {
+					// Just forward the message
+					let lock = handler.lock();
+					let (ref handler, _, ref map_single) = *lock;
+					handler.send(map_single(res));
+					return;
+				}
+
+				if my_response_sent.load(Ordering::SeqCst) {
+					// Dicard events before initial response is sent
+					return;
+				}
+				my_response_sent.store(true, Ordering::SeqCst);
+
 				let mut outputs = outputs.lock();
 				let len = {
 					let mut out = outputs.as_mut().expect("When output is taken no handlers are left.");
@@ -189,10 +276,11 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 
 				// last handler
 				if len == count {
-					let (handler, map) = handler.lock().take().expect("Only single handler will be the last.");
 					let outputs = outputs.take().expect("Outputs taken only once.");
-
+					let lock = handler.lock();
+					let (ref handler, ref map, _) = *lock;
 					handler.send(map(outputs));
+					initial_sent.store(true, Ordering::SeqCst);
 				}
 			})
 		}).collect()
@@ -220,8 +308,13 @@ impl<A, B> ResponseHandler<B> for Handler<A, B> {
 
 #[cfg(test)]
 mod tests {
-	use std::sync::mpsc;
-	use super::{Handler, ResponseHandler};
+	use std::sync::{mpsc, Arc};
+	use parking_lot::Mutex;
+
+	use Value;
+	use error::Error;
+	use commander::SubscriptionCommand;
+	use super::{Handler, ResponseHandler, Session, Subscription, Ready};
 
 	#[test]
 	fn should_map_handler_correctly() {
@@ -261,7 +354,11 @@ mod tests {
 			tx.send(output).unwrap();
 		}, |data: i64| data);
 		// split handler
-		let split = handler.split_map(2, |data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64);
+		let split = handler.split_map(
+			2,
+			|data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64,
+			|single| single as i64,
+		);
 		assert_eq!(split.len(), 2);
 
 		// when
@@ -276,5 +373,145 @@ mod tests {
 		assert_eq!(rx.recv().unwrap(), 30i64);
 	}
 
+	#[test]
+	fn should_split_handler_and_send_more_events_afterwards() {
+		// given
+		let (tx, rx) = mpsc::channel();
+		let handler = Handler::new(move |output| {
+			tx.send(output).unwrap();
+		}, |data: i64| data);
+		// split handler
+		let split = handler.split_map(
+			2,
+			|data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64,
+			|single| (single + 5) as i64,
+		);
+		assert_eq!(split.len(), 2);
 
+		// when
+		let mut split = split.into_iter();
+		let a = split.next().unwrap();
+		let b = split.next().unwrap();
+
+		// then
+		a.send(10);
+		a.send(30); // This message should be discarded
+		b.send(20);
+
+		a.send(50); // This should be propagated
+		b.send(100); // And this too
+
+		assert_eq!(rx.recv().unwrap(), 30i64);
+		assert_eq!(rx.recv().unwrap(), 55i64);
+		assert_eq!(rx.recv().unwrap(), 105i64);
+	}
+
+	#[test]
+	fn should_handle_empty_batch() {
+		let (tx, rx) = mpsc::channel();
+		let handler = Handler::new(move |output| {
+			tx.send(output).unwrap();
+		}, |data: i64| data);
+
+		// when
+		let split = handler.split_map(
+			0,
+			|data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64,
+			|single| (single + 5) as i64,
+		);
+		assert_eq!(split.len(), 0);
+
+		// then
+		assert_eq!(rx.recv().unwrap(), 0);
+	}
+
+	#[test]
+	fn should_unsubscribe_when_session_is_dropped() {
+		// given
+		let (tx, rx) = mpsc::channel();
+		let tx = Mutex::new(tx);
+		let session = Session::default();
+		let command = Arc::new(Box::new(move |x: Subscription| tx.lock().send(x).unwrap()) as Box<SubscriptionCommand>);
+
+		// when
+		session.add_subscription("a".into(), Value::String("1".into()), command);
+		drop(session);
+
+		// then
+		assert_eq!(rx.recv().unwrap(), Subscription::Close { id: Value::String("1".into()), ready: Ready::discard() });
+	}
+
+	#[test]
+	fn should_not_unsubscribe_if_removed_manually() {
+		// given
+		let (tx, rx) = mpsc::channel();
+		let tx = Mutex::new(tx);
+		let session = Session::default();
+		let command = Arc::new(Box::new(move |x: Subscription| tx.lock().send(x).unwrap()) as Box<SubscriptionCommand>);
+
+		// when
+		session.add_subscription("a".into(), Value::String("1".into()), command);
+		session.remove_subscription("a".into(), Value::String("1".into()));
+		drop(session);
+
+		// then
+		assert!(rx.recv().is_err(), "Should not get anything!");
+	}
+
+	#[test]
+	fn should_convert_handler_into_ready() {
+		// given
+		let (tx, rx) = mpsc::channel();
+		let handler = Handler::id(move |output| {
+			tx.send(output).unwrap();
+		});
+
+		// when
+		let ready: Ready = handler.into();
+		ready.ready(Ok(Value::String("1".into())));
+
+		// then
+		assert_eq!(rx.recv().unwrap(), Ok(Value::String("1".into())));
+	}
+
+	#[test]
+	fn should_convert_handler_into_subsciber_and_accept() {
+		// given
+		let (tx, rx) = mpsc::channel();
+		let session = Session::default();
+		let command = Arc::new(Box::new(move |_: Subscription| {}) as Box<SubscriptionCommand>);
+		let handler = Handler::id(move |output| {
+			tx.send(output).unwrap();
+		});
+
+		// when
+		let new_subscriber = handler.into_subscriber(session, "a".into(), command);
+		let subscriber = new_subscriber.assign_id(Value::U64(1));
+		subscriber.send(Ok(Value::String("hello".into())));
+
+		// then
+		assert_eq!(rx.recv().unwrap(), Ok(Value::U64(1)));
+		assert_eq!(rx.recv().unwrap(), Ok(Value::String("hello".into())));
+		drop(subscriber);
+		assert!(rx.recv().is_err(), "Should not receive anything else.");
+	}
+
+	#[test]
+	fn should_convert_handler_into_subsciber_and_reject() {
+		// given
+		let (tx, rx) = mpsc::channel();
+		let session = Session::default();
+		let command = Arc::new(Box::new(move |_: Subscription| {}) as Box<SubscriptionCommand>);
+		let handler = Handler::id(move |output| {
+			tx.send(output).unwrap();
+		});
+
+		// when
+		let new_subscriber = handler.into_subscriber(session, "a".into(), command);
+		new_subscriber.reject(Error::invalid_request());
+
+		// then
+		assert_eq!(rx.recv().unwrap(), Err(Error::invalid_request()));
+		assert!(rx.recv().is_err(), "Should not receive anything else.");
+	}
 }

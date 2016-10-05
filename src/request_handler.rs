@@ -66,7 +66,7 @@ impl RequestHandler {
 						0 => None,
 						_ => Some(Response::Batch(outs))
 					}
-				});
+				}, |output: Option<Output>| output.map(Response::Single));
 				for (call, sub_handler) in calls.into_iter().zip(sub_handlers) {
 					self.handle_call(call, sub_handler, session.clone());
 				}
