@@ -18,7 +18,7 @@ Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
 ```
 [dependencies]
-jsonrpc-core = "3.0"
+jsonrpc-core = "4.0"
 ```
 
 `main.rs`
@@ -31,7 +31,7 @@ use jsonrpc_core::*;
 struct SayHello;
 impl SyncMethodCommand for SayHello {
     fn execute(&self, _params: Params) -> Result<Value, Error> {
-        Ok(Value::String("hello".to_string()))
+        Ok(Value::String("hello".into()))
     }
 }
 
@@ -42,7 +42,7 @@ fn main() {
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 	let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
 
-	assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
+	assert_eq!(io.handle_request_sync(request), Some(response.to_owned()));
 }
 ```
 
@@ -56,9 +56,9 @@ extern crate jsonrpc_core;
 use jsonrpc_core::*;
 
 struct SayHello;
-impl AsyncMethodCommand for SayHello {
+impl MethodCommand for SayHello {
     fn execute(&self, _params: Params, ready: Ready) {
-        ready.ready(Ok(Value::String("hello".to_string())))
+        ready.ready(Ok(Value::String("hello".into())))
     }
 }
 
@@ -69,10 +69,11 @@ fn main() {
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 	let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
 
-	io.handle_request(request).map(|async_response| {
-		async_response.on_result(move |res| {
-			assert_eq!(res, response.to_string());
-		})
+	io.handle_request(request, move |res| {
+		assert_eq!(res, Some(response.to_owned()));
 	});
 }
 ```
+
+### Publish-Subscribe
+See examples directory.
