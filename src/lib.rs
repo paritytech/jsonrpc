@@ -53,7 +53,7 @@ pub mod io;
 pub use self::control::*;
 pub use self::commander::{Commander, MethodCommand, SyncMethodCommand, NotificationCommand, SubscriptionCommand};
 pub use self::request_handler::RequestHandler;
-pub use self::io::{IoHandler, IoDelegate};
+pub use self::io::{IoHandler, IoDelegate, IoSession};
 
 #[cfg(feature = "serde_macros")]
 include!("lib.rs.in");
