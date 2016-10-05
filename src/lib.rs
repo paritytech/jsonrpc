@@ -45,12 +45,12 @@ extern crate parking_lot;
 #[macro_use] extern crate log;
 
 // pub mod async;
-pub mod flow;
+pub mod control;
 pub mod commander;
 pub mod request_handler;
 pub mod io;
 
-pub use self::flow::*;
+pub use self::control::*;
 pub use self::commander::{Commander, MethodCommand, SyncMethodCommand, NotificationCommand, SubscriptionCommand};
 pub use self::request_handler::RequestHandler;
 pub use self::io::{IoHandler, IoDelegate};

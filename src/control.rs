@@ -6,7 +6,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use parking_lot::Mutex;
 
 use commander::SubscriptionCommand;
-use super::{Value, Error, Params};
+use error::Error;
+use params::Params;
+use super::Value;
 
 /// Convenient type for RPC methods return types.
 pub type Data = Result<Value, Error>;

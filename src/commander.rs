@@ -1,10 +1,12 @@
 //! method and notification commands executor
 
 use std::sync::Arc;
-use parking_lot::RwLock;
 use std::collections::HashMap;
-use flow::{Subscription, Ready, Data, Session, Handler, ResponseHandler};
-use super::{Params, Error, ErrorCode};
+use parking_lot::RwLock;
+
+use control::{Subscription, Ready, Data, Session, Handler, ResponseHandler};
+use error::{Error, ErrorCode};
+use params::Params;
 
 /// Result of Method invocation.
 pub enum Method {
