@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use std::collections::HashMap;
 use serde_json;
 
-use control::{Ready, ResponseHandler, Handler, Data, Subscription};
+use control::{Ready, ResponseHandler, Handler, Data, Subscription, Session};
 use commander::{MethodCommand, SyncMethod, SyncMethodCommand, NotificationCommand, SubscriptionCommand};
 use request_handler::RequestHandler;
 use params::Params;
@@ -239,7 +239,11 @@ impl IoHandler {
 
 	/// Handle given request asynchronously.
 	pub fn handle_request<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, response_handler: H) {
-		trace!(target: "rpc", "Request: {}", request_str);
+		self.handle(request_str, response_handler, None);
+	}
+
+	fn handle<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, response_handler: H, session: Option<Session>) {
+		trace!(target: "rpc", "Request: {} in session.", request_str);
 
 		let handler = Handler::new(response_handler, move |response: Option<Response>| {
 			let response = response.map(write_response);
@@ -249,7 +253,7 @@ impl IoHandler {
 
 		let request = read_request(request_str);
 		match request {
-			Ok(request) => self.request_handler.handle_request(request, handler, None),
+			Ok(request) => self.request_handler.handle_request(request, handler, session),
 			Err(error) => handler.send(Some(Response::from(Failure {
 				id: Id::Null,
 				jsonrpc: Version::V2,
@@ -257,10 +261,34 @@ impl IoHandler {
 			}))),
 		}
 	}
+
+	/// Opens up a new session to handle many request and subscriptions.
+	/// It should represent a single client.
+	pub fn session(&self) -> IoSession {
+		IoSession {
+			io_handler: self,
+			session: Session::default(),
+		}
+	}
+}
+
+/// Represents a single client connected to this RPC server.
+/// The client may send many requests.
+pub struct IoSession<'a> {
+	io_handler: &'a IoHandler,
+	session: Session,
+}
+
+impl<'a> IoSession<'a> {
+	/// Handle a request within this session.
+	pub fn handle_request<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, handler: H) {
+		self.io_handler.handle(request_str, handler, Some(self.session.clone()));
+	}
 }
 
 #[cfg(test)]
 mod tests {
+	use std::sync::mpsc;
 	use std::time::Duration;
 	use std::thread;
 	use super::super::*;
@@ -323,6 +351,48 @@ mod tests {
 		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
 
 		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
+	}
+
+	#[test]
+	fn test_session_handler_with_subscription() {
+		let io = IoHandler::new();
+
+		struct SayHelloSubscription;
+		impl SubscriptionCommand for SayHelloSubscription {
+			fn execute(&self, subscription: Subscription) {
+				match subscription {
+					Subscription::Open { subscriber, .. } => {
+						let subscriber = subscriber.assign_id(Value::U64(1));
+						thread::spawn(move || {
+							thread::sleep(Duration::from_millis(10));
+							subscriber.send(Ok(Value::String("hello".to_string())));
+							thread::sleep(Duration::from_millis(10));
+							subscriber.send(Ok(Value::String("world".to_string())));
+						});
+					},
+					Subscription::Close { id, .. } => {
+						assert_eq!(id, Value::U64(1));
+					},
+				}
+			}
+		}
+
+		io.add_subscription("say_hello", "stop_saying_hello", SayHelloSubscription);
+
+		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
+		let id = r#"{"jsonrpc":"2.0","result":1,"id":1}"#.to_owned();
+		let response1 = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#.to_owned();
+		let response2 = r#"{"jsonrpc":"2.0","result":"world","id":1}"#.to_owned();
+
+		let (tx, rx) = mpsc::channel();
+		let session = io.session();
+		session.handle_request(request, move |res| tx.send(res).unwrap());
+
+		assert_eq!(rx.recv().unwrap(), Some(id));
+		assert_eq!(rx.recv().unwrap(), Some(response1));
+		assert_eq!(rx.recv().unwrap(), Some(response2));
+		drop(session);
+		assert!(rx.recv().is_err());
 	}
 
 }
