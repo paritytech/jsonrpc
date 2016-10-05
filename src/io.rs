@@ -33,7 +33,6 @@ impl<T, F> MethodCommand for DelegateMethod<T, F> where
 	}
 }
 
-
 struct DelegateAsyncMethod<T, F> where
 	F: Fn(&T, Params, Ready),
 	F: Send + Sync,
@@ -261,25 +260,37 @@ impl IoHandler {
 			}))),
 		}
 	}
+}
 
-	/// Opens up a new session to handle many request and subscriptions.
-	/// It should represent a single client.
-	pub fn session(&self) -> IoSession {
-		IoSession {
-			io_handler: self,
-			session: Session::default(),
-		}
+/// Io Handler with session support
+pub trait IoSessionHandler {
+	/// Returns a new session object.
+	fn session(&self) -> IoSession;
+}
+
+impl IoSessionHandler for Arc<IoHandler> {
+	fn session(&self) -> IoSession {
+		IoSession::new(self.clone())
 	}
 }
 
 /// Represents a single client connected to this RPC server.
 /// The client may send many requests.
-pub struct IoSession<'a> {
-	io_handler: &'a IoHandler,
+pub struct IoSession {
+	io_handler: Arc<IoHandler>,
 	session: Session,
 }
 
-impl<'a> IoSession<'a> {
+impl IoSession {
+	/// Opens up a new session to handle many request and subscriptions.
+	/// It should represent a single client.
+	pub fn new(handler: Arc<IoHandler>) -> IoSession {
+		IoSession {
+			io_handler: handler,
+			session: Session::default(),
+		}
+	}
+
 	/// Handle a request within this session.
 	pub fn handle_request<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, handler: H) {
 		self.io_handler.handle(request_str, handler, Some(self.session.clone()));
@@ -288,7 +299,7 @@ impl<'a> IoSession<'a> {
 
 #[cfg(test)]
 mod tests {
-	use std::sync::mpsc;
+	use std::sync::{mpsc, Arc};
 	use std::time::Duration;
 	use std::thread;
 	use super::super::*;
@@ -355,7 +366,7 @@ mod tests {
 
 	#[test]
 	fn test_session_handler_with_subscription() {
-		let io = IoHandler::new();
+		let io = Arc::new(IoHandler::new());
 
 		struct SayHelloSubscription;
 		impl SubscriptionCommand for SayHelloSubscription {

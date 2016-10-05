@@ -60,7 +60,7 @@ impl SubscriptionCommand for SayHello {
 }
 
 fn main() {
-	let io = IoHandler::new();
+	let io = Arc::new(IoHandler::new());
 	io.add_subscription("subscribe_hello", "unsubscribe_hello", SayHello::default());
 
 	let request = r#"{"jsonrpc": "2.0", "method": "subscribe_hello", "params": [42, 23], "id": 1}"#;
