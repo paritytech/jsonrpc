@@ -77,9 +77,9 @@ pub fn test_reqrep() {
     std::thread::park_timeout(std::time::Duration::from_millis(50));
 
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
+    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#.to_owned() + "\n";
 
-    assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
+    assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response);
 }
 
 #[test]
@@ -94,8 +94,8 @@ pub fn test_sequental_connections() {
 
     for i in 0..100 {
         let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;
-        let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent "#.to_owned() + &format!("{}", i)  + r#"","id":1}"#;
-        assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
+        let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent "#.to_owned() + &format!("{}", i)  + r#"","id":1}"# + "\n";
+        assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response);
     }
 }
 
@@ -111,8 +111,8 @@ pub fn test_reqrep_poll() {
     });
 
     let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#;
-    assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
+    let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#.to_owned() + "\n";
+    assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response);
 
     std::thread::sleep(std::time::Duration::from_millis(500));
 }
