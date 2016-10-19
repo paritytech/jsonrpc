@@ -143,6 +143,7 @@ impl server::Handler<HttpStream> for ServerHandler {
 						let control = self.control.take()
 							.expect("on_request_readable is called only once and this is the only place accessing control");
 						let res = self.waiting.clone();
+
 						let invoked = async.on_result(move |result| {
 							// Add new line to have nice output when using CLI clients (curl)
 							*res.lock().unwrap() = Some(Response::ok(format!("{}\n", result)));
