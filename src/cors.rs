@@ -18,18 +18,25 @@ pub fn get_cors_header(allowed: &Option<Vec<AccessControlAllowOrigin>>, origin: 
 	}
 	let allowed = allowed.as_ref().unwrap();
 
-	if let Some(ref origin) = *origin {
-		for cors in allowed  {
-			match *cors {
-				AccessControlAllowOrigin::Any => return Some(AccessControlAllowOrigin::Value(origin.clone())),
-				AccessControlAllowOrigin::Null => return Some(AccessControlAllowOrigin::Null),
-				AccessControlAllowOrigin::Value(ref val) if val == origin => return Some(AccessControlAllowOrigin::Value(origin.clone())),
-				_ => {}
-			}
-		}
+	match *origin {
+		Some(ref origin) => {
+			allowed.iter().find(|cors| {
+				match **cors {
+					AccessControlAllowOrigin::Any => true,
+					AccessControlAllowOrigin::Value(ref val) if val == origin => true,
+					_ => false
+				}
+			}).map(|cors| {
+				match *cors {
+					AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(origin.clone()),
+					ref cors => cors.clone(),
+				}
+			})
+		},
+		None => {
+			allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
+		},
 	}
-
-	Some(AccessControlAllowOrigin::Null)
 }
 
 
@@ -62,11 +69,11 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
+		assert_eq!(res, None);
 	}
 
 	#[test]
-	fn should_return_null_for_empty_list() {
+	fn should_return_none_for_empty_list() {
 		// given
 		let origin = None;
 
@@ -74,7 +81,7 @@ mod tests {
 		let res = get_cors_header(&Some(Vec::new()), &origin);
 
 		// then
-		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
+		assert_eq!(res, None);
 	}
 
 	#[test]
@@ -89,7 +96,7 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
+		assert_eq!(res, None);
 	}
 
 	#[test]
@@ -102,6 +109,21 @@ mod tests {
 
 		// then
 		assert_eq!(res, Some(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
+	}
+
+	#[test]
+	fn should_return_null_only_if_null_is_set_and_origin_is_not_defined() {
+		// given
+		let origin = None;
+
+		// when
+		let res = get_cors_header(
+			&Some(vec![AccessControlAllowOrigin::Null]),
+			&origin
+		);
+
+		// then
+		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
 	}
 
 	#[test]

@@ -263,7 +263,6 @@ fn should_not_add_cors_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -502,5 +501,5 @@ fn world() -> String {
  "2A\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
 }
 fn world_batch() -> String {
- "2B\n[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n0\n".into()
+ "2C\n[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
 }
