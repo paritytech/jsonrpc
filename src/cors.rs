@@ -26,7 +26,12 @@ pub fn get_cors_header(allowed: &Option<Vec<AccessControlAllowOrigin>>, origin: 
 					AccessControlAllowOrigin::Value(ref val) if val == origin => true,
 					_ => false
 				}
-			}).cloned()
+			}).map(|cors| {
+				match *cors {
+					AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(origin.clone()),
+					ref cors => cors.clone(),
+				}
+			})
 		},
 		None => {
 			allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
