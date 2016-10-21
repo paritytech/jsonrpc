@@ -2,6 +2,7 @@ use hyper::header::AccessControlAllowOrigin;
 use hyper::server::Request;
 use hyper::net::HttpStream;
 
+/// Reads Origin header from the request.
 pub fn read_origin(req: &Request<HttpStream>) -> Option<String> {
 	match req.headers().get_raw("origin") {
 		Some(ref v) if v.len() == 1 => {
@@ -11,6 +12,7 @@ pub fn read_origin(req: &Request<HttpStream>) -> Option<String> {
 	}
 }
 
+/// Returns correct CORS header (if any) given list of allowed origins and current origin.
 pub fn get_cors_header(allowed: &Option<Vec<AccessControlAllowOrigin>>, origin: &Option<String>) -> Option<AccessControlAllowOrigin> {
 
 	if allowed.is_none() {

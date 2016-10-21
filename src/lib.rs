@@ -30,7 +30,7 @@ extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 
 pub mod request_response;
-mod cors;
+pub mod cors;
 mod handler;
 mod hosts_validator;
 #[cfg(test)]
