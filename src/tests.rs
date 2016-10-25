@@ -184,7 +184,5 @@ pub fn big_request() {
 		}
 	"#;
 
-	dummy_request(&addr, request.as_bytes());
-
-
+	assert!(String::from_utf8(dummy_request(&addr, request.as_bytes())).is_ok());
 }
