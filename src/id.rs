@@ -2,10 +2,14 @@
 use serde::{Serialize, Serializer, Deserialize, Deserializer, Error};
 use serde::de::Visitor;
 
-#[derive(Debug, PartialEq)]
+/// Request Id
+#[derive(Debug, PartialEq, Clone)]
 pub enum Id {
+	/// No id (notification)
 	Null,
+	/// String id
 	Str(String),
+	/// Numeric id
 	Num(u64),
 }
 

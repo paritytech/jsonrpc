@@ -2,37 +2,48 @@
 use std::collections::HashMap;
 use super::*;
 
+/// Requests handler - maps `Commander` outputs into well-formed JSONRPC `Responses`
 pub struct RequestHandler {
 	commander: Commander
 }
 
+impl Default for RequestHandler {
+	fn default() -> Self {
+		RequestHandler::new()
+	}
+}
+
 impl RequestHandler {
+	/// Creates new `RequestHandler`
 	pub fn new() -> Self {
 		RequestHandler {
 			commander: Commander::new()
 		}
 	}
 
-	#[inline]
+	/// Adds supported method
 	pub fn add_method<C>(&self, name: String, command: Box<C>) where C: MethodCommand + 'static {
 		self.commander.add_method(name, command)
 	}
 
-	#[inline]
+	/// Adds supported methods
 	pub fn add_methods(&self, methods: HashMap<String, Box<MethodCommand>>) {
 		self.commander.add_methods(methods);
 	}
 
-	#[inline]
+	/// Adds supported notification
 	pub fn add_notification<C>(&self, name: String, command: Box<C>) where C: NotificationCommand + 'static {
 		self.commander.add_notification(name, command)
 	}
 
-	#[inline]
+	/// Adds supported notifications
 	pub fn add_notifications(&self, notifications: HashMap<String, Box<NotificationCommand>>) {
 		self.commander.add_notifications(notifications);
 	}
 
+	/// Handle single request
+	/// `Some(response)` is returned in case that request is a method call.
+	/// `None` is returned in case of notifications and empty batches.
 	pub fn handle_request(&self, request: Request) -> Option<Response> {
 		match request {
 			Request::Single(call) => self.handle_call(call).map(Response::Single),
@@ -53,11 +64,11 @@ impl RequestHandler {
 				self.handle_notification(notification);
 				None
 			},
-			Call::Invalid(id) => Some(Output::Failure(Failure {
+			Call::Invalid(id) => Some(Output::Sync(SyncOutput::Failure(Failure {
 				id: id,
 				jsonrpc: Version::V2,
 				error: Error::new(ErrorCode::InvalidRequest)
-			}))
+			})))
 		}
 	}
 
@@ -68,16 +79,8 @@ impl RequestHandler {
 		};
 
 		match self.commander.execute_method(method.method, params) {
-			Ok(result) => Output::Success(Success {
-				id: method.id,
-				jsonrpc: method.jsonrpc,
-				result: result
-			}),
-			Err(error) => Output::Failure(Failure {
-				id: method.id,
-				jsonrpc: method.jsonrpc,
-				error: error
-			})
+			MethodResult::Sync(res) => Output::Sync(SyncOutput::from(res, method.id, method.jsonrpc)),
+			MethodResult::Async(result) => Output::Async(AsyncOutput::from(result, method.id, method.jsonrpc)),
 		}
 	}
 

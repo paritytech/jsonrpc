@@ -5,10 +5,14 @@ use serde::de::{Visitor, SeqVisitor, MapVisitor};
 use serde::de::impls::{VecVisitor, BTreeMapVisitor};
 use super::Value;
 
+/// Request parameters
 #[derive(Debug, PartialEq)]
 pub enum Params {
+	/// Array of values
 	Array(Vec<Value>),
+	/// Map of values
 	Map(BTreeMap<String, Value>),
+	/// No parameters
 	None
 }
 
