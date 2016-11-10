@@ -10,7 +10,7 @@ use request_handler::RequestHandler;
 use params::Params;
 use id::Id;
 use version::Version;
-use request::Request;
+use request::{Request, Notification};
 use response::{Response, Failure};
 use error::{Error, ErrorCode};
 use super::Value;
@@ -92,7 +92,7 @@ pub struct IoDelegate<T> where T: Send + Sync + 'static {
 	delegate: Arc<T>,
 	methods: HashMap<String, Box<MethodCommand>>,
 	notifications: HashMap<String, Box<NotificationCommand>>,
-	subscriptions: HashMap<(String, String), Box<SubscriptionCommand>>,
+	subscriptions: HashMap<(String, String, String), Box<SubscriptionCommand>>,
 }
 
 impl<T> IoDelegate<T> where T: Send + Sync + 'static {
@@ -125,9 +125,9 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 	}
 
 	/// Add new supported subscription
-	pub fn add_subscription<F>(&mut self, subscribe: &str, unsubscribe: &str, closure: F) where F: Fn(&T, Subscription) + Send + Sync + 'static {
+	pub fn add_subscription<F>(&mut self, subscribe: &str, subscription: &str, unsubscribe: &str, closure: F) where F: Fn(&T, Subscription) + Send + Sync + 'static {
 		let delegate = self.delegate.clone();
-		self.subscriptions.insert((subscribe.into(), unsubscribe.into()), Box::new(DelegateSubscription {
+		self.subscriptions.insert((subscribe.into(), subscription.into(), unsubscribe.into()), Box::new(DelegateSubscription {
 			delegate: delegate,
 			closure: closure,
 		}));
@@ -187,6 +187,11 @@ fn write_response(response: Response) -> String {
 	serde_json::to_string(&response).unwrap()
 }
 
+fn write_notification(notification: Notification) -> String {
+	// this should never fail
+	serde_json::to_string(&notification).unwrap()
+}
+
 impl IoHandler {
 	/// Creates new `IoHandler`
 	pub fn new() -> Self {
@@ -213,8 +218,8 @@ impl IoHandler {
 	}
 
 	/// Add supported subscription
-	pub fn add_subscription<C>(&self, subscribe: &str, unsubscribe: &str, command: C) where C: SubscriptionCommand + 'static {
-		self.request_handler.add_subscription(subscribe.into(), unsubscribe.into(), command);
+	pub fn add_subscription<C>(&self, subscribe: &str, subscription: &str, unsubscribe: &str, command: C) where C: SubscriptionCommand + 'static {
+		self.request_handler.add_subscription(subscribe.into(), subscription.into(), unsubscribe.into(), command);
 	}
 
 	/// Add delegate with supported methods.
@@ -237,18 +242,26 @@ impl IoHandler {
 	}
 
 	/// Handle given request asynchronously.
-	pub fn handle_request<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, response_handler: H) {
+	pub fn handle_request<H: ResponseHandler<Option<String>, Option<String>> + 'static>(&self, request_str: &str, response_handler: H) {
 		self.handle(request_str, response_handler, None);
 	}
 
-	fn handle<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, response_handler: H, session: Option<Session>) {
+	fn handle<H: ResponseHandler<Option<String>, Option<String>> + 'static>(&self, request_str: &str, response_handler: H, session: Option<Session>) {
 		trace!(target: "rpc", "Request: {} in session.", request_str);
 
-		let handler = Handler::new(response_handler, move |response: Option<Response>| {
-			let response = response.map(write_response);
-			debug!(target: "rpc", "Response: {:?}", response);
-			response
-		});
+		let handler = Handler::new(
+			response_handler,
+			move |response: Option<Response>| {
+				let response = response.map(write_response);
+				debug!(target: "rpc", "Response: {:?}", response);
+				response
+			},
+			move |notification: Notification| {
+				let notification = write_notification(notification);
+				debug!(target: "rpc", "Notification: {:?}", notification);
+				Some(notification)
+			},
+		);
 
 		let request = read_request(request_str);
 		match request {
@@ -292,7 +305,7 @@ impl IoSession {
 	}
 
 	/// Handle a request within this session.
-	pub fn handle_request<H: ResponseHandler<Option<String>> + 'static>(&self, request_str: &str, handler: H) {
+	pub fn handle_request<H: ResponseHandler<Option<String>, Option<String>> + 'static>(&self, request_str: &str, handler: H) {
 		self.io_handler.handle(request_str, handler, Some(self.session.clone()));
 	}
 }
@@ -376,9 +389,9 @@ mod tests {
 						let subscriber = subscriber.assign_id(Value::U64(1));
 						thread::spawn(move || {
 							thread::sleep(Duration::from_millis(10));
-							subscriber.send(Ok(Value::String("hello".to_string())));
+							subscriber.notify(Ok(Value::String("hello".to_string())));
 							thread::sleep(Duration::from_millis(10));
-							subscriber.send(Ok(Value::String("world".to_string())));
+							subscriber.notify(Ok(Value::String("world".to_string())));
 						});
 					},
 					Subscription::Close { id, .. } => {
@@ -388,12 +401,12 @@ mod tests {
 			}
 		}
 
-		io.add_subscription("say_hello", "stop_saying_hello", SayHelloSubscription);
+		io.add_subscription("say_hello", "hello_notification", "stop_saying_hello", SayHelloSubscription);
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 		let id = r#"{"jsonrpc":"2.0","result":1,"id":1}"#.to_owned();
-		let response1 = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#.to_owned();
-		let response2 = r#"{"jsonrpc":"2.0","result":"world","id":1}"#.to_owned();
+		let response1 = r#"{"jsonrpc":"2.0","method":"hello_notification","params":{"result":"hello","subscription":1}}"#.to_owned();
+		let response2 = r#"{"jsonrpc":"2.0","method":"hello_notification","params":{"result":"world","subscription":1}}"#.to_owned();
 
 		let (tx, rx) = mpsc::channel();
 		let session = io.session();

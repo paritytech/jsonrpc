@@ -34,7 +34,7 @@ impl SubscriptionCommand for SayHello {
 							return;
 						}
 						// Send a message every second
-						subscriber.send(Ok(to_value("Hello World!")));
+						subscriber.notify(Ok(to_value("Hello World!")));
 						thread::sleep(Duration::from_secs(1));
 					}
 				});
@@ -61,12 +61,12 @@ impl SubscriptionCommand for SayHello {
 
 fn main() {
 	let io = Arc::new(IoHandler::new());
-	io.add_subscription("subscribe_hello", "unsubscribe_hello", SayHello::default());
+	io.add_subscription("subscribe_hello", "hello_notification", "unsubscribe_hello", SayHello::default());
 
 	let request = r#"{"jsonrpc": "2.0", "method": "subscribe_hello", "params": [42, 23], "id": 1}"#;
 	let is_first = AtomicBool::new(true);
 	let first = r#"{"jsonrpc":"2.0","result":0,"id":1}"#;
-	let hello = r#"{"jsonrpc":"2.0","result":"Hello World!","id":1}"#;
+	let hello = r#"{"jsonrpc":"2.0","method":"hello_notification","params":{"result":"Hello World!","subscription":0}}"#;
 
 
 	let session = io.session();

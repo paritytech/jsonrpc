@@ -7,6 +7,7 @@ use parking_lot::RwLock;
 use control::{Subscription, Ready, Data, Session, Handler, ResponseHandler};
 use error::{Error, ErrorCode};
 use params::Params;
+use response::SubscriptionOutput;
 
 /// Result of Method invocation.
 pub enum Method {
@@ -15,7 +16,7 @@ pub enum Method {
 	/// Notification
 	Notify(Box<NotificationCommand>),
 	/// New subscription
-	Subscribe(Arc<Box<SubscriptionCommand>>),
+	Subscribe(Arc<Box<SubscriptionCommand>>, String),
 	/// Close subscription
 	Unsubscribe(Arc<Box<SubscriptionCommand>>),
 }
@@ -107,10 +108,10 @@ impl Commander {
 	}
 
 	/// Add supported notification to this executor
-	pub fn add_subscription<C>(&self, subscribe: String, unsubscribe: String, command: C) where C: SubscriptionCommand + 'static {
+	pub fn add_subscription<C>(&self, subscribe: String, subscription: String, unsubscribe: String, command: C) where C: SubscriptionCommand + 'static {
 		let command = Arc::new(Box::new(command) as Box<SubscriptionCommand>);
 		let mut methods = self.methods.write();
-		methods.insert(subscribe, Method::Subscribe(command.clone()));
+		methods.insert(subscribe, Method::Subscribe(command.clone(), subscription));
 		methods.insert(unsubscribe, Method::Unsubscribe(command));
 	}
 
@@ -127,26 +128,26 @@ impl Commander {
 	}
 
 	/// Add supported subscriptions to this executor
-	pub fn add_subscriptions(&self, subscriptions: HashMap<(String, String), Box<SubscriptionCommand>>) {
+	pub fn add_subscriptions(&self, subscriptions: HashMap<(String, String, String), Box<SubscriptionCommand>>) {
 		let mut methods = self.methods.write();
 
-		for ((subscribe, unsubscribe), command) in subscriptions.into_iter() {
+		for ((subscribe, subscription, unsubscribe), command) in subscriptions.into_iter() {
 			let command = Arc::new(command);
-			methods.insert(subscribe, Method::Subscribe(command.clone()));
+			methods.insert(subscribe, Method::Subscribe(command.clone(), subscription));
 			methods.insert(unsubscribe, Method::Unsubscribe(command));
 		}
 	}
 
 	/// Execute method identified by `name` with given `params`.
-	pub fn execute_method<A: 'static>(&self, name: String, params: Params, handler: Handler<A, Data>, session: Option<Session>) {
+	pub fn execute_method<A: 'static>(&self, name: String, params: Params, handler: Handler<A, Data, SubscriptionOutput>, session: Option<Session>) {
 		match (self.methods.read().get(&name), session) {
 			(Some(&Method::Call(ref command)), _) => {
 				command.execute(params, handler.into());
 			},
-			(Some(&Method::Subscribe(ref subscribe)), Some(ref session)) => {
+			(Some(&Method::Subscribe(ref subscribe, ref subscription_name)), Some(ref session)) => {
 				subscribe.execute(Subscription::Open {
 					params: params,
-					subscriber: handler.into_subscriber(session.clone(), name, subscribe.clone()),
+					subscriber: handler.into_subscriber(session.clone(), subscription_name.clone(), subscribe.clone()),
 				});
 			},
 			(Some(&Method::Unsubscribe(ref unsubscribe)), Some(ref session)) => match params {
@@ -162,7 +163,7 @@ impl Commander {
 				},
 				_ => handler.send(Err(Error::new(ErrorCode::InvalidParams))),
 			},
-			(Some(&Method::Subscribe(_)), None) | (Some(&Method::Unsubscribe(_)), None) => {
+			(Some(&Method::Subscribe(_, _)), None) | (Some(&Method::Unsubscribe(_)), None) => {
 				handler.send(Err(Error::new(ErrorCode::SessionNotSupported)))
 			},
 			_ => handler.send(Err(Error::new(ErrorCode::MethodNotFound))),
