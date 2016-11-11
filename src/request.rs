@@ -1,7 +1,7 @@
 //! jsonrpc request
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer, Error as SerError};
-use serde_json::value::from_value;
+use serde_json::{from_value, Error as JsonError};
 
 use super::{Id, Params, Version, Value};
 
@@ -45,7 +45,8 @@ pub enum Call {
 	/// Fire notification
 	Notification(Notification),
 	/// Invalid call
-	Invalid
+	Invalid(Id),
+
 }
 
 impl Serialize for Call {
@@ -54,7 +55,7 @@ impl Serialize for Call {
 		match *self {
 			Call::MethodCall(ref m) => m.serialize(serializer),
 			Call::Notification(ref n) => n.serialize(serializer),
-			Call::Invalid => Err(S::Error::custom("invalid call"))
+			Call::Invalid(_) => Err(S::Error::custom("invalid call"))
 		}
 	}
 }
@@ -64,9 +65,14 @@ impl Deserialize for Call {
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
 		from_value(v.clone()).map(Call::Notification)
-			.or_else(|_| from_value(v).map(Call::MethodCall))
-			.map_err(|_| D::Error::custom("")) // types must match
-			.or_else(|_: D::Error | Ok(Call::Invalid))
+			.or_else(|_: JsonError| from_value(v.clone()).map(Call::MethodCall))
+			.or_else(|_: JsonError| {
+				let id = v.find("id")
+					.and_then(|id| from_value(id.clone()).ok())
+					.unwrap_or(Id::Null);
+				Ok(Call::Invalid(id))
+			})
+			.map_err(|_: JsonError| D::Error::custom("")) // make the types match
 	}
 }
 
@@ -225,7 +231,7 @@ fn request_deserialize_batch() {
 	let s = r#"[1, {"jsonrpc": "2.0", "method": "update", "params": [1,2], "id": 1},{"jsonrpc": "2.0", "method": "update", "params": [1]}]"#;
 	let deserialized: Request = serde_json::from_str(s).unwrap();
 	assert_eq!(deserialized, Request::Batch(vec![
-		Call::Invalid,
+		Call::Invalid(Id::Null),
 		Call::MethodCall(MethodCall {
 			jsonrpc: Version::V2,
 			method: "update".to_owned(),
@@ -238,4 +244,16 @@ fn request_deserialize_batch() {
 			params: Some(Params::Array(vec![Value::U64(1)]))
 		})
 	]))
+}
+
+#[test]
+fn request_invalid_returns_id() {
+	use serde_json;
+
+	let s = r#"{"id":120,"method":"my_method","params":["foo", "bar"]}"#;
+	let deserialized: Request = serde_json::from_str(s).unwrap();
+	match deserialized {
+		Request::Single(Call::Invalid(Id::Num(120))) => {},
+		_ => panic!("Request wrongly deserialized: {:?}", deserialized),
+	}
 }
