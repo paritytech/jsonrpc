@@ -2,7 +2,7 @@
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer};
 use serde_json::value::from_value;
-use super::{Id, Value, Error, Version, AsyncOutput};
+use super::{Id, Value, Error, Version};
 
 /// Successful response
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -28,32 +28,23 @@ pub struct Failure {
 
 /// Represents synchronous output - failure or success
 #[derive(Debug, PartialEq)]
-pub enum SyncOutput {
+pub enum Output {
 	/// Success
 	Success(Success),
 	/// Failure
 	Failure(Failure),
 }
 
-/// Represents synchronous or asynchronous output
-#[derive(Debug)]
-pub enum Output {
-	/// Synchronous
-	Sync(SyncOutput),
-	/// Asynchronous
-	Async(AsyncOutput),
-}
-
-impl SyncOutput {
+impl Output {
 	/// Creates new synchronous output given `Result`, `Id` and `Version`.
 	pub fn from(result: Result<Value, Error>, id: Id, jsonrpc: Version) -> Self {
 		match result {
-			Ok(result) => SyncOutput::Success(Success {
+			Ok(result) => Output::Success(Success {
 				id: id,
 				jsonrpc: jsonrpc,
 				result: result,
 			}),
-			Err(error) => SyncOutput::Failure(Failure {
+			Err(error) => Output::Failure(Failure {
 				id: id,
 				jsonrpc: jsonrpc,
 				error: error,
@@ -62,64 +53,64 @@ impl SyncOutput {
 	}
 }
 
-impl Deserialize for SyncOutput {
-	fn deserialize<D>(deserializer: &mut D) -> Result<SyncOutput, D::Error>
+impl Deserialize for Output {
+	fn deserialize<D>(deserializer: &mut D) -> Result<Output, D::Error>
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
-		from_value(v.clone()).map(SyncOutput::Failure)
-			.or_else(|_| from_value(v).map(SyncOutput::Success))
+		from_value(v.clone()).map(Output::Failure)
+			.or_else(|_| from_value(v).map(Output::Success))
 			.map_err(|_| D::Error::custom("")) // types must match
 	}
 }
 
-impl Serialize for SyncOutput {
+impl Serialize for Output {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
-			SyncOutput::Success(ref s) => s.serialize(serializer),
-			SyncOutput::Failure(ref f) => f.serialize(serializer)
+			Output::Success(ref s) => s.serialize(serializer),
+			Output::Failure(ref f) => f.serialize(serializer)
 		}
 	}
 }
 
 /// Synchronous response
 #[derive(Debug, PartialEq)]
-pub enum SyncResponse {
+pub enum Response {
 	/// Single response
-	Single(SyncOutput),
+	Single(Output),
 	/// Response to batch request (batch of responses)
-	Batch(Vec<SyncOutput>)
+	Batch(Vec<Output>)
 }
 
-impl Deserialize for SyncResponse {
-	fn deserialize<D>(deserializer: &mut D) -> Result<SyncResponse, D::Error>
+impl Deserialize for Response {
+	fn deserialize<D>(deserializer: &mut D) -> Result<Response, D::Error>
 	where D: Deserializer {
 		let v = try!(Value::deserialize(deserializer));
-		from_value(v.clone()).map(SyncResponse::Batch)
-			.or_else(|_| from_value(v).map(SyncResponse::Single))
+		from_value(v.clone()).map(Response::Batch)
+			.or_else(|_| from_value(v).map(Response::Single))
 			.map_err(|_| D::Error::custom("")) // types must match
 	}
 }
 
-impl Serialize for SyncResponse {
+impl Serialize for Response {
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
-			SyncResponse::Single(ref o) => o.serialize(serializer),
-			SyncResponse::Batch(ref b) => b.serialize(serializer)
+			Response::Single(ref o) => o.serialize(serializer),
+			Response::Batch(ref b) => b.serialize(serializer)
 		}
 	}
 }
 
-impl From<Failure> for SyncResponse {
+impl From<Failure> for Response {
 	fn from(failure: Failure) -> Self {
-		SyncResponse::Single(SyncOutput::Failure(failure))
+		Response::Single(Output::Failure(failure))
 	}
 }
 
-impl From<Success> for SyncResponse {
+impl From<Success> for Response {
 	fn from(success: Success) -> Self {
-		SyncResponse::Single(SyncOutput::Success(success))
+		Response::Single(Output::Success(success))
 	}
 }
 
@@ -128,7 +119,7 @@ fn success_output_serialize() {
 	use serde_json;
 	use serde_json::Value;
 
-	let so = SyncOutput::Success(Success {
+	let so = Output::Success(Success {
 		jsonrpc: Version::V2,
 		result: Value::U64(1),
 		id: Id::Num(1)
@@ -145,8 +136,8 @@ fn success_output_deserialize() {
 
 	let dso = r#"{"jsonrpc":"2.0","result":1,"id":1}"#;
 
-	let deserialized: SyncOutput = serde_json::from_str(dso).unwrap();
-	assert_eq!(deserialized, SyncOutput::Success(Success {
+	let deserialized: Output = serde_json::from_str(dso).unwrap();
+	assert_eq!(deserialized, Output::Success(Success {
 		jsonrpc: Version::V2,
 		result: Value::U64(1),
 		id: Id::Num(1)
@@ -157,7 +148,7 @@ fn success_output_deserialize() {
 fn failure_output_serialize() {
 	use serde_json;
 
-	let fo = SyncOutput::Failure(Failure {
+	let fo = Output::Failure(Failure {
 		jsonrpc: Version::V2,
 		error: Error::parse_error(),
 		id: Id::Num(1)
@@ -173,8 +164,8 @@ fn failure_output_deserialize() {
 
 	let dfo = r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#;
 
-	let deserialized: SyncOutput = serde_json::from_str(dfo).unwrap();
-	assert_eq!(deserialized, SyncOutput::Failure(Failure {
+	let deserialized: Output = serde_json::from_str(dfo).unwrap();
+	assert_eq!(deserialized, Output::Failure(Failure {
 		jsonrpc: Version::V2,
 		error: Error::parse_error(),
 		id: Id::Num(1)
@@ -188,8 +179,8 @@ fn single_response_deserialize() {
 
 	let dsr = r#"{"jsonrpc":"2.0","result":1,"id":1}"#;
 
-	let deserialized: SyncResponse = serde_json::from_str(dsr).unwrap();
-	assert_eq!(deserialized, SyncResponse::Single(SyncOutput::Success(Success {
+	let deserialized: Response = serde_json::from_str(dsr).unwrap();
+	assert_eq!(deserialized, Response::Single(Output::Success(Success {
 		jsonrpc: Version::V2,
 		result: Value::U64(1),
 		id: Id::Num(1)
@@ -203,14 +194,14 @@ fn batch_response_deserialize() {
 
 	let dbr = r#"[{"jsonrpc":"2.0","result":1,"id":1},{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}]"#;
 
-	let deserialized: SyncResponse = serde_json::from_str(dbr).unwrap();
-	assert_eq!(deserialized, SyncResponse::Batch(vec![
-		SyncOutput::Success(Success {
+	let deserialized: Response = serde_json::from_str(dbr).unwrap();
+	assert_eq!(deserialized, Response::Batch(vec![
+		Output::Success(Success {
 			jsonrpc: Version::V2,
 			result: Value::U64(1),
 			id: Id::Num(1)
 		}),
-		SyncOutput::Failure(Failure {
+		Output::Failure(Failure {
 			jsonrpc: Version::V2,
 			error: Error::parse_error(),
 			id: Id::Num(1)

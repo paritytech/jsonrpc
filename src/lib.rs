@@ -15,7 +15,7 @@
 //! }
 //!
 //! struct SayHelloAsync;
-//! impl AsyncMethodCommand for SayHelloAsync {
+//! impl MethodCommand for SayHelloAsync {
 //!		fn execute(&self, _params: Params, ready: Ready) {
 //!			ready.ready(Ok(Value::String("hello".to_string())))
 //!		}
@@ -43,6 +43,17 @@ extern crate serde;
 extern crate serde_json;
 extern crate parking_lot;
 #[macro_use] extern crate log;
+
+// pub mod async;
+pub mod control;
+pub mod commander;
+pub mod request_handler;
+pub mod io;
+
+pub use self::control::*;
+pub use self::commander::{Commander, MethodCommand, SyncMethodCommand, NotificationCommand, SubscriptionCommand};
+pub use self::request_handler::RequestHandler;
+pub use self::io::{IoHandler, IoDelegate, IoSession, IoSessionHandler};
 
 #[cfg(feature = "serde_macros")]
 include!("lib.rs.in");

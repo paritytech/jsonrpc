@@ -1,7 +1,8 @@
 //! jsonrpc request
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer, Error as SerError};
-use serde_json::{value, from_value, Error as JsonError};
+use serde_json::{from_value, Error as JsonError};
+
 use super::{Id, Params, Version, Value};
 
 /// Represents jsonrpc request which is a method call.
