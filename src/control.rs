@@ -78,6 +78,11 @@ impl Ready {
 	}
 }
 
+fn _assert_ready_send() {
+    fn _assert_send<T: Send>() {}
+    _assert_send::<Ready>();
+}
+
 /// New subscriber waiting for id to assign
 pub struct NewSubscriber {
 	session: Session,
