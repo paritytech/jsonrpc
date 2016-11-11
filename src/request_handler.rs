@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use control::{Session, Handler, ResponseHandler};
 use commander::{Commander, MethodCommand, NotificationCommand, SubscriptionCommand};
 use params::Params;
-use id::Id;
 use version::Version;
 use error::{Error, ErrorCode};
 use request::{Request, MethodCall, Call, Notification};
@@ -94,8 +93,8 @@ impl RequestHandler {
 				self.handle_notification(notification);
 				handler.send(None)
 			},
-			Call::Invalid => handler.send(Some(Output::Failure(Failure {
-				id: Id::Null,
+			Call::Invalid(id) => handler.send(Some(Output::Failure(Failure {
+				id: id,
 				jsonrpc: Version::V2,
 				error: Error::new(ErrorCode::InvalidRequest)
 			}))),
