@@ -40,8 +40,8 @@ impl SubscriptionCommand for SayHello {
 				});
 
 			},
-			Subscription::Close { id, ready } => match id {
-				Value::U64(id) => {
+			Subscription::Close { id, ready } => {
+				if let Value::U64(id) = id {
 					// Remove from subscribers
 					match self.subscribers.lock().unwrap().remove(&(id as usize)) {
 						Some(finished) => {
@@ -52,8 +52,9 @@ impl SubscriptionCommand for SayHello {
 						},
 						None => ready.ready(Err(Error::invalid_request())),
 					}
-				},
-				_ => ready.ready(Err(Error::invalid_request())),
+				} else {
+					ready.ready(Err(Error::invalid_request()))
+				}
 			},
 		}
     }
