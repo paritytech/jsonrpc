@@ -237,23 +237,36 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 		H: Fn(C) -> B + Send + 'static,
 		C: Send + 'static {
 
-		// Handle empty batch
+		// If batch is empty we can respond right away with empty vector of responses.
 		if count == 0 {
 			self.send(map_many(vec![]));
 			return vec![];
 		}
+		// Otherwise we need to wait for all requests in batch to respond
+		// before sending a response to batch request.
+		//
+		// Further messages from the same handlers are notifications:
+		// 1. We need to forward notifications, but only if initial response was sent.
+		// 2. Notifications coming before sending the initial response are discarded.
 
+		// Collecting responses for batch response.
 		let outputs = Arc::new(Mutex::new(Some(Vec::with_capacity(count))));
+		// Shared handle and map functions
 		let handler = Arc::new(Mutex::new((self, map_many, map_single)));
+		// Is the initial response sent already?
 		let initial = Arc::new(AtomicBool::new(false));
 
+		// For each request in batch
 		(0..count).into_iter().map(|_| {
 			let outputs = outputs.clone();
 			let handler = handler.clone();
 			let initial_sent = initial.clone();
+
+			// Is response for this request already included in initial response (batch)?
 			let my_response_sent = AtomicBool::new(false);
 
 			Handler::id(move |res| {
+				// If initial response was sent we are safe to forward notifications
 				if initial_sent.load(Ordering::SeqCst) {
 					// Just forward the message
 					let lock = handler.lock();
@@ -262,10 +275,13 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 					return;
 				}
 
+				// Dicard notifications if initial response was not sent yet.
 				if my_response_sent.load(Ordering::SeqCst) {
-					// Dicard events before initial response is sent
 					return;
 				}
+
+				// It's the first response for this request, we need to include it
+				// into initial response.
 				my_response_sent.store(true, Ordering::SeqCst);
 
 				let mut outputs = outputs.lock();
@@ -276,7 +292,7 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 					out.len()
 				};
 
-				// last handler
+				// last handler - actually send initial_response
 				if len == count {
 					let outputs = outputs.take().expect("Outputs taken only once.");
 					let lock = handler.lock();
