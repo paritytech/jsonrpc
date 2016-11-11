@@ -17,13 +17,12 @@ pub enum Params {
 }
 
 impl Serialize for Params {
-	#[allow(const_err)]
 	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
 	where S: Serializer {
 		match *self {
 			Params::Array(ref vec) => vec.serialize(serializer),
 			Params::Map(ref map) => map.serialize(serializer),
-			Params::None => ([] as [u8; 0]).serialize(serializer)
+			Params::None => ([0u8; 0]).serialize(serializer)
 		}
 	}
 }
