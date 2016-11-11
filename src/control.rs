@@ -79,6 +79,11 @@ impl Ready {
 	}
 }
 
+fn _assert_ready_send() {
+    fn _assert_send<T: Send>() {}
+    _assert_send::<Ready>();
+}
+
 /// New subscriber waiting for id to assign
 pub struct NewSubscriber {
 	session: Session,
@@ -259,16 +264,26 @@ impl<A: 'static, B: 'static, C: 'static, D: 'static> HandlerInternal<A, B, C, D>
 		G: Fn(Vec<E>) -> C + Send + 'static,
 		H: Fn(F) -> D + Send + 'static,
 	{
-		// Handle empty batch
+		// If batch is empty we can respond right away with empty vector of responses.
 		if count == 0 {
 			self.send(map_send(vec![]));
 			return vec![];
 		}
+		// Otherwise we need to wait for all requests in batch to respond
+		// before sending a response to batch request.
+		//
+		// Further messages from the same handlers are notifications:
+		// 1. We need to forward notifications, but only if initial response was sent.
+		// 2. Notifications coming before sending the initial response are discarded.
 
+		// Collecting responses for batch response.
 		let outputs = Arc::new(Mutex::new(Some(Vec::with_capacity(count))));
+		// Shared handle and map functions
 		let handler = Arc::new(Mutex::new((self, map_send, map_notify)));
+		// Is the initial response sent already?
 		let initial = Arc::new(AtomicBool::new(false));
 
+		// For each request in batch
 		(0..count).into_iter().map(|_| {
 			let outputs = outputs.clone();
 			let handler = handler.clone();
@@ -297,8 +312,8 @@ impl<A: 'static, B: 'static, C: 'static, D: 'static> HandlerInternal<A, B, C, D>
 					}
 				},
 				move |res| {
+					// Dicard notifications if initial response was not sent yet.
 					if !initial_sent2.load(Ordering::SeqCst) {
-						// Dicard notifications before initial response is sent
 						return;
 					}
 
@@ -306,7 +321,7 @@ impl<A: 'static, B: 'static, C: 'static, D: 'static> HandlerInternal<A, B, C, D>
 					let lock = handler2.lock();
 					let (ref handler, _, ref map_notify) = *lock;
 					handler.notify(map_notify(res));
-				}
+				},
 			)
 		}).collect()
 	}

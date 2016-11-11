@@ -150,18 +150,19 @@ impl Commander {
 					subscriber: handler.into_subscriber(session.clone(), subscription_name.clone(), subscribe.clone()),
 				});
 			},
-			(Some(&Method::Unsubscribe(ref unsubscribe)), Some(ref session)) => match params {
-				Params::Array(params) => match params.into_iter().next() {
-					Some(id) => {
+			(Some(&Method::Unsubscribe(ref unsubscribe)), Some(ref session)) => {
+				if let Params::Array(params) = params {
+					if let Some(id) = params.into_iter().next() {
 						session.remove_subscription(name, id.clone());
 						unsubscribe.execute(Subscription::Close {
 							id: id,
 							ready: handler.into(),
 						});
-					},
-					_ => handler.send(Err(Error::new(ErrorCode::InvalidParams))),
-				},
-				_ => handler.send(Err(Error::new(ErrorCode::InvalidParams))),
+						return;
+					}
+				}
+
+				handler.send(Err(Error::new(ErrorCode::InvalidParams)))
 			},
 			(Some(&Method::Subscribe(_, _)), None) | (Some(&Method::Unsubscribe(_)), None) => {
 				handler.send(Err(Error::new(ErrorCode::SessionNotSupported)))
