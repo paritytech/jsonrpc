@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 use commander::SubscriptionCommand;
 use error::Error;
 use params::Params;
+use response::SubscriptionOutput;
 use super::Value;
 
 /// Convenient type for RPC methods return types.
@@ -62,13 +63,13 @@ impl PartialEq for Subscription {
 
 /// Asynchronous method response.
 pub struct Ready {
-	handler: Box<ResponseHandler<Data>>,
+	handler: Box<ResponseHandler<Data, SubscriptionOutput>>,
 }
 
 impl Ready {
 	fn discard() -> Self {
 		Ready {
-			handler: Box::new(|_| {}),
+			handler: Box::new((|_| {}, |_| {})),
 		}
 	}
 
@@ -88,7 +89,7 @@ pub struct NewSubscriber {
 	session: Session,
 	name: String,
 	unsubscribe: Arc<Box<SubscriptionCommand>>,
-	handler: Box<ResponseHandler<Data>>,
+	handler: Box<ResponseHandler<Data, SubscriptionOutput>>,
 }
 
 impl NewSubscriber {
@@ -103,27 +104,36 @@ impl NewSubscriber {
 		// Send a response
 		self.handler.send(Ok(id.clone()));
 		// Add subscription
-		self.session.add_subscription(self.name, id, self.unsubscribe);
+		let name = self.name;
+		self.session.add_subscription(name.clone(), id.clone(), self.unsubscribe);
 		Subscriber {
-			handler: self.handler,
+			handler: Box::new(HandlerInternal {
+				handler: self.handler,
+				send_mapper: Box::new(|result: Data| result),
+				notify_mapper: Box::new(move |subscription: Data| SubscriptionOutput {
+					method: name.clone(),
+					notification_id: id.clone(),
+					result: subscription
+				}),
+			}),
 		}
 	}
 }
 
 /// Subscriber with assigned ID
 pub struct Subscriber {
-	handler: Box<ResponseHandler<Data>>,
+	handler: Box<ResponseHandler<Data, Data>>,
 }
 
 impl Subscriber {
 	/// Send a notification to subscriber.
-	pub fn send(&self, data: Data) {
-		self.handler.send(data);
+	pub fn notify(&self, data: Data) {
+		self.handler.notify(data);
 	}
 }
 
-impl<A: 'static> From<Handler<A, Data>> for Ready {
-	fn from(handler: Handler<A, Data>) -> Self {
+impl<A: 'static> From<Handler<A, Data, SubscriptionOutput>> for Ready {
+	fn from(handler: Handler<A, Data, SubscriptionOutput>) -> Self {
 		Ready {
 			handler: Box::new(handler),
 		}
@@ -179,72 +189,84 @@ impl Drop for SessionInternal {
 	}
 }
 
-/// Trait representing a client waiting for the response(s).
-pub trait ResponseHandler<T>: Send {
-	/// Send a reponse to that client.
-	fn send(&self, response: T);
+/// Trait representing a client waiting for the response and notifications.
+pub trait ResponseHandler<S, N>: Send {
+	/// Sends a reponse to that client.
+	fn send(&self, response: S);
+	/// Sends a notification to that client.
+	fn notify(&self, notification: N);
 }
 
-impl<T, F: Fn(T) + Send> ResponseHandler<T> for F {
+impl<T, F: Fn(T) + Send> ResponseHandler<T, T> for F {
 	fn send(&self, response: T) {
 		self(response)
+	}
+
+	fn notify(&self, notification: T) {
+		self(notification)
+	}
+}
+
+impl<S, N, F: Fn(S) + Send, G: Fn(N) + Send> ResponseHandler<S, N> for (F, G) {
+	fn send(&self, response: S) {
+		self.0(response)
+	}
+
+	fn notify(&self, notification: N) {
+		self.1(notification)
 	}
 }
 
 /// Response handler with transformations.
-pub struct Handler<A, B> {
-	handler: Box<ResponseHandler<A>>,
-	mapper: Box<Fn(B) -> A + Send>,
+pub struct HandlerInternal<A, B, C, D> {
+	handler: Box<ResponseHandler<A, B>>,
+	send_mapper: Box<Fn(C) -> A + Send>,
+	notify_mapper: Box<Fn(D) -> B + Send>,
 }
 
-impl<A: 'static> Handler<A, A> {
-	/// Creates new identity handler.
-	/// There is no mapping, same type is send upstream.
-	pub fn id<X>(handler: X) -> Self where
-		X: ResponseHandler<A> + 'static {
-			Handler {
-				handler: Box::new(handler),
-				mapper: Box::new(|x| x),
-			}
-	}
-}
+/// Simplified Response handler with transformations.
+pub type Handler<A, B, C> = HandlerInternal<A, A, B, C>;
 
-impl<A: 'static, B: 'static> Handler<A, B> {
-	/// Create a new `Handler` with given transformation function.
-	pub fn new<X, Y>(handler: X, mapper: Y) -> Self where
-		X: ResponseHandler<A> + 'static,
-		Y: Fn(B) -> A + Send + 'static {
-			Handler {
-				handler: Box::new(handler),
-				mapper: Box::new(mapper),
-			}
+impl<A: 'static, B: 'static, C: 'static, D: 'static> HandlerInternal<A, B, C, D> {
+	/// Create a new `HandlerInternal` with given transformation function.
+	pub fn new<X, G, H>(handler: X, send_mapper: G, notify_mapper: H) -> Self where
+		X: ResponseHandler<A, B> + 'static,
+		G: Fn(C) -> A + Send + 'static,
+		H: Fn(D) -> B + Send + 'static,
+	{
+		HandlerInternal {
+			handler: Box::new(handler),
+			send_mapper: Box::new(send_mapper),
+			notify_mapper: Box::new(notify_mapper),
+		}
 	}
 
-	/// Convert this `Handler` into a new one, accepting different input.
-	pub fn map<C, G>(self, map: G) -> Handler<A, C> where
-		G: Fn(C) -> B + Send + 'static {
-		let current = self.mapper;
-		Handler {
+	/// Convert this `HandlerInternal` into a new one, accepting different input.
+	pub fn map<E, F, G, H>(self, send_map: G, notify_map: H) -> HandlerInternal<A, B, E, F> where
+		G: Fn(E) -> C + Send + 'static,
+		H: Fn(F) -> D + Send + 'static,
+	{
+		let current_send = self.send_mapper;
+		let current_notify = self.notify_mapper;
+		HandlerInternal {
 			handler: self.handler,
-			mapper: Box::new(move |c| current(map(c))),
+			send_mapper: Box::new(move |c| current_send(send_map(c))),
+			notify_mapper: Box::new(move |c| current_notify(notify_map(c))),
 		}
 	}
 
 	/// Split this handler into `count` handlers.
-	/// Upstream `ResponseHandler` will be called only when all sub-handlers receive a response for the first time.
-	///
-	/// Some handlers may return more then one response - in such case:
-	/// 1. First response of each handler is included in initial upstream response (`map_many`).
-	/// 2. All subsequent responses are mapped using `map_single`.
-	/// 3. Responses arriving after FIRST but before sending INITIAL upstream response are discarded.
-	pub fn split_map<C, G, H>(self, count: usize, map_many: G, map_single: H) -> Vec<Handler<C, C>> where
-		G: Fn(Vec<C>) -> B + Send + 'static,
-		H: Fn(C) -> B + Send + 'static,
-		C: Send + 'static {
-
+	/// Upstream `ResponseHandler::send` will be called only when all sub-handlers receive a response for the first time.
+	/// Notifications are forwarded and mapped through `map_single`
+	pub fn split_map<E, F, G, H>(self, count: usize, map_send: G, map_notify: H) -> Vec<HandlerInternal<(), (), E, F>> where
+		E: Send + 'static,
+		F: Send + 'static,
+		G: Fn(Vec<E>) -> C + Send + 'static,
+		H: Fn(F) -> D + Send + 'static,
+	{
 		// If batch is empty we can respond right away with empty vector of responses.
 		if count == 0 {
-			self.send(map_many(vec![]));
+			self.send(map_send(vec![]));
 			return vec![];
 		}
 		// Otherwise we need to wait for all requests in batch to respond
@@ -257,7 +279,7 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 		// Collecting responses for batch response.
 		let outputs = Arc::new(Mutex::new(Some(Vec::with_capacity(count))));
 		// Shared handle and map functions
-		let handler = Arc::new(Mutex::new((self, map_many, map_single)));
+		let handler = Arc::new(Mutex::new((self, map_send, map_notify)));
 		// Is the initial response sent already?
 		let initial = Arc::new(AtomicBool::new(false));
 
@@ -265,52 +287,47 @@ impl<A: 'static, B: 'static> Handler<A, B> {
 		(0..count).into_iter().map(|_| {
 			let outputs = outputs.clone();
 			let handler = handler.clone();
+			let handler2 = handler.clone();
 			let initial_sent = initial.clone();
+			let initial_sent2 = initial.clone();
 
-			// Is response for this request already included in initial response (batch)?
-			let my_response_sent = AtomicBool::new(false);
+			HandlerInternal::new(
+				(|_| {}, |_| {}),
+				move |res| {
+					let mut outputs = outputs.lock();
+					let len = {
+						let mut out = outputs.as_mut().expect("When output is taken no handlers are left.");
+						// NOTE Order of responses does not really matter
+						out.push(res);
+						out.len()
+					};
 
-			Handler::id(move |res| {
-				// If initial response was sent we are safe to forward notifications
-				if initial_sent.load(Ordering::SeqCst) {
+					// last handler
+					if len == count {
+						let outputs = outputs.take().expect("Outputs taken only once.");
+						let lock = handler.lock();
+						let (ref handler, ref map, _) = *lock;
+						handler.send(map(outputs));
+						initial_sent.store(true, Ordering::SeqCst);
+					}
+				},
+				move |res| {
+					// Dicard notifications if initial response was not sent yet.
+					if !initial_sent2.load(Ordering::SeqCst) {
+						return;
+					}
+
 					// Just forward the message
-					let lock = handler.lock();
-					let (ref handler, _, ref map_single) = *lock;
-					handler.send(map_single(res));
-					return;
-				}
-
-				// Dicard notifications if initial response was not sent yet.
-				if my_response_sent.load(Ordering::SeqCst) {
-					return;
-				}
-
-				// It's the first response for this request, we need to include it
-				// into initial response.
-				my_response_sent.store(true, Ordering::SeqCst);
-
-				let mut outputs = outputs.lock();
-				let len = {
-					let mut out = outputs.as_mut().expect("When output is taken no handlers are left.");
-					// NOTE Order of responses does not really matter
-					out.push(res);
-					out.len()
-				};
-
-				// last handler - actually send initial_response
-				if len == count {
-					let outputs = outputs.take().expect("Outputs taken only once.");
-					let lock = handler.lock();
-					let (ref handler, ref map, _) = *lock;
-					handler.send(map(outputs));
-					initial_sent.store(true, Ordering::SeqCst);
-				}
-			})
+					let lock = handler2.lock();
+					let (ref handler, _, ref map_notify) = *lock;
+					handler.notify(map_notify(res));
+				},
+			)
 		}).collect()
 	}
 }
 
-impl<A: 'static> Handler<A, Data> {
+impl<A: 'static> Handler<A, Data, SubscriptionOutput> {
 	/// Converts this handler into a `NewSubscriber` for given `Session`.
 	pub fn into_subscriber(self, session: Session, name: String, unsubscribe: Arc<Box<SubscriptionCommand>>) -> NewSubscriber {
 		NewSubscriber {
@@ -322,10 +339,15 @@ impl<A: 'static> Handler<A, Data> {
 	}
 }
 
-impl<A, B> ResponseHandler<B> for Handler<A, B> {
-	fn send(&self, response: B) {
-		let map = &self.mapper;
+impl<A, B, C, D> ResponseHandler<C, D> for HandlerInternal<A, B, C, D> {
+	fn send(&self, response: C) {
+		let map = &self.send_mapper;
 		self.handler.send(map(response))
+	}
+
+	fn notify(&self, notification: D) {
+		let map = &self.notify_mapper;
+		self.handler.notify(map(notification))
 	}
 }
 
@@ -337,36 +359,45 @@ mod tests {
 	use Value;
 	use error::Error;
 	use commander::SubscriptionCommand;
+	use response::SubscriptionOutput;
 	use super::{Handler, ResponseHandler, Session, Subscription, Ready};
 
 	#[test]
 	fn should_map_handler_correctly() {
 		// given
 		let (tx, rx) = mpsc::channel();
-		let handler = Handler::new(move |output| {
+		let handler = Handler::new(move |output: usize| {
 			tx.send(output).unwrap();
-		}, |data: usize| data + 10);
+		}, |data: usize| data + 10, |data: usize| data + 20);
 
 		// when
 		handler.send(20);
+		handler.notify(20);
 
 		// then
 		assert_eq!(rx.recv().unwrap(), 30);
+		assert_eq!(rx.recv().unwrap(), 40);
 	}
 
 	#[test]
 	fn should_return_new_mapping_handler() {
 		// given
 		let (tx, rx) = mpsc::channel();
-		let handler = Handler::new(move |output| {
-			tx.send(output).unwrap();
-		}, |data: usize| data + 10).map(|x| x + 15usize);
+		let handler = Handler::new(
+			move |output| {
+				tx.send(output).unwrap();
+			},
+			|data: usize| data + 10,
+			|data: usize| data + 20,
+		).map(|x: usize| x + 15, |x: usize| x + 20);
 
 		// when
 		handler.send(20);
+		handler.notify(20);
 
 		// then
 		assert_eq!(rx.recv().unwrap(), 45);
+		assert_eq!(rx.recv().unwrap(), 60);
 	}
 
 	#[test]
@@ -375,12 +406,12 @@ mod tests {
 		let (tx, rx) = mpsc::channel();
 		let handler = Handler::new(move |output| {
 			tx.send(output).unwrap();
-		}, |data: i64| data);
+		}, |data: i64| data, |data| data);
 		// split handler
 		let split = handler.split_map(
 			2,
 			|data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64,
-			|single| single as i64,
+			|single: usize| single as i64,
 		);
 		assert_eq!(split.len(), 2);
 
@@ -402,12 +433,12 @@ mod tests {
 		let (tx, rx) = mpsc::channel();
 		let handler = Handler::new(move |output| {
 			tx.send(output).unwrap();
-		}, |data: i64| data);
+		}, |data: i64| data, |data| data);
 		// split handler
 		let split = handler.split_map(
 			2,
 			|data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64,
-			|single| (single + 5) as i64,
+			|single: usize| (single + 5) as i64,
 		);
 		assert_eq!(split.len(), 2);
 
@@ -418,11 +449,11 @@ mod tests {
 
 		// then
 		a.send(10);
-		a.send(30); // This message should be discarded
+		a.notify(30); // This message should be discarded
 		b.send(20);
 
-		a.send(50); // This should be propagated
-		b.send(100); // And this too
+		a.notify(50); // This should be propagated
+		b.notify(100); // And this too
 
 		assert_eq!(rx.recv().unwrap(), 30i64);
 		assert_eq!(rx.recv().unwrap(), 55i64);
@@ -434,13 +465,13 @@ mod tests {
 		let (tx, rx) = mpsc::channel();
 		let handler = Handler::new(move |output| {
 			tx.send(output).unwrap();
-		}, |data: i64| data);
+		}, |data: i64| data, |data| data);
 
 		// when
 		let split = handler.split_map(
 			0,
 			|data: Vec<usize>| data.into_iter().fold(0, |a, b| a + b) as i64,
-			|single| (single + 5) as i64,
+			|single: usize| (single + 5) as i64,
 		);
 		assert_eq!(split.len(), 0);
 
@@ -485,9 +516,11 @@ mod tests {
 	fn should_convert_handler_into_ready() {
 		// given
 		let (tx, rx) = mpsc::channel();
-		let handler = Handler::id(move |output| {
-			tx.send(output).unwrap();
-		});
+		let handler = Handler::new(
+			|_| {},
+			move |output: Result<Value, Error>| tx.send(output).unwrap(),
+			move |_: SubscriptionOutput| {},
+		);
 
 		// when
 		let ready: Ready = handler.into();
@@ -503,14 +536,14 @@ mod tests {
 		let (tx, rx) = mpsc::channel();
 		let session = Session::default();
 		let command = Arc::new(Box::new(move |_: Subscription| {}) as Box<SubscriptionCommand>);
-		let handler = Handler::id(move |output| {
+		let handler = Handler::new(move |output| {
 			tx.send(output).unwrap();
-		});
+		}, |x| x, |output: SubscriptionOutput| output.result);
 
 		// when
 		let new_subscriber = handler.into_subscriber(session, "a".into(), command);
 		let subscriber = new_subscriber.assign_id(Value::U64(1));
-		subscriber.send(Ok(Value::String("hello".into())));
+		subscriber.notify(Ok(Value::String("hello".into())));
 
 		// then
 		assert_eq!(rx.recv().unwrap(), Ok(Value::U64(1)));
@@ -525,9 +558,9 @@ mod tests {
 		let (tx, rx) = mpsc::channel();
 		let session = Session::default();
 		let command = Arc::new(Box::new(move |_: Subscription| {}) as Box<SubscriptionCommand>);
-		let handler = Handler::id(move |output| {
+		let handler = Handler::new(move |output| {
 			tx.send(output).unwrap();
-		});
+		}, |x| x, |output: SubscriptionOutput| output.result);
 
 		// when
 		let new_subscriber = handler.into_subscriber(session, "a".into(), command);

@@ -12,6 +12,6 @@ pub use self::version::Version;
 pub use self::id::Id;
 pub use self::params::Params;
 pub use self::request::{Request, Call, MethodCall, Notification};
-pub use self::response::{Output, Response, Success, Failure};
+pub use self::response::{Output, Response, Success, Failure, SubscriptionOutput};
 pub use self::error::{ErrorCode, Error};
 pub use self::util::{from_params, to_value};

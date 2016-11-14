@@ -39,8 +39,8 @@ impl RequestHandler {
 	}
 
 	/// Adds supported subscription
-	pub fn add_subscription<C>(&self, subscribe: String, unsubscribe: String, command: C) where C: SubscriptionCommand + 'static {
-		self.commander.add_subscription(subscribe, unsubscribe, command)
+	pub fn add_subscription<C>(&self, subscribe: String, subscription: String, unsubscribe: String, command: C) where C: SubscriptionCommand + 'static {
+		self.commander.add_subscription(subscribe, subscription, unsubscribe, command)
 	}
 
 	/// Adds a batch of supported methods
@@ -54,17 +54,20 @@ impl RequestHandler {
 	}
 
 	/// Adds a batch of supported subscriptions
-	pub fn add_subscriptions(&self, subscriptions: HashMap<(String, String), Box<SubscriptionCommand>>) {
+	pub fn add_subscriptions(&self, subscriptions: HashMap<(String, String, String), Box<SubscriptionCommand>>) {
 		self.commander.add_subscriptions(subscriptions);
 	}
 
 	/// Handle single request
 	/// `Some(response)` is returned in case that request is a method call.
 	/// `None` is returned in case of notifications and empty batches.
-	pub fn handle_request<A: 'static>(&self, request: Request, handler: Handler<A, Option<Response>>, session: Option<Session>) {
+	pub fn handle_request<A: 'static>(&self, request: Request, handler: Handler<A, Option<Response>, Notification>, session: Option<Session>) {
 		match request {
 			Request::Single(call) => {
-				self.handle_call(call, handler.map(|output: Option<Output>| output.map(Response::Single)), session)
+				self.handle_call(call, handler.map(
+						|output: Option<Output>| output.map(Response::Single),
+						|notification| notification,
+				), session)
 			},
 			Request::Batch(calls) => {
 				let sub_handlers = handler.split_map(calls.len(), |responses| {
@@ -73,7 +76,7 @@ impl RequestHandler {
 						0 => None,
 						_ => Some(Response::Batch(outs))
 					}
-				}, |output: Option<Output>| output.map(Response::Single));
+				}, |notification: Notification| notification);
 				for (call, sub_handler) in calls.into_iter().zip(sub_handlers) {
 					self.handle_call(call, sub_handler, session.clone());
 				}
@@ -81,7 +84,7 @@ impl RequestHandler {
 		}
 	}
 
-	fn handle_call<A: 'static>(&self, call: Call, handler: Handler<A, Option<Output>>, session: Option<Session>) {
+	fn handle_call<A: 'static>(&self, call: Call, handler: Handler<A, Option<Output>, Notification>, session: Option<Session>) {
 		match call {
 			Call::MethodCall(method) => {
 				self.handle_method_call(method, handler, session)
@@ -98,14 +101,16 @@ impl RequestHandler {
 		}
 	}
 
-	fn handle_method_call<A: 'static>(&self, method: MethodCall, handler: Handler<A, Option<Output>>, session: Option<Session>) {
+	fn handle_method_call<A: 'static>(&self, method: MethodCall, handler: Handler<A, Option<Output>, Notification>, session: Option<Session>) {
 		let params = method.params.unwrap_or(Params::None);
 		let id = method.id;
-		let jsonrpc = method.jsonrpc;
+		let jsonrpc = method.jsonrpc.clone();
+		let jsonrpc2 = method.jsonrpc;
 
-		self.commander.execute_method(method.method, params, handler.map(move |result| {
-			Some(Output::from(result, id.clone(), jsonrpc.clone()))
-		}), session)
+		self.commander.execute_method(method.method, params, handler.map(
+			move |result| Some(Output::from(result, id.clone(), jsonrpc.clone())),
+			move |result| Notification::from(result, jsonrpc2.clone()),
+		), session)
 	}
 
 	fn handle_notification(&self, notification: Notification) {

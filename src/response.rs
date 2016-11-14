@@ -1,8 +1,33 @@
 //! jsonrpc response
+use std::collections::BTreeMap;
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer};
-use serde_json::value::from_value;
-use super::{Id, Value, Error, Version};
+use serde_json::value::{from_value, to_value};
+use super::{Id, Value, Error, Version, Params};
+
+/// Response from subscription
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct SubscriptionOutput {
+	/// Notification method
+	pub method: String,
+	/// Id of notification
+	pub notification_id: Value,
+	/// Result
+	pub result: Result<Value, Error>,
+}
+
+// TODO [ToDr] Test serialization!
+impl From<SubscriptionOutput> for Params {
+	fn from(output: SubscriptionOutput) -> Self {
+		let mut map = BTreeMap::new();
+		map.insert("subscription".into(), output.notification_id);
+		match output.result {
+			Ok(result) => map.insert("result".into(), result),
+			Err(error) => map.insert("error".into(), to_value(error)),
+		};
+		Params::Map(map)
+	}
+}
 
 /// Successful response
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
