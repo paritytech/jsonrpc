@@ -4,7 +4,7 @@ version = "0.2.4"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 
 [dependencies]
-jsonrpc-core = "3.0"
+jsonrpc-core = "4.0"
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
