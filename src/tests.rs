@@ -39,6 +39,34 @@ pub fn dummy_io_handler() -> Arc<IoHandler> {
 	Arc::new(io)
 }
 
+#[cfg(test)]
+pub fn pubsub_io_handler() -> Arc<IoHandler> {
+	use std::sync::Arc;
+	use std::sync::atomic::{AtomicUsize, Ordering};
+	use jsonrpc_core::*;
+
+	struct SayHello {
+		id: AtomicUsize,
+	}
+	impl SubscriptionCommand for SayHello {
+		fn execute(&self, subscription: Subscription) {
+			match subscription {
+				Subscription::Open { params: _params, subscriber } => {
+					let id = self.id.fetch_add(1, Ordering::SeqCst);
+					let subscriber = subscriber.assign_id(to_value(id));
+
+					subscriber.notify(Ok(to_value(format!("Hello: 1"))));
+				},
+				_ => {}
+			}
+		}
+	}
+
+	let io = IoHandler::new();
+	io.add_subscription("say_hello", "hello", "stop_say_hello", SayHello { id: Default::default() });
+	Arc::new(io)
+}
+
 #[cfg(not(windows))]
 pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
 	use std::io::{Read, Write};
@@ -154,6 +182,23 @@ pub fn test_reqrep_100_connections() {
 	for i in 0..100 {
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;
 		let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent "#.to_owned() + &format!("{}", i)  + r#"","id":1}"#;
+		assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
+	}
+}
+
+#[test]
+pub fn test_reqrep_10_pubsub() {
+	super::init_log();
+
+	let addr = random_ipc_endpoint();
+	let io = pubsub_io_handler();
+	let server = Server::new(&addr, &io).unwrap();
+	server.run_async().unwrap();
+	std::thread::park_timeout(std::time::Duration::from_millis(50));
+
+	for i in 0..10 {
+		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;
+		let response = r#"{"jsonrpc":"2.0","result":"#.to_owned() + &format!("{}", i)  + r#","id":1}{"jsonrpc":"2.0","method":"hello","params":{"result":"Hello: 1","subscription":"# + &format!("{}", i) + r#"}}"#;
 		assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response.to_string());
 	}
 }

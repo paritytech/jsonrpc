@@ -309,7 +309,12 @@ impl RpcServer {
 	}
 
 	fn connection_write(&mut self, event_loop: &mut EventLoop<RpcServer>, tok: Token, data: Bytes) -> io::Result<()> {
-		self.connection(tok).write(event_loop, data)
+		// Ignore notifications for disconnected sockets.
+		if self.connections.contains(tok) {
+			self.connection(tok).write(event_loop, data)
+		} else {
+			Ok(())
+		}
 	}
 
 	fn connection_readable(&mut self, event_loop: &mut EventLoop<RpcServer>, tok: Token) -> io::Result<()> {
@@ -352,6 +357,13 @@ impl Handler for RpcServer {
 			};
 		}
 
+		if events.is_writable() {
+			match token {
+				SERVER => {},
+				_ => self.connection_writable(event_loop, token).unwrap_or_else(|_| {}), // todo: disqualify connection from list on error
+			};
+		}
+
 		if events.is_hup() {
 			match token {
 				SERVER => {
@@ -361,13 +373,6 @@ impl Handler for RpcServer {
 					self.drop_connection(other_token)
 				}
 			}
-		}
-
-		if events.is_writable() {
-			match token {
-				SERVER => {},
-				_ => self.connection_writable(event_loop, token).unwrap_or_else(|_| {}), // todo: disqualify connection from list on error
-			};
 		}
 	}
 }
