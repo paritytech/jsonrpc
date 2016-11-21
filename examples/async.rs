@@ -6,7 +6,7 @@ use jsonrpc_core::*;
 use jsonrpc_http_server::*;
 
 struct SayHello;
-impl AsyncMethodCommand for SayHello {
+impl MethodCommand for SayHello {
 	fn execute(&self, _params: Params, ready: Ready) {
 		ready.ready(Ok(Value::String("hello".to_string())))
 	}

@@ -9,6 +9,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 
 [dependencies]
 log = "0.3"
-jsonrpc-core = "3.0"
+# jsonrpc-core = "3.0"
+jsonrpc-core = { path = "../jsonrpc-core" }
 hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
 unicase = "1.3"

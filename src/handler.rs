@@ -1,7 +1,6 @@
 use cors;
 
-use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::io::{self, Read, Write};
 use unicase::UniCase;
 use hyper::{mime, server, Next, Encoder, Decoder, Control};
@@ -9,7 +8,7 @@ use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
 use hyper::net::HttpStream;
 use hyper::header::AccessControlAllowOrigin;
-use jsonrpc::IoHandler;
+use jsonrpc::{IoHandler, GenericIoHandler};
 use request_response::{Request, Response};
 use hosts_validator::is_host_header_valid;
 
@@ -25,18 +24,19 @@ pub struct ServerHandler {
 	jsonrpc_handler: Arc<IoHandler>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
+	control: Control,
 	request: Request,
 	response: Response,
 	/// Asynchronous response waiting to be moved into `response` field.
-	waiting: Arc<Mutex<Option<Response>>>,
-	control: Option<Control>,
+	waiting_response: mpsc::Receiver<Response>,
+	waiting_sender: mpsc::Sender<Response>,
 }
 
 impl Drop for ServerHandler {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
 			let handler = self.panic_handler.handler.lock().unwrap();
-			if let Some(ref h) = *handler.deref() {
+			if let Some(ref h) = *handler {
 				h();
 			}
 		}
@@ -52,15 +52,17 @@ impl ServerHandler {
 		panic_handler: PanicHandler,
 		control: Control,
 	) -> Self {
+		let (sender, receiver) = mpsc::channel();
 		ServerHandler {
 			panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domains: cors_domains,
 			allowed_hosts: allowed_hosts,
+			control: control,
 			request: Request::empty(),
 			response: Response::method_not_allowed(),
-			control: Some(control),
-			waiting: Arc::new(Mutex::new(None)),
+			waiting_response: receiver,
+			waiting_sender: sender,
 		}
 	}
 
@@ -133,33 +135,30 @@ impl server::Handler<HttpStream> for ServerHandler {
 	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
 		match decoder.read_to_string(&mut self.request.content) {
 			Ok(0) => {
-				let response = self.jsonrpc_handler.handle_request(&self.request.content);
-				match response {
-					None => {
-						self.response = Response::ok(String::new());
-						Next::write()
-					}
-					Some(async) => {
-						let control = self.control.take()
-							.expect("on_request_readable is called only once and this is the only place accessing control");
-						let res = self.waiting.clone();
+				let control = self.control.clone();
+				let sender = self.waiting_sender.clone();
 
-						let invoked = async.on_result(move |result| {
-							// Add new line to have nice output when using CLI clients (curl)
-							*res.lock().unwrap() = Some(Response::ok(format!("{}\n", result)));
-							let result = control.ready(Next::write());
-							if let Err(e) = result {
-								warn!("Error while resuming async call: {:?}", e);
-							}
+				self.jsonrpc_handler.handle_request(&self.request.content, move |response| {
+
+					let response = match response {
+						None => Response::ok(String::new()),
+						// Add new line to have nice output when using CLI clients (curl)
+						Some(result) => Response::ok(format!("{}\n", result)),
+					};
+
+					let result = sender.send(response)
+						.map_err(|e| format!("{:?}", e))
+						.and_then(|_| {
+							control.ready(Next::write()).map_err(|e| format!("{:?}", e))
 						});
 
-						if invoked {
-							Next::write()
-						} else {
-							Next::wait()
-						}
+					if let Err(e) = result {
+								warn!("Error while resuming async call: {:?}", e);
 					}
-				}
+
+				});
+
+				Next::wait()
 			}
 			Ok(_) => {
 				Next::read()
@@ -176,7 +175,7 @@ impl server::Handler<HttpStream> for ServerHandler {
 	/// This event occurs after the first time this handled signals `Next::write()`.
 	fn on_response(&mut self, response: &mut server::Response) -> Next {
 		// Check if there is a response pending
-		if let Some(output) = self.waiting.lock().unwrap().take() {
+		if let Ok(output) = self.waiting_response.try_recv() {
 			self.response = output;
 		}
 

@@ -1,3 +1,5 @@
+//! CORS handling utility functions
+
 use hyper::header::AccessControlAllowOrigin;
 use hyper::server::Request;
 use hyper::net::HttpStream;
