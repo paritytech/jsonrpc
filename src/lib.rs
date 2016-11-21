@@ -43,7 +43,7 @@ use hyper::server;
 use jsonrpc::IoHandler;
 
 pub use hyper::header::AccessControlAllowOrigin;
-pub use handler::{PanicHandler, ServerHandler};
+pub use handler::{PanicHandler, ServerHandler, RpcHandler};
 pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
@@ -95,20 +95,20 @@ impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
 }
 
 /// Convenient JSON-RPC HTTP Server builder.
-pub struct ServerBuilder {
-	jsonrpc_handler: Arc<IoHandler>,
+pub struct ServerBuilder<T: RpcHandler = IoHandler> {
+	jsonrpc_handler: Arc<T>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
-impl ServerBuilder {
+impl<T: RpcHandler + 'static> ServerBuilder<T> {
 	/// Creates new `ServerBuilder` with specified `IoHandler`.
 	///
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self {
+	pub fn new(jsonrpc_handler: Arc<T>) -> Self {
 		ServerBuilder {
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domains: None,
