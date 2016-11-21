@@ -1,0 +1,14 @@
+[package]
+description = "Rust http server using JSONRPC 2.0."
+homepage = "https://github.com/debris/jsonrpc-http-server"
+license = "MIT"
+name = "jsonrpc-http-server"
+version = "6.1.1"
+authors = ["debris <marek.kotewicz@gmail.com>"]
+keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
+
+[dependencies]
+log = "0.3"
+jsonrpc-core = "3.0"
+hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
+unicase = "1.3"
