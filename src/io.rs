@@ -209,8 +209,15 @@ pub struct IoHandler {
 
 impl IoHandler {
 	/// Deserializes `Request` from string.
-	pub fn read_request(request_str: &str) -> Result<Request, Error> {
-		serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
+	pub fn read_request(request_str: &str) -> Result<Request, Failure> {
+		trace!(target: "rpc", "Request: {}", request_str);
+		serde_json::from_str(request_str)
+			.map_err(|_| Error::new(ErrorCode::ParseError))
+			.map_err(|error| Failure {
+				id: Id::Null,
+				jsonrpc: Version::V2,
+				error: error
+			})
 	}
 
 	/// Serializes `Response`
@@ -260,15 +267,17 @@ impl IoHandler {
 		self.request_handler.add_notifications(delegate.notifications);
 		self.request_handler.add_subscriptions(delegate.subscriptions);
 	}
-}
 
-impl GenericIoHandler for IoHandler {
-	fn handle<H>(&self, request_str: &str, response_handler: H, session: Option<Session>) where
+	/// Returns a request handler to issue calls directly.
+	pub fn request_handler(&self) -> &RequestHandler {
+		&self.request_handler
+	}
+
+	/// Converts the handler to serializing one.
+	pub fn convert_handler<H>(response_handler: H) -> Handler<Option<String>, Option<Response>, Notification> where
 		H: ResponseHandler<Option<String>, Option<String>> + 'static
 	{
-		trace!(target: "rpc", "Request: {} in session.", request_str);
-
-		let handler = Handler::new(
+		Handler::new(
 			response_handler,
 			move |response: Option<Response>| {
 				let response = response.map(Self::write_response);
@@ -280,22 +289,26 @@ impl GenericIoHandler for IoHandler {
 				debug!(target: "rpc", "Notification: {:?}", notification);
 				Some(notification)
 			},
-		);
+		)
+	}
+}
 
+impl GenericIoHandler for IoHandler {
+	fn handle<H>(&self, request_str: &str, response_handler: H, session: Option<Session>) where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static
+	{
+		let handler = Self::convert_handler(response_handler);
 		let request = Self::read_request(request_str);
+
 		match request {
 			Ok(request) => self.request_handler.handle_request(request, handler, session),
-			Err(error) => handler.send(Some(Response::from(Failure {
-				id: Id::Null,
-				jsonrpc: Version::V2,
-				error: error
-			}))),
+			Err(error) => handler.send(Some(Response::from(error))),
 		}
 	}
 }
 
 /// Io Handler with session support
-pub trait IoSessionHandler<T> {
+pub trait IoSessionHandler<T = IoHandler> {
 	/// Returns a new session object.
 	fn session(&self) -> IoSession<T>;
 }
@@ -308,7 +321,7 @@ impl<T: GenericIoHandler> IoSessionHandler<T> for Arc<T> {
 
 /// Represents a single client connected to this RPC server.
 /// The client may send many requests.
-pub struct IoSession<T> {
+pub struct IoSession<T = IoHandler> {
 	io_handler: Arc<T>,
 	session: Session,
 }
