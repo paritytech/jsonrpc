@@ -1,12 +1,7 @@
 # jsonrpc-core
 Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
-[![Build Status][travis-image]][travis-url]
-
-[travis-image]: https://travis-ci.org/ethcore/jsonrpc-core.svg?branch=master
-[travis-url]: https://travis-ci.org/ethcore/jsonrpc-core
-
-[Documentation](http://ethcore.github.io/jsonrpc-core/jsonrpc_core/index.html)
+[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_core/index.html)
 
 - [x] - server side
 - [x] - client side

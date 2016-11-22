@@ -18,12 +18,12 @@
 //!
 //! ```no_run
 //! extern crate jsonrpc_core;
-//! extern crate json_tcp_server;
+//! extern crate jsonrpc_tcp_server;
 //! extern crate rand;
 //!
 //! use std::sync::Arc;
 //! use jsonrpc_core::*;
-//! use json_tcp_server::Server;
+//! use jsonrpc_tcp_server::Server;
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
 //!

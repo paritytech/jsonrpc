@@ -18,12 +18,12 @@
 //!
 //! ```no_run
 //! extern crate jsonrpc_core;
-//! extern crate json_ipc_server;
+//! extern crate jsonrpc_ipc_server;
 //! extern crate rand;
 //!
 //! use std::sync::Arc;
 //! use jsonrpc_core::*;
-//! use json_ipc_server::Server;
+//! use jsonrpc_ipc_server::Server;
 //!
 //! struct SayHello;
 //! impl SyncMethodCommand for SayHello {

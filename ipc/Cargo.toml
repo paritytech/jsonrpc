@@ -1,17 +1,17 @@
 [package]
-name = "json-tcp-server"
-version = "0.1.0"
-authors = ["NikVolf <nikvolf@gmail.com>"]
+name = "jsonrpc-ipc-server"
+version = "0.2.4"
+authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 
 [dependencies]
-jsonrpc-core = "4.0"
+jsonrpc-core = { path = "../core" }
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
+miow = "0.1"
 log = "0.3"
 env_logger = "0.3"
 lazy_static = "0.2"
-serde_json = "0.8"
 
 [dev-dependencies]
 rand = "0.3"
