@@ -8,7 +8,7 @@ use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
 use hyper::net::HttpStream;
 use hyper::header::AccessControlAllowOrigin;
-use jsonrpc::IoHandler;
+use jsonrpc::{IoHandler, GenericIoHandler, ResponseHandler};
 use request_response::{Request, Response};
 use hosts_validator::is_host_header_valid;
 
@@ -18,12 +18,38 @@ pub struct PanicHandler {
 	pub handler: Arc<Mutex<Option<Box<Fn() -> () + Send + 'static>>>>
 }
 
+/// RPC Requests handler with additional metadata support.
+pub trait RpcHandler: Send + Sync {
+	/// Type of metadata
+	type Metadata: Send;
+
+	/// Read the metadata from the request
+	fn read_metadata(&self, &server::Request<HttpStream>) -> Option<Self::Metadata> {
+		None
+	}
+
+	/// Handle request with additional metadata.
+	fn handle_request<H>(&self, request_str: &str, response_handler: H, meta: Option<Self::Metadata>) where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static;
+}
+
+impl RpcHandler for IoHandler {
+	type Metadata = ();
+
+	fn handle_request<H>(&self, request_str: &str, response_handler: H, _meta: Option<Self::Metadata>) where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static
+	{
+		GenericIoHandler::handle_request(self, request_str, response_handler)
+	}
+}
+
 /// jsonrpc http request handler.
-pub struct ServerHandler {
+pub struct ServerHandler<T: RpcHandler> {
 	panic_handler: PanicHandler,
-	jsonrpc_handler: Arc<IoHandler>,
+	jsonrpc_handler: Arc<T>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
+	metadata: Option<T::Metadata>,
 	control: Control,
 	request: Request,
 	response: Response,
@@ -32,7 +58,7 @@ pub struct ServerHandler {
 	waiting_response: mpsc::Receiver<Response>,
 }
 
-impl Drop for ServerHandler {
+impl<T: RpcHandler> Drop for ServerHandler<T> {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
 			let handler = self.panic_handler.handler.lock().unwrap();
@@ -43,22 +69,24 @@ impl Drop for ServerHandler {
 	}
 }
 
-impl ServerHandler {
+impl<T: RpcHandler> ServerHandler<T> {
 	/// Create new request handler.
 	pub fn new(
-		jsonrpc_handler: Arc<IoHandler>,
+		jsonrpc_handler: Arc<T>,
 		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<String>>,
 		panic_handler: PanicHandler,
 		control: Control,
 	) -> Self {
 		let (sender, receiver) = mpsc::channel();
+
 		ServerHandler {
 			panic_handler: panic_handler,
 			jsonrpc_handler: jsonrpc_handler,
 			cors_domains: cors_domains,
 			allowed_hosts: allowed_hosts,
 			control: control,
+			metadata: None,
 			request: Request::empty(),
 			response: Response::method_not_allowed(),
 			waiting_sender: sender,
@@ -95,7 +123,7 @@ impl ServerHandler {
 	}
 }
 
-impl server::Handler<HttpStream> for ServerHandler {
+impl<T: RpcHandler> server::Handler<HttpStream> for ServerHandler<T> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Validate host
 		if let Some(ref allowed_hosts) = self.allowed_hosts {
@@ -107,6 +135,7 @@ impl server::Handler<HttpStream> for ServerHandler {
 
 		// Read origin
 		self.request.origin = cors::read_origin(&request);
+		self.metadata = self.jsonrpc_handler.read_metadata(&request);
 
 		match *request.method() {
 			// Don't validate content type on options
@@ -138,6 +167,8 @@ impl server::Handler<HttpStream> for ServerHandler {
 				let control = self.control.clone();
 				let sender = self.waiting_sender.clone();
 
+				let metadata = self.metadata.take();
+
 				self.jsonrpc_handler.handle_request(&self.request.content, move |response| {
 					let response = match response {
 						None => Response::ok(String::new()),
@@ -154,7 +185,7 @@ impl server::Handler<HttpStream> for ServerHandler {
 					if let Err(e) = result {
 						warn!("Error while resuming async call: {:?}", e);
 					}
-				});
+				}, metadata);
 
 				Next::wait()
 			}

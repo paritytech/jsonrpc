@@ -1,4 +1,4 @@
-//! CORS related utilities.
+//! CORS handling utility functions
 
 use hyper::header::AccessControlAllowOrigin;
 use hyper::server::Request;
