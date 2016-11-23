@@ -2,6 +2,9 @@
 name = "jsonrpc-ipc-server"
 version = "0.2.4"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
+homepage = "https://github.com/ethcore/jsonrpc"
+repository = "https://github.com/ethcore/jsonrpc"
+documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
 jsonrpc-core = { path = "../core" }
