@@ -143,6 +143,34 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 	}
 }
 
+/// Generic representation of `IoHandler`.
+/// Should be used by transports.
+pub trait GenericIoHandler: Sized {
+	/// Handle given request synchronously - will block until response is available.
+	/// If you have any asynchronous methods in your RPC it is much wiser to use
+	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
+	fn handle_request_sync(&self, request_str: &str) -> Option<String> {
+		let (tx, rx) = mpsc::channel();
+		self.handle_request(request_str, move |response: Option<String>| {
+			tx.send(response).expect("Receiver is never dropped.");
+		});
+		// Wait for response.
+		rx.recv().expect("Transmitting end is never dropped.")
+	}
+
+	/// Handle given request asynchronously.
+	fn handle_request<H>(&self, request_str: &str, response_handler: H) where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static,
+	{
+		self.handle(request_str, response_handler, None);
+	}
+
+	/// Handle given request asynchronously with additional session data.
+	/// Instead of using this method directly you can use `IoSessionHandler` to easily create new sessions.
+	fn handle<H>(&self, request_str: &str, response_handler: H, session: Option<Session>) where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static;
+}
+
 /// Should be used to handle jsonrpc io.
 ///
 /// ```rust
@@ -174,25 +202,36 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 /// 	assert_eq!(io.handle_request_sync(request2), Some(response.to_string()));
 /// }
 /// ```
+#[derive(Default)]
 pub struct IoHandler {
 	request_handler: RequestHandler
 }
 
-fn read_request(request_str: &str) -> Result<Request, Error> {
-	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
-}
-
-fn write_response(response: Response) -> String {
-	// this should never fail
-	serde_json::to_string(&response).unwrap()
-}
-
-fn write_notification(notification: Notification) -> String {
-	// this should never fail
-	serde_json::to_string(&notification).unwrap()
-}
-
 impl IoHandler {
+	/// Deserializes `Request` from string.
+	pub fn read_request(request_str: &str) -> Result<Request, Failure> {
+		trace!(target: "rpc", "Request: {}", request_str);
+		serde_json::from_str(request_str)
+			.map_err(|_| Error::new(ErrorCode::ParseError))
+			.map_err(|error| Failure {
+				id: Id::Null,
+				jsonrpc: Version::V2,
+				error: error
+			})
+	}
+
+	/// Serializes `Response`
+	pub fn write_response(response: Response) -> String {
+		// this should never fail
+		serde_json::to_string(&response).unwrap()
+	}
+
+	/// Serializes `Notification`
+	pub fn write_notification(notification: Notification) -> String {
+		// this should never fail
+		serde_json::to_string(&notification).unwrap()
+	}
+
 	/// Creates new `IoHandler`
 	pub fn new() -> Self {
 		IoHandler {
@@ -229,75 +268,68 @@ impl IoHandler {
 		self.request_handler.add_subscriptions(delegate.subscriptions);
 	}
 
-	/// Handle given request synchronously - will block until response is available.
-	/// If you have any asynchronous methods in your RPC it is much wiser to use
-	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
-	pub fn handle_request_sync(&self, request_str: &str) -> Option<String> {
-		let (tx, rx) = mpsc::channel();
-		self.handle_request(request_str, move |response: Option<String>| {
-			tx.send(response).expect("Receiver is never dropped.");
-		});
-		// Wait for response.
-		rx.recv().expect("Transmitting end is never dropped.")
+	/// Returns a request handler to issue calls directly.
+	pub fn request_handler(&self) -> &RequestHandler {
+		&self.request_handler
 	}
 
-	/// Handle given request asynchronously.
-	pub fn handle_request<H: ResponseHandler<Option<String>, Option<String>> + 'static>(&self, request_str: &str, response_handler: H) {
-		self.handle(request_str, response_handler, None);
-	}
-
-	fn handle<H: ResponseHandler<Option<String>, Option<String>> + 'static>(&self, request_str: &str, response_handler: H, session: Option<Session>) {
-		trace!(target: "rpc", "Request: {} in session.", request_str);
-
-		let handler = Handler::new(
+	/// Converts the handler to serializing one.
+	pub fn convert_handler<H>(response_handler: H) -> Handler<Option<String>, Option<Response>, Notification> where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static
+	{
+		Handler::new(
 			response_handler,
 			move |response: Option<Response>| {
-				let response = response.map(write_response);
+				let response = response.map(Self::write_response);
 				debug!(target: "rpc", "Response: {:?}", response);
 				response
 			},
 			move |notification: Notification| {
-				let notification = write_notification(notification);
+				let notification = Self::write_notification(notification);
 				debug!(target: "rpc", "Notification: {:?}", notification);
 				Some(notification)
 			},
-		);
+		)
+	}
+}
 
-		let request = read_request(request_str);
+impl GenericIoHandler for IoHandler {
+	fn handle<H>(&self, request_str: &str, response_handler: H, session: Option<Session>) where
+		H: ResponseHandler<Option<String>, Option<String>> + 'static
+	{
+		let handler = Self::convert_handler(response_handler);
+		let request = Self::read_request(request_str);
+
 		match request {
 			Ok(request) => self.request_handler.handle_request(request, handler, session),
-			Err(error) => handler.send(Some(Response::from(Failure {
-				id: Id::Null,
-				jsonrpc: Version::V2,
-				error: error
-			}))),
+			Err(error) => handler.send(Some(Response::from(error))),
 		}
 	}
 }
 
 /// Io Handler with session support
-pub trait IoSessionHandler {
+pub trait IoSessionHandler<T = IoHandler> {
 	/// Returns a new session object.
-	fn session(&self) -> IoSession;
+	fn session(&self) -> IoSession<T>;
 }
 
-impl IoSessionHandler for Arc<IoHandler> {
-	fn session(&self) -> IoSession {
+impl<T: GenericIoHandler> IoSessionHandler<T> for Arc<T> {
+	fn session(&self) -> IoSession<T> {
 		IoSession::new(self.clone())
 	}
 }
 
 /// Represents a single client connected to this RPC server.
 /// The client may send many requests.
-pub struct IoSession {
-	io_handler: Arc<IoHandler>,
+pub struct IoSession<T = IoHandler> {
+	io_handler: Arc<T>,
 	session: Session,
 }
 
-impl IoSession {
+impl<T: GenericIoHandler> IoSession<T> {
 	/// Opens up a new session to handle many request and subscriptions.
 	/// It should represent a single client.
-	pub fn new(handler: Arc<IoHandler>) -> IoSession {
+	pub fn new(handler: Arc<T>) -> Self {
 		IoSession {
 			io_handler: handler,
 			session: Session::default(),
