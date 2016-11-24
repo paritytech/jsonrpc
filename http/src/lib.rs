@@ -39,6 +39,7 @@ mod tests;
 use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
 use std::thread;
+use std::collections::HashSet;
 use hyper::server;
 use jsonrpc::IoHandler;
 
@@ -156,14 +157,19 @@ impl ServerBuilder {
 		}));
 
 		// Add current host to allowed headers.
-		// NOTE: we need to use `l.addr()` instead of `addr`
+		// NOTE: we need to use `l.addrs()` instead of `addr`
 		// it might be different!
 		{
 			let mut hosts = hosts_setter.lock().unwrap();
-			if let Some(ref mut hosts) = *hosts {
-				let address = l.addr().to_string();
-				hosts.push(address.clone());
-				hosts.push(address.replace("127.0.0.1", "localhost"));
+			if let Some(current_hosts) = hosts.take() {
+				let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
+				for addr in l.addrs() {
+					let address = addr.to_string();
+					new_hosts.insert(address.clone());
+					new_hosts.insert(address.replace("127.0.0.1", "localhost"));
+				}
+				// Override hosts
+				*hosts = Some(new_hosts.into_iter().collect());
 			}
 		}
 
@@ -185,9 +191,9 @@ pub struct Server {
 }
 
 impl Server {
-	/// Returns address of this server
-	pub fn addr(&self) -> &SocketAddr {
-		self.server.as_ref().unwrap().addr()
+	/// Returns addresses of this server
+	pub fn addrs(&self) -> &[SocketAddr] {
+		self.server.as_ref().unwrap().addrs()
 	}
 
 	/// Closes the server.

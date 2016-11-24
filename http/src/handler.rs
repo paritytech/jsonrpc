@@ -1,7 +1,7 @@
 use cors;
 
 use std::sync::{mpsc, Arc, Mutex};
-use std::io::{self, Read, Write};
+use std::io::{self, Read};
 use unicase::UniCase;
 use hyper::{mime, server, Next, Encoder, Decoder, Control};
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
