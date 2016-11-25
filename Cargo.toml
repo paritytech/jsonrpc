@@ -3,6 +3,9 @@ version = "1.0.0"
 description = "JSON-RPC 2.0 implementation"
 name = "jsonrpc"
 
+[lib]
+path = "lib.rs"
+
 [workspace]
 
 [dependencies]
