@@ -1,14 +1,14 @@
 [package]
 description = "Transport agnostic rust implementation of JSON-RPC 2.0 Specification."
-homepage = "https://github.com/ethcore/jsonrpc-core"
-repository = "https://github.com/ethcore/jsonrpc-core"
+homepage = "https://github.com/ethcore/jsonrpc"
+repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-core"
 version = "4.0.0"
 authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 build = "build.rs"
-documentation = "https://ethcore.github.io/jsonrpc-core/jsonrpc_core/index.html"
+documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_core/index.html"
 
 [dependencies]
 log = "0.3"
