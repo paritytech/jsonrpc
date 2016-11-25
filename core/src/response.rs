@@ -23,7 +23,7 @@ impl From<SubscriptionOutput> for Params {
 		map.insert("subscription".into(), output.notification_id);
 		match output.result {
 			Ok(result) => map.insert("result".into(), result),
-			Err(error) => map.insert("error".into(), to_value(error)),
+			Err(error) => map.insert("error".into(), to_value(&error)),
 		};
 		Params::Map(map)
 	}

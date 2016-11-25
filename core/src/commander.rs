@@ -85,6 +85,7 @@ impl<F> SubscriptionCommand for F where F: Fn(Subscription) + Sync + Send {
 }
 
 /// Commands executor.
+#[derive(Default)]
 pub struct Commander {
 	methods: RwLock<HashMap<String, Method>>,
 }

@@ -10,22 +10,15 @@ use request::{Request, MethodCall, Call, Notification};
 use response::{Response, Output, Failure};
 
 /// Requests handler - maps `Commander` outputs into well-formed JSONRPC `Responses`
+#[derive(Default)]
 pub struct RequestHandler {
 	commander: Commander
-}
-
-impl Default for RequestHandler {
-	fn default() -> Self {
-		RequestHandler::new()
-	}
 }
 
 impl RequestHandler {
 	/// Creates new `RequestHandler`
 	pub fn new() -> Self {
-		RequestHandler {
-			commander: Commander::new()
-		}
+		Self::default()
 	}
 
 	/// Adds supported method

@@ -44,7 +44,7 @@ use hyper::server;
 use jsonrpc::IoHandler;
 
 pub use hyper::header::AccessControlAllowOrigin;
-pub use handler::{PanicHandler, ServerHandler};
+pub use handler::{PanicHandler, ServerHandler, RpcHandler};
 pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
