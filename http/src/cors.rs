@@ -8,7 +8,7 @@ use hyper::net::HttpStream;
 pub fn read_origin(req: &Request<HttpStream>) -> Option<String> {
 	match req.headers().get_raw("origin") {
 		Some(ref v) if v.len() == 1 => {
-			String::from_utf8(v[0].clone()).ok()
+			String::from_utf8(v[0].to_vec()).ok()
 		},
 		_ => None
 	}
