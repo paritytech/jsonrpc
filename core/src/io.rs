@@ -143,6 +143,9 @@ impl<T> IoDelegate<T> where T: Send + Sync + 'static {
 	}
 }
 
+/// Standard `ResponseHandler` passed down from `IoHandler`.
+pub type StdResponseHandler = Handler<Option<String>, Option<Response>, Notification>;
+
 /// Generic representation of `IoHandler`.
 /// Should be used by transports.
 pub trait GenericIoHandler: Sized {
@@ -274,7 +277,7 @@ impl IoHandler {
 	}
 
 	/// Converts the handler to serializing one.
-	pub fn convert_handler<H>(response_handler: H) -> Handler<Option<String>, Option<Response>, Notification> where
+	pub fn convert_handler<H>(response_handler: H) -> StdResponseHandler where
 		H: ResponseHandler<Option<String>, Option<String>> + 'static
 	{
 		Handler::new(
