@@ -21,7 +21,7 @@ after_success: |
   [ $TRAVIS_BRANCH = master ] &&
   [ $TRAVIS_PULL_REQUEST = false ] &&
   [ $TRAVIS_RUST_VERSION = stable ] &&
-  cargo doc $TARGETS &&
+  cargo doc $TARGETS --no-deps &&
   echo '<meta http-equiv=refresh content=0;url=jsonrpc/index.html>' > target/doc/index.html &&
   pip install --user ghp-import &&
   /home/travis/.local/bin/ghp-import -n target/doc &&
