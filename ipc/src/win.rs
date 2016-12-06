@@ -47,7 +47,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::*;
 use std::sync::Arc;
-use jsonrpc_core::GenericIoHandler;
+use jsonrpc_core::{GenericIoHandler, IoHandler};
 use validator;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -72,12 +72,12 @@ impl std::convert::From<std::io::Error> for Error {
 
 pub struct PipeHandler {
 	waiting_pipe: NamedPipe,
-	io_handler: Arc<GenericIoHandler>,
+	io_handler: Arc<IoHandler>,
 }
 
 impl PipeHandler {
 	/// start ipc rpc server (blocking)
-	pub fn start(addr: &str, io_handler: &Arc<GenericIoHandler>) -> Result<PipeHandler> {
+	pub fn start(addr: &str, io_handler: &Arc<IoHandler>) -> Result<PipeHandler> {
 		Ok(PipeHandler {
 			waiting_pipe: try!(
 				NamedPipeBuilder::new(addr)
@@ -175,12 +175,12 @@ pub struct Server {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
 	addr: String,
-	io_handler: Arc<GenericIoHandler>,
+	io_handler: Arc<IoHandler>,
 }
 
 impl Server {
 	/// New server
-	pub fn new(socket_addr: &str, io_handler: &Arc<GenericIoHandler>) -> Result<Server> {
+	pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Result<Server> {
 		Ok(Server {
 			io_handler: io_handler.clone(),
 			is_stopping: Arc::new(AtomicBool::new(false)),
