@@ -15,3 +15,4 @@ Transport-agnostic `core` and transport servers for `http`, `ipc` and `tcp`.
 - [jsonrpc-http-server](./http)
 - [jsonrpc-ipc-server](./ipc)
 - [jsonrpc-tcp-server](./tcp)
+- [jsonrpc-macros](./macros)
