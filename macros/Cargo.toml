@@ -1,0 +1,14 @@
+[package]
+description = "Helper macros for jsonrpc-core"
+homepage = "https://github.com/ethcore/jsonrpc"
+repository = "https://github.com/ethcore/jsonrpc"
+license = "MIT"
+name = "jsonrpc-macros"
+version = "0.1.0"
+authors = ["debris <marek.kotewicz@gmail.com>"]
+keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
+documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_macros/index.html"
+
+[dependencies]
+serde = "0.8"
+jsonrpc-core = { path = "../core" }
