@@ -5,7 +5,7 @@ repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-macros"
 version = "0.1.0"
-authors = ["debris <marek.kotewicz@gmail.com>"]
+authors = ["rphmeier <robert@ethcore.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_macros/index.html"
 
