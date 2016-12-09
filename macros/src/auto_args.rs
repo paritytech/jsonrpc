@@ -31,6 +31,7 @@ use util::{invalid_params, expect_no_params};
 /// `fn foo(&self, Param1, Param2, Param3, Ready<Out>);
 ///
 /// Anything else will be rejected by the code generator.
+#[macro_export]
 macro_rules! build_rpc_trait {
 	// entry-point. todo: make another for traits w/ bounds.
 	(
