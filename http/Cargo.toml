@@ -11,6 +11,6 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.htm
 
 [dependencies]
 log = "0.3"
-jsonrpc-core = { path = "../core" }
+jsonrpc-core = { version = "4.0", path = "../core" }
 hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
 unicase = "1.3"

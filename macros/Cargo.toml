@@ -11,4 +11,4 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_macros/index.html"
 
 [dependencies]
 serde = "0.8"
-jsonrpc-core = { path = "../core" }
+jsonrpc-core = { version = "4.0", path = "../core" }
