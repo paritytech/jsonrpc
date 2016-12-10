@@ -71,7 +71,7 @@ macro_rules! build_rpc_trait {
 		fn $method: ident (&self $(, $param: ty)*) -> Result<$out: ty, Error>
 	) => {
 		$del.add_method($name, move |base, params| {
-			(Self::$method as fn(&_ $(, $param)*) -> Result<$out, Error>).wrap_rpc(base, params)
+			$crate::Wrap::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> Result<$out, Error>), base, params)
 		})
 	};
 
@@ -80,7 +80,7 @@ macro_rules! build_rpc_trait {
 		fn $method: ident (&self, Ready<$out: ty> $(, $param: ty)*)
 	) => {
 		$del.add_async_method($name, move |base, params, ready| {
-			(Self::$method as fn(&_, Ready<$out> $(, $param)*)).wrap_rpc(base, params, ready)
+			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_, Ready<$out> $(, $param)*), base, params, ready))
 		})
 	};
 }
