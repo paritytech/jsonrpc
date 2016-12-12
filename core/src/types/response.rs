@@ -1,10 +1,8 @@
 //! jsonrpc response
-use std::collections::BTreeMap;
-
 use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer};
-use serde_json::value::{from_value, to_value};
-use super::{Id, Value, Error, ErrorCode, Version, Params};
+use serde_json::value::from_value;
+use super::{Id, Value, Error, ErrorCode, Version};
 
 /// Successful response
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -110,6 +108,16 @@ impl Serialize for Response {
 			Response::Single(ref o) => o.serialize(serializer),
 			Response::Batch(ref b) => b.serialize(serializer)
 		}
+	}
+}
+
+impl From<Error> for Response {
+	fn from(error: Error) -> Self {
+		Failure {
+			id: Id::Null,
+			jsonrpc: Version::V2,
+			error: error,
+		}.into()
 	}
 }
 

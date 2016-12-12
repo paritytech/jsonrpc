@@ -1,10 +1,12 @@
 //! jsonrpc params field
 use std::collections::BTreeMap;
+
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{Visitor, SeqVisitor, MapVisitor};
 use serde::de::impls::{VecVisitor, BTreeMapVisitor};
+use serde_json::value::from_value;
 
-use super::Value;
+use super::{Value, Error};
 
 /// Request parameters
 #[derive(Debug, PartialEq)]
@@ -15,6 +17,19 @@ pub enum Params {
 	Map(BTreeMap<String, Value>),
 	/// No parameters
 	None
+}
+
+impl Params {
+	/// Parse incoming `Params` into expected types.
+	pub fn parse<D>(self) -> Result<D, Error> where D: Deserialize {
+		let value = match self {
+			Params::Array(vec) => Value::Array(vec),
+			Params::Map(map) => Value::Object(map),
+			Params::None =>  Value::Null
+		};
+
+		from_value(value).map_err(|_| Error::invalid_params())
+	}
 }
 
 impl Serialize for Params {

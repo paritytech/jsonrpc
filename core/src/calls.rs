@@ -2,11 +2,43 @@
 use types::{Params, Value, Error};
 use futures::BoxFuture;
 
+/// Metadata marker trait
 pub trait Metadata: Clone + 'static {}
 impl Metadata for () {}
 
+/// Synchronous Method
 pub trait RpcMethodSync: 'static {
+	/// Call method
 	fn call(&self, params: Params) -> Result<Value, Error>;
+}
+
+/// Asynchronous Method
+pub trait RpcMethodSimple: 'static {
+	/// Call method
+	fn call(&self, params: Params) -> BoxFuture<Value, Error>;
+}
+
+/// Asynchronous Method with Metadata
+pub trait RpcMethod<T: Metadata>: 'static {
+	/// Call method
+	fn call(&self, params: Params, meta: T) -> BoxFuture<Value, Error>;
+}
+
+/// Notification
+pub trait RpcNotificationSimple: 'static {
+	/// Execute notification
+	fn execute(&self, params: Params);
+}
+
+/// Notification with Metadata
+pub trait RpcNotification<T: Metadata>: 'static {
+	/// Execute notification
+	fn execute(&self, params: Params, meta: T);
+}
+
+pub enum RemoteProcedure<T: Metadata> {
+	Method(Box<RpcMethod<T>>),
+	Notification(Box<RpcNotification<T>>)
 }
 
 impl<F: 'static> RpcMethodSync for F where
@@ -17,10 +49,6 @@ impl<F: 'static> RpcMethodSync for F where
 	}
 }
 
-pub trait RpcMethodSimple: 'static {
-	fn call(&self, params: Params) -> BoxFuture<Value, Error>;
-}
-
 impl<F: 'static> RpcMethodSimple for F where
 	F: Fn(Params) -> BoxFuture<Value, Error>,
 {
@@ -29,20 +57,12 @@ impl<F: 'static> RpcMethodSimple for F where
 	}
 }
 
-pub trait RpcNotificationSimple: 'static {
-	fn execute(&self, params: Params);
-}
-
 impl<F: 'static> RpcNotificationSimple for F where
 	F: Fn(Params),
 {
 	fn execute(&self, params: Params) {
 		self(params)
 	}
-}
-
-pub trait RpcMethod<T: Metadata>: 'static {
-	fn call(&self, params: Params, meta: T) -> BoxFuture<Value, Error>;
 }
 
 impl<F: 'static, T> RpcMethod<T> for F where
@@ -54,10 +74,6 @@ impl<F: 'static, T> RpcMethod<T> for F where
 	}
 }
 
-pub trait RpcNotification<T: Metadata>: 'static {
-	fn execute(&self, params: Params, meta: T);
-}
-
 impl<F: 'static, T> RpcNotification<T> for F where
 	T: Metadata,
 	F: Fn(Params, T),
@@ -66,4 +82,3 @@ impl<F: 'static, T> RpcNotification<T> for F where
 		self(params, meta)
 	}
 }
-

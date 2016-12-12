@@ -16,7 +16,7 @@
 //! 	});
 //!
 //! 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-//! 	let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+//! 	let response = r#"{"jsonrpc":"2.0","result":"Hello World!","id":1}"#;
 //!
 //! 	assert_eq!(io.handle_request(request).wait().unwrap(), Some(response.to_string()));
 //! }
@@ -32,10 +32,9 @@ extern crate serde;
 extern crate serde_json;
 
 mod calls;
-mod handlers;
 mod io;
 pub mod types;
 
-pub use calls::Metadata;
+pub use calls::{Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 pub use io::{IoHandler, MetaIoHandler};
 pub use types::*;
