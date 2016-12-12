@@ -100,6 +100,15 @@ impl<M: Metadata> RpcHandler<M> {
 		let future = self.handler.handle_request(request, metadata);
 		self.remote.spawn(|_| future.map(on_response))
 	}
+
+	/// Handles the request synchronously (not recommended)
+	pub fn handle_request_sync(&self, request: &str, metadata: M) -> Option<String> {
+		let (tx, rx) = mpsc::channel();
+		self.handle_request(request, metadata, move |res| {
+			tx.send(res).unwrap();
+		});
+		rx.recv().unwrap()
+	}
 }
 
 

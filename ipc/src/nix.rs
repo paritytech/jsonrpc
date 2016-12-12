@@ -196,7 +196,7 @@ impl std::convert::From<std::io::Error> for Error {
 impl Server {
 	/// New server
 	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Server, Error> where
-		T: Into<MetaIoHandler<()>>
+		T: Into<MetaIoHandler<()>>,
 	{
 		let rpc_loop = RpcEventLoop::spawn(Arc::new(io_handler.into()));
 		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler()));
@@ -255,6 +255,7 @@ impl Server {
 	}
 
 	pub fn stop_async(&self) -> Result<(), Error> {
+		self.rpc_event_loop.lock().unwrap().take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping) }
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -262,6 +263,7 @@ impl Server {
 	}
 
 	pub fn stop(&self) -> Result<(), Error> {
+		self.rpc_event_loop.lock().unwrap().take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping) }
 		self.is_stopping.store(true, Ordering::Relaxed);
