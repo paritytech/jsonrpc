@@ -28,8 +28,6 @@ extern crate slab;
 extern crate mio;
 #[cfg(not(windows))]
 extern crate bytes;
-
-#[cfg(test)]
 extern crate rand;
 
 #[cfg(not(windows))] mod nix;

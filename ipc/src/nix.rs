@@ -21,21 +21,16 @@
 //! extern crate jsonrpc_ipc_server;
 //! extern crate rand;
 //!
-//! use std::sync::Arc;
 //! use jsonrpc_core::*;
 //! use jsonrpc_ipc_server::Server;
 //!
-//! struct SayHello;
-//! impl SyncMethodCommand for SayHello {
-//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	}
-//! }
-//!
 //! fn main() {
-//! 	let io = IoHandler::new();
-//! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new("/tmp/json-ipc-test.ipc", &Arc::new(io)).unwrap();
+//! 	let mut io = IoHandler::default();
+//! 	io.add_method("say_hello", |_params| {
+//!			Ok(Value::String("hello".into()))
+//! 	});
+//!
+//! 	let server = Server::new("/tmp/json-ipc-test.ipc", io).unwrap();
 //!     ::std::thread::spawn(move || server.run());
 //! }
 //! ```
@@ -47,7 +42,8 @@ use std::sync::*;
 use std::sync::atomic::*;
 
 use bytes::{ByteBuf, MutByteBuf};
-use jsonrpc_core::{IoHandler, IoSession, IoSessionHandler};
+use jsonrpc_core::MetaIoHandler;
+use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 use mio::*;
 use mio::unix::*;
 
@@ -65,7 +61,7 @@ const REQUEST_CHUNK_SIZE: usize = 4096;
 
 struct SocketConnection {
 	socket: UnixStream,
-	session: IoSession,
+	session: RpcHandler,
 	write_buf: Option<Bytes>,
 	read_buf: MutByteBuf,
 	token: Option<Token>,
@@ -76,7 +72,7 @@ struct SocketConnection {
 type Slab<T> = slab::Slab<T, Token>;
 
 impl SocketConnection {
-	fn new(sock: UnixStream, session: IoSession) -> Self {
+	fn new(sock: UnixStream, session: RpcHandler) -> Self {
 		SocketConnection {
 			socket: sock,
 			session: session,
@@ -133,8 +129,9 @@ impl SocketConnection {
 						trace!(target: "ipc", "Request: {}", rpc_msg);
 						let channel = event_loop.channel();
 						let token = self.token.unwrap();
+						let metadata = ();
 
-						self.session.handle_request(&rpc_msg, move |response: Option<String>| {
+						self.session.handle_request(&rpc_msg, metadata, move |response: Option<String>| {
 							if let Some(response_str) = response {
 								trace!(target: "ipc", "Response: {}", &response_str);
 								if let Err(e) = channel.send(RpcMessage::Write(token, response_str.into_bytes())) {
@@ -168,7 +165,7 @@ impl SocketConnection {
 struct RpcServer {
 	socket: UnixListener,
 	connections: Slab<SocketConnection>,
-	io_handler: Arc<IoHandler>,
+	io_handler: RpcHandler,
 	tokens: VecDeque<Token>,
 }
 
@@ -177,6 +174,7 @@ pub struct Server {
 	event_loop: Arc<RwLock<EventLoop<RpcServer>>>,
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
+	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
 	addr: String,
 }
 
@@ -197,13 +195,24 @@ impl std::convert::From<std::io::Error> for Error {
 
 impl Server {
 	/// New server
-	pub fn new(socket_addr: &str, io_handler: &Arc<IoHandler>) -> Result<Server, Error> {
+	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Server, Error> where
+		T: Into<MetaIoHandler<()>>
+	{
+		let rpc_loop = RpcEventLoop::spawn(Arc::new(io_handler.into()));
+		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler()));
+		server.rpc_event_loop = Mutex::new(Some(rpc_loop.into()));
+		Ok(server)
+	}
+
+	pub fn with_rpc_handler(socket_addr: &str, io_handler: RpcHandler) -> Result<Server, Error> {
 		let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler));
+
 		Ok(Server {
 			rpc_server: Arc::new(RwLock::new(server)),
 			event_loop: Arc::new(RwLock::new(event_loop)),
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
+			rpc_event_loop: Mutex::new(None),
 			addr: socket_addr.to_owned(),
 		})
 	}
@@ -270,8 +279,8 @@ impl Drop for Server {
 }
 
 impl RpcServer {
-	/// start ipc rpc server (blocking)
-	pub fn start(addr: &str, io_handler: &Arc<IoHandler>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
+	/// start ipc rpc server
+	pub fn start(addr: &str, io_handler: RpcHandler) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
 		let mut event_loop = try!(EventLoop::new());
 		::std::fs::remove_file(addr).unwrap_or_else(|_| {}); // ignore error (if no file)
 		let socket = try!(UnixListener::bind(&addr));
@@ -287,7 +296,7 @@ impl RpcServer {
 
 	fn accept(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
 		let new_client_socket = self.socket.accept().unwrap().unwrap();
-		let connection = SocketConnection::new(new_client_socket, self.io_handler.session());
+		let connection = SocketConnection::new(new_client_socket, self.io_handler.clone());
 		if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
 			// max connections
 			return Ok(());
@@ -381,7 +390,7 @@ impl Handler for RpcServer {
 pub fn test_reqrep_poll() {
 	let addr = tests::random_ipc_endpoint();
 	let io = tests::dummy_io_handler();
-	let server = Server::new(&addr, &io).unwrap();
+	let server = Server::new(&addr, io).unwrap();
 	std::thread::spawn(move || {
 		loop {
 			server.poll();
@@ -400,7 +409,7 @@ pub fn test_file_removed() {
 	let addr = tests::random_ipc_endpoint();
 	let io = tests::dummy_io_handler();
 	{
-		let server = Server::new(&addr, &io).unwrap();
+		let server = Server::new(&addr, io).unwrap();
 		server.run_async().unwrap();
 		std::thread::sleep(std::time::Duration::from_millis(50));
 

@@ -11,7 +11,7 @@ path = "lib.rs"
 [dependencies]
 jsonrpc-core = { path = "core" }
 jsonrpc-http-server = { path = "http" }
-# jsonrpc-ipc-server = { path = "ipc" }
+jsonrpc-ipc-server = { path = "ipc" }
 jsonrpc-tcp-server = { path = "tcp" }
 # jsonrpc-macros= { path = "macros" }
 
