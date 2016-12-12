@@ -99,35 +99,52 @@ impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
 	}
 }
 
-/// Basic RPC abstraction.
-#[derive(Clone)]
-pub struct RpcHandler {
-	/// RPC Handler
-	pub handler: Arc<MetaIoHandler<()>>,
-	/// Event Loop Remote
-	pub remote: tokio_core::reactor::Remote,
+/// Extracts metadata from the HTTP request.
+pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
+	/// Read the metadata from the request
+	fn read_metadata(&self, _: &server::Request<hyper::net::HttpStream>) -> M {
+		Default::default()
+	}
 }
 
-impl RpcHandler {
+#[derive(Default)]
+struct NoopExtractor;
+impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
+
+
+/// Basic RPC abstraction.
+#[derive(Clone)]
+pub struct RpcHandler<M: jsonrpc::Metadata> {
+	/// RPC Handler
+	pub handler: Arc<MetaIoHandler<M>>,
+	/// Event Loop Remote
+	pub remote: tokio_core::reactor::Remote,
+	/// Metadata extractor
+	pub extractor: Arc<HttpMetaExtractor<M>>,
+}
+
+impl<M: jsonrpc::Metadata> RpcHandler<M> {
 	/// Handles the request and returns to a closure response when it's ready.
-	pub fn handle_request<F>(&self, request: &str, on_response: F) where
+	pub fn handle_request<F>(&self, request: &str, metadata: M, on_response: F) where
 		F: Fn(Option<String>) + Send + 'static
 	{
-		let future = self.handler.handle_request(request, ());
+		let future = self.handler.handle_request(request, metadata);
 		self.remote.spawn(|_| future.map(on_response))
 	}
 }
 
+
 /// Convenient JSON-RPC HTTP Server builder.
-pub struct ServerBuilder {
-	jsonrpc_handler: Arc<MetaIoHandler<()>>,
+pub struct ServerBuilder<M: jsonrpc::Metadata = ()> {
+	jsonrpc_handler: Arc<MetaIoHandler<M>>,
 	remote: Option<tokio_core::reactor::Remote>,
+	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
-impl ServerBuilder {
+impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
 	/// If you want to re-use the same handler in couple places
@@ -137,11 +154,12 @@ impl ServerBuilder {
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
 	pub fn new<T>(handler: T) -> Self where
-		T: Into<MetaIoHandler<()>>
+		T: Into<MetaIoHandler<M>>
 	{
 		ServerBuilder {
 			jsonrpc_handler: Arc::new(handler.into()),
 			remote: None,
+			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
@@ -153,10 +171,11 @@ impl ServerBuilder {
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn with_remote(handler: Arc<MetaIoHandler<()>>, remote: tokio_core::reactor::Remote) -> Self {
+	pub fn with_remote(handler: Arc<MetaIoHandler<M>>, remote: tokio_core::reactor::Remote) -> Self {
 		ServerBuilder {
 			jsonrpc_handler: handler,
 			remote: Some(remote),
+			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
@@ -212,6 +231,7 @@ impl ServerBuilder {
 		let jsonrpc_handler = RpcHandler {
 			handler: self.jsonrpc_handler,
 			remote: remote,
+			extractor: self.meta_extractor,
 		};
 
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |control| {

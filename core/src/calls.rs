@@ -3,7 +3,7 @@ use types::{Params, Value, Error};
 use futures::BoxFuture;
 
 /// Metadata marker trait
-pub trait Metadata: Clone + 'static {}
+pub trait Metadata: Default + Clone + Send + 'static {}
 impl Metadata for () {}
 
 /// Synchronous Method

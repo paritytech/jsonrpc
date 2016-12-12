@@ -11,10 +11,9 @@ use hyper::method::Method;
 use hyper::net::HttpStream;
 use hyper::header::AccessControlAllowOrigin;
 
+use jsonrpc::Metadata;
 use request_response::{Request, Response};
 use hosts_validator::is_host_header_valid;
-
-struct Metadata;
 
 /// PanicHandling function
 pub struct PanicHandler {
@@ -23,12 +22,12 @@ pub struct PanicHandler {
 }
 
 /// jsonrpc http request handler.
-pub struct ServerHandler {
+pub struct ServerHandler<M: Metadata = ()> {
 	panic_handler: PanicHandler,
-	jsonrpc_handler: RpcHandler,
+	jsonrpc_handler: RpcHandler<M>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
-	metadata: Option<Metadata>,
+	metadata: Option<M>,
 	control: Control,
 	request: Request,
 	response: Response,
@@ -37,7 +36,7 @@ pub struct ServerHandler {
 	waiting_response: mpsc::Receiver<Response>,
 }
 
-impl Drop for ServerHandler {
+impl<M: Metadata> Drop for ServerHandler<M> {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
 			let handler = self.panic_handler.handler.lock().unwrap();
@@ -48,10 +47,10 @@ impl Drop for ServerHandler {
 	}
 }
 
-impl ServerHandler {
+impl<M: Metadata> ServerHandler<M> {
 	/// Create new request handler.
 	pub fn new(
-		jsonrpc_handler: RpcHandler,
+		jsonrpc_handler: RpcHandler<M>,
 		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<String>>,
 		panic_handler: PanicHandler,
@@ -102,7 +101,7 @@ impl ServerHandler {
 	}
 }
 
-impl server::Handler<HttpStream> for ServerHandler {
+impl<M: Metadata> server::Handler<HttpStream> for ServerHandler<M> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Validate host
 		if let Some(ref allowed_hosts) = self.allowed_hosts {
@@ -114,7 +113,7 @@ impl server::Handler<HttpStream> for ServerHandler {
 
 		// Read origin
 		self.request.origin = cors::read_origin(&request);
-		// self.metadata = self.jsonrpc_handler.read_metadata(&request);
+		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
 
 		match *request.method() {
 			// Don't validate content type on options
@@ -145,8 +144,9 @@ impl server::Handler<HttpStream> for ServerHandler {
 			Ok(0) => {
 				let control = self.control.clone();
 				let sender = self.waiting_sender.clone();
+				let metadata = self.metadata.take().unwrap_or_default();
 
-				self.jsonrpc_handler.handle_request(&self.request.content, move |response| {
+				self.jsonrpc_handler.handle_request(&self.request.content, metadata, move |response| {
 					let response = match response {
 						None => Response::ok(String::new()),
 						// Add new line to have nice output when using CLI clients (curl)

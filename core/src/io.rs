@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 use serde_json;
@@ -20,7 +19,6 @@ fn write_response(response: Response) -> String {
 
 /// Request handler
 pub struct MetaIoHandler<T: Metadata> {
-	_meta: PhantomData<T>,
 	methods: HashMap<String, RemoteProcedure<T>>,
 }
 
@@ -28,7 +26,6 @@ pub struct MetaIoHandler<T: Metadata> {
 impl<T: Metadata> Default for MetaIoHandler<T> {
 	fn default() -> Self {
 		MetaIoHandler {
-			_meta: PhantomData,
 			methods: HashMap::new(),
 		}
 	}
@@ -254,14 +251,14 @@ mod tests {
 
 	#[test]
 	fn test_send_sync() {
-		fn is_send_sync<T>(obj: T) where
+		fn is_send_sync<T>(_obj: T) where
 			T: Send + Sync
 		{
-			drop(obj)
+			true
 		}
 
 		let io = IoHandler::default();
 
-		is_send_sync(io);
+		assert!(is_send_sync(io))
 	}
 }

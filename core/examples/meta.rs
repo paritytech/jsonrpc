@@ -4,7 +4,7 @@ extern crate futures;
 use futures::Future;
 use jsonrpc_core::*;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 struct Meta(usize);
 
 impl Metadata for Meta {}
