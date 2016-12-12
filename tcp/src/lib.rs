@@ -27,17 +27,12 @@
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
 //!
-//! struct SayHello;
-//! impl SyncMethodCommand for SayHello {
-//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	}
-//! }
-//!
 //! fn main() {
-//! 	let io = IoHandler::new();
-//! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new(&SocketAddr::from_str("0.0.0.0:9993").unwrap(), &Arc::new(io)).unwrap();
+//! 	let mut io = IoHandler::default();
+//! 	io.add_method("say_hello", |_params| {
+//! 		Ok(Value::String("hello".to_string()))
+//! 	});
+//! 	let server = Server::new(&SocketAddr::from_str("0.0.0.0:9993").unwrap(), io).unwrap();
 //!     ::std::thread::spawn(move || server.run());
 //! }
 //! ```
@@ -50,27 +45,28 @@ extern crate slab;
 extern crate mio;
 extern crate bytes;
 extern crate serde_json;
-
-#[cfg(test)]
 extern crate rand;
 
 mod validator;
 #[cfg(test)]
 pub mod tests;
 
-use mio::*;
-use mio::tcp::*;
-use bytes::{Buf, ByteBuf, MutByteBuf};
+use std::env;
 use std::io;
-use jsonrpc_core::{IoHandler, IoSession, IoSessionHandler};
 use std::sync::*;
 use std::sync::atomic::*;
+use std::net::SocketAddr;
 use std::collections::VecDeque;
-use std::env;
+use std::collections::HashMap;
+
 use log::LogLevelFilter;
 use env_logger::LogBuilder;
-use std::net::SocketAddr;
-use std::collections::HashMap;
+use bytes::{Buf, ByteBuf, MutByteBuf};
+
+use mio::*;
+use mio::tcp::*;
+use jsonrpc_core::IoHandler;
+use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 
 lazy_static! {
 	static ref LOG_DUMMY: bool = {
@@ -101,7 +97,7 @@ const POLL_INTERVAL: usize = 100;
 
 struct SocketConnection {
 	socket: TcpStream,
-	session: IoSession,
+	session: RpcHandler,
 	buf: Option<ByteBuf>,
 	mut_buf: Option<MutByteBuf>,
 	token: Option<Token>,
@@ -112,7 +108,7 @@ struct SocketConnection {
 type Slab<T> = slab::Slab<T, Token>;
 
 impl SocketConnection {
-	fn new(sock: TcpStream, addr: SocketAddr, session: IoSession) -> Self {
+	fn new(sock: TcpStream, addr: SocketAddr, session: RpcHandler) -> Self {
 		SocketConnection {
 			socket: sock,
 			session: session,
@@ -189,7 +185,7 @@ impl SocketConnection {
 
 						let channel = event_loop.channel();
 						let token = self.token.unwrap();
-						self.session.handle_request(&self.inject_protocol_note(&rpc_msg).unwrap(), move |response: Option<String>| {
+						self.session.handle_request(&self.inject_protocol_note(&rpc_msg).unwrap(), (), move |response: Option<String>| {
 							if let Some(response_str) = response {
 								trace!(target: "tcp", "Response: {}", &response_str);
 
@@ -242,7 +238,7 @@ impl TcpContext {
 struct RpcServer {
 	socket: TcpListener,
 	connections: Slab<SocketConnection>,
-	io_handler: Arc<IoHandler>,
+	io_handler: RpcHandler,
 	tokens: VecDeque<Token>,
 	context: Arc<TcpContext>,
 	addr_index: HashMap<SocketAddr, Token>,
@@ -251,6 +247,7 @@ struct RpcServer {
 pub struct Server {
 	rpc_server: Arc<RwLock<RpcServer>>,
 	event_loop: Arc<RwLock<EventLoop<RpcServer>>>,
+	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
 	_addr: SocketAddr,
@@ -275,12 +272,20 @@ impl std::convert::From<std::io::Error> for Error {
 
 impl Server {
 	/// New server
-	pub fn new(socket_addr: &SocketAddr, io_handler: &Arc<IoHandler>) -> Result<Server, Error> {
+	pub fn new(socket_addr: &SocketAddr, io_handler: IoHandler) -> Result<Server, Error> {
+		let rpc_loop = RpcEventLoop::spawn(Arc::new(io_handler.into()));
+		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler()));
+		server.rpc_event_loop = Mutex::new(Some(rpc_loop.into()));
+		Ok(server)
+	}
+
+	pub fn with_rpc_handler(socket_addr: &SocketAddr, io_handler: RpcHandler) -> Result<Server, Error> {
 		let tcp_context = TcpContext::new();
 		let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler, tcp_context.clone()));
 		Ok(Server {
 			rpc_server: Arc::new(RwLock::new(server)),
 			event_loop: Arc::new(RwLock::new(event_loop)),
+			rpc_event_loop: Mutex::new(None),
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
 			_addr: socket_addr.clone(),
@@ -351,6 +356,9 @@ impl Server {
 	}
 
 	pub fn stop_async(&self) -> Result<(), Error> {
+		if let Some(rpc) = self.rpc_event_loop.lock().unwrap().take() {
+			rpc.close();
+		}
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -358,6 +366,9 @@ impl Server {
 	}
 
 	pub fn stop(&self) -> Result<(), Error> {
+		if let Some(rpc) = self.rpc_event_loop.lock().unwrap().take() {
+			rpc.close();
+		}
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -391,15 +402,15 @@ pub struct RequestContext {
 }
 
 impl RpcServer {
-	/// start ipc rpc server (blocking)
-	pub fn start(addr: &SocketAddr, io_handler: &Arc<IoHandler>, tcp_context: Arc<TcpContext>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
+	/// start ipc rpc server
+	pub fn start(addr: &SocketAddr, io_handler: RpcHandler, tcp_context: Arc<TcpContext>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
 		let mut event_loop = try!(EventLoop::new());
 		let socket = try!(TcpListener::bind(&addr));
 		event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
 		let server = RpcServer {
 			socket: socket,
 			connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
-			io_handler: io_handler.clone(),
+			io_handler: io_handler,
 			tokens: VecDeque::new(),
 			context: tcp_context,
 			addr_index: HashMap::new(),
@@ -409,7 +420,7 @@ impl RpcServer {
 
 	fn accept(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
 		let (stream, addr) = self.socket.accept().unwrap().unwrap();
-		let connection = SocketConnection::new(stream, addr.clone(), self.io_handler.session());
+		let connection = SocketConnection::new(stream, addr.clone(), self.io_handler.clone());
 		if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
 			// max connections
 			return Ok(());

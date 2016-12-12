@@ -14,29 +14,20 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use jsonrpc_core::IoHandler;
-use std::sync::*;
+use jsonrpc_core::{IoHandler, Params, Value};
 use super::Server;
 use std;
 use rand::{thread_rng, Rng};
 use std::net::SocketAddr;
 
-pub fn dummy_io_handler() -> Arc<IoHandler> {
-	use std::sync::Arc;
-	use jsonrpc_core::*;
-
-	struct SayHello;
-	impl SyncMethodCommand for SayHello {
-		fn execute(&self, params: Params) -> Result<Value, Error> {
-			let (request_p1, request_p2) = from_params::<(u64, u64)>(params).unwrap();
-			let response_str = format!("hello {}! you sent {}", request_p1, request_p2);
-			Ok(Value::String(response_str))
-		}
-	}
-
-	let io = IoHandler::new();
-	io.add_method("say_hello", SayHello);
-	Arc::new(io)
+pub fn dummy_io_handler() -> IoHandler {
+	let mut io = IoHandler::default();
+	io.add_method("say_hello", |params: Params| {
+		let (request_p1, request_p2) = params.parse::<(u64, u64)>().unwrap();
+		let response_str = format!("hello {}! you sent {}", request_p1, request_p2);
+		Ok(Value::String(response_str))
+	});
+	io
 }
 
 pub fn dummy_request(addr: &SocketAddr, buf: &[u8]) -> Vec<u8> {
@@ -72,7 +63,7 @@ pub fn random_endpoint() -> SocketAddr {
 pub fn test_reqrep() {
 	let addr = random_endpoint();
 	let io = dummy_io_handler();
-	let server = Server::new(&addr, &io).unwrap();
+	let server = Server::new(&addr, io).unwrap();
 	server.run_async().unwrap();
 	std::thread::park_timeout(std::time::Duration::from_millis(50));
 
@@ -88,7 +79,7 @@ pub fn test_sequental_connections() {
 
 	let addr = random_endpoint();
 	let io = dummy_io_handler();
-	let server = Server::new(&addr, &io).unwrap();
+	let server = Server::new(&addr, io).unwrap();
 	server.run_async().unwrap();
 	std::thread::park_timeout(std::time::Duration::from_millis(50));
 
@@ -103,7 +94,7 @@ pub fn test_sequental_connections() {
 pub fn test_reqrep_poll() {
 	let addr = random_endpoint();
 	let io = dummy_io_handler();
-	let server = Server::new(&addr, &io).unwrap();
+	let server = Server::new(&addr, io).unwrap();
 	std::thread::spawn(move || {
 		loop {
 			server.poll();

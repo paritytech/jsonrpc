@@ -1,13 +1,13 @@
 [package]
 name = "jsonrpc-ipc-server"
-version = "0.2.4"
+version = "1.2.4"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
-jsonrpc-core = { version = "4.0", path = "../core" }
+jsonrpc-core = { version = "5.0", path = "../core" }
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"

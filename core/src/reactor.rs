@@ -13,14 +13,14 @@ use {MetaIoHandler, Metadata};
 /// EventLoop for all request to `jsonrpc-core`.
 /// NOTE: This is more-less temporary solution until we find a good way of integrating with event loops of particular
 /// transports.
-pub struct EventLoop<M: Metadata = ()> {
+pub struct RpcEventLoop<M: Metadata = ()> {
 	rpc: RpcHandler<M>,
-	handle: EventLoopHandle,
+	handle: RpcEventLoopHandle,
 }
 
-impl<M: Metadata> EventLoop<M> {
+impl<M: Metadata> RpcEventLoop<M> {
 	/// Spawns a new thread with `EventLoop` with given handler.
-	pub fn spawn(handler: Arc<MetaIoHandler<M>>) -> EventLoop<M> {
+	pub fn spawn(handler: Arc<MetaIoHandler<M>>) -> Self {
 		let (stop, stopped) = futures::oneshot();
 		let (tx, rx) = mpsc::channel();
 		let handle = thread::spawn(move || {
@@ -30,9 +30,9 @@ impl<M: Metadata> EventLoop<M> {
 		});
 		let remote = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
-		EventLoop {
+		RpcEventLoop {
 			rpc: RpcHandler::new(handler, remote),
-			handle: EventLoopHandle {
+			handle: RpcEventLoopHandle {
 				close: Some(stop),
 				handle: Some(handle),
 			},
@@ -46,24 +46,24 @@ impl<M: Metadata> EventLoop<M> {
 }
 
 /// A handle to running event loop. Dropping the handle will cause event loop to finish.
-pub struct EventLoopHandle {
+pub struct RpcEventLoopHandle {
 	close: Option<futures::Complete<()>>,
 	handle: Option<thread::JoinHandle<()>>
 }
 
-impl<M: Metadata> From<EventLoop<M>> for EventLoopHandle {
-	fn from(el: EventLoop<M>) -> Self {
+impl<M: Metadata> From<RpcEventLoop<M>> for RpcEventLoopHandle {
+	fn from(el: RpcEventLoop<M>) -> Self {
 		el.handle
 	}
 }
 
-impl Drop for EventLoopHandle {
+impl Drop for RpcEventLoopHandle {
 	fn drop(&mut self) {
 		self.close.take().map(|v| v.complete(()));
 	}
 }
 
-impl EventLoopHandle {
+impl RpcEventLoopHandle {
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> thread::Result<()> {
 		self.handle.take().unwrap().join()

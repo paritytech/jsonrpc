@@ -40,7 +40,7 @@ use std::collections::HashSet;
 use std::ops::Deref;
 use hyper::server;
 use jsonrpc::MetaIoHandler;
-use jsonrpc::reactor::{RpcHandler, EventLoop as RpcEventLoop, EventLoopHandle as RpcEventLoopHandle};
+use jsonrpc::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 
 pub use hyper::header::AccessControlAllowOrigin;
 pub use handler::{PanicHandler, ServerHandler};
