@@ -16,3 +16,6 @@ tokio-core = "0.1"
 jsonrpc-core = { version = "5.0", path = "../core" }
 hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
 unicase = "1.3"
+
+[features]
+default = ["jsonrpc-core/reactor"]

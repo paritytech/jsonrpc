@@ -1,5 +1,5 @@
 use cors;
-use RpcHandler;
+use Rpc;
 
 use std::sync::{mpsc, Arc, Mutex};
 use std::io::{self, Read};
@@ -24,7 +24,7 @@ pub struct PanicHandler {
 /// jsonrpc http request handler.
 pub struct ServerHandler<M: Metadata = ()> {
 	panic_handler: PanicHandler,
-	jsonrpc_handler: RpcHandler<M>,
+	jsonrpc_handler: Rpc<M>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	metadata: Option<M>,
@@ -50,7 +50,7 @@ impl<M: Metadata> Drop for ServerHandler<M> {
 impl<M: Metadata> ServerHandler<M> {
 	/// Create new request handler.
 	pub fn new(
-		jsonrpc_handler: RpcHandler<M>,
+		jsonrpc_handler: Rpc<M>,
 		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<String>>,
 		panic_handler: PanicHandler,

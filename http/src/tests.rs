@@ -5,6 +5,8 @@ use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
+
+use futures::Future;
 use super::*;
 
 fn serve_hosts(hosts: Vec<String>) -> Server {

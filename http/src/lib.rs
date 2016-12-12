@@ -33,13 +33,14 @@ mod hosts_validator;
 #[cfg(test)]
 mod tests;
 
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
-use futures::Future;
+use std::ops::Deref;
 use hyper::server;
 use jsonrpc::MetaIoHandler;
+use jsonrpc::reactor::{RpcHandler, EventLoop as RpcEventLoop, EventLoopHandle as RpcEventLoopHandle};
 
 pub use hyper::header::AccessControlAllowOrigin;
 pub use handler::{PanicHandler, ServerHandler};
@@ -111,28 +112,22 @@ pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 struct NoopExtractor;
 impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 
-
 /// Basic RPC abstraction.
 #[derive(Clone)]
-pub struct RpcHandler<M: jsonrpc::Metadata> {
+pub struct Rpc<M: jsonrpc::Metadata> {
 	/// RPC Handler
-	pub handler: Arc<MetaIoHandler<M>>,
-	/// Event Loop Remote
-	pub remote: tokio_core::reactor::Remote,
+	pub handler: RpcHandler<M>,
 	/// Metadata extractor
 	pub extractor: Arc<HttpMetaExtractor<M>>,
 }
 
-impl<M: jsonrpc::Metadata> RpcHandler<M> {
-	/// Handles the request and returns to a closure response when it's ready.
-	pub fn handle_request<F>(&self, request: &str, metadata: M, on_response: F) where
-		F: Fn(Option<String>) + Send + 'static
-	{
-		let future = self.handler.handle_request(request, metadata);
-		self.remote.spawn(|_| future.map(on_response))
+impl<M: jsonrpc::Metadata> Deref for Rpc<M> {
+	type Target = RpcHandler<M>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.handler
 	}
 }
-
 
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = ()> {
@@ -213,24 +208,16 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
 
-		let (remote, event_loop, event_loop_handle) = match self.remote {
-			Some(remote) => (remote, None, None),
+		let (handler, event_loop) = match self.remote {
+			Some(remote) => (RpcHandler::new(self.jsonrpc_handler, remote), None),
 			None => {
-				let (stop, stopped) = futures::oneshot();
-				let (tx, rx) = mpsc::channel();
-				let handle = thread::spawn(move || {
-					let mut el = tokio_core::reactor::Core::new().expect("Creating an event loop should not fail.");
-					tx.send(el.remote()).expect("Rx is blocking upper thread.");
-					let _ = el.run(futures::empty().select(stopped));
-				});
-				let remote = rx.recv().expect("tx is transfered to a newly spawned thread.");
-				(remote, Some(stop), Some(handle))
+				let event_loop = RpcEventLoop::spawn(self.jsonrpc_handler);
+				(event_loop.handler(), Some(event_loop.into()))
 			},
 		};
 
-		let jsonrpc_handler = RpcHandler {
-			handler: self.jsonrpc_handler,
-			remote: remote,
+		let jsonrpc_handler = Rpc {
+			handler: handler,
 			extractor: self.meta_extractor,
 		};
 
@@ -265,7 +252,6 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 			server: Some(l),
 			handle: Some(handle),
 			event_loop: event_loop,
-			event_loop_handle: event_loop_handle,
 		})
 	}
 }
@@ -274,8 +260,7 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 pub struct Server {
 	server: Option<server::Listening>,
 	handle: Option<thread::JoinHandle<()>>,
-	event_loop: Option<futures::Complete<()>>,
-	event_loop_handle: Option<thread::JoinHandle<()>>
+	event_loop: Option<RpcEventLoopHandle>,
 }
 
 impl Server {
@@ -287,19 +272,18 @@ impl Server {
 	/// Closes the server.
 	pub fn close(mut self) {
 		self.server.take().unwrap().close();
-		self.event_loop.take().map(|v| v.complete(()));
+		self.event_loop.take().map(|v| v.close());
 	}
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) -> thread::Result<()> {
-		try!(self.handle.take().unwrap().join());
-		self.event_loop_handle.take().map(|v| v.join()).unwrap_or(Ok(()))
+		self.handle.take().unwrap().join()
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
 		self.server.take().unwrap().close();
-		self.event_loop.take().map(|v| v.complete(()));
+		self.event_loop.take().map(|v| v.close());
 	}
 }

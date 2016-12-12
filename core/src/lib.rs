@@ -34,6 +34,8 @@ extern crate serde_json;
 mod calls;
 mod io;
 pub mod types;
+#[cfg(feature = "reactor")]
+pub mod reactor;
 
 pub use calls::{Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 pub use io::{IoHandler, MetaIoHandler};

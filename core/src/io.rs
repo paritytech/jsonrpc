@@ -241,17 +241,17 @@ mod tests {
 
 	#[test]
 	fn test_method_not_found() {
-		let mut io = IoHandler::default();
+		let io = IoHandler::default();
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+		let response = r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found","data":null},"id":1}"#;
 
 		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
 	}
 
 	#[test]
 	fn test_send_sync() {
-		fn is_send_sync<T>(_obj: T) where
+		fn is_send_sync<T>(_obj: T) -> bool where
 			T: Send + Sync
 		{
 			true
