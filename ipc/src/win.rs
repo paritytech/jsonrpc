@@ -47,7 +47,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::*;
 use std::sync::Arc;
-use jsonrpc_core::IoHandler;
+use jsonrpc_core::{GenericIoHandler, IoHandler};
 use validator;
 
 pub type Result<T> = std::result::Result<T, Error>;

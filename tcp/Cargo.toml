@@ -7,7 +7,7 @@ repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_tcp_server/index.html"
 
 [dependencies]
-jsonrpc-core = { path = "../core" }
+jsonrpc-core = { version = "4.0", path = "../core" }
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
