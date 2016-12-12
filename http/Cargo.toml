@@ -4,13 +4,15 @@ homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-http-server"
-version = "6.1.1"
+version = "7.1.1"
 authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.html"
 
 [dependencies]
 log = "0.3"
-jsonrpc-core = { version = "4.0", path = "../core" }
+futures = "0.1.6"
+tokio-core = "0.1"
+jsonrpc-core = { version = "5.0", path = "../core" }
 hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
 unicase = "1.3"

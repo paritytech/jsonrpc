@@ -29,6 +29,6 @@ extern crate jsonrpc_core;
 /// HTTP transport
 extern crate jsonrpc_http_server;
 /// IPC transport
-extern crate jsonrpc_ipc_server;
+// extern crate jsonrpc_ipc_server;
 /// TCP transport
-extern crate jsonrpc_tcp_server;
+// extern crate jsonrpc_tcp_server;

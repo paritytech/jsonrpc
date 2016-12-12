@@ -4,21 +4,16 @@
 //! extern crate jsonrpc_core;
 //! extern crate jsonrpc_http_server;
 //!
-//! use std::sync::Arc;
 //! use jsonrpc_core::*;
 //! use jsonrpc_http_server::*;
 //!
-//! struct SayHello;
-//! impl SyncMethodCommand for SayHello {
-//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	}
-//! }
-//!
 //! fn main() {
-//! 	let io = IoHandler::new();
-//! 	io.add_method("say_hello", SayHello);
-//! 	let _server = ServerBuilder::new(Arc::new(io)).start_http(&"127.0.0.1:3030".parse().unwrap());
+//! 	let mut io = IoHandler::default();
+//! 	io.add_method("say_hello", |_: Params| {
+//! 		Ok(Value::String("hello".to_string()))
+//! 	});
+//!
+//! 	let _server = ServerBuilder::new(io).start_http(&"127.0.0.1:3030".parse().unwrap());
 //! }
 //! ```
 
@@ -28,6 +23,8 @@
 extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
+extern crate futures;
+extern crate tokio_core;
 
 pub mod request_response;
 pub mod cors;
@@ -36,15 +33,16 @@ mod hosts_validator;
 #[cfg(test)]
 mod tests;
 
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
+use futures::Future;
 use hyper::server;
-use jsonrpc::IoHandler;
+use jsonrpc::MetaIoHandler;
 
 pub use hyper::header::AccessControlAllowOrigin;
-pub use handler::{PanicHandler, ServerHandler, RpcHandler};
+pub use handler::{PanicHandler, ServerHandler};
 pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
@@ -57,6 +55,12 @@ pub enum RpcServerError {
 	IoError(std::io::Error),
 	/// Other Error (hyper)
 	Other(hyper::error::Error),
+}
+
+impl From<std::io::Error> for RpcServerError {
+	fn from(err: std::io::Error) -> Self {
+		RpcServerError::IoError(err)
+	}
 }
 
 impl From<hyper::error::Error> for RpcServerError {
@@ -95,23 +99,64 @@ impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
 	}
 }
 
+/// Basic RPC abstraction.
+#[derive(Clone)]
+pub struct RpcHandler {
+	/// RPC Handler
+	pub handler: Arc<MetaIoHandler<()>>,
+	/// Event Loop Remote
+	pub remote: tokio_core::reactor::Remote,
+}
+
+impl RpcHandler {
+	/// Handles the request and returns to a closure response when it's ready.
+	pub fn handle_request<F>(&self, request: &str, on_response: F) where
+		F: Fn(Option<String>) + Send + 'static
+	{
+		let future = self.handler.handle_request(request, ());
+		self.remote.spawn(|_| future.map(on_response))
+	}
+}
+
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder {
-	jsonrpc_handler: Arc<IoHandler>,
+	jsonrpc_handler: Arc<MetaIoHandler<()>>,
+	remote: Option<tokio_core::reactor::Remote>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
 impl ServerBuilder {
-	/// Creates new `ServerBuilder` with specified `IoHandler`.
+	/// Creates new `ServerBuilder` for given `IoHandler`.
+	///
+	/// If you want to re-use the same handler in couple places
+	/// see `with_remote` function.
 	///
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self {
+	pub fn new<T>(handler: T) -> Self where
+		T: Into<MetaIoHandler<()>>
+	{
 		ServerBuilder {
-			jsonrpc_handler: jsonrpc_handler,
+			jsonrpc_handler: Arc::new(handler.into()),
+			remote: None,
+			cors_domains: None,
+			allowed_hosts: None,
+			panic_handler: None,
+		}
+	}
+
+	/// Creates new `ServerBuilder` given access to the event loop `Remote`.
+	///
+	/// By default:
+	/// 1. Server is not sending any CORS headers.
+	/// 2. Server is validating `Host` header.
+	pub fn with_remote(handler: Arc<MetaIoHandler<()>>, remote: tokio_core::reactor::Remote) -> Self {
+		ServerBuilder {
+			jsonrpc_handler: handler,
+			remote: Some(remote),
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
@@ -145,10 +190,29 @@ impl ServerBuilder {
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
 		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
-		let jsonrpc_handler = self.jsonrpc_handler;
 		let cors_domains = self.cors_domains;
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
+
+		let (remote, event_loop, event_loop_handle) = match self.remote {
+			Some(remote) => (remote, None, None),
+			None => {
+				let (stop, stopped) = futures::oneshot();
+				let (tx, rx) = mpsc::channel();
+				let handle = thread::spawn(move || {
+					let mut el = tokio_core::reactor::Core::new().expect("Creating an event loop should not fail.");
+					tx.send(el.remote()).expect("Rx is blocking upper thread.");
+					let _ = el.run(futures::empty().select(stopped));
+				});
+				let remote = rx.recv().expect("tx is transfered to a newly spawned thread.");
+				(remote, Some(stop), Some(handle))
+			},
+		};
+
+		let jsonrpc_handler = RpcHandler {
+			handler: self.jsonrpc_handler,
+			remote: remote,
+		};
 
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |control| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
@@ -180,6 +244,8 @@ impl ServerBuilder {
 		Ok(Server {
 			server: Some(l),
 			handle: Some(handle),
+			event_loop: event_loop,
+			event_loop_handle: event_loop_handle,
 		})
 	}
 }
@@ -188,6 +254,8 @@ impl ServerBuilder {
 pub struct Server {
 	server: Option<server::Listening>,
 	handle: Option<thread::JoinHandle<()>>,
+	event_loop: Option<futures::Complete<()>>,
+	event_loop_handle: Option<thread::JoinHandle<()>>
 }
 
 impl Server {
@@ -198,17 +266,20 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		self.server.take().unwrap().close()
+		self.server.take().unwrap().close();
+		self.event_loop.take().map(|v| v.complete(()));
 	}
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) -> thread::Result<()> {
-		self.handle.take().unwrap().join()
+		try!(self.handle.take().unwrap().join());
+		self.event_loop_handle.take().map(|v| v.join()).unwrap_or(Ok(()))
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.server.take().unwrap().close()
+		self.server.take().unwrap().close();
+		self.event_loop.take().map(|v| v.complete(()));
 	}
 }
