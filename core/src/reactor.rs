@@ -6,7 +6,7 @@ use std::thread;
 use std::sync::{mpsc, Arc};
 
 use futures::{self, Future};
-use self::tokio_core::reactor::Remote;
+pub use self::tokio_core::reactor::Remote;
 
 use {MetaIoHandler, Metadata};
 

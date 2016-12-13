@@ -114,7 +114,7 @@ impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 
 /// Basic RPC abstraction.
 #[derive(Clone)]
-pub struct Rpc<M: jsonrpc::Metadata> {
+pub struct Rpc<M: jsonrpc::Metadata = ()> {
 	/// RPC Handler
 	pub handler: RpcHandler<M>,
 	/// Metadata extractor

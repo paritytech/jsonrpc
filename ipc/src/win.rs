@@ -42,7 +42,7 @@ use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::*;
 use std::sync::{Arc, Mutex};
-use jsonrpc_core::{MetaIoHandler};
+use jsonrpc_core::{Metadata, MetaIoHandler};
 use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 use validator;
 
@@ -66,14 +66,14 @@ impl std::convert::From<std::io::Error> for Error {
 	}
 }
 
-pub struct PipeHandler {
+pub struct PipeHandler<M: Metadata = ()> {
 	waiting_pipe: NamedPipe,
-	io_handler: RpcHandler,
+	io_handler: RpcHandler<M>,
 }
 
-impl PipeHandler {
+impl<M: Metadata> PipeHandler<M> {
 	/// start ipc rpc server
-	pub fn start(addr: &str, io_handler: RpcHandler) -> Result<PipeHandler> {
+	pub fn start(addr: &str, io_handler: RpcHandler<M>) -> Result<PipeHandler<M>> {
 		Ok(PipeHandler {
 			waiting_pipe: try!(
 				NamedPipeBuilder::new(addr)
@@ -129,8 +129,8 @@ impl PipeHandler {
 							let mut response_buf = Vec::new();
 							for rpc_msg in requests  {
 								trace!(target: "ipc", "Request: {}", rpc_msg);
-
-								let response: Option<String> = thread_handler.handle_request_sync(&rpc_msg, ());
+								let meta = Default::default();
+								let response: Option<String> = thread_handler.handle_request_sync(&rpc_msg, meta);
 
 								if let Some(response_str) = response {
 									trace!(target: "ipc", "Response: {}", &response_str);
@@ -167,18 +167,18 @@ impl PipeHandler {
 	}
 }
 
-pub struct Server {
+pub struct Server<M: Metadata = ()> {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
-	io_handler: RpcHandler,
+	io_handler: RpcHandler<M>,
 	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
 	addr: String,
 }
 
-impl Server {
+impl<M: Metadata> Server<M> {
 	/// New server
-	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Server> where
-		T: Into<MetaIoHandler<()>>,
+	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Server<M>> where
+		T: Into<MetaIoHandler<M>>,
 	{
 		let rpc_loop = RpcEventLoop::spawn();
 		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler(Arc::new(io_handler.into()))));
@@ -187,7 +187,7 @@ impl Server {
 	}
 
 	// New Server using RpcHandler
-	pub fn with_rpc_handler(socket_addr: &str, io_handler: RpcHandler) -> Result<Server> {
+	pub fn with_rpc_handler(socket_addr: &str, io_handler: RpcHandler<M>) -> Result<Server<M>> {
 		Ok(Server {
 			io_handler: io_handler,
 			is_stopping: Arc::new(AtomicBool::new(false)),
@@ -249,7 +249,7 @@ impl Server {
 	}
 }
 
-impl Drop for Server {
+impl<M: Metadata> Drop for Server<M> {
 	fn drop(&mut self) {
 		self.stop_async().unwrap_or_else(|_| {}); // ignore error - can be stopped already
 		// todo : no stable logging for windows?
