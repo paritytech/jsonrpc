@@ -138,10 +138,14 @@ impl<M: jsonrpc::Metadata> Deref for Rpc<M> {
 	}
 }
 
+enum Handler<M: jsonrpc::Metadata> {
+	Simple(MetaIoHandler<M>),
+	WithLoop(RpcHandler<M>),
+}
+
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = ()> {
-	jsonrpc_handler: Arc<MetaIoHandler<M>>,
-	remote: Option<tokio_core::reactor::Remote>,
+	jsonrpc_handler: Handler<M>,
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
@@ -161,8 +165,7 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 		T: Into<MetaIoHandler<M>>
 	{
 		ServerBuilder {
-			jsonrpc_handler: Arc::new(handler.into()),
-			remote: None,
+			jsonrpc_handler: Handler::Simple(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
@@ -175,10 +178,9 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn with_remote(handler: Arc<MetaIoHandler<M>>, remote: tokio_core::reactor::Remote) -> Self {
+	pub fn with_rpc_handler(handler: RpcHandler<M>) -> Self {
 		ServerBuilder {
-			jsonrpc_handler: handler,
-			remote: Some(remote),
+			jsonrpc_handler: Handler::WithLoop(handler),
 			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
@@ -223,11 +225,11 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
 
-		let (handler, event_loop) = match self.remote {
-			Some(remote) => (RpcHandler::new(self.jsonrpc_handler, remote), None),
-			None => {
+		let (handler, event_loop) = match self.jsonrpc_handler {
+			Handler::WithLoop(handler) => (handler, None),
+			Handler::Simple(io_handler) => {
 				let event_loop = RpcEventLoop::spawn();
-				(event_loop.handler(self.jsonrpc_handler), Some(event_loop.into()))
+				(event_loop.handler(Arc::new(io_handler)), Some(event_loop.into()))
 			},
 		};
 
