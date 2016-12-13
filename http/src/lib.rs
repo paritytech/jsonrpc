@@ -121,6 +121,15 @@ pub struct Rpc<M: jsonrpc::Metadata> {
 	pub extractor: Arc<HttpMetaExtractor<M>>,
 }
 
+impl<M: jsonrpc::Metadata> From<RpcHandler<M>> for Rpc<M> {
+	fn from(handler: RpcHandler<M>) -> Self {
+		Rpc {
+			handler: handler,
+			extractor: Arc::new(NoopExtractor),
+		}
+	}
+}
+
 impl<M: jsonrpc::Metadata> Deref for Rpc<M> {
 	type Target = RpcHandler<M>;
 
@@ -189,6 +198,12 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 		self
 	}
 
+	/// Configures metadata extractor
+	pub fn meta_extractor(mut self, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
+		self.meta_extractor = extractor;
+		self
+	}
+
 	/// Allow connections only with `Host` header set to binding address.
 	pub fn allow_only_bind_host(mut self) -> Self {
 		self.allowed_hosts = Some(Vec::new());
@@ -211,8 +226,8 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 		let (handler, event_loop) = match self.remote {
 			Some(remote) => (RpcHandler::new(self.jsonrpc_handler, remote), None),
 			None => {
-				let event_loop = RpcEventLoop::spawn(self.jsonrpc_handler);
-				(event_loop.handler(), Some(event_loop.into()))
+				let event_loop = RpcEventLoop::spawn();
+				(event_loop.handler(self.jsonrpc_handler), Some(event_loop.into()))
 			},
 		};
 

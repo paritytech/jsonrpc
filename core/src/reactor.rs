@@ -13,14 +13,14 @@ use {MetaIoHandler, Metadata};
 /// EventLoop for all request to `jsonrpc-core`.
 /// NOTE: This is more-less temporary solution until we find a good way of integrating with event loops of particular
 /// transports.
-pub struct RpcEventLoop<M: Metadata = ()> {
-	rpc: RpcHandler<M>,
+pub struct RpcEventLoop {
+	remote: Remote,
 	handle: RpcEventLoopHandle,
 }
 
-impl<M: Metadata> RpcEventLoop<M> {
+impl RpcEventLoop {
 	/// Spawns a new thread with `EventLoop` with given handler.
-	pub fn spawn(handler: Arc<MetaIoHandler<M>>) -> Self {
+	pub fn spawn() -> Self {
 		let (stop, stopped) = futures::oneshot();
 		let (tx, rx) = mpsc::channel();
 		let handle = thread::spawn(move || {
@@ -31,7 +31,7 @@ impl<M: Metadata> RpcEventLoop<M> {
 		let remote = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
 		RpcEventLoop {
-			rpc: RpcHandler::new(handler, remote),
+			remote: remote,
 			handle: RpcEventLoopHandle {
 				close: Some(stop),
 				handle: Some(handle),
@@ -40,8 +40,13 @@ impl<M: Metadata> RpcEventLoop<M> {
 	}
 
 	/// Returns an RPC handler to process requests.
-	pub fn handler(&self) -> RpcHandler<M> {
-		self.rpc.clone()
+	pub fn handler<M: Metadata>(&self, handler: Arc<MetaIoHandler<M>>) -> RpcHandler<M> {
+		RpcHandler::new(handler, self.remote.clone())
+	}
+
+	/// Returns event loop remote.
+	pub fn remote(&self) -> Remote {
+		self.remote.clone()
 	}
 }
 
@@ -51,8 +56,8 @@ pub struct RpcEventLoopHandle {
 	handle: Option<thread::JoinHandle<()>>
 }
 
-impl<M: Metadata> From<RpcEventLoop<M>> for RpcEventLoopHandle {
-	fn from(el: RpcEventLoop<M>) -> Self {
+impl From<RpcEventLoop> for RpcEventLoopHandle {
+	fn from(el: RpcEventLoop) -> Self {
 		el.handle
 	}
 }

@@ -277,8 +277,8 @@ impl<M: Metadata> Server<M> {
 	pub fn new<T>(socket_addr: &SocketAddr, io_handler: T) -> Result<Server<M>, Error> where
 		T: Into<MetaIoHandler<M>>,
 	{
-		let rpc_loop = RpcEventLoop::spawn(Arc::new(io_handler.into()));
-		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler()));
+		let rpc_loop = RpcEventLoop::spawn();
+		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler(Arc::new(io_handler.into()))));
 		server.rpc_event_loop = Mutex::new(Some(rpc_loop.into()));
 		Ok(server)
 	}
