@@ -112,13 +112,23 @@ pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 struct NoopExtractor;
 impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 
-/// Basic RPC abstraction.
+/// RPC Handler bundled with metadata extractor.
 #[derive(Clone)]
 pub struct Rpc<M: jsonrpc::Metadata = ()> {
 	/// RPC Handler
 	pub handler: RpcHandler<M>,
 	/// Metadata extractor
 	pub extractor: Arc<HttpMetaExtractor<M>>,
+}
+
+impl<M: jsonrpc::Metadata> Rpc<M> {
+	/// Creates new RPC with extractor
+	pub fn new(handler: RpcHandler<M>, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
+		Rpc {
+			handler: handler,
+			extractor: extractor,
+		}
+	}
 }
 
 impl<M: jsonrpc::Metadata> From<RpcHandler<M>> for Rpc<M> {
