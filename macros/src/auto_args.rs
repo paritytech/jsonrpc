@@ -41,7 +41,7 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) $( -> $result: tt <$out: ty, Error> )* ;
+				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, Error>;
 			)*
 		}
 	) => {
@@ -49,7 +49,7 @@ macro_rules! build_rpc_trait {
 		pub trait $name: Sized + Send + Sync + 'static {
 			$(
 				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) $( -> $result<$out, Error> )* ;
+				fn $m_name ( $($p)* ) -> $result<$out, Error> ;
 			)*
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
@@ -59,7 +59,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) $( -> $result <$out, Error> )*
+						fn $m_name ( $($p)* ) -> $result <$out, Error>
 					);
 				)*
 				del
