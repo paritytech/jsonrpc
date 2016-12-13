@@ -1,6 +1,6 @@
 [package]
 name = "jsonrpc-ipc-server"
-version = "1.2.4"
+version = "1.0.0"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
