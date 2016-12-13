@@ -47,12 +47,6 @@ extern crate jsonrpc_core;
 use futures::{self, Future};
 use jsonrpc_core::*;
 
-struct SayHello;
-impl MethodCommand for SayHello {
-    fn execute(&self, _params: Params, ready: Ready) {
-    }
-}
-
 fn main() {
 	let io = IoHandler::new();
 	io.add_async_method("say_hello", |_params: Params| {
