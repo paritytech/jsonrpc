@@ -75,6 +75,13 @@ impl<T: Metadata> MetaIoHandler<T> {
 		);
 	}
 
+	/// Extend this `MetaIoHandler` with methods defined elsewhere.
+	pub fn extend_with<F>(&mut self, methods: F) where
+		F: Into<HashMap<String, RemoteProcedure<T>>>
+	{
+		self.methods.extend(methods.into())
+	}
+
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.

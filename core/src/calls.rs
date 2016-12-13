@@ -36,8 +36,11 @@ pub trait RpcNotification<T: Metadata>: Send + Sync + 'static {
 	fn execute(&self, params: Params, meta: T);
 }
 
+/// Possible Remote Procedures with Metadata
 pub enum RemoteProcedure<T: Metadata> {
+	/// A method call
 	Method(Box<RpcMethod<T>>),
+	/// A notification
 	Notification(Box<RpcNotification<T>>)
 }
 

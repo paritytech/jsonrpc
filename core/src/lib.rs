@@ -37,6 +37,6 @@ pub mod types;
 #[cfg(feature = "reactor")]
 pub mod reactor;
 
-pub use calls::{Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
+pub use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 pub use io::{IoHandler, MetaIoHandler};
 pub use types::*;
