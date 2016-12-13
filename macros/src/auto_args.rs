@@ -54,8 +54,8 @@ macro_rules! build_rpc_trait {
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
-			fn to_delegate<M: ::jsonrpc_core::Metadata>(self) -> $crate::delegates::IoDelegate<Self, M> {
-				let mut del = $crate::delegates::IoDelegate::new(self.into());
+			fn to_delegate<M: ::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M> {
+				let mut del = $crate::IoDelegate::new(self.into());
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )

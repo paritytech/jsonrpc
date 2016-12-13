@@ -72,7 +72,7 @@ impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F> where
 }
 
 /// A set of RPC methods and notifications tied to single `delegate` struct.
-pub struct IoDelegate<T, M> where
+pub struct IoDelegate<T, M = ()> where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {
