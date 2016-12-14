@@ -49,22 +49,6 @@ impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
 		closure(&self.delegate, params)
 	}
 }
-//
-// trait AsyncFunc<T, M> {
-// 	fn call(&self, base: &T, params: Params, meta: M) -> AsyncData;
-// }
-//
-// impl<F, T, M> AsyncFunc<T, M> for F where
-// 	F: Fn(&T, Params, M) -> AsyncData + 'static,
-// 	F: Send + Sync + 'static,
-// 	T: Send + Sync + 'static,
-// 	M: Metadata,
-// {
-// 	fn call(&self, base: &T, params: Params, meta: M) -> AsyncData {
-// 		self(base, params, meta)
-// 	}
-// }
-
 
 struct DelegateMethodWithMeta<T, M> where
 	T: Send + Sync + 'static,
