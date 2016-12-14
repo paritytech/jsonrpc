@@ -10,7 +10,7 @@
 //! use jsonrpc_core::*;
 //!
 //! fn main() {
-//! 	let mut io = IoHandler::default();
+//! 	let mut io = IoHandler::new();
 //! 	io.add_method("say_hello", |_| {
 //!			Ok(Value::String("Hello World!".into()))
 //! 	});
