@@ -1,14 +1,16 @@
 extern crate jsonrpc_core;
+extern crate futures;
 
-use std::sync::Arc;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use self::jsonrpc_core::{IoHandler, Params, Ready, Value};
+use self::jsonrpc_core::{IoHandler, Params, Value, Error};
+
+use futures::Future;
 use super::*;
 
 fn serve_hosts(hosts: Vec<String>) -> Server {
-	ServerBuilder::new(Arc::new(IoHandler::new()))
+	ServerBuilder::new(IoHandler::default())
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
 		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
@@ -17,19 +19,21 @@ fn serve_hosts(hosts: Vec<String>) -> Server {
 
 fn serve() -> Server {
 	use std::thread;
-	let io = IoHandler::new();
+	let mut io = IoHandler::default();
 	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
-	io.add_async_method("hello_async", |_params: Params, ready: Ready| {
-		ready.ready(Ok(Value::String("world".into())));
+	io.add_async_method("hello_async", |_params: Params| {
+		futures::finished(Value::String("world".into())).boxed()
 	});
-	io.add_async_method("hello_async2", |_params: Params, ready: Ready| {
+	io.add_async_method("hello_async2", |_params: Params| {
+		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
 			thread::sleep(::std::time::Duration::from_millis(10));
-			ready.ready(Ok(Value::String("world".into())));
+			c.complete(Value::String("world".into()));
 		});
+		p.map_err(|_| Error::invalid_request()).boxed()
 	});
 
-	ServerBuilder::new(Arc::new(io))
+	ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()

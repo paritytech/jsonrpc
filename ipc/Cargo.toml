@@ -1,13 +1,13 @@
 [package]
 name = "jsonrpc-ipc-server"
-version = "0.2.4"
+version = "1.0.0"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
 homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
-jsonrpc-core = { version = "4.0", path = "../core" }
+jsonrpc-core = { version = "5.0", path = "../core" }
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
@@ -15,6 +15,7 @@ miow = "0.1"
 log = "0.3"
 env_logger = "0.3"
 lazy_static = "0.2"
-
-[dev-dependencies]
 rand = "0.3"
+
+[features]
+default = ["jsonrpc-core/reactor"]

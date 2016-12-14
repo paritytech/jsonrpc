@@ -1,14 +1,17 @@
 use cors;
+use Rpc;
 
 use std::sync::{mpsc, Arc, Mutex};
 use std::io::{self, Read};
+
 use unicase::UniCase;
 use hyper::{mime, server, Next, Encoder, Decoder, Control};
 use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
 use hyper::method::Method;
 use hyper::net::HttpStream;
 use hyper::header::AccessControlAllowOrigin;
-use jsonrpc::{IoHandler, GenericIoHandler, ResponseHandler};
+
+use jsonrpc::Metadata;
 use request_response::{Request, Response};
 use hosts_validator::is_host_header_valid;
 
@@ -18,38 +21,13 @@ pub struct PanicHandler {
 	pub handler: Arc<Mutex<Option<Box<Fn() -> () + Send + 'static>>>>
 }
 
-/// RPC Requests handler with additional metadata support.
-pub trait RpcHandler: Send + Sync {
-	/// Type of metadata
-	type Metadata: Send;
-
-	/// Read the metadata from the request
-	fn read_metadata(&self, &server::Request<HttpStream>) -> Option<Self::Metadata> {
-		None
-	}
-
-	/// Handle request with additional metadata.
-	fn handle_request<H>(&self, request_str: &str, response_handler: H, meta: Option<Self::Metadata>) where
-		H: ResponseHandler<Option<String>, Option<String>> + 'static;
-}
-
-impl RpcHandler for IoHandler {
-	type Metadata = ();
-
-	fn handle_request<H>(&self, request_str: &str, response_handler: H, _meta: Option<Self::Metadata>) where
-		H: ResponseHandler<Option<String>, Option<String>> + 'static
-	{
-		GenericIoHandler::handle_request(self, request_str, response_handler)
-	}
-}
-
 /// jsonrpc http request handler.
-pub struct ServerHandler<T: RpcHandler> {
+pub struct ServerHandler<M: Metadata = ()> {
 	panic_handler: PanicHandler,
-	jsonrpc_handler: Arc<T>,
+	jsonrpc_handler: Rpc<M>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
-	metadata: Option<T::Metadata>,
+	metadata: Option<M>,
 	control: Control,
 	request: Request,
 	response: Response,
@@ -58,7 +36,7 @@ pub struct ServerHandler<T: RpcHandler> {
 	waiting_response: mpsc::Receiver<Response>,
 }
 
-impl<T: RpcHandler> Drop for ServerHandler<T> {
+impl<M: Metadata> Drop for ServerHandler<M> {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
 			let handler = self.panic_handler.handler.lock().unwrap();
@@ -69,10 +47,10 @@ impl<T: RpcHandler> Drop for ServerHandler<T> {
 	}
 }
 
-impl<T: RpcHandler> ServerHandler<T> {
+impl<M: Metadata> ServerHandler<M> {
 	/// Create new request handler.
 	pub fn new(
-		jsonrpc_handler: Arc<T>,
+		jsonrpc_handler: Rpc<M>,
 		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<String>>,
 		panic_handler: PanicHandler,
@@ -123,7 +101,7 @@ impl<T: RpcHandler> ServerHandler<T> {
 	}
 }
 
-impl<T: RpcHandler> server::Handler<HttpStream> for ServerHandler<T> {
+impl<M: Metadata> server::Handler<HttpStream> for ServerHandler<M> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Validate host
 		if let Some(ref allowed_hosts) = self.allowed_hosts {
@@ -135,7 +113,7 @@ impl<T: RpcHandler> server::Handler<HttpStream> for ServerHandler<T> {
 
 		// Read origin
 		self.request.origin = cors::read_origin(&request);
-		self.metadata = self.jsonrpc_handler.read_metadata(&request);
+		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
 
 		match *request.method() {
 			// Don't validate content type on options
@@ -166,10 +144,9 @@ impl<T: RpcHandler> server::Handler<HttpStream> for ServerHandler<T> {
 			Ok(0) => {
 				let control = self.control.clone();
 				let sender = self.waiting_sender.clone();
+				let metadata = self.metadata.take().unwrap_or_default();
 
-				let metadata = self.metadata.take();
-
-				self.jsonrpc_handler.handle_request(&self.request.content, move |response| {
+				self.jsonrpc_handler.handle_request(&self.request.content, metadata, move |response| {
 					let response = match response {
 						None => Response::ok(String::new()),
 						// Add new line to have nice output when using CLI clients (curl)
@@ -185,7 +162,7 @@ impl<T: RpcHandler> server::Handler<HttpStream> for ServerHandler<T> {
 					if let Err(e) = result {
 						warn!("Error while resuming async call: {:?}", e);
 					}
-				}, metadata);
+				});
 
 				Next::wait()
 			}

@@ -4,21 +4,16 @@
 //! extern crate jsonrpc_core;
 //! extern crate jsonrpc_http_server;
 //!
-//! use std::sync::Arc;
 //! use jsonrpc_core::*;
 //! use jsonrpc_http_server::*;
 //!
-//! struct SayHello;
-//! impl SyncMethodCommand for SayHello {
-//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	}
-//! }
-//!
 //! fn main() {
-//! 	let io = IoHandler::new();
-//! 	io.add_method("say_hello", SayHello);
-//! 	let _server = ServerBuilder::new(Arc::new(io)).start_http(&"127.0.0.1:3030".parse().unwrap());
+//! 	let mut io = IoHandler::default();
+//! 	io.add_method("say_hello", |_: Params| {
+//! 		Ok(Value::String("hello".to_string()))
+//! 	});
+//!
+//! 	let _server = ServerBuilder::new(io).start_http(&"127.0.0.1:3030".parse().unwrap());
 //! }
 //! ```
 
@@ -28,6 +23,8 @@
 extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
+extern crate futures;
+extern crate tokio_core;
 
 pub mod request_response;
 pub mod cors;
@@ -40,11 +37,13 @@ use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
+use std::ops::Deref;
 use hyper::server;
-use jsonrpc::IoHandler;
+use jsonrpc::MetaIoHandler;
+use jsonrpc::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 
 pub use hyper::header::AccessControlAllowOrigin;
-pub use handler::{PanicHandler, ServerHandler, RpcHandler};
+pub use handler::{PanicHandler, ServerHandler};
 pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
@@ -57,6 +56,12 @@ pub enum RpcServerError {
 	IoError(std::io::Error),
 	/// Other Error (hyper)
 	Other(hyper::error::Error),
+}
+
+impl From<std::io::Error> for RpcServerError {
+	fn from(err: std::io::Error) -> Self {
+		RpcServerError::IoError(err)
+	}
 }
 
 impl From<hyper::error::Error> for RpcServerError {
@@ -95,23 +100,98 @@ impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
 	}
 }
 
+/// Extracts metadata from the HTTP request.
+pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
+	/// Read the metadata from the request
+	fn read_metadata(&self, _: &server::Request<hyper::net::HttpStream>) -> M {
+		Default::default()
+	}
+}
+
+#[derive(Default)]
+struct NoopExtractor;
+impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
+
+/// RPC Handler bundled with metadata extractor.
+#[derive(Clone)]
+pub struct Rpc<M: jsonrpc::Metadata = ()> {
+	/// RPC Handler
+	pub handler: RpcHandler<M>,
+	/// Metadata extractor
+	pub extractor: Arc<HttpMetaExtractor<M>>,
+}
+
+impl<M: jsonrpc::Metadata> Rpc<M> {
+	/// Creates new RPC with extractor
+	pub fn new(handler: RpcHandler<M>, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
+		Rpc {
+			handler: handler,
+			extractor: extractor,
+		}
+	}
+}
+
+impl<M: jsonrpc::Metadata> From<RpcHandler<M>> for Rpc<M> {
+	fn from(handler: RpcHandler<M>) -> Self {
+		Rpc {
+			handler: handler,
+			extractor: Arc::new(NoopExtractor),
+		}
+	}
+}
+
+impl<M: jsonrpc::Metadata> Deref for Rpc<M> {
+	type Target = RpcHandler<M>;
+
+	fn deref(&self) -> &Self::Target {
+		&self.handler
+	}
+}
+
+enum Handler<M: jsonrpc::Metadata> {
+	Simple(MetaIoHandler<M>),
+	WithLoop(RpcHandler<M>),
+}
+
 /// Convenient JSON-RPC HTTP Server builder.
-pub struct ServerBuilder {
-	jsonrpc_handler: Arc<IoHandler>,
+pub struct ServerBuilder<M: jsonrpc::Metadata = ()> {
+	jsonrpc_handler: Handler<M>,
+	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
-impl ServerBuilder {
-	/// Creates new `ServerBuilder` with specified `IoHandler`.
+impl<M: jsonrpc::Metadata> ServerBuilder<M> {
+	/// Creates new `ServerBuilder` for given `IoHandler`.
+	///
+	/// If you want to re-use the same handler in couple places
+	/// see `with_remote` function.
 	///
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn new(jsonrpc_handler: Arc<IoHandler>) -> Self {
+	pub fn new<T>(handler: T) -> Self where
+		T: Into<MetaIoHandler<M>>
+	{
 		ServerBuilder {
-			jsonrpc_handler: jsonrpc_handler,
+			jsonrpc_handler: Handler::Simple(handler.into()),
+			meta_extractor: Arc::new(NoopExtractor::default()),
+			cors_domains: None,
+			allowed_hosts: None,
+			panic_handler: None,
+		}
+	}
+
+	/// Creates new `ServerBuilder` given access to the event loop `Remote`.
+	///
+	/// By default:
+	/// 1. Server is not sending any CORS headers.
+	/// 2. Server is validating `Host` header.
+	pub fn with_rpc_handler(handler: RpcHandler<M>) -> Self {
+		ServerBuilder {
+			jsonrpc_handler: Handler::WithLoop(handler),
+			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
@@ -130,6 +210,12 @@ impl ServerBuilder {
 		self
 	}
 
+	/// Configures metadata extractor
+	pub fn meta_extractor(mut self, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
+		self.meta_extractor = extractor;
+		self
+	}
+
 	/// Allow connections only with `Host` header set to binding address.
 	pub fn allow_only_bind_host(mut self) -> Self {
 		self.allowed_hosts = Some(Vec::new());
@@ -145,10 +231,22 @@ impl ServerBuilder {
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
 		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
-		let jsonrpc_handler = self.jsonrpc_handler;
 		let cors_domains = self.cors_domains;
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
+
+		let (handler, event_loop) = match self.jsonrpc_handler {
+			Handler::WithLoop(handler) => (handler, None),
+			Handler::Simple(io_handler) => {
+				let event_loop = RpcEventLoop::spawn();
+				(event_loop.handler(Arc::new(io_handler)), Some(event_loop.into()))
+			},
+		};
+
+		let jsonrpc_handler = Rpc {
+			handler: handler,
+			extractor: self.meta_extractor,
+		};
 
 		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |control| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
@@ -180,6 +278,7 @@ impl ServerBuilder {
 		Ok(Server {
 			server: Some(l),
 			handle: Some(handle),
+			event_loop: event_loop,
 		})
 	}
 }
@@ -188,6 +287,7 @@ impl ServerBuilder {
 pub struct Server {
 	server: Option<server::Listening>,
 	handle: Option<thread::JoinHandle<()>>,
+	event_loop: Option<RpcEventLoopHandle>,
 }
 
 impl Server {
@@ -198,7 +298,8 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		self.server.take().unwrap().close()
+		self.server.take().unwrap().close();
+		self.event_loop.take().map(|v| v.close());
 	}
 
 	/// Will block, waiting for the server to finish.
@@ -209,6 +310,7 @@ impl Server {
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.server.take().unwrap().close()
+		self.server.take().unwrap().close();
+		self.event_loop.take().map(|v| v.close());
 	}
 }

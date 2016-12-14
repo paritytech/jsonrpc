@@ -3,7 +3,7 @@ use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer, Error as SerError};
 use serde_json::{from_value, Error as JsonError};
 
-use super::{Id, Params, Version, Value, SubscriptionOutput};
+use super::{Id, Params, Version, Value};
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
@@ -35,17 +35,6 @@ pub struct Notification {
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
 	pub params: Option<Params>,
-}
-
-impl Notification {
-	/// Converts `SubscriptionOutput` into `Notification` request.
-	pub fn from(result: SubscriptionOutput, jsonrpc: Version) -> Self {
-		Notification {
-			jsonrpc: jsonrpc,
-			method: result.method.clone(),
-			params: Some(result.into()),
-		}
-	}
 }
 
 /// Represents single jsonrpc call.

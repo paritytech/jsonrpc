@@ -17,8 +17,6 @@ pub enum ErrorCode {
 	InvalidParams,
 	/// Internal JSON-RPC error.
 	InternalError,
-	/// Pub-Sub not supported
-	SessionNotSupported,
 	/// Reserved for implementation-defined server-errors.
 	ServerError(i64)
 }
@@ -32,7 +30,6 @@ impl ErrorCode {
 			ErrorCode::MethodNotFound => -32601,
 			ErrorCode::InvalidParams => -32602,
 			ErrorCode::InternalError => -32603,
-			ErrorCode::SessionNotSupported => -32001,
 			ErrorCode::ServerError(code) => code
 		}
 	}
@@ -45,7 +42,6 @@ impl ErrorCode {
 			ErrorCode::MethodNotFound => "Method not found",
 			ErrorCode::InvalidParams => "Invalid params",
 			ErrorCode::InternalError => "Internal error",
-			ErrorCode::SessionNotSupported => "Subscriptions are not supported",
 			ErrorCode::ServerError(_) => "Server error",
 		};
 		desc.to_string()
@@ -62,7 +58,6 @@ impl Deserialize for ErrorCode {
 			Some(-32601) => Ok(ErrorCode::MethodNotFound),
 			Some(-32602) => Ok(ErrorCode::InvalidParams),
 			Some(-32603) => Ok(ErrorCode::InternalError),
-			Some(-32000) => Ok(ErrorCode::SessionNotSupported),
 			Some(code) => Ok(ErrorCode::ServerError(code)),
 			_ => unreachable!()
 		}

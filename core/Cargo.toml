@@ -4,7 +4,7 @@ homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-core"
-version = "4.0.0"
+version = "5.0.0"
 authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 build = "build.rs"
@@ -12,15 +12,18 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_core/index.html"
 
 [dependencies]
 log = "0.3"
-parking_lot = "0.3"
+futures = "0.1.6"
 # always carefully check serde versions before an update
 serde = "0.8"
 serde_json = "0.8"
-serde_macros = { "version" = "0.8", "optional" = true }
+serde_macros = { version = "0.8", optional = true }
+# Optional dependencies for reactor support
+tokio-core = { version = "0.1", optional = true}
 
 [build-dependencies]
-serde_codegen = { "version" = "0.8", "optional" = true }
+serde_codegen = { version = "0.8", optional = true }
 
 [features]
 default = ["serde_codegen"]
 nightly = ["serde_macros"]
+reactor = ["tokio-core"]

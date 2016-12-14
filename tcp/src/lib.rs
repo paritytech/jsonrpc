@@ -27,17 +27,12 @@
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
 //!
-//! struct SayHello;
-//! impl SyncMethodCommand for SayHello {
-//! 	fn execute(&self, _params: Params) -> Result<Value, Error> {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	}
-//! }
-//!
 //! fn main() {
-//! 	let io = IoHandler::new();
-//! 	io.add_method("say_hello", SayHello);
-//! 	let server = Server::new(&SocketAddr::from_str("0.0.0.0:9993").unwrap(), &Arc::new(io)).unwrap();
+//! 	let mut io = IoHandler::default();
+//! 	io.add_method("say_hello", |_params| {
+//! 		Ok(Value::String("hello".to_string()))
+//! 	});
+//! 	let server = Server::new(&SocketAddr::from_str("0.0.0.0:9993").unwrap(), io).unwrap();
 //!     ::std::thread::spawn(move || server.run());
 //! }
 //! ```
@@ -50,27 +45,28 @@ extern crate slab;
 extern crate mio;
 extern crate bytes;
 extern crate serde_json;
-
-#[cfg(test)]
 extern crate rand;
 
 mod validator;
 #[cfg(test)]
 pub mod tests;
 
-use mio::*;
-use mio::tcp::*;
-use bytes::{Buf, ByteBuf, MutByteBuf};
+use std::env;
 use std::io;
-use jsonrpc_core::{IoHandler, IoSession, IoSessionHandler};
 use std::sync::*;
 use std::sync::atomic::*;
+use std::net::SocketAddr;
 use std::collections::VecDeque;
-use std::env;
+use std::collections::HashMap;
+
 use log::LogLevelFilter;
 use env_logger::LogBuilder;
-use std::net::SocketAddr;
-use std::collections::HashMap;
+use bytes::{Buf, ByteBuf, MutByteBuf};
+
+use mio::*;
+use mio::tcp::*;
+use jsonrpc_core::{Metadata, MetaIoHandler};
+use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 
 lazy_static! {
 	static ref LOG_DUMMY: bool = {
@@ -99,9 +95,9 @@ const MAX_WRITE_LENGTH: usize = 8192;
 const MAX_MESSAGES_DISPATCH: usize = 128; // per max of POLL_INTERVAL
 const POLL_INTERVAL: usize = 100;
 
-struct SocketConnection {
+struct SocketConnection<M: Metadata> {
 	socket: TcpStream,
-	session: IoSession,
+	session: RpcHandler<M>,
 	buf: Option<ByteBuf>,
 	mut_buf: Option<MutByteBuf>,
 	token: Option<Token>,
@@ -111,8 +107,8 @@ struct SocketConnection {
 
 type Slab<T> = slab::Slab<T, Token>;
 
-impl SocketConnection {
-	fn new(sock: TcpStream, addr: SocketAddr, session: IoSession) -> Self {
+impl<M: Metadata> SocketConnection<M> {
+	fn new(sock: TcpStream, addr: SocketAddr, session: RpcHandler<M>) -> Self {
 		SocketConnection {
 			socket: sock,
 			session: session,
@@ -124,7 +120,7 @@ impl SocketConnection {
 		}
 	}
 
-	fn send(&mut self, event_loop: &mut EventLoop<RpcServer>, data: &[u8]) -> io::Result<()> {
+	fn send(&mut self, event_loop: &mut EventLoop<RpcServer<M>>, data: &[u8]) -> io::Result<()> {
 		if let Some(buf) = self.buf.take() {
 			let mut mut_buf = buf.flip();
 			mut_buf.write_slice(data);
@@ -138,7 +134,7 @@ impl SocketConnection {
 		event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
 	}
 
-	fn writable(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
+	fn writable(&mut self, event_loop: &mut EventLoop<RpcServer<M>>) -> io::Result<()> {
 		use std::io::Write;
 		if let Some(buf) = self.buf.take() {
 			trace!(target: "tcp", "{} bytes in write buffer", buf.remaining());
@@ -173,7 +169,7 @@ impl SocketConnection {
 		Ok(msg.to_owned())
 	}
 
-	fn readable(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
+	fn readable(&mut self, event_loop: &mut EventLoop<RpcServer<M>>) -> io::Result<()> {
 		let mut buf = self.mut_buf.take().unwrap_or_else(|| panic!("unwrapping mutable buffer which is None"));
 
 		match self.socket.try_read_buf(&mut buf) {
@@ -189,7 +185,9 @@ impl SocketConnection {
 
 						let channel = event_loop.channel();
 						let token = self.token.unwrap();
-						self.session.handle_request(&self.inject_protocol_note(&rpc_msg).unwrap(), move |response: Option<String>| {
+						// TODO [ToDr] Implement some metadata extractor here.
+						let metadata = Default::default();
+						self.session.handle_request(&self.inject_protocol_note(&rpc_msg).unwrap(), metadata, move |response: Option<String>| {
 							if let Some(response_str) = response {
 								trace!(target: "tcp", "Response: {}", &response_str);
 
@@ -239,18 +237,19 @@ impl TcpContext {
 	}
 }
 
-struct RpcServer {
+struct RpcServer<M: Metadata> {
 	socket: TcpListener,
-	connections: Slab<SocketConnection>,
-	io_handler: Arc<IoHandler>,
+	connections: Slab<SocketConnection<M>>,
+	io_handler: RpcHandler<M>,
 	tokens: VecDeque<Token>,
 	context: Arc<TcpContext>,
 	addr_index: HashMap<SocketAddr, Token>,
 }
 
-pub struct Server {
-	rpc_server: Arc<RwLock<RpcServer>>,
-	event_loop: Arc<RwLock<EventLoop<RpcServer>>>,
+pub struct Server<M: Metadata> {
+	rpc_server: Arc<RwLock<RpcServer<M>>>,
+	event_loop: Arc<RwLock<EventLoop<RpcServer<M>>>>,
+	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
 	_addr: SocketAddr,
@@ -273,14 +272,24 @@ impl std::convert::From<std::io::Error> for Error {
 	}
 }
 
-impl Server {
+impl<M: Metadata> Server<M> {
 	/// New server
-	pub fn new(socket_addr: &SocketAddr, io_handler: &Arc<IoHandler>) -> Result<Server, Error> {
+	pub fn new<T>(socket_addr: &SocketAddr, io_handler: T) -> Result<Server<M>, Error> where
+		T: Into<MetaIoHandler<M>>,
+	{
+		let rpc_loop = RpcEventLoop::spawn();
+		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler(Arc::new(io_handler.into()))));
+		server.rpc_event_loop = Mutex::new(Some(rpc_loop.into()));
+		Ok(server)
+	}
+
+	pub fn with_rpc_handler(socket_addr: &SocketAddr, io_handler: RpcHandler<M>) -> Result<Server<M>, Error> {
 		let tcp_context = TcpContext::new();
 		let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler, tcp_context.clone()));
 		Ok(Server {
 			rpc_server: Arc::new(RwLock::new(server)),
 			event_loop: Arc::new(RwLock::new(event_loop)),
+			rpc_event_loop: Mutex::new(None),
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
 			_addr: socket_addr.clone(),
@@ -351,6 +360,9 @@ impl Server {
 	}
 
 	pub fn stop_async(&self) -> Result<(), Error> {
+		if let Some(rpc) = self.rpc_event_loop.lock().unwrap().take() {
+			rpc.close();
+		}
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -358,6 +370,9 @@ impl Server {
 	}
 
 	pub fn stop(&self) -> Result<(), Error> {
+		if let Some(rpc) = self.rpc_event_loop.lock().unwrap().take() {
+			rpc.close();
+		}
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -377,9 +392,9 @@ impl Server {
 }
 
 // listener (RpcServer.socket) is never used except initializer, but have to be stored inside RpcServer and is not `Sync`
-unsafe impl Sync for RpcServer { }
+unsafe impl<M: Metadata> Sync for RpcServer<M> { }
 
-impl Drop for Server {
+impl<M: Metadata> Drop for Server<M> {
 	fn drop(&mut self) {
 		self.stop().unwrap_or_else(|_| {}); // ignore error - can be stopped already
 	}
@@ -390,16 +405,16 @@ pub struct RequestContext {
 	pub socket_addr: SocketAddr,
 }
 
-impl RpcServer {
-	/// start ipc rpc server (blocking)
-	pub fn start(addr: &SocketAddr, io_handler: &Arc<IoHandler>, tcp_context: Arc<TcpContext>) -> Result<(RpcServer, EventLoop<RpcServer>), Error> {
+impl<M: Metadata> RpcServer<M> {
+	/// start ipc rpc server
+	pub fn start(addr: &SocketAddr, io_handler: RpcHandler<M>, tcp_context: Arc<TcpContext>) -> Result<(RpcServer<M>, EventLoop<RpcServer<M>>), Error> {
 		let mut event_loop = try!(EventLoop::new());
 		let socket = try!(TcpListener::bind(&addr));
 		event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
 		let server = RpcServer {
 			socket: socket,
 			connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
-			io_handler: io_handler.clone(),
+			io_handler: io_handler,
 			tokens: VecDeque::new(),
 			context: tcp_context,
 			addr_index: HashMap::new(),
@@ -407,9 +422,9 @@ impl RpcServer {
 		Ok((server, event_loop))
 	}
 
-	fn accept(&mut self, event_loop: &mut EventLoop<RpcServer>) -> io::Result<()> {
+	fn accept(&mut self, event_loop: &mut EventLoop<RpcServer<M>>) -> io::Result<()> {
 		let (stream, addr) = self.socket.accept().unwrap().unwrap();
-		let connection = SocketConnection::new(stream, addr.clone(), self.io_handler.session());
+		let connection = SocketConnection::new(stream, addr.clone(), self.io_handler.clone());
 		if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
 			// max connections
 			return Ok(());
@@ -432,21 +447,21 @@ impl RpcServer {
 		Ok(())
 	}
 
-	fn connection_send(&mut self, event_loop: &mut EventLoop<RpcServer>, tok: Token, data: Vec<u8>) -> io::Result<()> {
+	fn connection_send(&mut self, event_loop: &mut EventLoop<RpcServer<M>>, tok: Token, data: Vec<u8>) -> io::Result<()> {
 		self.connection(tok).send(event_loop, &data)
 	}
 
-	fn connection_readable(&mut self, event_loop: &mut EventLoop<RpcServer>, tok: Token) -> io::Result<()> {
+	fn connection_readable(&mut self, event_loop: &mut EventLoop<RpcServer<M>>, tok: Token) -> io::Result<()> {
 		*self.context.request.write().unwrap() =
 			Some(RequestContext { socket_addr: self.connection(tok).addr.clone() });
 		self.connection(tok).readable(event_loop)
 	}
 
-	fn connection_writable(&mut self, event_loop: &mut EventLoop<RpcServer>, tok: Token) -> io::Result<()> {
+	fn connection_writable(&mut self, event_loop: &mut EventLoop<RpcServer<M>>, tok: Token) -> io::Result<()> {
 		self.connection(tok).writable(event_loop)
 	}
 
-	fn connection<'a>(&'a mut self, tok: Token) -> &'a mut SocketConnection {
+	fn connection<'a>(&'a mut self, tok: Token) -> &'a mut SocketConnection<M> {
 		&mut self.connections[tok]
 	}
 
@@ -461,17 +476,17 @@ enum RpcMessage {
 }
 
 
-impl Handler for RpcServer {
+impl<M: Metadata> Handler for RpcServer<M> {
 	type Timeout = usize;
 	type Message = RpcMessage;
 
-	fn notify(&mut self, event_loop: &mut EventLoop<RpcServer>, msg: RpcMessage) {
+	fn notify(&mut self, event_loop: &mut EventLoop<RpcServer<M>>, msg: RpcMessage) {
 		match msg {
 			RpcMessage::Write(token, bytes) => self.connection_send(event_loop, token, bytes).unwrap(),
 		}
 	}
 
-	fn ready(&mut self, event_loop: &mut EventLoop<RpcServer>, token: Token, events: EventSet) {
+	fn ready(&mut self, event_loop: &mut EventLoop<RpcServer<M>>, token: Token, events: EventSet) {
 		if events.is_readable() {
 			match token {
 				SERVER => self.accept(event_loop).unwrap(),
