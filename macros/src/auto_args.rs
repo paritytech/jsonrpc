@@ -81,6 +81,7 @@ macro_rules! build_rpc_trait {
 	) => {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
+			/// Requests metadata
 			type Metadata: ::jsonrpc_core::Metadata;
 
 			$(

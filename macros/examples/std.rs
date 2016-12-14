@@ -40,7 +40,7 @@ impl Rpc for RpcImpl {
 
 
 fn main() {
-	let mut io = jsonrpc_core::IoHandler::default();
+	let mut io = jsonrpc_core::IoHandler::new();
 	let rpc = RpcImpl;
 
 	io.extend_with(rpc.to_delegate())

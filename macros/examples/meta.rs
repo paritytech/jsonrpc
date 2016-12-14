@@ -47,7 +47,7 @@ impl Rpc for RpcImpl {
 
 
 fn main() {
-	let mut io = jsonrpc_core::MetaIoHandler::default();
+	let mut io = jsonrpc_core::IoHandler::default();
 	let rpc = RpcImpl;
 
 	io.extend_with(rpc.to_delegate())
