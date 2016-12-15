@@ -18,17 +18,9 @@ fn write_response(response: Response) -> String {
 }
 
 /// Request handler
+#[derive(Default)]
 pub struct MetaIoHandler<T: Metadata> {
 	methods: HashMap<String, RemoteProcedure<T>>,
-}
-
-// Don't derive, cause we don't require T to be Default
-impl<T: Metadata> Default for MetaIoHandler<T> {
-	fn default() -> Self {
-		MetaIoHandler {
-			methods: HashMap::new(),
-		}
-	}
 }
 
 impl<T: Metadata> MetaIoHandler<T> {
@@ -157,32 +149,40 @@ impl<T: Metadata> MetaIoHandler<T> {
 
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
 #[derive(Default)]
-pub struct IoHandler(MetaIoHandler<()>);
+pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
 
+// Type inference helper
 impl IoHandler {
+	/// Creates new `IoHandler` without any metadata.
+	pub fn new() -> Self {
+		IoHandler::default()
+	}
+}
+
+impl<M: Metadata> IoHandler<M> {
 
 	/// Handle given request asynchronously.
 	pub fn handle_request(&self, request: &str) -> BoxFuture<Option<String>, ()> {
-		self.0.handle_request(request, ())
+		self.0.handle_request(request, M::default())
 	}
 
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
 	pub fn handle_request_sync(&self, request: &str) -> Option<String> {
-		self.0.handle_request_sync(request, ())
+		self.0.handle_request_sync(request, M::default())
 	}
 }
 
-impl Deref for IoHandler {
-	type Target = MetaIoHandler<()>;
+impl<M: Metadata> Deref for IoHandler<M> {
+	type Target = MetaIoHandler<M>;
 
 	fn deref(&self) -> &Self::Target {
 		&self.0
 	}
 }
 
-impl DerefMut for IoHandler {
+impl<M: Metadata> DerefMut for IoHandler<M> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
 		&mut self.0
 	}
@@ -202,7 +202,7 @@ mod tests {
 
 	#[test]
 	fn test_io_handler() {
-		let mut io = IoHandler::default();
+		let mut io = IoHandler::new();
 
 		io.add_method("say_hello", |_| {
 			Ok(Value::String("hello".to_string()))
@@ -216,7 +216,7 @@ mod tests {
 
 	#[test]
 	fn test_async_io_handler() {
-		let mut io = IoHandler::default();
+		let mut io = IoHandler::new();
 
 		io.add_async_method("say_hello", |_| {
 			futures::finished(Value::String("hello".to_string())).boxed()
@@ -233,7 +233,7 @@ mod tests {
 		use std::sync::Arc;
 		use std::sync::atomic;
 
-		let mut io = IoHandler::default();
+		let mut io = IoHandler::new();
 
 		let called = Arc::new(atomic::AtomicBool::new(false));
 		let c = called.clone();
@@ -248,7 +248,7 @@ mod tests {
 
 	#[test]
 	fn test_method_not_found() {
-		let io = IoHandler::default();
+		let io = IoHandler::new();
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 		let response = r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found","data":null},"id":1}"#;
@@ -264,7 +264,7 @@ mod tests {
 			true
 		}
 
-		let io = IoHandler::default();
+		let io = IoHandler::new();
 
 		assert!(is_send_sync(io))
 	}

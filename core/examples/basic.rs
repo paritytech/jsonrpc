@@ -3,7 +3,7 @@ extern crate jsonrpc_core;
 use jsonrpc_core::*;
 
 fn main() {
-	let mut io = IoHandler::default();
+	let mut io = IoHandler::new();
 
 	io.add_method("say_hello", |_: Params| {
 		Ok(Value::String("Hello World!".to_owned()))

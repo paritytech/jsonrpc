@@ -5,7 +5,7 @@
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
 use futures::{self, BoxFuture, Future};
-use jsonrpc_core::{Error, Params, Value, to_value};
+use jsonrpc_core::{Error, Params, Value, to_value, Metadata};
 use serde::{Serialize, Deserialize};
 use util::{invalid_params, expect_no_params};
 
@@ -67,6 +67,43 @@ macro_rules! build_rpc_trait {
 		}
 	};
 
+	// entry-point for trait with metadata methods
+	(
+		$(#[$t_attr: meta])*
+		pub trait $name: ident {
+			type Metadata;
+			$(
+				$( #[doc=$m_doc:expr] )*
+				#[ rpc( $($t:tt)* ) ]
+				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, Error>;
+			)*
+		}
+	) => {
+		$(#[$t_attr])*
+		pub trait $name: Sized + Send + Sync + 'static {
+			/// Requests metadata
+			type Metadata: ::jsonrpc_core::Metadata;
+
+			$(
+				$(#[doc=$m_doc])*
+				fn $m_name ( $($p)* ) -> $result<$out, Error> ;
+			)*
+
+			/// Transform this into an `IoDelegate`, automatically wrapping
+			/// the parameters.
+			fn to_delegate(self) -> $crate::IoDelegate<Self, Self::Metadata> {
+				let mut del = $crate::IoDelegate::new(self.into());
+				$(
+					build_rpc_trait!(WRAP del =>
+						( $($t)* )
+						fn $m_name ( $($p)* ) -> $result <$out, Error>
+					);
+				)*
+				del
+			}
+		}
+	};
+
 	( WRAP $del: expr =>
 		(name = $name: expr)
 		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, Error>
@@ -84,6 +121,15 @@ macro_rules! build_rpc_trait {
 			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, Error>), base, params)
 		})
 	};
+
+	( WRAP $del: expr =>
+		(meta, name = $name: expr)
+		fn $method: ident (&self, Self::Metadata $(, $param: ty)*) -> $result: tt <$out: ty, Error>
+	) => {
+		$del.add_method_with_meta($name, move |base, params, meta| {
+			$crate::WrapMeta::wrap_rpc(&(Self::$method as fn(&_, Self::Metadata $(, $param)*) -> $result <$out, Error>), base, params, meta)
+		})
+	};
 }
 
 /// A wrapper type without an implementation of `Deserialize`
@@ -99,6 +145,11 @@ pub trait Wrap<B: Send + Sync + 'static> {
 /// Wrapper trait for asynchronous RPC functions.
 pub trait WrapAsync<B: Send + Sync + 'static> {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error>;
+}
+
+/// Wrapper trait for meta RPC functions.
+pub trait WrapMeta<B: Send + Sync + 'static, M: Metadata> {
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error>;
 }
 
 // special impl for no parameters.
@@ -122,6 +173,18 @@ impl<B, OUT> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, Error>
 		}
 	}
 }
+
+impl<B, M, OUT> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, Error>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, M: Metadata
+{
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
+		match expect_no_params(params) {
+			Ok(()) => (self)(base, meta).map(to_value).boxed(),
+			Err(e) => futures::failed(e).boxed(),
+		}
+	}
+}
+
 
 // creates a wrapper implementation which deserializes the parameters,
 // calls the function with concrete type, and serializes the output.
@@ -154,7 +217,41 @@ macro_rules! wrap {
 				}
 			}
 		}
+
+		// asynchronous implementation with meta
+		impl <
+			BASE: Send + Sync + 'static,
+			META: Metadata,
+			OUT: Serialize + 'static,
+			$($x: Deserialize,)+
+		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, Error> {
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
+				match params.parse::<($($x,)+)>() {
+					Ok(($($x,)+)) => (self)(base, meta, $($x,)+).map(to_value).boxed(),
+					Err(e) => futures::failed(e).boxed(),
+				}
+			}
+		}
 	}
+}
+
+fn params_len(params: &Params) -> Result<usize, Error> {
+	match *params {
+		Params::Array(ref v) => Ok(v.len()),
+		Params::None => Ok(0),
+		_ => Err(invalid_params("not an array", "")),
+	}
+}
+
+fn parse_trailing_param<T: Default + Deserialize>(params: Params) -> Result<(T, ), Error> {
+	let len = try!(params_len(&params));
+	let id = match len {
+		0 => Ok((T::default(),)),
+		1 => params.parse::<(T,)>(),
+		_ => Err(Error::invalid_params()),
+	};
+
+	id
 }
 
 // special impl for no parameters other than block parameter.
@@ -162,17 +259,7 @@ impl<B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
 	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + Deserialize
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
-		let len = match params {
-			Params::Array(ref v) => v.len(),
-			Params::None => 0,
-			_ => return Err(invalid_params("not an array", "")),
-		};
-
-		let (id,) = match len {
-			0 => (T::default(),),
-			1 => try!(params.parse::<(T,)>()),
-			_ => return Err(Error::invalid_params()),
-		};
+		let id = try!(parse_trailing_param(params)).0;
 
 		(self)(base, Trailing(id)).map(to_value)
 	}
@@ -182,20 +269,23 @@ impl<B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error>
 	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + Deserialize
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
-		let len = match params {
-			Params::Array(ref v) => v.len(),
-			Params::None => 0,
-			_ => return futures::failed(invalid_params("not an array", "")).boxed(),
-		};
-
-		let id = match len {
-			0 => Ok((T::default(),)),
-			1 => params.parse::<(T,)>(),
-			_ => Err(Error::invalid_params()),
-		};
+		let id = parse_trailing_param(params);
 
 		match id {
 			Ok((id,)) => (self)(base, Trailing(id)).map(to_value).boxed(),
+			Err(e) => futures::failed(e).boxed(),
+		}
+	}
+}
+
+impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, Error>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + Deserialize, M: Metadata,
+{
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
+		let id = parse_trailing_param(params);
+
+		match id {
+			Ok((id,)) => (self)(base, meta, Trailing(id)).map(to_value).boxed(),
 			Err(e) => futures::failed(e).boxed(),
 		}
 	}
@@ -213,11 +303,7 @@ macro_rules! wrap_with_trailing {
 			TRAILING: Default + Deserialize,
 		> Wrap<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Result<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
-				let len = match params {
-					Params::Array(ref v) => v.len(),
-					Params::None => 0,
-					_ => return Err(invalid_params("not an array", "")),
-				};
+				let len = try!(params_len(&params));
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
@@ -240,10 +326,9 @@ macro_rules! wrap_with_trailing {
 			TRAILING: Default + Deserialize,
 		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
-				let len = match params {
-					Params::Array(ref v) => v.len(),
-					Params::None => 0,
-					_ => return futures::failed(invalid_params("not an array", "")).boxed(),
+				let len = match params_len(&params) {
+					Ok(len) => len,
+					Err(e) => return futures::failed(e).boxed(),
 				};
 
 				let params = match len - $num {
@@ -256,6 +341,35 @@ macro_rules! wrap_with_trailing {
 
 				match params {
 					Ok(($($x,)+ id)) => (self)(base, $($x,)+ Trailing(id)).map(to_value).boxed(),
+					Err(e) => futures::failed(e).boxed(),
+				}
+			}
+		}
+
+		// asynchronous implementation with meta
+		impl <
+			BASE: Send + Sync + 'static,
+			META: Metadata,
+			OUT: Serialize + 'static,
+			$($x: Deserialize,)+
+			TRAILING: Default + Deserialize,
+		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
+				let len = match params_len(&params) {
+					Ok(len) => len,
+					Err(e) => return futures::failed(e).boxed(),
+				};
+
+				let params = match len - $num {
+					0 => params.parse::<($($x,)+)>()
+						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
+					1 => params.parse::<($($x,)+ TRAILING)>()
+						.map(|($($x,)+ id)| ($($x,)+ id)),
+					_ => Err(Error::invalid_params()),
+				};
+
+				match params {
+					Ok(($($x,)+ id)) => (self)(base, meta, $($x,)+ Trailing(id)).map(to_value).boxed(),
 					Err(e) => futures::failed(e).boxed(),
 				}
 			}

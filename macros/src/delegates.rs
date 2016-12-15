@@ -30,7 +30,7 @@ impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
 }
 
 struct DelegateAsyncMethod<T, F> where
-	F: Fn(&T, Params) -> AsyncData + 'static,
+	F: Fn(&T, Params) -> AsyncData,
 	F: Send + Sync + 'static,
 	T: Send + Sync + 'static,
 {
@@ -39,7 +39,7 @@ struct DelegateAsyncMethod<T, F> where
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
-	F: Fn(&T, Params) -> AsyncData + 'static,
+	F: Fn(&T, Params) -> AsyncData,
 	F: Send + Sync + 'static,
 	T: Send + Sync + 'static,
 	M: Metadata,
@@ -47,6 +47,24 @@ impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
 		let closure = &self.closure;
 		closure(&self.delegate, params)
+	}
+}
+
+struct DelegateMethodWithMeta<T, M> where
+	T: Send + Sync + 'static,
+	M: Metadata,
+{
+	delegate: Arc<T>,
+	closure: Box<Fn(&T, Params, M) -> AsyncData + Send + Sync>,
+}
+
+impl<T, M> RpcMethod<M> for DelegateMethodWithMeta<T, M> where
+	T: Send + Sync + 'static,
+	M: Metadata,
+{
+	fn call(&self, params: Params, meta: M) -> AsyncData {
+		let closure = &self.closure;
+		closure(&self.delegate, params, meta)
 	}
 }
 
@@ -112,6 +130,18 @@ impl<T, M> IoDelegate<T, M> where
 			DelegateAsyncMethod {
 				delegate: self.delegate.clone(),
 				closure: method,
+			}
+		)));
+	}
+
+	pub fn add_method_with_meta<F>(&mut self, name: &str, method: F) where
+		F: Fn(&T, Params, M) -> AsyncData,
+		F: Send + Sync + 'static,
+	{
+		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+			DelegateMethodWithMeta {
+				delegate: self.delegate.clone(),
+				closure: Box::new(method),
 			}
 		)));
 	}
