@@ -175,7 +175,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 				let valid_version = self.compatibility.is_version_valid(jsonrpc);
 
 				let result = match (valid_version, self.methods.get(&method.method)) {
-					(false, _) => futures::failed(Error::invalid_request()).boxed(),
+					(false, _) => futures::failed(Error::invalid_version()).boxed(),
 					(true, Some(&RemoteProcedure::Method(ref method))) => method.call(params, meta),
 					(true, _) => futures::failed(Error::method_not_found()).boxed(),
 				};

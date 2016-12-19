@@ -117,4 +117,13 @@ impl Error {
 	pub fn internal_error() -> Self {
 		Self::new(ErrorCode::InternalError)
 	}
+
+	/// Creates new `InvalidRequest` with invalid version description
+	pub fn invalid_version() -> Self {
+		Error {
+			code: ErrorCode::InvalidRequest,
+			message: "Unsupported JSON-RPC protocol version".to_owned(),
+			data: None,
+		}
+	}
 }
