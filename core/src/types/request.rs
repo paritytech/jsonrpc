@@ -10,7 +10,6 @@ use super::{Id, Params, Version, Value};
 #[serde(deny_unknown_fields)]
 pub struct MethodCall {
 	/// A String specifying the version of the JSON-RPC protocol.
-	/// MUST be exactly "2.0".
 	pub jsonrpc: Option<Version>,
 	/// A String containing the name of the method to be invoked.
 	pub method: String,
@@ -28,7 +27,6 @@ pub struct MethodCall {
 #[serde(deny_unknown_fields)]
 pub struct Notification {
 	/// A String specifying the version of the JSON-RPC protocol.
-	/// MUST be exactly "2.0".
 	pub jsonrpc: Option<Version>,
 	/// A String containing the name of the method to be invoked.
 	pub method: String,
@@ -246,13 +244,11 @@ fn request_deserialize_batch() {
 	]))
 }
 
-// TODO: fix this test. it's valid now, since jsonrpc v1 does not require "version" field
 #[test]
-#[ignore]
 fn request_invalid_returns_id() {
 	use serde_json;
 
-	let s = r#"{"id":120,"method":"my_method","params":["foo", "bar"]}"#;
+	let s = r#"{"id":120,"method":"my_method","params":["foo", "bar"],"extra_field":[]}"#;
 	let deserialized: Request = serde_json::from_str(s).unwrap();
 	match deserialized {
 		Request::Single(Call::Invalid(Id::Num(120))) => {},

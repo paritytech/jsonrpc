@@ -43,6 +43,13 @@ impl Compatibility {
 			_ => false,
 		}
 	}
+
+	fn default_version(&self) -> Option<Version> {
+		match *self {
+			Compatibility::V1 => None,
+			Compatibility::V2 | Compatibility::Both => Some(Version::V2),
+		}
+	}
 }
 
 /// Request handler
@@ -55,8 +62,13 @@ pub struct MetaIoHandler<T: Metadata> {
 }
 
 impl<T: Metadata> MetaIoHandler<T> {
-	/// Creates new `MetaIoHandler` without any metadata compatible with specified protocol version.
-	pub fn new(compatibility: Compatibility) -> Self {
+	/// Creates new `MetaIoHandler`
+	pub fn new() -> Self {
+		MetaIoHandler::default()
+	}
+
+	/// Creates new `MetaIoHandler` compatible with specified protocol version.
+	pub fn with_compatibility(compatibility: Compatibility) -> Self {
 		MetaIoHandler {
 			compatibility: compatibility,
 			methods: HashMap::default(),
@@ -125,7 +137,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 		trace!(target: "rpc", "Request: {}.", request);
 		let request = read_request(request);
 		let result = match request {
-			Err(error) => futures::finished(Some(Response::from(error))).boxed(),
+			Err(error) => futures::finished(Some(Response::from(error, self.compatibility.default_version()))).boxed(),
 			Ok(request) => match request {
 				Request::Single(call) => {
 					self.handle_call(call, meta)
@@ -186,7 +198,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 				futures::finished(None).boxed()
 			},
 			Call::Invalid(id) => {
-				futures::finished(Some(Output::invalid_request(id))).boxed()
+				futures::finished(Some(Output::invalid_request(id, self.compatibility.default_version()))).boxed()
 			},
 		}
 	}
@@ -204,8 +216,8 @@ impl IoHandler {
 	}
 
 	/// Creates new `IoHandler` without any metadata compatible with specified protocol version.
-	pub fn new_compatible_with(compatibility: Compatibility) -> Self {
-		IoHandler(MetaIoHandler::new(compatibility))
+	pub fn with_compatibility(compatibility: Compatibility) -> Self {
+		IoHandler(MetaIoHandler::with_compatibility(compatibility))
 	}
 }
 

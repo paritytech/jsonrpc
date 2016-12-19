@@ -53,10 +53,10 @@ impl Output {
 	}
 
 	/// Creates new failure output indicating malformed request.
-	pub fn invalid_request(id: Id) -> Self {
+	pub fn invalid_request(id: Id, jsonrpc: Option<Version>) -> Self {
 		Output::Failure(Failure {
 			id: id,
-			jsonrpc: Some(Version::V2),
+			jsonrpc: jsonrpc,
 			error: Error::new(ErrorCode::InvalidRequest),
 		})
 	}
@@ -111,11 +111,12 @@ impl Serialize for Response {
 	}
 }
 
-impl From<Error> for Response {
-	fn from(error: Error) -> Self {
+impl Response {
+	/// Creates new `Response` with given error and `Version`
+	pub fn from(error: Error, jsonrpc: Option<Version>) -> Self {
 		Failure {
 			id: Id::Null,
-			jsonrpc: Some(Version::V2),
+			jsonrpc: jsonrpc,
 			error: error,
 		}.into()
 	}
