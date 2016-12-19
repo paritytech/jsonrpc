@@ -16,3 +16,61 @@ Transport-agnostic `core` and transport servers for `http`, `ipc` and `tcp`.
 - [jsonrpc-ipc-server](./ipc)
 - [jsonrpc-tcp-server](./tcp)
 - [jsonrpc-macros](./macros)
+
+## Examples
+
+- [Core](./core/examples)
+- [Macros](./macros/examples)
+
+### Basic Usage (with HTTP transport)
+
+```rust
+extern crate jsonrpc_core;
+extern crate jsonrpc_http_server;
+
+use jsonrpc_core::{IoHandler, Value, Params};
+use jsonrpc_http_server::{ServerBuilder};
+
+fn main() {
+	let mut io = IoHandler::new();
+	io.add_method("say_hello", |_params: Params| {
+		Ok(Value::String("hello".to_string()))
+	});
+
+	let server = ServerBuilder::new(io)
+		.start_http(&"127.0.0.1:3030".parse().unwrap())
+		.unwrap();
+
+	server.wait().unwrap();
+}
+```
+
+### Basic usage with macros
+
+```rust
+extern crate jsonrpc_core;
+#[macro_use]
+extern crate jsonrpc_macros;
+
+use jsonrpc_core::Error;
+
+build_rpc_trait! {
+	pub trait Rpc {
+		/// Adds two numbers and returns a result
+		#[rpc(name = "add")]
+		fn add(&self, u64, u64) -> Result<u64, Error>;
+	}
+}
+
+pub struct RpcImpl;
+impl Rpc for RpcImpl {
+	fn add(&self, a: u64, b: u64) -> Result<u64, Error> {
+		Ok(a + b)
+	}
+}
+
+
+fn main() {
+	let mut io = jsonrpc_core::IoHandler::new();
+	io.extend_with(RpcImpl.to_delegate())
+}
