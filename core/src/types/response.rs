@@ -8,7 +8,7 @@ use super::{Id, Value, Error, ErrorCode, Version};
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Success {
 	/// Protocol version
-	pub jsonrpc: Version,
+	pub jsonrpc: Option<Version>,
 	/// Result
 	pub result: Value,
 	/// Correlation id
@@ -19,7 +19,7 @@ pub struct Success {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Failure {
 	/// Protocol Version
-	pub jsonrpc: Version,
+	pub jsonrpc: Option<Version>,
 	/// Error
 	pub error: Error,
 	/// Correlation id
@@ -37,7 +37,7 @@ pub enum Output {
 
 impl Output {
 	/// Creates new output given `Result`, `Id` and `Version`.
-	pub fn from(result: Result<Value, Error>, id: Id, jsonrpc: Version) -> Self {
+	pub fn from(result: Result<Value, Error>, id: Id, jsonrpc: Option<Version>) -> Self {
 		match result {
 			Ok(result) => Output::Success(Success {
 				id: id,
@@ -56,7 +56,7 @@ impl Output {
 	pub fn invalid_request(id: Id) -> Self {
 		Output::Failure(Failure {
 			id: id,
-			jsonrpc: Version::V2,
+			jsonrpc: Some(Version::V2),
 			error: Error::new(ErrorCode::InvalidRequest),
 		})
 	}
@@ -115,7 +115,7 @@ impl From<Error> for Response {
 	fn from(error: Error) -> Self {
 		Failure {
 			id: Id::Null,
-			jsonrpc: Version::V2,
+			jsonrpc: Some(Version::V2),
 			error: error,
 		}.into()
 	}
@@ -139,7 +139,7 @@ fn success_output_serialize() {
 	use serde_json::Value;
 
 	let so = Output::Success(Success {
-		jsonrpc: Version::V2,
+		jsonrpc: Some(Version::V2),
 		result: Value::U64(1),
 		id: Id::Num(1)
 	});
@@ -157,7 +157,7 @@ fn success_output_deserialize() {
 
 	let deserialized: Output = serde_json::from_str(dso).unwrap();
 	assert_eq!(deserialized, Output::Success(Success {
-		jsonrpc: Version::V2,
+		jsonrpc: Some(Version::V2),
 		result: Value::U64(1),
 		id: Id::Num(1)
 	}));
@@ -168,7 +168,7 @@ fn failure_output_serialize() {
 	use serde_json;
 
 	let fo = Output::Failure(Failure {
-		jsonrpc: Version::V2,
+		jsonrpc: Some(Version::V2),
 		error: Error::parse_error(),
 		id: Id::Num(1)
 	});
@@ -185,7 +185,7 @@ fn failure_output_deserialize() {
 
 	let deserialized: Output = serde_json::from_str(dfo).unwrap();
 	assert_eq!(deserialized, Output::Failure(Failure {
-		jsonrpc: Version::V2,
+		jsonrpc: Some(Version::V2),
 		error: Error::parse_error(),
 		id: Id::Num(1)
 	}));
@@ -200,7 +200,7 @@ fn single_response_deserialize() {
 
 	let deserialized: Response = serde_json::from_str(dsr).unwrap();
 	assert_eq!(deserialized, Response::Single(Output::Success(Success {
-		jsonrpc: Version::V2,
+		jsonrpc: Some(Version::V2),
 		result: Value::U64(1),
 		id: Id::Num(1)
 	})));
@@ -216,12 +216,12 @@ fn batch_response_deserialize() {
 	let deserialized: Response = serde_json::from_str(dbr).unwrap();
 	assert_eq!(deserialized, Response::Batch(vec![
 		Output::Success(Success {
-			jsonrpc: Version::V2,
+			jsonrpc: Some(Version::V2),
 			result: Value::U64(1),
 			id: Id::Num(1)
 		}),
 		Output::Failure(Failure {
-			jsonrpc: Version::V2,
+			jsonrpc: Some(Version::V2),
 			error: Error::parse_error(),
 			id: Id::Num(1)
 		})
