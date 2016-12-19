@@ -38,5 +38,5 @@ pub mod types;
 pub mod reactor;
 
 pub use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
-pub use io::{IoHandler, MetaIoHandler};
+pub use io::{Compatibility, IoHandler, MetaIoHandler};
 pub use types::*;

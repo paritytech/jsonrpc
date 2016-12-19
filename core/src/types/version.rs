@@ -3,7 +3,7 @@ use serde::{Serialize, Serializer, Deserialize, Deserializer, Error};
 use serde::de::Visitor;
 
 /// Protocol Version
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Version {
 	/// JSONRPC 2.0
 	V2

@@ -5,7 +5,7 @@ use serde_json;
 use futures::{self, Future, BoxFuture};
 
 use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
-use types::{Params, Error, ErrorCode};
+use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
 
 fn read_request(request_str: &str) -> Result<Request, Error> {
@@ -17,13 +17,64 @@ fn write_response(response: Response) -> String {
 	serde_json::to_string(&response).unwrap()
 }
 
+/// `IoHandler` json-rpc protocol compatibility
+#[derive(Clone, Copy)]
+pub enum Compatibility {
+	/// Compatible only with JSON-RPC 1.x
+	V1,
+	/// Compatible only with JSON-RPC 2.0
+	V2,
+	/// Compatible with both
+	Both,
+}
+
+impl Default for Compatibility {
+	fn default() -> Self {
+		Compatibility::V2
+	}
+}
+
+impl Compatibility {
+	fn is_version_valid(&self, version: Option<Version>) -> bool {
+		match (*self, version) {
+			(Compatibility::V1, None) |
+			(Compatibility::V2, Some(Version::V2)) |
+			(Compatibility::Both, _) => true,
+			_ => false,
+		}
+	}
+
+	fn default_version(&self) -> Option<Version> {
+		match *self {
+			Compatibility::V1 => None,
+			Compatibility::V2 | Compatibility::Both => Some(Version::V2),
+		}
+	}
+}
+
 /// Request handler
+///
+/// By default compatible only with jsonrpc v2
 #[derive(Default)]
 pub struct MetaIoHandler<T: Metadata> {
+	compatibility: Compatibility,
 	methods: HashMap<String, RemoteProcedure<T>>,
 }
 
 impl<T: Metadata> MetaIoHandler<T> {
+	/// Creates new `MetaIoHandler`
+	pub fn new() -> Self {
+		MetaIoHandler::default()
+	}
+
+	/// Creates new `MetaIoHandler` compatible with specified protocol version.
+	pub fn with_compatibility(compatibility: Compatibility) -> Self {
+		MetaIoHandler {
+			compatibility: compatibility,
+			methods: HashMap::default(),
+		}
+	}
+
 	/// Adds new supported synchronous method
 	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: RpcMethodSync,
@@ -86,7 +137,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 		trace!(target: "rpc", "Request: {}.", request);
 		let request = read_request(request);
 		let result = match request {
-			Err(error) => futures::finished(Some(Response::from(error))).boxed(),
+			Err(error) => futures::finished(Some(Response::from(error, self.compatibility.default_version()))).boxed(),
 			Ok(request) => match request {
 				Request::Single(call) => {
 					self.handle_call(call, meta)
@@ -121,10 +172,12 @@ impl<T: Metadata> MetaIoHandler<T> {
 				let params = method.params.unwrap_or(Params::None);
 				let id = method.id;
 				let jsonrpc = method.jsonrpc;
+				let valid_version = self.compatibility.is_version_valid(jsonrpc);
 
-				let result = match self.methods.get(&method.method) {
-					Some(&RemoteProcedure::Method(ref method)) => method.call(params, meta),
-					_ => futures::failed(Error::new(ErrorCode::MethodNotFound)).boxed(),
+				let result = match (valid_version, self.methods.get(&method.method)) {
+					(false, _) => futures::failed(Error::invalid_version()).boxed(),
+					(true, Some(&RemoteProcedure::Method(ref method))) => method.call(params, meta),
+					(true, _) => futures::failed(Error::method_not_found()).boxed(),
 				};
 
 				result
@@ -133,6 +186,10 @@ impl<T: Metadata> MetaIoHandler<T> {
 			},
 			Call::Notification(notification) => {
 				let params = notification.params.unwrap_or(Params::None);
+				let jsonrpc = notification.jsonrpc;
+				if !self.compatibility.is_version_valid(jsonrpc) {
+					return futures::finished(None).boxed();
+				}
 
 				if let Some(&RemoteProcedure::Notification(ref notification)) = self.methods.get(&notification.method) {
 					notification.execute(params, meta);
@@ -141,7 +198,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 				futures::finished(None).boxed()
 			},
 			Call::Invalid(id) => {
-				futures::finished(Some(Output::invalid_request(id))).boxed()
+				futures::finished(Some(Output::invalid_request(id, self.compatibility.default_version()))).boxed()
 			},
 		}
 	}
@@ -156,6 +213,11 @@ impl IoHandler {
 	/// Creates new `IoHandler` without any metadata.
 	pub fn new() -> Self {
 		IoHandler::default()
+	}
+
+	/// Creates new `IoHandler` without any metadata compatible with specified protocol version.
+	pub fn with_compatibility(compatibility: Compatibility) -> Self {
+		IoHandler(MetaIoHandler::with_compatibility(compatibility))
 	}
 }
 
