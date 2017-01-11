@@ -22,7 +22,10 @@ pub fn get_cors_header(allowed: &Option<Vec<AccessControlAllowOrigin>>, origin: 
 	}
 	let allowed = allowed.as_ref().unwrap();
 
-	match *origin {
+	match origin.as_ref().map(String::as_str) {
+		None | Some("null") => {
+			allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
+		},
 		Some(ref origin) => {
 			allowed.iter().find(|cors| {
 				match **cors {
@@ -32,13 +35,10 @@ pub fn get_cors_header(allowed: &Option<Vec<AccessControlAllowOrigin>>, origin: 
 				}
 			}).map(|cors| {
 				match *cors {
-					AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(origin.clone()),
+					AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value((*origin).to_owned()),
 					ref cors => cors.clone(),
 				}
 			})
-		},
-		None => {
-			allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
 		},
 	}
 }
@@ -116,9 +116,24 @@ mod tests {
 	}
 
 	#[test]
-	fn should_return_null_only_if_null_is_set_and_origin_is_not_defined() {
+	fn should_return_null_if_null_is_set_and_origin_is_not_defined() {
 		// given
 		let origin = None;
+
+		// when
+		let res = get_cors_header(
+			&Some(vec![AccessControlAllowOrigin::Null]),
+			&origin
+		);
+
+		// then
+		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
+	}
+
+	#[test]
+	fn should_return_null_if_origin_is_null() {
+		// given
+		let origin = Some("null".into());
 
 		// when
 		let res = get_cors_header(

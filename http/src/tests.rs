@@ -34,7 +34,10 @@ fn serve() -> Server {
 	});
 
 	ServerBuilder::new(io)
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
+		.cors(DomainsValidation::AllowOnly(vec![
+			AccessControlAllowOrigin::Value("ethcore.io".into()),
+			AccessControlAllowOrigin::Null,
+		]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
 }
@@ -256,6 +259,31 @@ fn should_not_add_cors_headers() {
 			POST / HTTP/1.1\r\n\
 			Host: 127.0.0.1:8080\r\n\
 			Origin: fake.io\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, method_not_found());
+}
+
+#[test]
+fn should_add_cors_header_for_null_origin() {
+	// given
+	let server = serve();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: null\r\n\
 			Connection: close\r\n\
 			Content-Type: application/json\r\n\
 			Content-Length: {}\r\n\
