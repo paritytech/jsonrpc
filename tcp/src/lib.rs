@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-//! jsonrpc server over unix sockets
+//! jsonrpc server over tcp/ip
 //!
 //! ```no_run
 //! extern crate jsonrpc_core;
@@ -409,8 +409,11 @@ impl<M: Metadata> RpcServer<M> {
 	/// start ipc rpc server
 	pub fn start(addr: &SocketAddr, io_handler: RpcHandler<M>, tcp_context: Arc<TcpContext>) -> Result<(RpcServer<M>, EventLoop<RpcServer<M>>), Error> {
 		let mut event_loop = try!(EventLoop::new());
+
 		let socket = try!(TcpListener::bind(&addr));
 		event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
+		trace!(target: "tcp", "Started listener at {}", &addr);
+		
 		let server = RpcServer {
 			socket: socket,
 			connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
@@ -434,6 +437,7 @@ impl<M: Metadata> RpcServer<M> {
 
 		self.addr_index.insert(addr.clone(), token);
 
+		println!("Accepted connection: {:?}, {:?}", token, addr);
 		trace!(target: "tcp", "Accepted connection with token {:?}, socket address: {:?}", token, addr);
 
 		self.connections[token].token = Some(token);
@@ -442,7 +446,7 @@ impl<M: Metadata> RpcServer<M> {
 			token,
 			EventSet::readable(),
 			PollOpt::edge() | PollOpt::oneshot()
-			).ok().expect("fatal: could not register socket with event loop (memory issue?)");
+		).ok().expect("fatal: could not register socket with event loop (memory issue?)");
 
 		Ok(())
 	}

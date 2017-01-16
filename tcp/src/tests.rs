@@ -60,7 +60,9 @@ pub fn random_endpoint() -> SocketAddr {
 }
 
 #[test]
-pub fn test_reqrep() {
+pub fn test_reqrep_async() {
+	super::init_log();
+	
 	let addr = random_endpoint();
 	let io = dummy_io_handler();
 	let server = Server::new(&addr, io).unwrap();
