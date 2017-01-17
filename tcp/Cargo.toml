@@ -8,14 +8,15 @@ documentation = "https://ethcore.github.io/jsonrpc/json_tcp_server/index.html"
 
 [dependencies]
 jsonrpc-core = { version = "5.0", path = "../core" }
-mio = "0.5"
-slab = "0.1.0"
-bytes = "0.3.0"
 log = "0.3"
 env_logger = "0.3"
 lazy_static = "0.2"
 serde_json = "0.8"
 rand = "0.3"
+futures = "0.1"
+tokio-core = "0.1"
+tokio-service = "0.1"
+tokio-proto = "0.1"
 
 [features]
 default = ["jsonrpc-core/reactor"]
