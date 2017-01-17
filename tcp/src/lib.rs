@@ -23,12 +23,12 @@
 //!
 //! use std::sync::Arc;
 //! use jsonrpc_core::*;
-//! use jsonrpc_tcp_server::{Server, SocketMetadata};
+//! use jsonrpc_tcp_server::Server;
 //! use std::net::SocketAddr;
 //! use std::str::FromStr;
 //!
 //! fn main() {
-//! 	let mut io = MetaIoHandler::<SocketMetadata>::new();
+//! 	let mut io = MetaIoHandler::<()>::new();
 //! 	io.add_method("say_hello", |_params| {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	});

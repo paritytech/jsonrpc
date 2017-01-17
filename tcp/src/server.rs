@@ -21,21 +21,21 @@ use tokio_core::io::Io;
 use futures::{future, Future, Stream, Sink};
 use tokio_service::Service as TokioService;
 
-use jsonrpc::MetaIoHandler;
-use service::{Service, SocketMetadata};
+use jsonrpc::{MetaIoHandler, Metadata};
+use service::Service;
 use line_codec::LineCodec;
 
-pub struct Server {
+pub struct Server<M: Metadata = ()> {
     listen_addr: SocketAddr,
-    handler: Arc<MetaIoHandler<SocketMetadata>>,
+    handler: Arc<MetaIoHandler<M>>,
 }
 
-impl Server {
-    pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<SocketMetadata>>) -> Self {
+impl<M: Metadata> Server<M> {
+    pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<M>>) -> Self {
         Server { listen_addr: addr, handler: handler }
     }
 
-    fn spawn_service(&self, peer_addr: SocketAddr) -> Service {
+    fn spawn_service(&self, peer_addr: SocketAddr) -> Service<M> {
         Service::new(peer_addr, self.handler.clone())
     }
 

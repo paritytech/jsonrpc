@@ -20,10 +20,9 @@ use std::net::SocketAddr;
 
 use jsonrpc::{MetaIoHandler, Value};
 use Server;
-use SocketMetadata;
 
 fn casual_server(socket_addr: &SocketAddr) -> Server {
-    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    let mut io = MetaIoHandler::<()>::new();
     io.add_method("say_hello", |_params| {
         Ok(Value::String("hello".to_string()))
     });
@@ -38,7 +37,7 @@ fn wait(millis: u64) {
 fn doc_test() {
     ::logger::init_log();
 
-    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    let mut io = MetaIoHandler::<()>::new();
     io.add_method("say_hello", |_params| {
         Ok(Value::String("hello".to_string()))
     });

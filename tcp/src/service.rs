@@ -25,18 +25,19 @@ impl From<SocketAddr> for SocketMetadata {
     }
 }
 
-pub struct Service {
-    handler: Arc<MetaIoHandler<SocketMetadata>>,
+pub struct Service<M: Metadata> {
+    handler: Arc<MetaIoHandler<M>>,
     peer_addr: SocketAddr,
+    meta: M,
 }
 
-impl Service {
-    pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<SocketMetadata>>) -> Self {
-        Service { peer_addr: peer_addr, handler: handler }
+impl<M: Metadata> Service<M> {
+    pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M>>) -> Self {
+        Service { peer_addr: peer_addr, handler: handler, meta: M::default() }
     }
 }
 
-impl tokio_service::Service for Service {
+impl<M: Metadata> tokio_service::Service for Service<M> {
     // These types must match the corresponding protocol types:
     type Request = String;
     type Response = Option<String>;
@@ -50,7 +51,6 @@ impl tokio_service::Service for Service {
     // Produce a future for computing a response from a request.
     fn call(&self, req: Self::Request) -> Self::Future {
         trace!(target: "tcp", "Accepted request from peer {}: {}", &self.peer_addr, req);
-        let meta: SocketMetadata = self.peer_addr.into();
-        self.handler.handle_request(&req, meta)
+        self.handler.handle_request(&req, self.meta.clone())
     }
 }
