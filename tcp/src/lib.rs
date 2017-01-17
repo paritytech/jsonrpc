@@ -51,9 +51,18 @@ extern crate tokio_service;
 mod line_codec;
 mod service;
 mod server;
+mod meta;
 
 #[cfg(test)] mod logger;
 #[cfg(test)] mod tests;
 
 pub use server::Server;
-pub use service::SocketMetadata;
+pub use meta::{MetaExtractor, PeerMetaExtractor, SocketMetadata};
+
+/// Default JSON RPC over TCP/IP server configuration
+pub fn server(listen_addr: &::std::net::SocketAddr, io: jsonrpc::MetaIoHandler<SocketMetadata>) -> Server<SocketMetadata> {
+    Server::new(
+        listen_addr.clone(),
+        ::std::sync::Arc::new(io))
+    .extractor(::std::sync::Arc::new(PeerMetaExtractor) as ::std::sync::Arc<MetaExtractor<SocketMetadata>>)
+}

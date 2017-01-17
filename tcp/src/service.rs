@@ -6,25 +6,6 @@ use tokio_service;
 
 use jsonrpc::{Metadata, MetaIoHandler};
 
-#[derive(Clone)]
-pub struct SocketMetadata {
-    addr: SocketAddr,
-}
-
-impl Default for SocketMetadata {
-    fn default() -> Self {
-        SocketMetadata { addr: "0.0.0.0:0".parse().unwrap() }
-    }
-}
-
-impl Metadata for SocketMetadata { }
-
-impl From<SocketAddr> for SocketMetadata {
-    fn from(addr: SocketAddr) -> SocketMetadata {
-        SocketMetadata { addr: addr }
-    }
-}
-
 pub struct Service<M: Metadata> {
     handler: Arc<MetaIoHandler<M>>,
     peer_addr: SocketAddr,
@@ -32,8 +13,8 @@ pub struct Service<M: Metadata> {
 }
 
 impl<M: Metadata> Service<M> {
-    pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M>>) -> Self {
-        Service { peer_addr: peer_addr, handler: handler, meta: M::default() }
+    pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M>>, meta: M) -> Self {
+        Service { peer_addr: peer_addr, handler: handler, meta: meta }
     }
 }
 

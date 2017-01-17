@@ -24,24 +24,28 @@ use tokio_service::Service as TokioService;
 use jsonrpc::{MetaIoHandler, Metadata};
 use service::Service;
 use line_codec::LineCodec;
+use meta::{MetaExtractor, RequestContext, NoopExtractor};
 
 pub struct Server<M: Metadata = ()> {
     listen_addr: SocketAddr,
     handler: Arc<MetaIoHandler<M>>,
+    meta_extractor: Arc<MetaExtractor<M>>,
 }
 
 impl<M: Metadata> Server<M> {
     pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<M>>) -> Self {
-        Server { listen_addr: addr, handler: handler }
+        Server { listen_addr: addr, handler: handler, meta_extractor: Arc::new(NoopExtractor)}
     }
 
-    fn spawn_service(&self, peer_addr: SocketAddr) -> Service<M> {
-        Service::new(peer_addr, self.handler.clone())
+    pub fn extractor(mut self, meta_extractor: Arc<MetaExtractor<M>>) -> Self {
+        self.meta_extractor = meta_extractor;
+        self
     }
 
     pub fn run(&self) -> std::io::Result<()> {
         let mut core = Core::new()?;
         let handle = core.handle();
+        let meta_extractor = self.meta_extractor.clone();
 
         let listener = TcpListener::bind(&self.listen_addr, &handle)?;
 
@@ -49,8 +53,11 @@ impl<M: Metadata> Server<M> {
         let server = connections.for_each(move |(socket, peer_addr)| {
             trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
 
+            let context = RequestContext { peer_addr: peer_addr };
+            let meta = meta_extractor.extract(&context).unwrap_or_default();
+
             let (writer, reader) = socket.framed(LineCodec).split();
-            let service = self.spawn_service(peer_addr);
+            let service = self.spawn_service(peer_addr, meta);
 
             let responses = reader.and_then(
                 move |req| service.call(req).then(|response|
@@ -74,7 +81,10 @@ impl<M: Metadata> Server<M> {
 
             Ok(())
         });
-
         core.run(server)
+    }
+
+    fn spawn_service(&self, peer_addr: SocketAddr, meta: M) -> Service<M> {
+        Service::new(peer_addr, self.handler.clone(), meta)
     }
 }

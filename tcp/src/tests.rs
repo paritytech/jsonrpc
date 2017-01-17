@@ -18,8 +18,16 @@ use std::sync::Arc;
 use std::str::FromStr;
 use std::net::SocketAddr;
 
+use tokio_core::reactor::Core;
+use tokio_core::net::TcpStream;
+use tokio_core::io;
+use futures::{Future, future};
+
 use jsonrpc::{MetaIoHandler, Value};
 use Server;
+use PeerMetaExtractor;
+use SocketMetadata;
+use MetaExtractor;
 
 fn casual_server(socket_addr: &SocketAddr) -> Server {
     let mut io = MetaIoHandler::<()>::new();
@@ -47,9 +55,6 @@ fn doc_test() {
 
 #[test]
 fn doc_test_connect() {
-    use tokio_core::reactor::Core;
-    use tokio_core::net::TcpStream;
-
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17775".parse().unwrap();
     let server = casual_server(&addr);
@@ -63,41 +68,73 @@ fn doc_test_connect() {
     assert!(result.is_ok());
 }
 
+fn dummy_request(addr: &SocketAddr, data: &[u8]) -> Vec<u8> {
+    let mut core = Core::new().expect("Tokio Core should be created with no errors");
+    let mut buffer = vec![0u8; 1024];
+
+    let stream = TcpStream::connect(addr, &core.handle())
+        .and_then(|stream| {
+            io::write_all(stream, data)
+        })
+        .and_then(|(stream, _)| {
+            io::read(stream, &mut buffer)
+        })
+        .and_then(|(_, read_buf, len)| {
+            future::ok(read_buf[0..len].to_vec())
+        });
+    let result = core.run(stream).expect("Core should run with no errors");
+
+    result
+}
+
+fn dummy_request_str(addr: &SocketAddr, data: &[u8]) -> String {
+    String::from_utf8(dummy_request(addr, data)).expect("String should be utf-8")
+}
 
 #[test]
 fn doc_test_handle() {
-    use tokio_core::reactor::Core;
-    use tokio_core::net::TcpStream;
-    use tokio_core::io;
-    use futures::{Future, future};
-
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17780".parse().unwrap();
     let server = casual_server(&addr);
     ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
     wait(100);
 
-    let mut core = Core::new().expect("Tokio Core should be created with no errors");
-    let mut buffer = vec![0u8; 1024];
+    let result = dummy_request_str(
+        &addr,
+        b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+    );
 
-    let stream = TcpStream::connect(&addr, &core.handle())
-        .and_then(|stream| {
-            let data = b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n";
+    assert_eq!(
+        result,
+        "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+        "Response does not exactly much the expected response",
+    );
+}
 
-            io::write_all(stream, &data[..])
-        })
-        .and_then(|(stream, _)| {
-            io::read(stream, &mut buffer)
-        })
-        .and_then(|(_, read_buf, len)| {
-            assert_eq!(
-                "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
-                String::from_utf8(read_buf[0..len].to_vec()).unwrap(),
-                "Response does not much the expected one",
-            );
-            future::ok(())
-        });
-    let result = core.run(stream);
+fn meta_server(socket_addr: &SocketAddr) -> Server<SocketMetadata> {
+    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
+        future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
+    });
+    Server::new(socket_addr.clone(), Arc::new(io)).extractor(Arc::new(PeerMetaExtractor) as Arc<MetaExtractor<SocketMetadata>>)
+}
 
-    assert!(result.is_ok());
+#[test]
+fn peer_meta() {
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17785".parse().unwrap();
+    let server = meta_server(&addr);
+    ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
+
+    let result = dummy_request_str(
+        &addr,
+        b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"
+    );
+
+    // contains random port, so just smoky comparing response length
+    assert_eq!(
+        59,
+        result.len()
+    );
 }
