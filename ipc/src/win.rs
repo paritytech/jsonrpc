@@ -92,11 +92,20 @@ impl<M: Metadata> PipeHandler<M> {
 
 	fn handle_incoming(&mut self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
 		trace!(target: "ipc", "Waiting for client: [{}]", addr);
-		try!(self.waiting_pipe.connect());
-		trace!(target: "ipc", "Received connection to address [{}]", addr);
-		if stop.load(Ordering::Relaxed) {
-			trace!(target: "ipc", "Stopped listening sequence [{}]", addr);
-			return Ok(())
+
+		// blocking wait with small timeouts
+		// allows check if the server is actually stopped to quit gracefully
+		// (`connect` does not allow that, it will block indefinitely)
+		loop {
+			if let Ok(_) = NamedPipe::wait(addr, Some(200)) {
+				try!(self.waiting_pipe.connect());
+				trace!(target: "ipc", "Received connection to address [{}]", addr);
+				break;
+			}
+			if stop.load(Ordering::Relaxed) {
+				trace!(target: "ipc", "Stopped listening sequence [{}]", addr);
+				return Ok(())
+			}
 		}
 
 		let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe,
