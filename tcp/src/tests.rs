@@ -14,96 +14,160 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use jsonrpc_core::{IoHandler, Params, Value};
-use super::Server;
-use std;
-use rand::{thread_rng, Rng};
+use std::sync::Arc;
+use std::str::FromStr;
 use std::net::SocketAddr;
+use std::thread;
 
-pub fn dummy_io_handler() -> IoHandler {
-	let mut io = IoHandler::default();
-	io.add_method("say_hello", |params: Params| {
-		let (request_p1, request_p2) = params.parse::<(u64, u64)>().unwrap();
-		let response_str = format!("hello {}! you sent {}", request_p1, request_p2);
-		Ok(Value::String(response_str))
-	});
-	io
+use tokio_core::reactor::Core;
+use tokio_core::net::TcpStream;
+use tokio_core::io;
+use futures::{Future, future};
+
+use jsonrpc::{MetaIoHandler, Value, Metadata};
+use Server;
+use MetaExtractor;
+use RequestContext;
+
+fn casual_server(socket_addr: &SocketAddr) -> Server {
+    let mut io = MetaIoHandler::<()>::new();
+    io.add_method("say_hello", |_params| {
+        Ok(Value::String("hello".to_string()))
+    });
+    Server::new(socket_addr.clone(), Arc::new(io))
 }
 
-pub fn dummy_request(addr: &SocketAddr, buf: &[u8]) -> Vec<u8> {
-	use std::io::{Read, Write};
-	use mio::*;
-	use mio::tcp::*;
-
-	let mut poll = Poll::new().unwrap();
-	let mut sock = TcpStream::connect(addr).unwrap();
-	poll.register(&sock, Token(0), EventSet::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-	poll.poll(Some(500)).unwrap();
-	sock.write_all(buf).unwrap();
-	poll.reregister(&sock, Token(0), EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-	poll.poll(Some(500)).unwrap();
-
-	let mut buf = Vec::new();
-	sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
-	buf
-}
-
-pub fn random_endpoint() -> SocketAddr {
-	use std::str::FromStr;
-
-	let port;
-	loop {
-		let nport = (thread_rng().next_u32() % 65536) as u16;
-		if nport > 1000 { port = nport; break }
-	}
-	SocketAddr::from_str(&format!("0.0.0.0:{}", port)).unwrap()
+fn wait(millis: u64) {
+    thread::sleep(::std::time::Duration::from_millis(millis));
 }
 
 #[test]
-pub fn test_reqrep() {
-	let addr = random_endpoint();
-	let io = dummy_io_handler();
-	let server = Server::new(&addr, io).unwrap();
-	server.run_async().unwrap();
-	std::thread::park_timeout(std::time::Duration::from_millis(50));
+fn doc_test() {
+    ::logger::init_log();
 
-	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-	let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#.to_owned() + "\n";
-
-	assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response);
+    let mut io = MetaIoHandler::<()>::new();
+    io.add_method("say_hello", |_params| {
+        Ok(Value::String("hello".to_string()))
+    });
+    let server = Server::new(SocketAddr::from_str("0.0.0.0:17770").unwrap(), Arc::new(io));
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
 }
 
 #[test]
-pub fn test_sequental_connections() {
-	super::init_log();
+fn doc_test_connect() {
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17775".parse().unwrap();
+    let server = casual_server(&addr);
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
 
-	let addr = random_endpoint();
-	let io = dummy_io_handler();
-	let server = Server::new(&addr, io).unwrap();
-	server.run_async().unwrap();
-	std::thread::park_timeout(std::time::Duration::from_millis(50));
+    let mut core = Core::new().expect("Tokio Core should be created with no errors");
+    let stream = TcpStream::connect(&addr, &core.handle());
+    let result = core.run(stream);
 
-	for i in 0..100 {
-		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42,"#.to_owned() + &format!("{}", i) + r#"], "id": 1}"#;
-		let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent "#.to_owned() + &format!("{}", i)  + r#"","id":1}"# + "\n";
-		assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response);
-	}
+    assert!(result.is_ok());
+}
+
+fn dummy_request(addr: &SocketAddr, data: &[u8]) -> Vec<u8> {
+    let mut core = Core::new().expect("Tokio Core should be created with no errors");
+    let mut buffer = vec![0u8; 1024];
+
+    let stream = TcpStream::connect(addr, &core.handle())
+        .and_then(|stream| {
+            io::write_all(stream, data)
+        })
+        .and_then(|(stream, _)| {
+            io::read(stream, &mut buffer)
+        })
+        .and_then(|(_, read_buf, len)| {
+            future::ok(read_buf[0..len].to_vec())
+        });
+    let result = core.run(stream).expect("Core should run with no errors");
+
+    result
+}
+
+fn dummy_request_str(addr: &SocketAddr, data: &[u8]) -> String {
+    String::from_utf8(dummy_request(addr, data)).expect("String should be utf-8")
 }
 
 #[test]
-pub fn test_reqrep_poll() {
-	let addr = random_endpoint();
-	let io = dummy_io_handler();
-	let server = Server::new(&addr, io).unwrap();
-	std::thread::spawn(move || {
-		loop {
-			server.poll();
-		}
-	});
+fn doc_test_handle() {
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17780".parse().unwrap();
+    let server = casual_server(&addr);
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
 
-	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-	let response = r#"{"jsonrpc":"2.0","result":"hello 42! you sent 23","id":1}"#.to_owned() + "\n";
-	assert_eq!(String::from_utf8(dummy_request(&addr, request.as_bytes())).unwrap(), response);
+    let result = dummy_request_str(
+        &addr,
+        b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+    );
 
-	std::thread::sleep(std::time::Duration::from_millis(500));
+    assert_eq!(
+        result,
+        "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+        "Response does not exactly much the expected response",
+    );
+}
+
+#[derive(Clone)]
+pub struct SocketMetadata {
+    addr: SocketAddr,
+}
+
+impl Default for SocketMetadata {
+    fn default() -> Self {
+        SocketMetadata { addr: "0.0.0.0:0".parse().unwrap() }
+    }
+}
+
+impl SocketMetadata {
+    pub fn addr(&self) -> &SocketAddr {
+        &self.addr
+    }
+}
+
+impl Metadata for SocketMetadata { }
+
+impl From<SocketAddr> for SocketMetadata {
+    fn from(addr: SocketAddr) -> SocketMetadata {
+        SocketMetadata { addr: addr }
+    }
+}
+
+pub struct PeerMetaExtractor;
+
+impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
+    fn extract(&self, context: &RequestContext) -> SocketMetadata {
+        context.peer_addr.into()
+    }
+}
+
+fn meta_server(socket_addr: &SocketAddr) -> Server<SocketMetadata> {
+    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
+        future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
+    });
+    Server::new(socket_addr.clone(), Arc::new(io)).extractor(Arc::new(PeerMetaExtractor) as Arc<MetaExtractor<SocketMetadata>>)
+}
+
+#[test]
+fn peer_meta() {
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17785".parse().unwrap();
+    let server = meta_server(&addr);
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
+
+    let result = dummy_request_str(
+        &addr,
+        b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"
+    );
+
+    // contains random port, so just smoky comparing response length
+    assert_eq!(
+        59,
+        result.len()
+    );
 }
