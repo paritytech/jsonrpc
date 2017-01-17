@@ -1,8 +1,7 @@
-use std::io;
 use std::sync::Arc;
 use std::net::SocketAddr;
 
-use futures::{self, future, BoxFuture};
+use futures::BoxFuture;
 use tokio_service;
 
 use jsonrpc::{Metadata, MetaIoHandler};
@@ -50,6 +49,7 @@ impl tokio_service::Service for Service {
 
     // Produce a future for computing a response from a request.
     fn call(&self, req: Self::Request) -> Self::Future {
+        trace!(target: "tcp", "Accepted request from peer {}: {}", &self.peer_addr, req);
         let meta: SocketMetadata = self.peer_addr.into();
         self.handler.handle_request(&req, meta)
     }

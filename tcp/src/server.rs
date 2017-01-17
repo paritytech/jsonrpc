@@ -21,17 +21,17 @@ use tokio_core::io::Io;
 use futures::{future, Future, Stream, Sink};
 use tokio_service::Service as TokioService;
 
-use jsonrpc::{Metadata, MetaIoHandler};
+use jsonrpc::MetaIoHandler;
 use service::{Service, SocketMetadata};
 use line_codec::LineCodec;
 
-struct Server {
+pub struct Server {
     listen_addr: SocketAddr,
     handler: Arc<MetaIoHandler<SocketMetadata>>,
 }
 
 impl Server {
-    fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<SocketMetadata>>) -> Self {
+    pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<SocketMetadata>>) -> Self {
         Server { listen_addr: addr, handler: handler }
     }
 
@@ -39,7 +39,7 @@ impl Server {
         Service::new(peer_addr, self.handler.clone())
     }
 
-    fn run(&self) -> std::io::Result<()> {
+    pub fn run(&self) -> std::io::Result<()> {
         let mut core = Core::new()?;
         let handle = core.handle();
 
@@ -47,8 +47,10 @@ impl Server {
 
         let connections = listener.incoming();
         let server = connections.for_each(move |(socket, peer_addr)| {
+            trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
+
             let (writer, reader) = socket.framed(LineCodec).split();
-            let mut service = self.spawn_service(peer_addr);
+            let service = self.spawn_service(peer_addr);
 
             let responses = reader.and_then(
                 move |req| service.call(req).then(|response|
@@ -61,7 +63,10 @@ impl Server {
                             trace!(target: "tcp", "JSON RPC request produced no response");
                             future::ok(String::new())
                         },
-                        Ok(Some(response_data)) => future::ok(response_data),
+                        Ok(Some(response_data)) => {
+                            trace!(target: "tcp", "Sent response: {}", &response_data);
+                            future::ok(response_data)
+                        }
                     }));
 
             let server = writer.send_all(responses).then(|_| Ok(()));
