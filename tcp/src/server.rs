@@ -42,7 +42,7 @@ impl<M: Metadata> Server<M> {
         self
     }
 
-    pub fn run(&self) -> std::io::Result<()> {
+    pub fn run(self) -> std::io::Result<()> {
         let mut core = Core::new()?;
         let handle = core.handle();
         let meta_extractor = self.meta_extractor.clone();
@@ -54,7 +54,7 @@ impl<M: Metadata> Server<M> {
             trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
 
             let context = RequestContext { peer_addr: peer_addr };
-            let meta = meta_extractor.extract(&context).unwrap_or_default();
+            let meta = meta_extractor.extract(&context);
 
             let (writer, reader) = socket.framed(LineCodec).split();
             let service = self.spawn_service(peer_addr, meta);

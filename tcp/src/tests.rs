@@ -17,17 +17,17 @@
 use std::sync::Arc;
 use std::str::FromStr;
 use std::net::SocketAddr;
+use std::thread;
 
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpStream;
 use tokio_core::io;
 use futures::{Future, future};
 
-use jsonrpc::{MetaIoHandler, Value};
+use jsonrpc::{MetaIoHandler, Value, Metadata};
 use Server;
-use PeerMetaExtractor;
-use SocketMetadata;
 use MetaExtractor;
+use RequestContext;
 
 fn casual_server(socket_addr: &SocketAddr) -> Server {
     let mut io = MetaIoHandler::<()>::new();
@@ -38,7 +38,7 @@ fn casual_server(socket_addr: &SocketAddr) -> Server {
 }
 
 fn wait(millis: u64) {
-    ::std::thread::sleep(::std::time::Duration::from_millis(millis));
+    thread::sleep(::std::time::Duration::from_millis(millis));
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn doc_test() {
         Ok(Value::String("hello".to_string()))
     });
     let server = Server::new(SocketAddr::from_str("0.0.0.0:17770").unwrap(), Arc::new(io));
-    ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn doc_test_connect() {
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17775".parse().unwrap();
     let server = casual_server(&addr);
-    ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
     wait(100);
 
     let mut core = Core::new().expect("Tokio Core should be created with no errors");
@@ -96,7 +96,7 @@ fn doc_test_handle() {
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17780".parse().unwrap();
     let server = casual_server(&addr);
-    ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
     wait(100);
 
     let result = dummy_request_str(
@@ -109,6 +109,39 @@ fn doc_test_handle() {
         "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
         "Response does not exactly much the expected response",
     );
+}
+
+#[derive(Clone)]
+pub struct SocketMetadata {
+    addr: SocketAddr,
+}
+
+impl Default for SocketMetadata {
+    fn default() -> Self {
+        SocketMetadata { addr: "0.0.0.0:0".parse().unwrap() }
+    }
+}
+
+impl SocketMetadata {
+    pub fn addr(&self) -> &SocketAddr {
+        &self.addr
+    }
+}
+
+impl Metadata for SocketMetadata { }
+
+impl From<SocketAddr> for SocketMetadata {
+    fn from(addr: SocketAddr) -> SocketMetadata {
+        SocketMetadata { addr: addr }
+    }
+}
+
+pub struct PeerMetaExtractor;
+
+impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
+    fn extract(&self, context: &RequestContext) -> SocketMetadata {
+        context.peer_addr.into()
+    }
 }
 
 fn meta_server(socket_addr: &SocketAddr) -> Server<SocketMetadata> {
@@ -124,7 +157,7 @@ fn peer_meta() {
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17785".parse().unwrap();
     let server = meta_server(&addr);
-    ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
     wait(100);
 
     let result = dummy_request_str(

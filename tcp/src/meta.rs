@@ -22,44 +22,11 @@ pub struct RequestContext {
 }
 
 pub trait MetaExtractor<M: Metadata> : Send + Sync {
-    fn extract(&self, context: &RequestContext) -> Option<M>;
+    fn extract(&self, context: &RequestContext) -> M;
 }
 
 pub struct NoopExtractor;
 
 impl<M: Metadata> MetaExtractor<M> for NoopExtractor {
-    fn extract(&self, _context: &RequestContext) -> Option<M> { None }
-}
-
-#[derive(Clone)]
-pub struct SocketMetadata {
-    addr: SocketAddr,
-}
-
-impl Default for SocketMetadata {
-    fn default() -> Self {
-        SocketMetadata { addr: "0.0.0.0:0".parse().unwrap() }
-    }
-}
-
-impl SocketMetadata {
-    pub fn addr(&self) -> &SocketAddr {
-        &self.addr
-    }
-}
-
-impl Metadata for SocketMetadata { }
-
-impl From<SocketAddr> for SocketMetadata {
-    fn from(addr: SocketAddr) -> SocketMetadata {
-        SocketMetadata { addr: addr }
-    }
-}
-
-pub struct PeerMetaExtractor;
-
-impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
-    fn extract(&self, context: &RequestContext) -> Option<SocketMetadata> {
-        Some(context.peer_addr.into())
-    }
+    fn extract(&self, _context: &RequestContext) -> M { M::default() }
 }

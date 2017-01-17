@@ -38,15 +38,16 @@
 //! ```
 
 extern crate jsonrpc_core as jsonrpc;
-#[macro_use] extern crate log;
-#[macro_use] extern crate lazy_static;
-extern crate env_logger;
 extern crate serde_json;
 extern crate rand;
 extern crate futures;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
+
+#[macro_use] extern crate log;
+#[cfg(test)] #[macro_use] extern crate lazy_static;
+#[cfg(test)] extern crate env_logger;
 
 mod line_codec;
 mod service;
@@ -57,12 +58,4 @@ mod meta;
 #[cfg(test)] mod tests;
 
 pub use server::Server;
-pub use meta::{MetaExtractor, PeerMetaExtractor, SocketMetadata};
-
-/// Default JSON RPC over TCP/IP server configuration
-pub fn server(listen_addr: &::std::net::SocketAddr, io: jsonrpc::MetaIoHandler<SocketMetadata>) -> Server<SocketMetadata> {
-    Server::new(
-        listen_addr.clone(),
-        ::std::sync::Arc::new(io))
-    .extractor(::std::sync::Arc::new(PeerMetaExtractor) as ::std::sync::Arc<MetaExtractor<SocketMetadata>>)
-}
+pub use meta::{MetaExtractor, RequestContext};
