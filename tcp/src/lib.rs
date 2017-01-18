@@ -53,9 +53,11 @@ mod line_codec;
 mod service;
 mod server;
 mod meta;
+mod dispatch;
 
 #[cfg(test)] mod logger;
 #[cfg(test)] mod tests;
 
 pub use server::Server;
+pub use dispatch::Dispatcher;
 pub use meta::{MetaExtractor, RequestContext};

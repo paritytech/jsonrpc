@@ -13,69 +13,26 @@
 
 use std;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
 use tokio_core::io::Io;
-use futures::{future, Future, Stream, Sink, Poll, Async};
+use futures::{future, Future, Stream, Sink};
 use tokio_service::Service as TokioService;
 
 use jsonrpc::{MetaIoHandler, Metadata};
 use service::Service;
 use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
-
-use std::collections::{HashMap, VecDeque};
-
-type MessageQueue = Mutex<HashMap<SocketAddr, VecDeque<String>>>;
-
-struct PeerMessageQueue<S: Stream> {
-    up: S,
-    queue: Arc<MessageQueue>,
-    addr: SocketAddr,
-}
-
-impl<S: Stream<Item=String, Error=std::io::Error>> Stream for PeerMessageQueue<S> {
-
-    type Item = String;
-    type Error = std::io::Error;
-
-    fn poll(&mut self) -> Poll<Option<String>, std::io::Error> {
-        // check if we have response pending
-        match self.up.poll() {
-            Ok(Async::Ready(Some(val))) => {
-                return Ok(Async::Ready(Some(val)));
-            }
-            _ => {}
-        }
-
-        // then try to send queued message
-        let mut queue = match self.queue.try_lock() {
-            Ok(lock) => lock,
-            Err(_) => return Ok(Async::NotReady),
-        };
-        match queue.get_mut(&self.addr) {
-            None => {
-                return Ok(Async::NotReady)
-            },
-            Some(mut peer_dequeue) => {
-                match peer_dequeue.pop_front() {
-                    None => return Ok(Async::NotReady),
-                    Some(msg) => {
-                        Ok(Async::Ready(Some(msg)))
-                    }
-                }
-            }
-        }
-    }
-}
+use dispatch::{Dispatcher, TaskNotificationQueue, MessageQueue, PeerMessageQueue};
 
 pub struct Server<M: Metadata = ()> {
     listen_addr: SocketAddr,
     handler: Arc<MetaIoHandler<M>>,
     meta_extractor: Arc<MetaExtractor<M>>,
     message_queue: Arc<MessageQueue>,
+    task: Arc<TaskNotificationQueue>,
 }
 
 impl<M: Metadata> Server<M> {
@@ -85,6 +42,7 @@ impl<M: Metadata> Server<M> {
             handler: handler,
             meta_extractor: Arc::new(NoopExtractor),
             message_queue: Default::default(),
+            task: Default::default(),
         }
     }
 
@@ -127,18 +85,28 @@ impl<M: Metadata> Server<M> {
                         }
                     }));
 
-            let peer_message_queue = PeerMessageQueue {
-                up: responses,
-                queue: self.message_queue.clone(),
-                addr: peer_addr.clone(),
-            };
+            let peer_message_queue = PeerMessageQueue::new(
+                responses,
+                self.message_queue.clone(),
+                self.task.clone(),
+                peer_addr.clone(),
+            );
 
-            let server = writer.send_all(peer_message_queue).then(|_| Ok(()));
+            let server = writer.send_all(peer_message_queue).then(
+                move |_| {
+                    trace!(target: "tcp", "Peer {}: service finished", peer_addr);
+                    Ok(())
+                }
+            );
             handle.spawn(server);
 
             Ok(())
         });
         core.run(server)
+    }
+
+    pub fn dispatcher(&self) -> Dispatcher {
+        Dispatcher::new(self.message_queue.clone(), self.task.clone())
     }
 
     fn spawn_service(&self, peer_addr: SocketAddr, meta: M) -> Service<M> {

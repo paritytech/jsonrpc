@@ -14,12 +14,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::str::FromStr;
 use std::net::SocketAddr;
 use std::thread;
 
-use tokio_core::reactor::Core;
+use tokio_core::reactor::{Core, Timeout};
 use tokio_core::net::TcpStream;
 use tokio_core::io;
 use futures::{Future, future};
@@ -169,5 +169,69 @@ fn peer_meta() {
     assert_eq!(
         59,
         result.len()
+    );
+}
+
+#[derive(Default)]
+pub struct PeerListMetaExtractor {
+    peers: Mutex<Vec<SocketAddr>>,
+}
+
+impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
+    fn extract(&self, context: &RequestContext) -> SocketMetadata {
+        trace!(target: "tcp", "extracting to peer list...");
+        self.peers.lock().unwrap().push(context.peer_addr.clone());
+        context.peer_addr.into()
+    }
+}
+
+#[test]
+fn message() {
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
+    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
+        future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
+    });
+    let peer_list = Arc::new(PeerListMetaExtractor::default());
+    let server = Server::new(addr.clone(), Arc::new(io))
+        .extractor(peer_list.clone() as Arc<MetaExtractor<SocketMetadata>>);
+    let dispatcher = server.dispatcher();
+
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
+
+    let mut core = Core::new().expect("Tokio Core should be created with no errors");
+    let timeout = Timeout::new(::std::time::Duration::from_millis(100), &core.handle())
+        .expect("There should be a timeout produced in message test");
+    let mut buffer = vec![0u8; 1024];
+    let stream = TcpStream::connect(&addr, &core.handle())
+        .and_then(|stream| {
+            future::ok(stream).join(timeout)
+        })
+        .and_then(|stream| {
+            let peer_addr = peer_list.peers.lock().unwrap()[0].clone();
+            dispatcher.push_message(
+                &peer_addr,
+                "ping".to_owned(),
+            );
+            trace!(target: "tcp", "Dispatched message for {}", peer_addr);
+            future::ok(stream)
+        })
+        .and_then(|(stream, _)| {
+            io::read(stream, &mut buffer)
+        })
+        .and_then(|(_, read_buf, len)| {
+            trace!(target: "tcp", "Read message");
+            future::ok(read_buf[0..len].to_vec())
+        });
+
+    let result = core.run(stream)
+        .expect("Should be the payload in message test");
+
+    assert_eq!(
+        "ping\n",
+        String::from_utf8(result).expect("String should be utf-8"),
+        "Sent request does not match received by the peer",
     );
 }
