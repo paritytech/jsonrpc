@@ -187,6 +187,8 @@ impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
 
 #[test]
 fn message() {
+
+    /// MASSIVE SETUP
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
     let mut io = MetaIoHandler::<SocketMetadata>::new();
@@ -205,6 +207,9 @@ fn message() {
     let timeout = Timeout::new(::std::time::Duration::from_millis(100), &core.handle())
         .expect("There should be a timeout produced in message test");
     let mut buffer = vec![0u8; 1024];
+    let executed = Mutex::new(false);
+
+    /// CLIENT RUN
     let stream = TcpStream::connect(&addr, &core.handle())
         .and_then(|stream| {
             future::ok(stream).join(timeout)
@@ -223,15 +228,19 @@ fn message() {
         })
         .and_then(|(_, read_buf, len)| {
             trace!(target: "tcp", "Read message");
-            future::ok(read_buf[0..len].to_vec())
+            let ping_signal = read_buf[0..len].to_vec();
+
+            assert_eq!(
+                "ping\n",
+                String::from_utf8(ping_signal).expect("String should be utf-8"),
+                "Sent request does not match received by the peer",
+            );
+            // ensure tat the above assert was actually triggered
+            *executed.lock().unwrap() = true;
+
+            future::ok(())
         });
 
-    let result = core.run(stream)
-        .expect("Should be the payload in message test");
-
-    assert_eq!(
-        "ping\n",
-        String::from_utf8(result).expect("String should be utf-8"),
-        "Sent request does not match received by the peer",
-    );
+    core.run(stream).expect("Should be the payload in message test");
+    assert!(*executed.lock().unwrap());
 }
