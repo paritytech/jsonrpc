@@ -51,7 +51,10 @@ impl<S: Stream<Item=String, Error=std::io::Error>> Stream for PeerMessageQueue<S
         }
 
         // then try to send queued message
-        let mut queue = self.queue.lock().unwrap();
+        let mut queue = match self.queue.try_lock() {
+            Ok(lock) => lock,
+            Err(_) => return Ok(Async::NotReady),
+        };
         match queue.get_mut(&self.addr) {
             None => {
                 return Ok(Async::NotReady)
