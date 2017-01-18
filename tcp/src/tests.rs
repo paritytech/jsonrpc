@@ -192,8 +192,8 @@ fn message() {
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
     let mut io = MetaIoHandler::<SocketMetadata>::new();
-    io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
-        future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
+    io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {
+        future::ok(Value::String("hello".to_owned())).boxed()
     });
     let peer_list = Arc::new(PeerListMetaExtractor::default());
     let server = Server::new(addr.clone(), Arc::new(io))
@@ -207,6 +207,7 @@ fn message() {
     let timeout = Timeout::new(::std::time::Duration::from_millis(100), &core.handle())
         .expect("There should be a timeout produced in message test");
     let mut buffer = vec![0u8; 1024];
+    let mut buffer2 = vec![0u8; 1024];
     let executed = Mutex::new(false);
 
     /// CLIENT RUN
@@ -226,8 +227,8 @@ fn message() {
         .and_then(|(stream, _)| {
             io::read(stream, &mut buffer)
         })
-        .and_then(|(_, read_buf, len)| {
-            trace!(target: "tcp", "Read message");
+        .and_then(|(stream, read_buf, len)| {
+            trace!(target: "tcp", "Read ping message");
             let ping_signal = read_buf[0..len].to_vec();
 
             assert_eq!(
@@ -238,6 +239,24 @@ fn message() {
             // ensure tat the above assert was actually triggered
             *executed.lock().unwrap() = true;
 
+            future::ok(stream)
+        })
+        .and_then(|stream| {
+            // make request AFTER message dispatches
+            let data = b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n";
+            io::write_all(stream, &data[..])
+        })
+        .and_then(|(stream, _)| {
+            io::read(stream, &mut buffer2)
+        })
+        .and_then(|(_, read_buf, len)| {
+            trace!(target: "tcp", "Read response message");
+            let response_signal = read_buf[0..len].to_vec();
+            assert_eq!(
+                "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+                String::from_utf8(response_signal).expect("String should be utf-8"),
+                "Response does not match the expected handling",
+            );
             future::ok(())
         });
 
