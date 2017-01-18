@@ -208,7 +208,8 @@ fn message() {
         .expect("There should be a timeout produced in message test");
     let mut buffer = vec![0u8; 1024];
     let mut buffer2 = vec![0u8; 1024];
-    let executed = Mutex::new(false);
+    let executed_dispatch = Mutex::new(false);
+    let executed_request = Mutex::new(false);
 
     /// CLIENT RUN
     let stream = TcpStream::connect(&addr, &core.handle())
@@ -237,7 +238,7 @@ fn message() {
                 "Sent request does not match received by the peer",
             );
             // ensure tat the above assert was actually triggered
-            *executed.lock().unwrap() = true;
+            *executed_dispatch.lock().unwrap() = true;
 
             future::ok(stream)
         })
@@ -257,9 +258,12 @@ fn message() {
                 String::from_utf8(response_signal).expect("String should be utf-8"),
                 "Response does not match the expected handling",
             );
+            *executed_request.lock().unwrap() = true;
+
             future::ok(())
         });
 
     core.run(stream).expect("Should be the payload in message test");
-    assert!(*executed.lock().unwrap());
+    assert!(*executed_dispatch.lock().unwrap());
+    assert!(*executed_request.lock().unwrap());
 }
