@@ -59,5 +59,5 @@ mod dispatch;
 #[cfg(test)] mod tests;
 
 pub use server::Server;
-pub use dispatch::Dispatcher;
+pub use dispatch::{Dispatcher, PushMessageError};
 pub use meta::{MetaExtractor, RequestContext};
