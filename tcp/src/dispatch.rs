@@ -92,6 +92,10 @@ impl<S: Stream<Item=String, Error=std::io::Error>> Stream for PeerMessageQueue<S
             Ok(Async::Ready(Some(val))) => {
                 return Ok(Async::Ready(Some(val)));
             },
+            Ok(Async::Ready(None)) => {
+                // todo: maybe try to send what is still pending
+                return Ok(Async::Ready(None));
+            },
             _ => {}
         }
 
