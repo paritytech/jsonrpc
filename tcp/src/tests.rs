@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
 use std::str::FromStr;
 use std::net::SocketAddr;
 use std::thread;
@@ -208,8 +209,8 @@ fn message() {
         .expect("There should be a timeout produced in message test");
     let mut buffer = vec![0u8; 1024];
     let mut buffer2 = vec![0u8; 1024];
-    let executed_dispatch = Mutex::new(false);
-    let executed_request = Mutex::new(false);
+    let executed_dispatch = RefCell::new(false);
+    let executed_request = RefCell::new(false);
 
     /// CLIENT RUN
     let stream = TcpStream::connect(&addr, &core.handle())
@@ -238,7 +239,7 @@ fn message() {
                 "Sent request does not match received by the peer",
             );
             // ensure tat the above assert was actually triggered
-            *executed_dispatch.lock().unwrap() = true;
+            *executed_dispatch.borrow_mut() = true;
 
             future::ok(stream)
         })
@@ -258,12 +259,12 @@ fn message() {
                 String::from_utf8(response_signal).expect("String should be utf-8"),
                 "Response does not match the expected handling",
             );
-            *executed_request.lock().unwrap() = true;
+            *executed_request.borrow_mut() = true;
 
             future::ok(())
         });
 
     core.run(stream).expect("Should be the payload in message test");
-    assert!(*executed_dispatch.lock().unwrap());
-    assert!(*executed_request.lock().unwrap());
+    assert!(*executed_dispatch.borrow_mut());
+    assert!(*executed_request.borrow_mut());
 }
