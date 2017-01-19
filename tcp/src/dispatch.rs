@@ -18,66 +18,65 @@ use std;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use futures::{task, Stream, Poll, Async};
+use futures::{Stream, Poll, Async, Sink, Future};
+use futures::sync::mpsc;
 
-use std::collections::{HashMap, VecDeque};
-use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
-
-pub type MessageQueue = Mutex<HashMap<SocketAddr, VecDeque<String>>>;
-pub type TaskNotificationQueue = Mutex<Vec<task::Task>>;
+pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::Sender<String>>>;
 
 pub struct PeerMessageQueue<S: Stream> {
     up: S,
-    queue: Arc<MessageQueue>,
-    task: Arc<TaskNotificationQueue>,
-    addr: SocketAddr,
+    receiver: mpsc::Receiver<String>,
+    _addr: SocketAddr,
 }
 
 impl<S: Stream> PeerMessageQueue<S> {
     pub fn new(response_stream: S,
-        message_queue: Arc<MessageQueue>,
-        task_notifications: Arc<TaskNotificationQueue>,
+        receiver: mpsc::Receiver<String>,
         addr: SocketAddr,
     ) -> Self {
         PeerMessageQueue {
             up: response_stream,
-            queue: message_queue,
-            task: task_notifications,
-            addr: addr,
+            receiver: receiver,
+            _addr: addr,
         }
+    }
+}
+
+#[derive(Debug)]
+pub enum PushMessageError { NoSuchPeer, Send(mpsc::SendError<String>) }
+
+impl From<mpsc::SendError<String>> for PushMessageError {
+    fn from(send_err: mpsc::SendError<String>) -> Self {
+        PushMessageError::Send(send_err)
     }
 }
 
 pub struct Dispatcher {
-    message_queue: Arc<MessageQueue>,
-    task: Arc<TaskNotificationQueue>,
+    channels: Arc<SenderChannels>,
 }
 
 impl Dispatcher {
-    pub fn new(message_queue: Arc<MessageQueue>, task_notifications: Arc<TaskNotificationQueue>) -> Self {
+    pub fn new(channels: Arc<SenderChannels>) -> Self {
         Dispatcher {
-            message_queue: message_queue,
-            task: task_notifications,
+            channels: channels,
         }
     }
 
-    pub fn push_message(&self, peer_addr: &SocketAddr, msg: String) {
-        let mut queue = self.message_queue.lock().unwrap();
-        match queue.entry(peer_addr.clone()) {
-            Entry::Vacant(vacant) => {
-                let mut deque = VecDeque::new();
-                deque.push_back(msg);
-                vacant.insert(deque);
-            },
-            Entry::Occupied(mut occupied) => {
-                occupied.get_mut().push_back(msg);
-            }
-        };
+    pub fn push_message(&self, peer_addr: &SocketAddr, msg: String) -> Result<(), PushMessageError> {
+        let mut channels = self.channels.lock().unwrap();
 
-        let mut task_lock = self.task.lock().unwrap();
-        let tasks = task_lock.drain(..).collect::<Vec<task::Task>>();
-        for task in tasks { task.unpark(); }
+        match channels.get_mut(peer_addr) {
+            Some(mut channel) => {
+                // todo: maybe async here later?
+                try!(channel.send(msg).wait().map_err(|e| PushMessageError::from(e)));
+                Ok(())
+            },
+            None => {
+                return Err(PushMessageError::NoSuchPeer);
+            }
+        }
     }
 }
 
@@ -93,36 +92,18 @@ impl<S: Stream<Item=String, Error=std::io::Error>> Stream for PeerMessageQueue<S
                 return Ok(Async::Ready(Some(val)));
             },
             Ok(Async::Ready(None)) => {
-                // todo: maybe try to send what is still pending
+                // this will ensure that this polling will end when incoming i/o stream ends
                 return Ok(Async::Ready(None));
             },
             _ => {}
         }
 
-        // then try to send queued message
-        let mut queue = match self.queue.try_lock() {
-            Ok(lock) => lock,
-            Err(_) => {
-                self.task.lock().unwrap().push(task::park());
-                return Ok(Async::NotReady);
-            }
-        };
-
-        match queue.get_mut(&self.addr) {
-            None => {
-                self.task.lock().unwrap().push(task::park());
-                return Ok(Async::NotReady)
-            },
-            Some(mut peer_deque) => {
-                match peer_deque.pop_front() {
-                    None => {
-                        self.task.lock().unwrap().push(task::park());
-                        return Ok(Async::NotReady);
-                    },
-                    Some(msg) => {
-                        Ok(Async::Ready(Some(msg)))
-                    }
-                }
+        match self.receiver.poll() {
+            Ok(result) => Ok(result),
+            Err(send_err) => {
+                // not sure if it can ever happen
+                warn!("MPSC send error: {:?}", send_err);
+                Err(std::io::Error::from(std::io::ErrorKind::Other))
             }
         }
     }

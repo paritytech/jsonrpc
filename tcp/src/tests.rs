@@ -221,7 +221,7 @@ fn message() {
             dispatcher.push_message(
                 &peer_addr,
                 "ping".to_owned(),
-            );
+            ).expect("Should be sent with no errors");
             trace!(target: "tcp", "Dispatched message for {}", peer_addr);
             future::ok(stream)
         })

@@ -19,20 +19,20 @@ use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
 use tokio_core::io::Io;
 use futures::{future, Future, Stream, Sink};
+use futures::sync::mpsc;
 use tokio_service::Service as TokioService;
 
 use jsonrpc::{MetaIoHandler, Metadata};
 use service::Service;
 use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
-use dispatch::{Dispatcher, TaskNotificationQueue, MessageQueue, PeerMessageQueue};
+use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 
 pub struct Server<M: Metadata = ()> {
     listen_addr: SocketAddr,
     handler: Arc<MetaIoHandler<M>>,
     meta_extractor: Arc<MetaExtractor<M>>,
-    message_queue: Arc<MessageQueue>,
-    task: Arc<TaskNotificationQueue>,
+    channels: Arc<SenderChannels>,
 }
 
 impl<M: Metadata> Server<M> {
@@ -41,8 +41,7 @@ impl<M: Metadata> Server<M> {
             listen_addr: addr,
             handler: handler,
             meta_extractor: Arc::new(NoopExtractor),
-            message_queue: Default::default(),
-            task: Default::default(),
+            channels: Default::default(),
         }
     }
 
@@ -85,10 +84,13 @@ impl<M: Metadata> Server<M> {
                         }
                     }));
 
+            let (sender, receiver) = mpsc::channel(65536);
+            let mut channels = self.channels.lock().unwrap();
+            channels.insert(peer_addr, sender.clone());
+
             let peer_message_queue = PeerMessageQueue::new(
                 responses,
-                self.message_queue.clone(),
-                self.task.clone(),
+                receiver,
                 peer_addr.clone(),
             );
 
@@ -106,7 +108,7 @@ impl<M: Metadata> Server<M> {
     }
 
     pub fn dispatcher(&self) -> Dispatcher {
-        Dispatcher::new(self.message_queue.clone(), self.task.clone())
+        Dispatcher::new(self.channels.clone())
     }
 
     fn spawn_service(&self, peer_addr: SocketAddr, meta: M) -> Service<M> {
