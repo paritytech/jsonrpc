@@ -19,22 +19,30 @@ use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
 use tokio_core::io::Io;
 use futures::{future, Future, Stream, Sink};
+use futures::sync::mpsc;
 use tokio_service::Service as TokioService;
 
 use jsonrpc::{MetaIoHandler, Metadata};
 use service::Service;
 use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
+use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 
 pub struct Server<M: Metadata = ()> {
     listen_addr: SocketAddr,
     handler: Arc<MetaIoHandler<M>>,
     meta_extractor: Arc<MetaExtractor<M>>,
+    channels: Arc<SenderChannels>,
 }
 
 impl<M: Metadata> Server<M> {
     pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<M>>) -> Self {
-        Server { listen_addr: addr, handler: handler, meta_extractor: Arc::new(NoopExtractor)}
+        Server {
+            listen_addr: addr,
+            handler: handler,
+            meta_extractor: Arc::new(NoopExtractor),
+            channels: Default::default(),
+        }
     }
 
     pub fn extractor(mut self, meta_extractor: Arc<MetaExtractor<M>>) -> Self {
@@ -42,7 +50,7 @@ impl<M: Metadata> Server<M> {
         self
     }
 
-    pub fn run(self) -> std::io::Result<()> {
+    pub fn run(&self) -> std::io::Result<()> {
         let mut core = Core::new()?;
         let handle = core.handle();
         let meta_extractor = self.meta_extractor.clone();
@@ -76,7 +84,22 @@ impl<M: Metadata> Server<M> {
                         }
                     }));
 
-            let server = writer.send_all(responses).then(|_| Ok(()));
+            let (sender, receiver) = mpsc::channel(65536);
+            let mut channels = self.channels.lock().unwrap();
+            channels.insert(peer_addr, sender.clone());
+
+            let peer_message_queue = PeerMessageQueue::new(
+                responses,
+                receiver,
+                peer_addr.clone(),
+            );
+
+            let server = writer.send_all(peer_message_queue).then(
+                move |_| {
+                    trace!(target: "tcp", "Peer {}: service finished", peer_addr);
+                    Ok(())
+                }
+            );
             handle.spawn(server);
 
             Ok(())
@@ -84,7 +107,11 @@ impl<M: Metadata> Server<M> {
         core.run(server)
     }
 
+    pub fn dispatcher(&self) -> Dispatcher {
+        Dispatcher::new(self.channels.clone())
+    }
+
     fn spawn_service(&self, peer_addr: SocketAddr, meta: M) -> Service<M> {
-        Service::new(peer_addr, self.handler.clone(), meta)
+        Service::new(peer_addr.clone(), self.handler.clone(), meta)
     }
 }

@@ -14,12 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::cell::RefCell;
 use std::str::FromStr;
 use std::net::SocketAddr;
 use std::thread;
 
-use tokio_core::reactor::Core;
+use tokio_core::reactor::{Core, Timeout};
 use tokio_core::net::TcpStream;
 use tokio_core::io;
 use futures::{Future, future};
@@ -170,4 +171,100 @@ fn peer_meta() {
         59,
         result.len()
     );
+}
+
+#[derive(Default)]
+pub struct PeerListMetaExtractor {
+    peers: Mutex<Vec<SocketAddr>>,
+}
+
+impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
+    fn extract(&self, context: &RequestContext) -> SocketMetadata {
+        trace!(target: "tcp", "extracting to peer list...");
+        self.peers.lock().unwrap().push(context.peer_addr.clone());
+        context.peer_addr.into()
+    }
+}
+
+#[test]
+fn message() {
+
+    /// MASSIVE SETUP
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
+    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {
+        future::ok(Value::String("hello".to_owned())).boxed()
+    });
+    let peer_list = Arc::new(PeerListMetaExtractor::default());
+    let server = Server::new(addr.clone(), Arc::new(io))
+        .extractor(peer_list.clone() as Arc<MetaExtractor<SocketMetadata>>);
+    let dispatcher = server.dispatcher();
+
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
+
+    let mut core = Core::new().expect("Tokio Core should be created with no errors");
+    let timeout = Timeout::new(::std::time::Duration::from_millis(100), &core.handle())
+        .expect("There should be a timeout produced in message test");
+    let mut buffer = vec![0u8; 1024];
+    let mut buffer2 = vec![0u8; 1024];
+    let executed_dispatch = RefCell::new(false);
+    let executed_request = RefCell::new(false);
+
+    /// CLIENT RUN
+    let stream = TcpStream::connect(&addr, &core.handle())
+        .and_then(|stream| {
+            future::ok(stream).join(timeout)
+        })
+        .and_then(|stream| {
+            let peer_addr = peer_list.peers.lock().unwrap()[0].clone();
+            dispatcher.push_message(
+                &peer_addr,
+                "ping".to_owned(),
+            ).expect("Should be sent with no errors");
+            trace!(target: "tcp", "Dispatched message for {}", peer_addr);
+            future::ok(stream)
+        })
+        .and_then(|(stream, _)| {
+            io::read(stream, &mut buffer)
+        })
+        .and_then(|(stream, read_buf, len)| {
+            trace!(target: "tcp", "Read ping message");
+            let ping_signal = read_buf[0..len].to_vec();
+
+            assert_eq!(
+                "ping\n",
+                String::from_utf8(ping_signal).expect("String should be utf-8"),
+                "Sent request does not match received by the peer",
+            );
+            // ensure tat the above assert was actually triggered
+            *executed_dispatch.borrow_mut() = true;
+
+            future::ok(stream)
+        })
+        .and_then(|stream| {
+            // make request AFTER message dispatches
+            let data = b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n";
+            io::write_all(stream, &data[..])
+        })
+        .and_then(|(stream, _)| {
+            io::read(stream, &mut buffer2)
+        })
+        .and_then(|(_, read_buf, len)| {
+            trace!(target: "tcp", "Read response message");
+            let response_signal = read_buf[0..len].to_vec();
+            assert_eq!(
+                "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+                String::from_utf8(response_signal).expect("String should be utf-8"),
+                "Response does not match the expected handling",
+            );
+            *executed_request.borrow_mut() = true;
+
+            future::ok(())
+        });
+
+    core.run(stream).expect("Should be the payload in message test");
+    assert!(*executed_dispatch.borrow_mut());
+    assert!(*executed_request.borrow_mut());
 }
