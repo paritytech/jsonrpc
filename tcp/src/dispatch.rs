@@ -78,6 +78,14 @@ impl Dispatcher {
             }
         }
     }
+
+    pub fn is_connected(&self, socket_addr: &SocketAddr) -> bool {
+        self.channels.lock().unwrap().contains_key(socket_addr)
+    }
+
+    pub fn peer_count(&self) -> usize {
+        self.channels.lock().unwrap().len()
+    }
 }
 
 impl<S: Stream<Item=String, Error=std::io::Error>> Stream for PeerMessageQueue<S> {

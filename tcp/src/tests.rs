@@ -69,6 +69,28 @@ fn doc_test_connect() {
     assert!(result.is_ok());
 }
 
+#[test]
+fn disconnect() {
+    ::logger::init_log();
+    let addr: SocketAddr = "127.0.0.1:17777".parse().unwrap();
+    let server = casual_server(&addr);
+    let dispatcher = server.dispatcher();
+    thread::spawn(move || server.run().expect("Server must run with no issues"));
+    wait(100);
+
+    {
+        let mut core = Core::new().expect("Tokio Core should be created with no errors");
+        let stream = TcpStream::connect(&addr, &core.handle())
+            .and_then(|stream| future::ok(stream))
+            .and_then(|stream| future::result(stream.shutdown(::std::net::Shutdown::Both)));
+        core.run(stream).expect("tcp/ip session should finalize with no errors in disconnect test");
+    }
+
+    wait(50);
+
+    assert_eq!(0, dispatcher.peer_count());
+}
+
 fn dummy_request(addr: &SocketAddr, data: &[u8]) -> Vec<u8> {
     let mut core = Core::new().expect("Tokio Core should be created with no errors");
     let mut buffer = vec![0u8; 1024];
