@@ -84,19 +84,24 @@ impl<M: Metadata> Server<M> {
                         }
                     }));
 
-            let (sender, receiver) = mpsc::channel(65536);
-            let mut channels = self.channels.lock().unwrap();
-            channels.insert(peer_addr, sender.clone());
+            let peer_message_queue = {
+                let (sender, receiver) = mpsc::channel(65536);
+                let mut channels = self.channels.lock().unwrap();
+                channels.insert(peer_addr.clone(), sender.clone());
 
-            let peer_message_queue = PeerMessageQueue::new(
-                responses,
-                receiver,
-                peer_addr.clone(),
-            );
+                PeerMessageQueue::new(
+                    responses,
+                    receiver,
+                    peer_addr.clone(),
+                )
+            };
 
+            let shared_channels = self.channels.clone();
             let server = writer.send_all(peer_message_queue).then(
                 move |_| {
                     trace!(target: "tcp", "Peer {}: service finished", peer_addr);
+                    let mut channels = shared_channels.lock().unwrap();
+                    channels.remove(&peer_addr);
                     Ok(())
                 }
             );
