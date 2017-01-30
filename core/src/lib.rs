@@ -4,10 +4,9 @@
 //!
 //! ```rust
 //! extern crate jsonrpc_core;
-//! extern crate futures;
 //!
-//! use futures::Future;
 //! use jsonrpc_core::*;
+//! use jsonrpc_core::futures::Future;
 //!
 //! fn main() {
 //! 	let mut io = IoHandler::new();

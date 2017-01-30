@@ -23,9 +23,9 @@ use std::thread;
 use tokio_core::reactor::{Core, Timeout};
 use tokio_core::net::TcpStream;
 use tokio_core::io;
-use futures::{Future, future};
 
 use jsonrpc::{MetaIoHandler, Value, Metadata};
+use jsonrpc::futures::{Future, future};
 use Server;
 use MetaExtractor;
 use RequestContext;

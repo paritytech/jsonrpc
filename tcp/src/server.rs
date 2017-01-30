@@ -18,11 +18,11 @@ use std::sync::Arc;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
 use tokio_core::io::Io;
-use futures::{future, Future, Stream, Sink};
-use futures::sync::mpsc;
 use tokio_service::Service as TokioService;
 
 use jsonrpc::{MetaIoHandler, Metadata};
+use jsonrpc::futures::{future, Future, Stream, Sink};
+use jsonrpc::futures::sync::mpsc;
 use service::Service;
 use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};

@@ -23,7 +23,6 @@
 extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
-extern crate futures;
 extern crate tokio_core;
 
 pub mod request_response;

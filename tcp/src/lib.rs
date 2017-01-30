@@ -40,7 +40,6 @@
 extern crate jsonrpc_core as jsonrpc;
 extern crate serde_json;
 extern crate rand;
-extern crate futures;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;

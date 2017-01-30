@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::net::SocketAddr;
 
-use futures::BoxFuture;
 use tokio_service;
 
 use jsonrpc::{Metadata, MetaIoHandler};
+use jsonrpc::futures::BoxFuture;
 
 pub struct Service<M: Metadata> {
     handler: Arc<MetaIoHandler<M>>,
