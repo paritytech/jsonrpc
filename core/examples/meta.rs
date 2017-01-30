@@ -1,8 +1,7 @@
 extern crate jsonrpc_core;
-extern crate futures;
 
-use futures::Future;
 use jsonrpc_core::*;
+use jsonrpc_core::futures::Future;
 
 #[derive(Clone, Default)]
 struct Meta(usize);
@@ -10,7 +9,7 @@ struct Meta(usize);
 impl Metadata for Meta {}
 
 pub fn main() {
-	let mut io = MetaIoHandler::default();
+	let mut io = MetaIoHandler::new();
 
 	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
 		futures::finished(Value::String(format!("Hello World: {}", meta.0))).boxed()

@@ -1,10 +1,9 @@
-extern crate futures;
 extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
 
-use futures::{BoxFuture, Future};
-use jsonrpc_core::{Metadata, Error};
+use jsonrpc_core::{IoHandler, Metadata, Error};
+use jsonrpc_core::futures::{self, BoxFuture, Future};
 
 #[derive(Clone, Default)]
 struct Meta(String);
@@ -47,7 +46,7 @@ impl Rpc for RpcImpl {
 
 
 fn main() {
-	let mut io = jsonrpc_core::IoHandler::default();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl;
 
 	io.extend_with(rpc.to_delegate())
