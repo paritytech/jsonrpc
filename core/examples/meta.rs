@@ -9,7 +9,7 @@ struct Meta(usize);
 impl Metadata for Meta {}
 
 pub fn main() {
-	let mut io = MetaIoHandler::new();
+	let mut io = MetaIoHandler::default();
 
 	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
 		futures::finished(Value::String(format!("Hello World: {}", meta.0))).boxed()

@@ -28,7 +28,7 @@
 //! use std::str::FromStr;
 //!
 //! fn main() {
-//! 	let mut io = MetaIoHandler::<()>::new();
+//! 	let mut io = MetaIoHandler::<()>::default();
 //! 	io.add_method("say_hello", |_params| {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	});

@@ -50,26 +50,36 @@ impl Compatibility {
 /// Request handler
 ///
 /// By default compatible only with jsonrpc v2
-#[derive(Default)]
 pub struct MetaIoHandler<T: Metadata, S: Middleware<T> = middleware::Noop> {
 	middleware: S,
 	compatibility: Compatibility,
 	methods: HashMap<String, RemoteProcedure<T>>,
 }
 
-impl<T: Metadata> MetaIoHandler<T> {
-	/// Creates new `MetaIoHandler`
-	pub fn new() -> Self {
-		MetaIoHandler::default()
+impl<T: Metadata> Default for MetaIoHandler<T> {
+	fn default() -> Self {
+		MetaIoHandler::with_compatibility(Default::default())
 	}
 }
 
-impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
+impl<T: Metadata> MetaIoHandler<T> {
 	/// Creates new `MetaIoHandler` compatible with specified protocol version.
 	pub fn with_compatibility(compatibility: Compatibility) -> Self {
 		MetaIoHandler {
 			compatibility: compatibility,
 			middleware: Default::default(),
+			methods: Default::default(),
+		}
+	}
+}
+
+
+impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
+	/// Creates new `MetaIoHandler`
+	pub fn new(compatibility: Compatibility, middleware: S) -> Self {
+		MetaIoHandler {
+			compatibility: compatibility,
+			middleware: middleware,
 			methods: Default::default(),
 		}
 	}
