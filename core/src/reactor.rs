@@ -8,7 +8,7 @@ use std::sync::{mpsc, Arc};
 use futures::{self, Future};
 pub use self::tokio_core::reactor::Remote;
 
-use {MetaIoHandler, Metadata};
+use {MetaIoHandler, Metadata, Middleware, NoopMiddleware};
 
 /// EventLoop for all request to `jsonrpc-core`.
 /// NOTE: This is more-less temporary solution until we find a good way of integrating with event loops of particular
@@ -40,7 +40,7 @@ impl RpcEventLoop {
 	}
 
 	/// Returns an RPC handler to process requests.
-	pub fn handler<M: Metadata>(&self, handler: Arc<MetaIoHandler<M>>) -> RpcHandler<M> {
+	pub fn handler<M: Metadata, S: Middleware<M>>(&self, handler: Arc<MetaIoHandler<M, S>>) -> RpcHandler<M, S> {
 		RpcHandler::new(handler, self.remote.clone())
 	}
 
@@ -81,17 +81,25 @@ impl RpcEventLoopHandle {
 }
 
 /// RPC Core Event Loop Handler.
-#[derive(Clone)]
-pub struct RpcHandler<M: Metadata = ()> {
+pub struct RpcHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	/// RPC Handler
-	handler: Arc<MetaIoHandler<M>>,
+	handler: Arc<MetaIoHandler<M, S>>,
 	/// Event Loop Remote
 	remote: Remote,
 }
 
-impl<M: Metadata> RpcHandler<M> {
+impl<M: Metadata, S: Middleware<M>> Clone for RpcHandler<M, S> {
+	fn clone(&self) -> Self {
+		RpcHandler {
+			handler: self.handler.clone(),
+			remote: self.remote.clone(),
+		}
+	}
+}
+
+impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	/// Creates new `RpcHandler` for existing `EventLoop`
-	pub fn new(handler: Arc<MetaIoHandler<M>>, remote: Remote) -> Self {
+	pub fn new(handler: Arc<MetaIoHandler<M, S>>, remote: Remote) -> Self {
 		RpcHandler {
 			handler: handler,
 			remote: remote,
