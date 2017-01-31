@@ -4,8 +4,8 @@
 
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
-use futures::{self, BoxFuture, Future};
 use jsonrpc_core::{Error, Params, Value, to_value, Metadata};
+use jsonrpc_core::futures::{self, BoxFuture, Future};
 use serde::{Serialize, Deserialize};
 use util::{invalid_params, expect_no_params};
 

@@ -1,4 +1,3 @@
-extern crate futures;
 extern crate jsonrpc_core;
 extern crate serde;
 

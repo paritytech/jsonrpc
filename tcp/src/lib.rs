@@ -28,7 +28,7 @@
 //! use std::str::FromStr;
 //!
 //! fn main() {
-//! 	let mut io = MetaIoHandler::<()>::new();
+//! 	let mut io = MetaIoHandler::<()>::default();
 //! 	io.add_method("say_hello", |_params| {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	});
@@ -40,7 +40,6 @@
 extern crate jsonrpc_core as jsonrpc;
 extern crate serde_json;
 extern crate rand;
-extern crate futures;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;

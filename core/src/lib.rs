@@ -4,10 +4,9 @@
 //!
 //! ```rust
 //! extern crate jsonrpc_core;
-//! extern crate futures;
 //!
-//! use futures::Future;
 //! use jsonrpc_core::*;
+//! use jsonrpc_core::futures::Future;
 //!
 //! fn main() {
 //! 	let mut io = IoHandler::new();
@@ -26,17 +25,21 @@
 #![cfg_attr(feature="nightly", feature(custom_derive, plugin))]
 #![cfg_attr(feature="nightly", plugin(serde_macros))]
 
-extern crate futures;
 #[macro_use] extern crate log;
 extern crate serde;
 extern crate serde_json;
 
+pub extern crate futures;
+
 mod calls;
 mod io;
+
+mod middleware;
 pub mod types;
 #[cfg(feature = "reactor")]
 pub mod reactor;
 
 pub use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
-pub use io::{Compatibility, IoHandler, MetaIoHandler};
+pub use io::{Compatibility, IoHandler, MetaIoHandler, FutureResponse};
+pub use middleware::{Middleware, Noop as NoopMiddleware};
 pub use types::*;

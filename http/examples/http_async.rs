@@ -1,10 +1,9 @@
-extern crate futures;
 extern crate jsonrpc_core;
 extern crate jsonrpc_http_server;
 
 
-use futures::Future;
 use jsonrpc_core::*;
+use jsonrpc_core::futures::Future;
 use jsonrpc_http_server::*;
 
 fn main() {

@@ -1,10 +1,9 @@
-extern crate futures;
 extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
 
-use futures::{BoxFuture, Future};
-use jsonrpc_core::Error;
+use jsonrpc_core::{IoHandler, Error};
+use jsonrpc_core::futures::{self, BoxFuture, Future};
 
 build_rpc_trait! {
 	pub trait Rpc {
@@ -40,7 +39,7 @@ impl Rpc for RpcImpl {
 
 
 fn main() {
-	let mut io = jsonrpc_core::IoHandler::new();
+	let mut io = IoHandler::new();
 	let rpc = RpcImpl;
 
 	io.extend_with(rpc.to_delegate())

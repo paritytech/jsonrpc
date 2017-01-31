@@ -41,11 +41,10 @@ fn main() {
 `main.rs`
 
 ```rust
-extern crate futures;
 extern crate jsonrpc_core;
 
-use futures::{self, Future};
 use jsonrpc_core::*;
+use jsonrpc_core::futures::Future;
 
 fn main() {
 	let io = IoHandler::new();

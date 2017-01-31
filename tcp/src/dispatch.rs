@@ -18,8 +18,8 @@ use std;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use futures::{Stream, Poll, Async, Sink, Future};
-use futures::sync::mpsc;
+use jsonrpc::futures::{Stream, Poll, Async, Sink, Future};
+use jsonrpc::futures::sync::mpsc;
 
 use std::collections::HashMap;
 

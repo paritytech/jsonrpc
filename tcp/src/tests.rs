@@ -23,15 +23,15 @@ use std::thread;
 use tokio_core::reactor::{Core, Timeout};
 use tokio_core::net::TcpStream;
 use tokio_core::io;
-use futures::{Future, future};
 
 use jsonrpc::{MetaIoHandler, Value, Metadata};
+use jsonrpc::futures::{Future, future};
 use Server;
 use MetaExtractor;
 use RequestContext;
 
 fn casual_server(socket_addr: &SocketAddr) -> Server {
-    let mut io = MetaIoHandler::<()>::new();
+    let mut io = MetaIoHandler::<()>::default();
     io.add_method("say_hello", |_params| {
         Ok(Value::String("hello".to_string()))
     });
@@ -46,7 +46,7 @@ fn wait(millis: u64) {
 fn doc_test() {
     ::logger::init_log();
 
-    let mut io = MetaIoHandler::<()>::new();
+    let mut io = MetaIoHandler::<()>::default();
     io.add_method("say_hello", |_params| {
         Ok(Value::String("hello".to_string()))
     });
@@ -168,7 +168,7 @@ impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
 }
 
 fn meta_server(socket_addr: &SocketAddr) -> Server<SocketMetadata> {
-    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    let mut io = MetaIoHandler::<SocketMetadata>::default();
     io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
         future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
     });
@@ -214,7 +214,7 @@ fn message() {
     /// MASSIVE SETUP
     ::logger::init_log();
     let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
-    let mut io = MetaIoHandler::<SocketMetadata>::new();
+    let mut io = MetaIoHandler::<SocketMetadata>::default();
     io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {
         future::ok(Value::String("hello".to_owned())).boxed()
     });

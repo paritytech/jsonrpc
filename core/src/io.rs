@@ -5,17 +5,12 @@ use serde_json;
 use futures::{self, Future, BoxFuture};
 
 use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
+use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
 
-fn read_request(request_str: &str) -> Result<Request, Error> {
-	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
-}
-
-fn write_response(response: Response) -> String {
-	// this should never fail
-	serde_json::to_string(&response).unwrap()
-}
+/// Type representing middleware or RPC response before serialization.
+pub type FutureResponse = BoxFuture<Option<Response>, ()>;
 
 /// `IoHandler` json-rpc protocol compatibility
 #[derive(Clone, Copy)]
@@ -55,23 +50,46 @@ impl Compatibility {
 /// Request handler
 ///
 /// By default compatible only with jsonrpc v2
-#[derive(Default)]
-pub struct MetaIoHandler<T: Metadata> {
+pub struct MetaIoHandler<T: Metadata, S: Middleware<T> = middleware::Noop> {
+	middleware: S,
 	compatibility: Compatibility,
 	methods: HashMap<String, RemoteProcedure<T>>,
 }
 
-impl<T: Metadata> MetaIoHandler<T> {
-	/// Creates new `MetaIoHandler`
-	pub fn new() -> Self {
-		MetaIoHandler::default()
+impl<T: Metadata> Default for MetaIoHandler<T> {
+	fn default() -> Self {
+		MetaIoHandler::with_compatibility(Default::default())
 	}
+}
 
+impl<T: Metadata> MetaIoHandler<T> {
 	/// Creates new `MetaIoHandler` compatible with specified protocol version.
 	pub fn with_compatibility(compatibility: Compatibility) -> Self {
 		MetaIoHandler {
 			compatibility: compatibility,
-			methods: HashMap::default(),
+			middleware: Default::default(),
+			methods: Default::default(),
+		}
+	}
+}
+
+
+impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
+	/// Creates new `MetaIoHandler`
+	pub fn new(compatibility: Compatibility, middleware: S) -> Self {
+		MetaIoHandler {
+			compatibility: compatibility,
+			middleware: middleware,
+			methods: Default::default(),
+		}
+	}
+
+	/// Creates new `MetaIoHandler` with specified middleware.
+	pub fn with_middleware(middleware: S) -> Self {
+		MetaIoHandler {
+			compatibility: Default::default(),
+			middleware: middleware,
+			methods: Default::default(),
 		}
 	}
 
@@ -138,7 +156,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 		let request = read_request(request);
 		let result = match request {
 			Err(error) => futures::finished(Some(Response::from(error, self.compatibility.default_version()))).boxed(),
-			Ok(request) => match request {
+			Ok(request) => self.middleware.on_request(request, meta, |request, meta| match request {
 				Request::Single(call) => {
 					self.handle_call(call, meta)
 						.map(|output| output.map(Response::Single))
@@ -156,7 +174,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 					})
 					.boxed()
 				},
-			}
+			}),
 		};
 
 		result.map(|response| {
@@ -254,6 +272,15 @@ impl From<IoHandler> for MetaIoHandler<()> {
 	fn from(io: IoHandler) -> Self {
 		io.0
 	}
+}
+
+fn read_request(request_str: &str) -> Result<Request, Error> {
+	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
+}
+
+fn write_response(response: Response) -> String {
+	// this should never fail
+	serde_json::to_string(&response).unwrap()
 }
 
 #[cfg(test)]
