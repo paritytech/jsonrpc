@@ -20,7 +20,7 @@ use tokio_core::net::TcpListener;
 use tokio_core::io::Io;
 use tokio_service::Service as TokioService;
 
-use jsonrpc::{MetaIoHandler, Metadata};
+use jsonrpc::{MetaIoHandler, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::mpsc;
 use service::Service;
@@ -28,15 +28,15 @@ use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 
-pub struct Server<M: Metadata = ()> {
+pub struct Server<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
     listen_addr: SocketAddr,
-    handler: Arc<MetaIoHandler<M>>,
+    handler: Arc<MetaIoHandler<M, S>>,
     meta_extractor: Arc<MetaExtractor<M>>,
     channels: Arc<SenderChannels>,
 }
 
-impl<M: Metadata> Server<M> {
-    pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<M>>) -> Self {
+impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
+    pub fn new(addr: SocketAddr, handler: Arc<MetaIoHandler<M, S>>) -> Self {
         Server {
             listen_addr: addr,
             handler: handler,
@@ -116,7 +116,7 @@ impl<M: Metadata> Server<M> {
         Dispatcher::new(self.channels.clone())
     }
 
-    fn spawn_service(&self, peer_addr: SocketAddr, meta: M) -> Service<M> {
+    fn spawn_service(&self, peer_addr: SocketAddr, meta: M) -> Service<M, S> {
         Service::new(peer_addr.clone(), self.handler.clone(), meta)
     }
 }

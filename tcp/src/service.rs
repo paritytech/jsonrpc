@@ -3,22 +3,22 @@ use std::net::SocketAddr;
 
 use tokio_service;
 
-use jsonrpc::{Metadata, MetaIoHandler};
+use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
 
-pub struct Service<M: Metadata> {
-    handler: Arc<MetaIoHandler<M>>,
+pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+    handler: Arc<MetaIoHandler<M, S>>,
     peer_addr: SocketAddr,
     meta: M,
 }
 
-impl<M: Metadata> Service<M> {
-    pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M>>, meta: M) -> Self {
+impl<M: Metadata, S: Middleware<M>> Service<M, S> {
+    pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
         Service { peer_addr: peer_addr, handler: handler, meta: meta }
     }
 }
 
-impl<M: Metadata> tokio_service::Service for Service<M> {
+impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
     // These types must match the corresponding protocol types:
     type Request = String;
     type Response = Option<String>;

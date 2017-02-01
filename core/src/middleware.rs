@@ -5,7 +5,7 @@ use calls::Metadata;
 use types::Request;
 
 /// RPC middleware
-pub trait Middleware<M: Metadata> {
+pub trait Middleware<M: Metadata>: Send + Sync + 'static {
 	/// Method invoked on each request.
 	/// Allows you to either respond directly (without executing RPC call)
 	/// or do any additional work before and/or after processing the request.
