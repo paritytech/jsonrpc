@@ -11,7 +11,7 @@ use hyper::method::Method;
 use hyper::net::HttpStream;
 use hyper::header::AccessControlAllowOrigin;
 
-use jsonrpc::Metadata;
+use jsonrpc::{Metadata, Middleware, NoopMiddleware};
 use request_response::{Request, Response};
 use hosts_validator::is_host_header_valid;
 
@@ -22,9 +22,9 @@ pub struct PanicHandler {
 }
 
 /// jsonrpc http request handler.
-pub struct ServerHandler<M: Metadata = ()> {
+pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	panic_handler: PanicHandler,
-	jsonrpc_handler: Rpc<M>,
+	jsonrpc_handler: Rpc<M, S>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	metadata: Option<M>,
@@ -36,7 +36,7 @@ pub struct ServerHandler<M: Metadata = ()> {
 	waiting_response: mpsc::Receiver<Response>,
 }
 
-impl<M: Metadata> Drop for ServerHandler<M> {
+impl<M: Metadata, S: Middleware<M>> Drop for ServerHandler<M, S> {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
 			let handler = self.panic_handler.handler.lock().unwrap();
@@ -47,10 +47,10 @@ impl<M: Metadata> Drop for ServerHandler<M> {
 	}
 }
 
-impl<M: Metadata> ServerHandler<M> {
+impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	/// Create new request handler.
 	pub fn new(
-		jsonrpc_handler: Rpc<M>,
+		jsonrpc_handler: Rpc<M, S>,
 		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<String>>,
 		panic_handler: PanicHandler,
@@ -101,7 +101,7 @@ impl<M: Metadata> ServerHandler<M> {
 	}
 }
 
-impl<M: Metadata> server::Handler<HttpStream> for ServerHandler<M> {
+impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandler<M, S> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Validate host
 		if let Some(ref allowed_hosts) = self.allowed_hosts {

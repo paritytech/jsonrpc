@@ -112,17 +112,25 @@ struct NoopExtractor;
 impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 
 /// RPC Handler bundled with metadata extractor.
-#[derive(Clone)]
-pub struct Rpc<M: jsonrpc::Metadata = ()> {
+pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	/// RPC Handler
-	pub handler: RpcHandler<M>,
+	pub handler: RpcHandler<M, S>,
 	/// Metadata extractor
 	pub extractor: Arc<HttpMetaExtractor<M>>,
 }
 
-impl<M: jsonrpc::Metadata> Rpc<M> {
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
+	fn clone(&self) -> Self {
+		Rpc {
+			handler: self.handler.clone(),
+			extractor: self.extractor.clone(),
+		}
+	}
+}
+
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Rpc<M, S> {
 	/// Creates new RPC with extractor
-	pub fn new(handler: RpcHandler<M>, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
+	pub fn new(handler: RpcHandler<M, S>, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
 		Rpc {
 			handler: handler,
 			extractor: extractor,
@@ -130,8 +138,8 @@ impl<M: jsonrpc::Metadata> Rpc<M> {
 	}
 }
 
-impl<M: jsonrpc::Metadata> From<RpcHandler<M>> for Rpc<M> {
-	fn from(handler: RpcHandler<M>) -> Self {
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> From<RpcHandler<M, S>> for Rpc<M, S> {
+	fn from(handler: RpcHandler<M, S>) -> Self {
 		Rpc {
 			handler: handler,
 			extractor: Arc::new(NoopExtractor),
@@ -139,29 +147,29 @@ impl<M: jsonrpc::Metadata> From<RpcHandler<M>> for Rpc<M> {
 	}
 }
 
-impl<M: jsonrpc::Metadata> Deref for Rpc<M> {
-	type Target = RpcHandler<M>;
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Deref for Rpc<M, S> {
+	type Target = RpcHandler<M, S>;
 
 	fn deref(&self) -> &Self::Target {
 		&self.handler
 	}
 }
 
-enum Handler<M: jsonrpc::Metadata> {
-	Simple(MetaIoHandler<M>),
-	WithLoop(RpcHandler<M>),
+enum Handler<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
+	Simple(MetaIoHandler<M, S>),
+	WithLoop(RpcHandler<M, S>),
 }
 
 /// Convenient JSON-RPC HTTP Server builder.
-pub struct ServerBuilder<M: jsonrpc::Metadata = ()> {
-	jsonrpc_handler: Handler<M>,
+pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
+	jsonrpc_handler: Handler<M, S>,
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
-impl<M: jsonrpc::Metadata> ServerBuilder<M> {
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
 	/// If you want to re-use the same handler in couple places
@@ -171,7 +179,7 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
 	pub fn new<T>(handler: T) -> Self where
-		T: Into<MetaIoHandler<M>>
+		T: Into<MetaIoHandler<M, S>>
 	{
 		ServerBuilder {
 			jsonrpc_handler: Handler::Simple(handler.into()),
@@ -187,7 +195,7 @@ impl<M: jsonrpc::Metadata> ServerBuilder<M> {
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn with_rpc_handler(handler: RpcHandler<M>) -> Self {
+	pub fn with_rpc_handler(handler: RpcHandler<M, S>) -> Self {
 		ServerBuilder {
 			jsonrpc_handler: Handler::WithLoop(handler),
 			meta_extractor: Arc::new(NoopExtractor::default()),
