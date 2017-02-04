@@ -48,7 +48,7 @@ pub enum Call {
 }
 
 impl Serialize for Call {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		match *self {
 			Call::MethodCall(ref m) => m.serialize(serializer),
@@ -59,13 +59,13 @@ impl Serialize for Call {
 }
 
 impl Deserialize for Call {
-	fn deserialize<D>(deserializer: &mut D) -> Result<Call, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Call, D::Error>
 	where D: Deserializer {
-		let v = try!(Value::deserialize(deserializer));
+		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Call::Notification)
 			.or_else(|_: JsonError| from_value(v.clone()).map(Call::MethodCall))
 			.or_else(|_: JsonError| {
-				let id = v.find("id")
+				let id = v.get("id")
 					.and_then(|id| from_value(id.clone()).ok())
 					.unwrap_or(Id::Null);
 				Ok(Call::Invalid(id))
@@ -84,7 +84,7 @@ pub enum Request {
 }
 
 impl Serialize for Request {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		match *self {
 			Request::Single(ref call) => call.serialize(serializer),
@@ -94,9 +94,9 @@ impl Serialize for Request {
 }
 
 impl Deserialize for Request {
-	fn deserialize<D>(deserializer: &mut D) -> Result<Request, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Request, D::Error>
 	where D: Deserializer {
-		let v = try!(Value::deserialize(deserializer));
+		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Request::Batch)
 			.or_else(|_| from_value(v).map(Request::Single))
 			.map_err(|_| D::Error::custom("")) // unreachable, but types must match
@@ -111,7 +111,7 @@ fn method_call_serialize() {
 	let m = MethodCall {
 		jsonrpc: Some(Version::V2),
 		method: "update".to_owned(),
-		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
+		params: Some(Params::Array(vec![Value::from(1), Value::from(2)])),
 		id: Id::Num(1)
 	};
 
@@ -127,7 +127,7 @@ fn notification_serialize() {
 	let n = Notification {
 		jsonrpc: Some(Version::V2),
 		method: "update".to_owned(),
-		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)]))
+		params: Some(Params::Array(vec![Value::from(1), Value::from(2)]))
 	};
 
 	let serialized = serde_json::to_string(&n).unwrap();
@@ -142,7 +142,7 @@ fn call_serialize() {
 	let n = Call::Notification(Notification {
 		jsonrpc: Some(Version::V2),
 		method: "update".to_owned(),
-		params: Some(Params::Array(vec![Value::U64(1)]))
+		params: Some(Params::Array(vec![Value::from(1)]))
 	});
 
 	let serialized = serde_json::to_string(&n).unwrap();
@@ -157,13 +157,13 @@ fn request_serialize_batch() {
 		Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
+			params: Some(Params::Array(vec![Value::from(1), Value::from(2)])),
 			id: Id::Num(1)
 		}),
 		Call::Notification(Notification {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::U64(1)]))
+			params: Some(Params::Array(vec![Value::from(1)]))
 		})
 	]);
 
@@ -183,7 +183,7 @@ fn notification_deserialize() {
 	assert_eq!(deserialized, Notification {
 		jsonrpc: Some(Version::V2),
 		method: "update".to_owned(),
-		params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)]))
+		params: Some(Params::Array(vec![Value::from(1), Value::from(2)]))
 	});
 
 	let s = r#"{"jsonrpc": "2.0", "method": "foobar"}"#;
@@ -209,7 +209,7 @@ fn call_deserialize() {
 	assert_eq!(deserialized, Call::Notification(Notification {
 		jsonrpc: Some(Version::V2),
 		method: "update".to_owned(),
-		params: Some(Params::Array(vec![Value::U64(1)]))
+		params: Some(Params::Array(vec![Value::from(1)]))
 	}));
 
 	let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [1], "id": 1}"#;
@@ -217,7 +217,7 @@ fn call_deserialize() {
 	assert_eq!(deserialized, Call::MethodCall(MethodCall {
 		jsonrpc: Some(Version::V2),
 		method: "update".to_owned(),
-		params: Some(Params::Array(vec![Value::U64(1)])),
+		params: Some(Params::Array(vec![Value::from(1)])),
 		id: Id::Num(1)
 	}));
 }
@@ -233,13 +233,13 @@ fn request_deserialize_batch() {
 		Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::U64(1), Value::U64(2)])),
+			params: Some(Params::Array(vec![Value::from(1), Value::from(2)])),
 			id: Id::Num(1)
 		}),
 		Call::Notification(Notification {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::U64(1)]))
+			params: Some(Params::Array(vec![Value::from(1)]))
 		})
 	]))
 }
