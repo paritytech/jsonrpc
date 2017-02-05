@@ -1,9 +1,10 @@
 //! jsonrpc params field
-use std::collections::BTreeMap;
+use std::fmt;
 
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use serde::de::{Visitor, SeqVisitor, MapVisitor};
-use serde::de::impls::{VecVisitor, BTreeMapVisitor};
+use serde::de::impls::{VecVisitor};
+use serde_json;
 use serde_json::value::from_value;
 
 use super::{Value, Error};
@@ -14,7 +15,7 @@ pub enum Params {
 	/// Array of values
 	Array(Vec<Value>),
 	/// Map of values
-	Map(BTreeMap<String, Value>),
+	Map(serde_json::Map<String, Value>),
 	/// No parameters
 	None
 }
@@ -33,7 +34,7 @@ impl Params {
 }
 
 impl Serialize for Params {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		match *self {
 			Params::Array(ref vec) => vec.serialize(serializer),
@@ -46,7 +47,7 @@ impl Serialize for Params {
 struct ParamsVisitor;
 
 impl Deserialize for Params {
-	fn deserialize<D>(deserializer: &mut D) -> Result<Params, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Params, D::Error>
 	where D: Deserializer {
 		deserializer.deserialize(ParamsVisitor)
 	}
@@ -55,7 +56,11 @@ impl Deserialize for Params {
 impl Visitor for ParamsVisitor {
 	type Value = Params;
 
-	fn visit_seq<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error>
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a map or sequence")
+	}
+
+	fn visit_seq<V>(self, visitor: V) -> Result<Self::Value, V::Error>
 	where V: SeqVisitor {
 		VecVisitor::new().visit_seq(visitor).and_then(|vec| match vec.is_empty() {
 			true => Ok(Params::None),
@@ -63,12 +68,15 @@ impl Visitor for ParamsVisitor {
 		})
 	}
 
-	fn visit_map<V>(&mut self, visitor: V) -> Result<Self::Value, V::Error>
+	fn visit_map<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
 	where V: MapVisitor {
-		BTreeMapVisitor::new().visit_map(visitor).and_then(|map| match map.is_empty() {
-			true => Ok(Params::None),
-			false => Ok(Params::Map(map))
-		})
+		let mut values = serde_json::Map::with_capacity(visitor.size_hint().0);
+
+		while let Some((key, value)) = visitor.visit()? {
+			values.insert(key, value);
+		}
+
+		Ok(if values.is_empty() { Params::None } else { Params::Map(values) })
 	}
 }
 
@@ -76,16 +84,14 @@ impl Visitor for ParamsVisitor {
 fn params_deserialization() {
 	use serde_json;
 
-	use std::collections::BTreeMap;
-
 	let s = r#"[null, true, -1, 4, 2.3, "hello", [0], {"key": "value"}]"#;
 	let deserialized: Params = serde_json::from_str(s).unwrap();
 
-	let mut map = BTreeMap::new();
+	let mut map = serde_json::Map::new();
 	map.insert("key".to_string(), Value::String("value".to_string()));
 
 	assert_eq!(Params::Array(vec![
-							 Value::Null, Value::Bool(true), Value::I64(-1), Value::U64(4),
-							 Value::F64(2.3), Value::String("hello".to_string()),
-							 Value::Array(vec![Value::U64(0)]), Value::Object(map)]), deserialized);
+							 Value::Null, Value::Bool(true), Value::from(-1), Value::from(4),
+							 Value::from(2.3), Value::String("hello".to_string()),
+							 Value::Array(vec![Value::from(0)]), Value::Object(map)]), deserialized);
 }

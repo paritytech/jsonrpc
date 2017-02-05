@@ -4,10 +4,14 @@
 
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
-use jsonrpc_core::{Error, Params, Value, to_value, Metadata};
+use jsonrpc_core::{self, Error, Params, Value, Metadata};
 use jsonrpc_core::futures::{self, BoxFuture, Future};
 use serde::{Serialize, Deserialize};
 use util::{invalid_params, expect_no_params};
+
+fn to_value<T>(value: T) -> Value where T: Serialize {
+	jsonrpc_core::to_value(value).unwrap()
+}
 
 /// Auto-generates an RPC trait from trait definition.
 ///
