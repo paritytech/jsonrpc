@@ -11,9 +11,12 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.htm
 
 [dependencies]
 log = "0.3"
+futures = "0.1"
 tokio-core = "0.1"
+tokio-proto = "0.1"
+tokio-service = "0.1"
+tokio-minihttp = { git = "https://github.com/tomusdrw/tokio-minihttp" }
 jsonrpc-core = { version = "5.1", path = "../core" }
-hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
 unicase = "1.3"
 
 [features]

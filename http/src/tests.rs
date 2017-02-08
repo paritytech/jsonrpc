@@ -70,7 +70,7 @@ fn request(server: Server, request: &str) -> Response {
 	req.read_to_string(&mut response).unwrap();
 
 	let mut lines = response.lines();
-	let status = lines.next().unwrap().to_owned();
+	let status = lines.next().expect("Status line always returned.").to_owned();
 	let headers =	read_block(&mut lines);
 	let body = read_block(&mut lines);
 
