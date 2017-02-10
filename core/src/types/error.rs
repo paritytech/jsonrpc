@@ -109,8 +109,14 @@ impl Error {
 	}
 
 	/// Creates new `InvalidParams`
-	pub fn invalid_params() -> Self {
-		Self::new(ErrorCode::InvalidParams)
+	pub fn invalid_params<M>(message: M) -> Self where
+		M: Into<String>,
+	{
+		Error {
+			code: ErrorCode::InvalidParams,
+			message: message.into(),
+			data: None,
+		}
 	}
 
 	/// Creates new `InternalError`
