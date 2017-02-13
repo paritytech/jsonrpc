@@ -4,11 +4,11 @@ homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-macros"
-version = "0.2.0"
+version = "6.0.0"
 authors = ["rphmeier <robert@ethcore.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_macros/index.html"
 
 [dependencies]
 serde = "0.9"
-jsonrpc-core = { version = "5.1", path = "../core" }
+jsonrpc-core = { version = "6.0", path = "../core" }
