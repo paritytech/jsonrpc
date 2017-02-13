@@ -8,6 +8,7 @@ use super::{Id, Value, Error, ErrorCode, Version};
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Success {
 	/// Protocol version
+    #[serde(skip_serializing_if = "Option::is_none")]	
 	pub jsonrpc: Option<Version>,
 	/// Result
 	pub result: Value,
