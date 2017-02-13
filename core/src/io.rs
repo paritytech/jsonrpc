@@ -287,7 +287,7 @@ fn write_response(response: Response) -> String {
 mod tests {
 	use futures::{self, Future};
 	use types::{Value};
-	use super::{IoHandler};
+	use super::{IoHandler, Compatibility};
 
 	#[test]
 	fn test_io_handler() {
@@ -299,6 +299,20 @@ mod tests {
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+
+		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
+	}
+
+	#[test]
+	fn test_io_handler_1dot0() {
+		let mut io = IoHandler::with_compatibility(Compatibility::Both);
+
+		io.add_method("say_hello", |_| {
+			Ok(Value::String("hello".to_string()))
+		});
+
+		let request = r#"{"method": "say_hello", "params": [42, 23], "id": 1}"#;
+		let response = r#"{"result":"hello","id":1}"#;
 
 		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
 	}
