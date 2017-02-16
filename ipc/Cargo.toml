@@ -1,7 +1,9 @@
 [package]
 name = "jsonrpc-ipc-server"
+description = "IPC server for JSON-RPC"
 version = "6.0.0"
 authors = ["Nikolay Volf <nikvolf@gmail.com>"]
+license = "MIT"
 homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"

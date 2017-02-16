@@ -1,7 +1,9 @@
 [package]
 name = "jsonrpc-tcp-server"
+description = "TCP/IP server for JSON-RPC"
 version = "6.0.0"
 authors = ["NikVolf <nikvolf@gmail.com>"]
+license = "MIT"
 homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_tcp_server/index.html"
