@@ -49,9 +49,9 @@ impl ErrorCode {
 }
 
 impl Deserialize for ErrorCode {
-	fn deserialize<D>(deserializer: &mut D) -> Result<ErrorCode, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<ErrorCode, D::Error>
 	where D: Deserializer {
-		let v = try!(Value::deserialize(deserializer));
+		let v: Value = try!(Deserialize::deserialize(deserializer));
 		match v.as_i64() {
 			Some(-32700) => Ok(ErrorCode::ParseError),
 			Some(-32600) => Ok(ErrorCode::InvalidRequest),
@@ -66,7 +66,7 @@ impl Deserialize for ErrorCode {
 }
 
 impl Serialize for ErrorCode {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		serializer.serialize_i64(self.code())
 	}
@@ -109,8 +109,14 @@ impl Error {
 	}
 
 	/// Creates new `InvalidParams`
-	pub fn invalid_params() -> Self {
-		Self::new(ErrorCode::InvalidParams)
+	pub fn invalid_params<M>(message: M) -> Self where
+		M: Into<String>,
+	{
+		Error {
+			code: ErrorCode::InvalidParams,
+			message: message.into(),
+			data: None,
+		}
 	}
 
 	/// Creates new `InternalError`

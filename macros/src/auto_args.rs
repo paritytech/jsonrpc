@@ -4,10 +4,14 @@
 
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
-use jsonrpc_core::{Error, Params, Value, to_value, Metadata};
+use jsonrpc_core::{self, Error, Params, Value, Metadata};
 use jsonrpc_core::futures::{self, BoxFuture, Future};
 use serde::{Serialize, Deserialize};
 use util::{invalid_params, expect_no_params};
+
+fn to_value<T>(value: T) -> Value where T: Serialize {
+	jsonrpc_core::to_value(value).unwrap()
+}
 
 /// Auto-generates an RPC trait from trait definition.
 ///
@@ -248,7 +252,7 @@ fn parse_trailing_param<T: Default + Deserialize>(params: Params) -> Result<(T, 
 	let id = match len {
 		0 => Ok((T::default(),)),
 		1 => params.parse::<(T,)>(),
-		_ => Err(Error::invalid_params()),
+		_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
 	};
 
 	id
@@ -310,7 +314,7 @@ macro_rules! wrap_with_trailing {
 						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
 					1 => params.parse::<($($x,)+ TRAILING)>()
 						.map(|($($x,)+ id)| ($($x,)+ id)),
-					_ => Err(Error::invalid_params()),
+					_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
 				};
 
 				let ($($x,)+ id) = try!(params);
@@ -336,7 +340,7 @@ macro_rules! wrap_with_trailing {
 						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
 					1 => params.parse::<($($x,)+ TRAILING)>()
 						.map(|($($x,)+ id)| ($($x,)+ id)),
-					_ => Err(Error::invalid_params()),
+					_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
 				};
 
 				match params {
@@ -365,7 +369,7 @@ macro_rules! wrap_with_trailing {
 						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
 					1 => params.parse::<($($x,)+ TRAILING)>()
 						.map(|($($x,)+ id)| ($($x,)+ id)),
-					_ => Err(Error::invalid_params()),
+					_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
 				};
 
 				match params {

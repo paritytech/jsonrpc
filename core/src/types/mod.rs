@@ -1,7 +1,18 @@
 //! JSON-RPC types
 
-#[cfg(feature = "serde_macros")]
-include!("mod.rs.in");
+pub mod error;
+pub mod id;
+pub mod params;
+pub mod request;
+pub mod response;
+pub mod version;
 
-#[cfg(not(feature = "serde_macros"))]
-include!(concat!(env!("OUT_DIR"), "/types.rs"));
+pub use serde_json::Value;
+pub use serde_json::value::to_value;
+
+pub use self::error::{ErrorCode, Error};
+pub use self::id::Id;
+pub use self::params::Params;
+pub use self::request::{Request, Call, MethodCall, Notification};
+pub use self::response::{Output, Response, Success, Failure};
+pub use self::version::Version;

@@ -22,10 +22,9 @@
 //! ```
 
 #![warn(missing_docs)]
-#![cfg_attr(feature="nightly", feature(custom_derive, plugin))]
-#![cfg_attr(feature="nightly", plugin(serde_macros))]
 
 #[macro_use] extern crate log;
+#[macro_use] extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;
 

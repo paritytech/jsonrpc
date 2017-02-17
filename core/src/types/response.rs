@@ -8,6 +8,7 @@ use super::{Id, Value, Error, ErrorCode, Version};
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Success {
 	/// Protocol version
+    #[serde(skip_serializing_if = "Option::is_none")]	
 	pub jsonrpc: Option<Version>,
 	/// Result
 	pub result: Value,
@@ -63,9 +64,9 @@ impl Output {
 }
 
 impl Deserialize for Output {
-	fn deserialize<D>(deserializer: &mut D) -> Result<Output, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Output, D::Error>
 	where D: Deserializer {
-		let v = try!(Value::deserialize(deserializer));
+		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Output::Failure)
 			.or_else(|_| from_value(v).map(Output::Success))
 			.map_err(|_| D::Error::custom("")) // types must match
@@ -73,7 +74,7 @@ impl Deserialize for Output {
 }
 
 impl Serialize for Output {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		match *self {
 			Output::Success(ref s) => s.serialize(serializer),
@@ -92,9 +93,9 @@ pub enum Response {
 }
 
 impl Deserialize for Response {
-	fn deserialize<D>(deserializer: &mut D) -> Result<Response, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Response, D::Error>
 	where D: Deserializer {
-		let v = try!(Value::deserialize(deserializer));
+		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Response::Batch)
 			.or_else(|_| from_value(v).map(Response::Single))
 			.map_err(|_| D::Error::custom("")) // types must match
@@ -102,7 +103,7 @@ impl Deserialize for Response {
 }
 
 impl Serialize for Response {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		match *self {
 			Response::Single(ref o) => o.serialize(serializer),
@@ -141,7 +142,7 @@ fn success_output_serialize() {
 
 	let so = Output::Success(Success {
 		jsonrpc: Some(Version::V2),
-		result: Value::U64(1),
+		result: Value::from(1),
 		id: Id::Num(1)
 	});
 
@@ -159,7 +160,7 @@ fn success_output_deserialize() {
 	let deserialized: Output = serde_json::from_str(dso).unwrap();
 	assert_eq!(deserialized, Output::Success(Success {
 		jsonrpc: Some(Version::V2),
-		result: Value::U64(1),
+		result: Value::from(1),
 		id: Id::Num(1)
 	}));
 }
@@ -202,7 +203,7 @@ fn single_response_deserialize() {
 	let deserialized: Response = serde_json::from_str(dsr).unwrap();
 	assert_eq!(deserialized, Response::Single(Output::Success(Success {
 		jsonrpc: Some(Version::V2),
-		result: Value::U64(1),
+		result: Value::from(1),
 		id: Id::Num(1)
 	})));
 }
@@ -218,7 +219,7 @@ fn batch_response_deserialize() {
 	assert_eq!(deserialized, Response::Batch(vec![
 		Output::Success(Success {
 			jsonrpc: Some(Version::V2),
-			result: Value::U64(1),
+			result: Value::from(1),
 			id: Id::Num(1)
 		}),
 		Output::Failure(Failure {

@@ -1,6 +1,8 @@
 //! jsonrpc id field
-use serde::{Serialize, Serializer, Deserialize, Deserializer, Error};
-use serde::de::Visitor;
+use std::fmt;
+
+use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use serde::de::{self, Visitor};
 
 /// Request Id
 #[derive(Debug, PartialEq, Clone)]
@@ -14,7 +16,7 @@ pub enum Id {
 }
 
 impl Serialize for Id {
-	fn serialize<S>(&self, serializer: &mut S) -> Result<(), S::Error>
+	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
 		match *self {
 			Id::Null => serializer.serialize_unit(),
@@ -25,7 +27,7 @@ impl Serialize for Id {
 }
 
 impl Deserialize for Id {
-	fn deserialize<D>(deserializer: &mut D) -> Result<Id, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Id, D::Error>
 	where D: Deserializer {
 		deserializer.deserialize(IdVisitor)
 	}
@@ -36,19 +38,23 @@ struct IdVisitor;
 impl Visitor for IdVisitor {
 	type Value = Id;
 
-	fn visit_unit<E>(&mut self) -> Result<Self::Value, E> where E: Error {
+	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+		formatter.write_str("a unit, integer or string")
+	}
+
+	fn visit_unit<E>(self) -> Result<Self::Value, E> where E: de::Error {
 		Ok(Id::Null)
 	}
 
-	fn visit_u64<E>(&mut self, value: u64) -> Result<Self::Value, E> where E: Error {
+	fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> where E: de::Error {
 		Ok(Id::Num(value))
 	}
 
-	fn visit_str<E>(&mut self, value: &str) -> Result<Self::Value, E> where E: Error {
+	fn visit_str<E>(self, value: &str) -> Result<Self::Value, E> where E: de::Error {
 		self.visit_string(value.to_owned())
 	}
 
-	fn visit_string<E>(&mut self, value: String) -> Result<Self::Value, E> where E: Error {
+	fn visit_string<E>(self, value: String) -> Result<Self::Value, E> where E: de::Error {
 		value.parse::<u64>().map(Id::Num).or(Ok(Id::Str(value)))
 	}
 }
