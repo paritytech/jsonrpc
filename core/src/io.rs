@@ -240,7 +240,6 @@ impl IoHandler {
 }
 
 impl<M: Metadata> IoHandler<M> {
-
 	/// Handle given request asynchronously.
 	pub fn handle_request(&self, request: &str) -> BoxFuture<Option<String>, ()> {
 		self.0.handle_request(request, M::default())

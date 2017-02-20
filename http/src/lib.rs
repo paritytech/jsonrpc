@@ -42,11 +42,11 @@ use std::sync::{Arc, mpsc};
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
-use std::ops::Deref;
 use parking_lot::RwLock;
 use futures::{future, Future, BoxFuture};
 use jsonrpc::MetaIoHandler;
-use jsonrpc::reactor::{RpcHandler};
+
+pub use req::Req;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, RpcServerError>;
@@ -90,67 +90,32 @@ impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
 		}
 	}
 }
-//
-// /// Extracts metadata from the HTTP request.
-// pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
-// 	/// Read the metadata from the request
-// 	fn read_metadata(&self, _: &server::Request<hyper::net::HttpStream>) -> M {
-// 		Default::default()
-// 	}
-// }
-//
-// #[derive(Default)]
-// struct NoopExtractor;
-// impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 
-/// RPC Handler bundled with metadata extractor.
-pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
-	/// RPC Handler
-	pub handler: RpcHandler<M, S>,
-	// / Metadata extractor
-	// pub extractor: Arc<HttpMetaExtractor<M>>,
-}
-
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
-	fn clone(&self) -> Self {
-		Rpc {
-			handler: self.handler.clone(),
-			// extractor: self.extractor.clone(),
-		}
-	}
-}
-//
-// impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Rpc<M, S> {
-// 	/// Creates new RPC with extractor
-// 	pub fn new(handler: RpcHandler<M, S>, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
-// 		Rpc {
-// 			handler: handler,
-// 			// extractor: extractor,
-// 		}
-// 	}
-// }
-
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> From<RpcHandler<M, S>> for Rpc<M, S> {
-	fn from(handler: RpcHandler<M, S>) -> Self {
-		Rpc {
-			handler: handler,
-			// extractor: Arc::new(NoopExtractor),
-		}
+/// Extracts metadata from the HTTP request.
+pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
+	/// Read the metadata from the request
+	fn read_metadata(&self, _: &req::Req) -> M {
+		Default::default()
 	}
 }
 
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Deref for Rpc<M, S> {
-	type Target = RpcHandler<M, S>;
-
-	fn deref(&self) -> &Self::Target {
-		&self.handler
+impl<M, F> HttpMetaExtractor<M> for F where
+	M: jsonrpc::Metadata,
+	F: Fn(&req::Req) -> M + Sync + Send  + 'static,
+{
+	fn read_metadata(&self, req: &req::Req) -> M {
+		(*self)(req)
 	}
 }
+
+#[derive(Default)]
+struct NoopExtractor;
+impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	jsonrpc_handler: Arc<MetaIoHandler<M, S>>,
-	// meta_extractor: Arc<HttpMetaExtractor<M>>,
+	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
@@ -170,7 +135,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	{
 		ServerBuilder {
 			jsonrpc_handler: Arc::new(handler.into()),
-			// meta_extractor: Arc::new(NoopExtractor::default()),
+			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
@@ -188,12 +153,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self.cors_domains = cors_domains.into();
 		self
 	}
-    //
-	// /// Configures metadata extractor
-	// pub fn meta_extractor(mut self, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
-	// 	self.meta_extractor = extractor;
-	// 	self
-	// }
+
+	/// Configures metadata extractor
+	pub fn meta_extractor(mut self, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
+		self.meta_extractor = extractor;
+		self
+	}
 
 	/// Allow connections only with `Host` header set to binding address.
 	pub fn allow_only_bind_host(mut self) -> Self {
@@ -214,7 +179,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			let address = address.to_string();
 			new_hosts.insert(address.clone());
 			new_hosts.insert(address.replace("127.0.0.1", "localhost"));
-			// Override hosts
 			new_hosts.into_iter().collect()
 		})
 	}
@@ -224,6 +188,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let cors_domains = self.cors_domains;
 		let allowed_hosts = self.allowed_hosts;
 		let handler = self.jsonrpc_handler;
+		let meta_extractor = self.meta_extractor;
 		let panic_handler = self.panic_handler;
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
@@ -239,6 +204,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			let server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
 			let server = server.bind(move || Ok(RpcService {
 				handler: handler.clone(),
+				meta_extractor: meta_extractor.clone(),
 				hosts: hosts.read().clone(),
 				cors_domains: cors_domains.clone(),
 			})).expect("Cannot bind to socket.");
@@ -288,6 +254,7 @@ impl Drop for PanicHandler {
 /// Tokio-proto JSON-RPC HTTP Service
 pub struct RpcService<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
 	handler: Arc<MetaIoHandler<M, S>>,
+	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	hosts: Option<Vec<String>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 }
@@ -346,9 +313,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 			).boxed();
 		}
 
+		// Extract metadata
+		let metadata = self.meta_extractor.read_metadata(&request);
+
 		// Read & handle request
 		let data = request.body();
-		self.handler.handle_request(data, Default::default()).map(|result| {
+		self.handler.handle_request(data, metadata).map(|result| {
 			let result = format!("{}\n", result.unwrap_or_default());
 			res::new(&result, cors)
 		}).map_err(|_| unimplemented!()).boxed()

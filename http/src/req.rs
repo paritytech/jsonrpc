@@ -4,20 +4,24 @@ use std::ascii::AsciiExt;
 use tokio_minihttp;
 use tokio_core::io::EasyBuf;
 
+/// HTTP Method used
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Method {
+	/// POST
 	Post,
+	/// OPTIONS
 	Options,
+	/// Other method
 	Other
 }
 
+/// Request
 pub struct Req {
 	request: tokio_minihttp::Request,
 	body: EasyBuf,
 }
 
 impl Req {
-
 	/// Creates new `Req` object
 	pub fn new(request: tokio_minihttp::Request) -> Self {
 		let body = request.body();
@@ -45,6 +49,7 @@ impl Req {
 			.and_then(|header| ::std::str::from_utf8(header.1).ok())
 	}
 
+	/// Returns body of the request as a string
 	pub fn body(&self) -> &str {
 		::std::str::from_utf8(self.body.as_slice()).unwrap_or("")
 	}
