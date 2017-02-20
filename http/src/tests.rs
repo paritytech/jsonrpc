@@ -1,16 +1,19 @@
 extern crate jsonrpc_core;
+extern crate env_logger;
+extern crate reqwest;
 
-use std::str::Lines;
-use std::net::TcpStream;
-use std::io::{Read, Write};
+use std::io::Read;
+use self::reqwest::{StatusCode, Method};
+use self::reqwest::header::{self, Headers};
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
-
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
 
 fn serve_hosts(hosts: Vec<String>) -> Server {
+	let _ = env_logger::init();
+
 	ServerBuilder::new(IoHandler::default())
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
+		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("parity.io".into())]))
 		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
@@ -18,6 +21,8 @@ fn serve_hosts(hosts: Vec<String>) -> Server {
 
 fn serve() -> Server {
 	use std::thread;
+
+	let _ = env_logger::init();
 	let mut io = IoHandler::default();
 	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
 	io.add_async_method("hello_async", |_params: Params| {
@@ -34,7 +39,7 @@ fn serve() -> Server {
 
 	ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![
-			AccessControlAllowOrigin::Value("ethcore.io".into()),
+			AccessControlAllowOrigin::Value("parity.io".into()),
 			AccessControlAllowOrigin::Null,
 		]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
@@ -42,42 +47,26 @@ fn serve() -> Server {
 }
 
 struct Response {
-	status: String,
-	headers: String,
-	body: String,
+	pub status: reqwest::StatusCode,
+	pub body: String,
+	pub headers: Headers,
 }
 
-fn read_block(lines: &mut Lines) -> String {
-	let mut block = String::new();
-	loop {
-		let line = lines.next();
-		match line {
-			Some("") | None => break,
-			Some(v) => {
-				block.push_str(v);
-				block.push_str("\n");
-			},
-		}
-	}
-	block
-}
+fn request(server: Server, method: Method, headers: Headers, body: &str) -> Response {
+	let client = reqwest::Client::new().unwrap();
+	let mut res = client.request(method, &format!("http://{}", server.addrs()[0]))
+		.headers(headers)
+		.body(body)
+		.send()
+		.unwrap();
 
-fn request(server: Server, request: &str) -> Response {
-	let mut req = TcpStream::connect(server.addrs()[0]).unwrap();
-	req.write_all(request.as_bytes()).unwrap();
-
-	let mut response = String::new();
-	req.read_to_string(&mut response).unwrap();
-
-	let mut lines = response.lines();
-	let status = lines.next().expect("Status line always returned.").to_owned();
-	let headers =	read_block(&mut lines);
-	let body = read_block(&mut lines);
+	let mut body = String::new();
+	res.read_to_string(&mut body).unwrap();
 
 	Response {
-		status: status,
-		headers: headers,
+		status: res.status().clone(),
 		body: body,
+		headers: res.headers().clone(),
 	}
 }
 
@@ -88,18 +77,14 @@ fn should_return_method_not_allowed_for_get() {
 
 	// when
 	let response = request(server,
-		"\
-			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			\r\n\
-			I shouldn't be read.\r\n\
-		"
+		Method::Get,
+		Headers::new(),
+		"I shouldn't be read.",
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 405 Method Not Allowed".to_owned());
-	assert_eq!(response.body, "3D\nUsed HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned());
+	assert_eq!(response.status, StatusCode::MethodNotAllowed);
+	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required".to_owned());
 }
 
 #[test]
@@ -109,18 +94,20 @@ fn should_return_unsupported_media_type_if_not_json() {
 
 	// when
 	let response = request(server,
-		"\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			\r\n\
-			{}\r\n\
-		"
+		Method::Post,
+		Headers::new(),
+		"{}",
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(response.body, "51\nSupplied content type is not allowed. Content-Type: application/json is required\n".to_owned());
+	assert_eq!(response.status, StatusCode::UnsupportedMediaType);
+	assert_eq!(response.body, "Supplied content type is not allowed. Content-Type: application/json is required".to_owned());
+}
+
+fn content_type_json() -> Headers {
+	let mut headers = Headers::new();
+	headers.set_raw("content-type", vec![b"application/json".to_vec()]);
+	headers
 }
 
 #[test]
@@ -129,21 +116,14 @@ fn should_return_error_for_malformed_request() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"3.0","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"3.0","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, invalid_request());
 }
 
@@ -153,21 +133,14 @@ fn should_return_error_for_malformed_request2() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","metho1d":""}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"2.0","metho1d":""}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, invalid_request());
 }
 
@@ -177,22 +150,15 @@ fn should_return_empty_response_for_notification() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"2.0","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert_eq!(response.body, "0\n".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
+	assert_eq!(response.body, "".to_owned());
 }
 
 
@@ -202,21 +168,14 @@ fn should_return_method_not_found() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
 }
 
@@ -226,24 +185,23 @@ fn should_add_cors_headers() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: ethcore.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.set(header::Origin::new("http", "parity.io", None));
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: ethcore.io"), "Headers missing in {}", response.headers);
+	assert_eq!(
+		response.headers.get::<reqwest::header::AccessControlAllowOrigin>(),
+		Some(&reqwest::header::AccessControlAllowOrigin::Value("http://parity.io".into()))
+	);
 }
 
 #[test]
@@ -252,22 +210,18 @@ fn should_not_add_cors_headers() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: fake.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.set(header::Origin::new("http", "fake.io", None));
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
 }
 
@@ -277,118 +231,87 @@ fn should_add_cors_header_for_null_origin() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: null\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.append_raw("origin", b"null".to_vec());
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
+	assert_eq!(
+		response.headers.get::<reqwest::header::AccessControlAllowOrigin>().cloned(),
+		Some(reqwest::header::AccessControlAllowOrigin::Null)
+	);
 }
 
 #[test]
 fn should_reject_invalid_hosts() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.set_raw("Host", vec![b"127.0.0.1:8080".to_vec()]);
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
-	assert_eq!(response.body, invalid_host());
-}
-
-#[test]
-fn should_reject_missing_host() {
-	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
-
-	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
-	);
-
-	// then
-	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.status, StatusCode::Forbidden);
 	assert_eq!(response.body, invalid_host());
 }
 
 #[test]
 fn should_allow_if_host_is_valid() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: ethcore.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.set_raw("Host", vec![b"parity.io".to_vec()]);
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
 }
 
 #[test]
 fn should_always_allow_the_bind_address() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 	let addr = server.addrs()[0].clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: {}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr, req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.set_raw("Host", vec![format!("{}", addr).as_bytes().to_vec()]);
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
 }
 
@@ -401,19 +324,17 @@ fn should_always_allow_the_bind_address_as_localhost() {
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.set_raw("Host", vec![format!("localhost:{}", addr.port()).as_bytes().to_vec()]);
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
 }
 
@@ -421,24 +342,16 @@ fn should_always_allow_the_bind_address_as_localhost() {
 fn should_handle_sync_requests_correctly() {
 	// given
 	let server = serve();
-	let addr = server.addrs()[0].clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, world());
 }
 
@@ -446,24 +359,16 @@ fn should_handle_sync_requests_correctly() {
 fn should_handle_async_requests_with_immediate_response_correctly() {
 	// given
 	let server = serve();
-	let addr = server.addrs()[0].clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, world());
 }
 
@@ -471,24 +376,16 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 fn should_handle_async_requests_correctly() {
 	// given
 	let server = serve();
-	let addr = server.addrs()[0].clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, world());
 }
 
@@ -496,41 +393,33 @@ fn should_handle_async_requests_correctly() {
 fn should_handle_sync_batch_requests_correctly() {
 	// given
 	let server = serve();
-	let addr = server.addrs()[0].clone();
 
 	// when
-	let req = r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#;
 	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+		Method::Post,
+		content_type_json(),
+		r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#,
 	);
 
 	// then
-	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, world_batch());
 }
 
 fn invalid_host() -> String {
-	"29\nProvided Host header is not whitelisted.\n".into()
+	"Provided Host header is not whitelisted.".into()
 }
 
 fn method_not_found() -> String {
- "5A\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\",\"data\":null},\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\",\"data\":null},\"id\":1}".into()
 }
 
 fn invalid_request() -> String {
- "5C\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}".into()
 }
 fn world() -> String {
- "2A\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}".into()
 }
 fn world_batch() -> String {
- "2C\n[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
+ "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]".into()
 }

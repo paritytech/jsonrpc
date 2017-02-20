@@ -36,7 +36,7 @@ extern crate tokio_minihttp;
 mod tests;
 
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
@@ -49,9 +49,14 @@ use jsonrpc::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 // pub use hosts_validator::is_host_header_valid;
 
 
+/// Origins allowed to access
+#[derive(Debug, Clone, PartialEq)]
 pub enum AccessControlAllowOrigin {
+	/// Specific hostname
 	Value(String),
+	/// null-origin (file:///, sandboxed iframe)
 	Null,
+	/// Any non-null origin
 	All,
 }
 
@@ -221,64 +226,71 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
 
-
-		// let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |control| {
-		// 	let hosts = hosts.lock().unwrap().clone();
-		// 	ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts, handler, control)
-		// }));
-        //
-		// // Add current host to allowed headers.
-		// // NOTE: we need to use `l.addrs()` instead of `addr`
-		// // it might be different!
-		// {
-		// 	let mut hosts = hosts_setter.lock().unwrap();
-		// 	if let Some(current_hosts) = hosts.take() {
-		// 		let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
-		// 		for addr in l.addrs() {
-		// 			let address = addr.to_string();
-		// 			new_hosts.insert(address.clone());
-		// 			new_hosts.insert(address.replace("127.0.0.1", "localhost"));
-		// 		}
-		// 		// Override hosts
-		// 		*hosts = Some(new_hosts.into_iter().collect());
-		// 	}
-		// }
-		let mut addr = addr.clone();
-		if addr.port() == 0 {
-			addr.set_port(6000);
-		}
-
-		let a = addr.clone();
-		let handler = self.jsonrpc_handler.clone();
+		let handler = self.jsonrpc_handler;
+		let (close, shutdown_signal) = futures::sync::oneshot::channel();
+		let (local_addr_tx, local_addr_rx) = mpsc::channel();
+		let addr = addr.to_owned();
 		let handle = thread::spawn(move || {
-			let server = tokio_proto::TcpServer::new(tokio_minihttp::Http, a);
-			server.serve(move || Ok(RpcService {
+			let server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
+			let server = server.bind(move || Ok(RpcService {
 				handler: handler.clone(),
+				hosts: hosts.clone(),
+				cors_domains: cors_domains.clone()
+			}))?;
+
+			local_addr_tx.send(server.local_addr()?)
+				.expect("Server initialization awaits local address.");
+			server.run_until(shutdown_signal.map_err(|_| {
+				warn!("Shutdown signaller dropped, closing server.");
 			}))
 		});
 
+		let local_addr = local_addr_rx.recv().map_err(|_| {
+			RpcServerError::IoError(io::Error::new(io::ErrorKind::Interrupted, ""))
+		})?;
+
+		// Add current host to allowed headers.
+		// NOTE: we need to use `local_address` instead of `addr`
+		// it might be different!
+		{
+			let mut hosts = hosts_setter.lock().unwrap();
+			if let Some(current_hosts) = hosts.take() {
+				let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
+				let address = local_addr.clone().to_string();
+				new_hosts.insert(address.clone());
+				new_hosts.insert(address.replace("127.0.0.1", "localhost"));
+				// Override hosts
+				*hosts = Some(new_hosts.into_iter().collect());
+			}
+		}
+
 		Ok(Server {
-			addr: [addr],
+			addr: [local_addr],
 			handle: Some(handle),
-			// event_loop: event_loop,
+			close: Some(close),
 		})
 	}
 }
 
 pub struct RpcService<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
 	handler: Arc<MetaIoHandler<M, S>>,
+	hosts: Arc<Mutex<Option<Vec<String>>>>,
+	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for RpcService<M, S> {
 	type Request = tokio_minihttp::Request;
 	type Response = tokio_minihttp::Response;
 	type Error = io::Error;
+	// TODO avoid boxing here
 	type Future = BoxFuture<tokio_minihttp::Response, io::Error>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
+		println!("Calling service");
 		let body = request.body();
 		let data = ::std::str::from_utf8(body.as_slice()).ok().unwrap_or("");
 		self.handler.handle_request(data, Default::default()).map(|result| {
+			println!("Got response");
 			let mut resp = Self::Response::new();
 			resp.body(&result.unwrap_or_default());
 			resp
@@ -289,10 +301,9 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 /// jsonrpc http server instance
 pub struct Server {
-	// server: Option<server::Listening>,
 	addr: [SocketAddr; 1],
-	handle: Option<thread::JoinHandle<()>>,
-	// event_loop: Option<RpcEventLoopHandle>,
+	handle: Option<thread::JoinHandle<Result<(), io::Error>>>,
+	close: Option<futures::sync::oneshot::Sender<()>>,
 }
 
 impl Server {
@@ -303,19 +314,17 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		// self.server.take().unwrap().close();
-		// self.event_loop.take().map(|v| v.close());
+		self.close.take().map(|close| close.complete(()));
 	}
 
 	/// Will block, waiting for the server to finish.
-	pub fn wait(mut self) -> thread::Result<()> {
+	pub fn wait(mut self) -> thread::Result<Result<(), io::Error>> {
 		self.handle.take().unwrap().join()
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		// self.server.take().unwrap().close();
-		// self.event_loop.take().map(|v| v.close());
+		self.close.take().map(|close| close.complete(()));
 	}
 }
