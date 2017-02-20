@@ -8,7 +8,7 @@ pub fn method_not_allowed() -> Response {
 	response
 		.status_code(405, "Method Not Allowed")
 		.header("Content-Type", "text/plain")
-		.body("Used HTTP Method is not allowed. POST or OPTIONS is required");
+		.body("Used HTTP Method is not allowed. POST or OPTIONS is required.\n");
 	response
 }
 
@@ -17,7 +17,7 @@ pub fn invalid_host() -> Response {
 	response
 		.status_code(403, "Forbidden")
 		.header("Content-Type", "text/plain")
-		.body("Provided Host header is not whitelisted.");
+		.body("Provided Host header is not whitelisted.\n");
 	response
 }
 
@@ -26,7 +26,7 @@ pub fn invalid_content_type() -> Response {
 	response
 		.status_code(415, "Unsupported Media Type")
 		.header("Content-Type", "text/plain")
-		.body("Supplied content type is not allowed. Content-Type: application/json is required");
+		.body("Supplied content type is not allowed. Content-Type: application/json is required.\n");
 	response
 }
 

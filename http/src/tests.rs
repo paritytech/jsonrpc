@@ -84,7 +84,7 @@ fn should_return_method_not_allowed_for_get() {
 
 	// then
 	assert_eq!(response.status, StatusCode::MethodNotAllowed);
-	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required".to_owned());
+	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required.\n".to_owned());
 }
 
 #[test]
@@ -101,7 +101,7 @@ fn should_return_unsupported_media_type_if_not_json() {
 
 	// then
 	assert_eq!(response.status, StatusCode::UnsupportedMediaType);
-	assert_eq!(response.body, "Supplied content type is not allowed. Content-Type: application/json is required".to_owned());
+	assert_eq!(response.body, "Supplied content type is not allowed. Content-Type: application/json is required.\n".to_owned());
 }
 
 fn content_type_json() -> Headers {
@@ -431,7 +431,7 @@ fn should_handle_sync_batch_requests_correctly() {
 }
 
 fn invalid_host() -> String {
-	"Provided Host header is not whitelisted.".into()
+	"Provided Host header is not whitelisted.\n".into()
 }
 
 fn method_not_found() -> String {
