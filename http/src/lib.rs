@@ -23,42 +23,30 @@
 extern crate futures;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
+extern crate parking_lot;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
 extern crate tokio_minihttp;
 
-// pub mod request_response;
-// pub mod cors;
-// mod handler;
-// mod hosts_validator;
+pub mod cors;
+pub mod hosts;
+mod req;
+mod res;
 #[cfg(test)]
 mod tests;
 
 use std::io;
-use std::sync::{Arc, Mutex, mpsc};
+use std::ascii::AsciiExt;
+use std::sync::{Arc, mpsc};
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
 use std::ops::Deref;
+use parking_lot::RwLock;
 use futures::{future, Future, BoxFuture};
 use jsonrpc::MetaIoHandler;
-use jsonrpc::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
-
-// pub use handler::{PanicHandler, ServerHandler};
-// pub use hosts_validator::is_host_header_valid;
-
-
-/// Origins allowed to access
-#[derive(Debug, Clone, PartialEq)]
-pub enum AccessControlAllowOrigin {
-	/// Specific hostname
-	Value(String),
-	/// null-origin (file:///, sandboxed iframe)
-	Null,
-	/// Any non-null origin
-	All,
-}
+use jsonrpc::reactor::{RpcHandler};
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, RpcServerError>;
@@ -163,7 +151,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Deref for Rpc<M, S> {
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	jsonrpc_handler: Arc<MetaIoHandler<M, S>>,
 	// meta_extractor: Arc<HttpMetaExtractor<M>>,
-	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
+	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
@@ -196,7 +184,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Configures a list of allowed CORS origins.
-	pub fn cors(mut self, cors_domains: DomainsValidation<AccessControlAllowOrigin>) -> Self {
+	pub fn cors(mut self, cors_domains: DomainsValidation<cors::AccessControlAllowOrigin>) -> Self {
 		self.cors_domains = cors_domains.into();
 		self
 	}
@@ -219,50 +207,61 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	fn update_hosts(hosts: Option<Vec<String>>, address: SocketAddr) -> Option<Vec<String>> {
+		hosts.map(|current_hosts| {
+			// TODO [ToDr] Pre-process hosts (so that they don't contain the path)
+			let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
+			let address = address.to_string();
+			new_hosts.insert(address.clone());
+			new_hosts.insert(address.replace("127.0.0.1", "localhost"));
+			// Override hosts
+			new_hosts.into_iter().collect()
+		})
+	}
+
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
-		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let cors_domains = self.cors_domains;
-		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
-		let hosts_setter = hosts.clone();
-
+		let allowed_hosts = self.allowed_hosts;
 		let handler = self.jsonrpc_handler;
-		let (close, shutdown_signal) = futures::sync::oneshot::channel();
+		let panic_handler = self.panic_handler;
+
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
+		let (close, shutdown_signal) = futures::sync::oneshot::channel();
 		let addr = addr.to_owned();
 		let handle = thread::spawn(move || {
+			let _panic_handler = PanicHandler { handler: panic_handler };
+
+			// TODO [ToDr] Errors?
+			let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
+			let hosts2 = hosts.clone();
+
 			let server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
 			let server = server.bind(move || Ok(RpcService {
 				handler: handler.clone(),
-				hosts: hosts.clone(),
-				cors_domains: cors_domains.clone()
-			}))?;
+				hosts: hosts.read().clone(),
+				cors_domains: cors_domains.clone(),
+			})).expect("Cannot bind to socket.");
 
-			local_addr_tx.send(server.local_addr()?)
-				.expect("Server initialization awaits local address.");
+			let local_addr = server.local_addr().expect("OK");
+			// Add current host to allowed headers.
+			// NOTE: we need to use `local_address` instead of `addr`
+			// it might be different!
+			*hosts2.write() = Self::update_hosts(allowed_hosts, local_addr.clone());
+
+			// Send local address
+			local_addr_tx.send(local_addr).expect("Server initialization awaits local address.");
+
+			// Start the server and wait for shutdown signal
 			server.run_until(shutdown_signal.map_err(|_| {
 				warn!("Shutdown signaller dropped, closing server.");
-			}))
+			})).expect("Expected clean shutdown.")
 		});
 
+		// Wait for server initialization
 		let local_addr = local_addr_rx.recv().map_err(|_| {
 			RpcServerError::IoError(io::Error::new(io::ErrorKind::Interrupted, ""))
 		})?;
-
-		// Add current host to allowed headers.
-		// NOTE: we need to use `local_address` instead of `addr`
-		// it might be different!
-		{
-			let mut hosts = hosts_setter.lock().unwrap();
-			if let Some(current_hosts) = hosts.take() {
-				let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
-				let address = local_addr.clone().to_string();
-				new_hosts.insert(address.clone());
-				new_hosts.insert(address.replace("127.0.0.1", "localhost"));
-				// Override hosts
-				*hosts = Some(new_hosts.into_iter().collect());
-			}
-		}
 
 		Ok(Server {
 			addr: [local_addr],
@@ -272,10 +271,35 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 }
 
+struct PanicHandler {
+	handler: Option<Box<Fn() -> () + Send>>,
+}
+
+impl Drop for PanicHandler {
+	fn drop(&mut self) {
+		if ::std::thread::panicking() {
+			if let Some(ref h) = self.handler {
+				h();
+			}
+		}
+	}
+}
+
+/// Tokio-proto JSON-RPC HTTP Service
 pub struct RpcService<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
 	handler: Arc<MetaIoHandler<M, S>>,
-	hosts: Arc<Mutex<Option<Vec<String>>>>,
-	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
+	hosts: Option<Vec<String>>,
+	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
+}
+
+fn is_json(content_type: Option<&str>) -> bool {
+	match content_type {
+		None => false,
+		Some(ref content_type) => {
+			let json = "application/json";
+			content_type.eq_ignore_ascii_case(json)
+		}
+	}
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for RpcService<M, S> {
@@ -286,23 +310,55 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 	type Future = BoxFuture<tokio_minihttp::Response, io::Error>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
-		println!("Calling service");
-		let body = request.body();
-		let data = ::std::str::from_utf8(body.as_slice()).ok().unwrap_or("");
+		let request = req::Req::new(request);
+		// Validate HTTP Method
+		let is_options = request.method() == req::Method::Options;
+		if !is_options && request.method() != req::Method::Post {
+			return future::ok(
+				res::method_not_allowed()
+			).boxed();
+		}
+
+		// Validate allowed hosts
+		let host = request.header("Host");
+		if !hosts::is_host_valid(host, &self.hosts) {
+			return future::ok(
+				res::invalid_host()
+			).boxed();
+		}
+
+		// Validate content type
+		let content_type = request.header("Content-type");
+		if !is_json(content_type) {
+			return future::ok(
+				res::invalid_content_type()
+			).boxed();
+		}
+
+		// Extract CORS headers
+		let origin = request.header("Origin");
+		let cors = cors::get_cors_header(origin, &self.cors_domains);
+
+		// Don't process data if it's OPTIONS
+		if is_options {
+			return future::ok(
+				res::new("", cors)
+			).boxed();
+		}
+
+		// Read & handle request
+		let data = request.body();
 		self.handler.handle_request(data, Default::default()).map(|result| {
-			println!("Got response");
-			let mut resp = Self::Response::new();
-			resp.body(&result.unwrap_or_default());
-			resp
+			let result = format!("{}\n", result.unwrap_or_default());
+			res::new(&result, cors)
 		}).map_err(|_| unimplemented!()).boxed()
 	}
 }
 
-
 /// jsonrpc http server instance
 pub struct Server {
 	addr: [SocketAddr; 1],
-	handle: Option<thread::JoinHandle<Result<(), io::Error>>>,
+	handle: Option<thread::JoinHandle<()>>,
 	close: Option<futures::sync::oneshot::Sender<()>>,
 }
 
@@ -318,7 +374,7 @@ impl Server {
 	}
 
 	/// Will block, waiting for the server to finish.
-	pub fn wait(mut self) -> thread::Result<Result<(), io::Error>> {
+	pub fn wait(mut self) -> thread::Result<()> {
 		self.handle.take().unwrap().join()
 	}
 }

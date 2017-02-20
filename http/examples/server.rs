@@ -11,7 +11,7 @@ fn main() {
 	});
 
 	let server = ServerBuilder::new(io)
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
+		.cors(DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Null]))
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 

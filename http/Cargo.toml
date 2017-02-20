@@ -13,6 +13,7 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.htm
 log = "0.3"
 futures = "0.1"
 jsonrpc-core = { version = "6.0", path = "../core" }
+parking_lot = "0.3"
 tokio-core = "0.1"
 tokio-service = "0.1"
 tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }

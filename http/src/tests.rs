@@ -7,13 +7,13 @@ use self::reqwest::{StatusCode, Method};
 use self::reqwest::header::{self, Headers};
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 use self::jsonrpc_core::futures::{self, Future};
-use super::*;
+use super::{ServerBuilder, Server, cors, DomainsValidation};
 
 fn serve_hosts(hosts: Vec<String>) -> Server {
 	let _ = env_logger::init();
 
 	ServerBuilder::new(IoHandler::default())
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("parity.io".into())]))
+		.cors(DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Value("http://parity.io".into())]))
 		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
@@ -39,8 +39,8 @@ fn serve() -> Server {
 
 	ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![
-			AccessControlAllowOrigin::Value("parity.io".into()),
-			AccessControlAllowOrigin::Null,
+			cors::AccessControlAllowOrigin::Value("http://parity.io".into()),
+			cors::AccessControlAllowOrigin::Null,
 		]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
@@ -158,7 +158,7 @@ fn should_return_empty_response_for_notification() {
 
 	// then
 	assert_eq!(response.status, StatusCode::Ok);
-	assert_eq!(response.body, "".to_owned());
+	assert_eq!(response.body, "\n".to_owned());
 }
 
 
@@ -198,6 +198,32 @@ fn should_add_cors_headers() {
 	// then
 	assert_eq!(response.status, StatusCode::Ok);
 	assert_eq!(response.body, method_not_found());
+	assert_eq!(
+		response.headers.get::<reqwest::header::AccessControlAllowOrigin>(),
+		Some(&reqwest::header::AccessControlAllowOrigin::Value("http://parity.io".into()))
+	);
+}
+
+#[test]
+fn should_add_cors_headers_for_options() {
+	// given
+	let server = serve();
+
+	// when
+	let response = request(server,
+		Method::Options,
+		{
+			let mut headers = content_type_json();
+			headers.set(header::Origin::new("http", "parity.io", None));
+			headers
+		},
+		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+	);
+
+	// then
+	assert_eq!(response.status, StatusCode::Ok);
+	assert_eq!(response.body, "".to_owned());
+	println!("{:?}", response.headers);
 	assert_eq!(
 		response.headers.get::<reqwest::header::AccessControlAllowOrigin>(),
 		Some(&reqwest::header::AccessControlAllowOrigin::Value("http://parity.io".into()))
@@ -277,7 +303,6 @@ fn should_allow_if_host_is_valid() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
 		Method::Post,
 		{
@@ -322,7 +347,6 @@ fn should_always_allow_the_bind_address_as_localhost() {
 	let addr = server.addrs()[0].clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
 		Method::Post,
 		{
@@ -411,15 +435,15 @@ fn invalid_host() -> String {
 }
 
 fn method_not_found() -> String {
- "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\",\"data\":null},\"id\":1}".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
 }
 
 fn invalid_request() -> String {
- "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
 }
 fn world() -> String {
- "{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}".into()
+ "{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
 }
 fn world_batch() -> String {
- "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]".into()
+ "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
 }
