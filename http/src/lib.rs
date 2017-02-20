@@ -242,7 +242,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		})?;
 
 		Ok(Server {
-			addr: [local_addr],
+			address: local_addr,
 			handle: Some(handle),
 			close: Some(close),
 		})
@@ -339,15 +339,15 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 /// jsonrpc http server instance
 pub struct Server {
-	addr: [SocketAddr; 1],
+	address: SocketAddr,
 	handle: Option<thread::JoinHandle<()>>,
 	close: Option<futures::sync::oneshot::Sender<()>>,
 }
 
 impl Server {
 	/// Returns addresses of this server
-	pub fn addrs(&self) -> &[SocketAddr] {
-		&self.addr
+	pub fn address(&self) -> &SocketAddr {
+		&self.address
 	}
 
 	/// Closes the server.

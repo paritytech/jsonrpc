@@ -54,7 +54,7 @@ struct Response {
 
 fn request(server: Server, method: Method, headers: Headers, body: &str) -> Response {
 	let client = reqwest::Client::new().unwrap();
-	let mut res = client.request(method, &format!("http://{}", server.addrs()[0]))
+	let mut res = client.request(method, &format!("http://{}", server.address()))
 		.headers(headers)
 		.body(body)
 		.send()
@@ -322,7 +322,7 @@ fn should_allow_if_host_is_valid() {
 fn should_always_allow_the_bind_address() {
 	// given
 	let server = serve_hosts(vec!["parity.io".into()]);
-	let addr = server.addrs()[0].clone();
+	let addr = server.address().clone();
 
 	// when
 	let response = request(server,
@@ -344,7 +344,7 @@ fn should_always_allow_the_bind_address() {
 fn should_always_allow_the_bind_address_as_localhost() {
 	// given
 	let server = serve_hosts(vec![]);
-	let addr = server.addrs()[0].clone();
+	let addr = server.address().clone();
 
 	// when
 	let response = request(server,
