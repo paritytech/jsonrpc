@@ -119,6 +119,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<String>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
+	threads: usize,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
@@ -139,7 +140,16 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
+			threads: 1,
 		}
+	}
+
+	/// Sets number of threads of the server to run.
+	/// Panics when set to `0`.
+	pub fn threads(mut self, threads: usize) -> Self {
+		assert!(threads > 0);
+		self.threads = threads;
+		self
 	}
 
 	/// Sets handler invoked in case of server panic.
@@ -190,6 +200,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let handler = self.jsonrpc_handler;
 		let meta_extractor = self.meta_extractor;
 		let panic_handler = self.panic_handler;
+		let threads = self.threads;
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = futures::sync::oneshot::channel();
@@ -201,7 +212,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
 			let hosts2 = hosts.clone();
 
-			let server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
+			let mut server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
+			server.threads(threads);
 			let server = server.bind(move || Ok(RpcService {
 				handler: handler.clone(),
 				meta_extractor: meta_extractor.clone(),
