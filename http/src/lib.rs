@@ -211,6 +211,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			// TODO [ToDr] Errors?
 			let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
 			let hosts2 = hosts.clone();
+			let mut hosts_setter = hosts2.write();
 
 			let mut server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
 			server.threads(threads);
@@ -225,7 +226,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			// Add current host to allowed headers.
 			// NOTE: we need to use `local_address` instead of `addr`
 			// it might be different!
-			*hosts2.write() = Self::update_hosts(allowed_hosts, local_addr.clone());
+			*hosts_setter = Self::update_hosts(allowed_hosts, local_addr.clone());
+			drop(hosts_setter);
 
 			// Send local address
 			local_addr_tx.send(local_addr).expect("Server initialization awaits local address.");
