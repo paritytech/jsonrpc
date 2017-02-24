@@ -15,20 +15,20 @@ use jsonrpc_core::futures::Future;
 struct Meta(usize);
 impl Metadata for Meta {}
 impl PubSubMetadata for Meta {
-	fn send(data: String) {
-		unimplemented!()
+	fn session(&self) -> Option<Arc<Session>> {
+		None
 	}
 }
 
 fn main() {
-	let mut io = PubSubHandler::default();
+	let mut io = PubSubHandler::new(MetaIoHandler::default());
 	io.add_method("say_hello", |_params: Params| {
 		Ok(Value::String("hello".to_string()))
 	});
 
 	io.add_subscription(
 		"hello",
-		("subscribe_hello", |params: Params, _, subscriber: Subscriber<Meta>| {
+		("subscribe_hello", |params: Params, _, subscriber: Subscriber| {
 			if params != Params::None {
 				subscriber.reject(Error {
 					code: ErrorCode::ParseError,
@@ -38,18 +38,18 @@ fn main() {
 				return;
 			}
 
-			let sink = subscriber.assign_id(Value::Number(5.into()));
+			let sink = subscriber.assign_id(SubscriptionId::Number(5));
 			// or subscriber.reject(Error {} );
 			// or drop(subscriber)
 			thread::spawn(move || {
 				loop {
 					thread::sleep(time::Duration::from_millis(100));
-					sink.send(Value::Number(10.into()));
+					sink.send(Params::Array(vec![Value::Number(10.into())]));
 				}
 			});
 		}),
-		("remove_hello", |id: SubscriptionId| -> futures::BoxFuture<bool, Error> {
-			futures::future::ok(true).boxed()
+		("remove_hello", |_id: SubscriptionId| -> futures::BoxFuture<Value, Error> {
+			futures::future::ok(Value::Bool(true)).boxed()
 		}),
 	);
 

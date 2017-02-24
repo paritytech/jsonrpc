@@ -1,8 +1,7 @@
-
 use types::{Params, Value, Error};
 use futures::BoxFuture;
 
-/// Metadata marker trait
+/// Metadata trait
 pub trait Metadata: Default + Clone + Send + 'static {}
 impl Metadata for () {}
 
