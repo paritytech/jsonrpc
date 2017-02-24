@@ -5,7 +5,6 @@ use jsonrpc_core::futures::Future;
 
 #[derive(Clone, Default)]
 struct Meta(usize);
-
 impl Metadata for Meta {}
 
 pub fn main() {

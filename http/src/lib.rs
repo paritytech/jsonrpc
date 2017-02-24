@@ -20,10 +20,11 @@
 #![warn(missing_docs)]
 
 #[macro_use] extern crate log;
-extern crate hyper;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 extern crate tokio_core;
+
+pub extern crate hyper;
 
 pub mod request_response;
 pub mod cors;
@@ -104,6 +105,15 @@ pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
 	fn read_metadata(&self, _: &server::Request<hyper::net::HttpStream>) -> M {
 		Default::default()
+	}
+}
+
+impl<M, F> HttpMetaExtractor<M> for F where
+	M: jsonrpc::Metadata,
+	F: Fn(&server::Request<hyper::net::HttpStream>) -> M + Sync + Send + 'static,
+{
+	fn read_metadata(&self, req: &server::Request<hyper::net::HttpStream>) -> M {
+		(*self)(req)
 	}
 }
 
