@@ -34,7 +34,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		}
 	}
 
-	pub fn extractor<T: MetaExtractor<M> + 'static>(mut self, meta_extractor: T) -> Self {
+	pub fn session_meta_extractor<T: MetaExtractor<M> + 'static>(mut self, meta_extractor: T) -> Self {
 		self.meta_extractor = Arc::new(meta_extractor);
 		self
 	}
@@ -56,12 +56,16 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 				let connections = listener.incoming();
 				let server = connections.for_each(move |(socket, peer_addr)| {
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
+					let (sender, receiver) = mpsc::channel(65536);
 
-					let context = RequestContext { peer_addr: peer_addr };
+					let context = RequestContext {
+						peer_addr: peer_addr,
+						sender: sender.clone(),
+					};
+
 					let meta = meta_extractor.extract(&context);
-
-					let (writer, reader) = socket.framed(LineCodec).split();
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
+					let (writer, reader) = socket.framed(LineCodec).split();
 
 					let responses = reader.and_then(
 						move |req| service.call(req).then(|response| match response {
@@ -81,7 +85,6 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					);
 
 					let peer_message_queue = {
-						let (sender, receiver) = mpsc::channel(65536);
 						let mut channels = channels.lock();
 						channels.insert(peer_addr.clone(), sender.clone());
 

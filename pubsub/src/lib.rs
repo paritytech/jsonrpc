@@ -1,12 +1,14 @@
+#![warn(missing_docs)]
+
 extern crate jsonrpc_core as core;
 extern crate parking_lot;
 
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 
 use parking_lot::Mutex;
-use core::futures::{self, future, Future, BoxFuture};
-use core::futures::sync::oneshot;
+use core::futures::{self, sink, future, Sink as FuturesSink, Future, BoxFuture};
+use core::futures::sync::{oneshot, mpsc};
 
 type TransportSender = mpsc::Sender<String>;
 
@@ -20,6 +22,13 @@ pub struct Session {
 }
 
 impl Session {
+	pub fn new(sender: TransportSender) -> Self {
+		Session {
+			active_subscriptions: Default::default(),
+			transport: Mutex::new(sender),
+		}
+	}
+
 	pub fn add_subscription(&self, name: &str, id: &SubscriptionId, remove: Box<Fn(SubscriptionId) + Send + 'static>) {
 		let ret = self.active_subscriptions.lock().insert((id.clone(), name.into()), remove);
 		// TODO [ToDr] Should this be a panic?
@@ -75,7 +84,7 @@ pub struct Sink {
 }
 
 impl Sink {
-	pub fn send(&self, val: core::Params) {
+	pub fn send(&self, val: core::Params) -> sink::Send<TransportSender> {
 		let notification = core::Notification {
 			jsonrpc: Some(core::Version::V2),
 			method: self.notification.clone(),
@@ -83,7 +92,7 @@ impl Sink {
 		};
 
 		// TODO [ToDr] Unwraps
-		self.transport.send(core::to_string(&notification).unwrap()).unwrap();
+		self.transport.clone().send(core::to_string(&notification).unwrap())
 	}
 }
 

@@ -1,8 +1,9 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_pubsub;
-extern crate jsonrpc_http_server;
+extern crate jsonrpc_tcp_server;
 
 use std::{time, thread};
+use std::sync::Arc;
 
 use jsonrpc_core::*;
 use jsonrpc_pubsub::*;
@@ -10,12 +11,23 @@ use jsonrpc_tcp_server::*;
 
 use jsonrpc_core::futures::Future;
 
-#[derive(Clone, Default)]
-struct Meta(usize);
+#[derive(Clone)]
+struct Meta {
+	session: Option<Arc<Session>>,
+}
+
+impl Default for Meta {
+	fn default() -> Self {
+		Meta {
+			session: None,
+		}
+	}
+}
+
 impl Metadata for Meta {}
 impl PubSubMetadata for Meta {
 	fn session(&self) -> Option<Arc<Session>> {
-		None
+		self.session.clone()
 	}
 }
 
@@ -43,21 +55,29 @@ fn main() {
 			thread::spawn(move || {
 				loop {
 					thread::sleep(time::Duration::from_millis(100));
-					sink.send(Params::Array(vec![Value::Number(10.into())]));
+					match sink.send(Params::Array(vec![Value::Number(10.into())])).wait() {
+						Ok(_) => {},
+						Err(_) => {
+							println!("Subscription has ended, finishing.");
+							break;
+						}
+					}
 				}
 			});
 		}),
 		("remove_hello", |_id: SubscriptionId| -> futures::BoxFuture<Value, Error> {
+			println!("Closing subscription");
 			futures::future::ok(Value::Bool(true)).boxed()
 		}),
 	);
 
 	let server = ServerBuilder::new(io)
-		.meta_extractor(|_session: &hyper::server::Request<hyper::net::HttpStream>| {
-			Meta(5)
+		.session_meta_extractor(|context: &RequestContext| {
+			Meta {
+				session: Some(Arc::new(Session::new(context.sender.clone()))),
+			}
 		})
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
-		.start_http(&"127.0.0.1:3030".parse().unwrap())
+		.start(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
 	server.wait().unwrap();

@@ -1,8 +1,11 @@
 use std::net::SocketAddr;
+
+use jsonrpc::futures::sync::mpsc;
 use jsonrpc::Metadata;
 
 pub struct RequestContext {
 	pub peer_addr: SocketAddr,
+	pub sender: mpsc::Sender<String>,
 }
 
 pub trait MetaExtractor<M: Metadata> : Send + Sync {

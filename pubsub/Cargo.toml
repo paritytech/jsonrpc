@@ -14,4 +14,4 @@ parking_lot = "0.3"
 jsonrpc-core = { version = "6.0", path = "../core" }
 
 [dev-dependencies]
-jsonrpc-http-server = { version = "6.0", path = "../http" }
+jsonrpc-tcp-server = { version = "6.0", path = "../tcp" }

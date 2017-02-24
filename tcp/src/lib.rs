@@ -21,6 +21,8 @@
 //! }
 //! ```
 
+#![warn(missing_docs)]
+
 extern crate jsonrpc_core as jsonrpc;
 extern crate parking_lot;
 extern crate rand;
