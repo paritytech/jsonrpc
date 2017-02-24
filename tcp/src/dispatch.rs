@@ -1,11 +1,12 @@
 use std;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use jsonrpc::futures::{Stream, Poll, Async, Sink, Future};
 use jsonrpc::futures::sync::mpsc;
 
-use std::collections::HashMap;
+use parking_lot::Mutex;
 
 pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::Sender<String>>>;
 
@@ -50,7 +51,7 @@ impl Dispatcher {
 	}
 
 	pub fn push_message(&self, peer_addr: &SocketAddr, msg: String) -> Result<(), PushMessageError> {
-		let mut channels = self.channels.lock().unwrap();
+		let mut channels = self.channels.lock();
 
 		match channels.get_mut(peer_addr) {
 			Some(mut channel) => {
@@ -65,11 +66,11 @@ impl Dispatcher {
 	}
 
 	pub fn is_connected(&self, socket_addr: &SocketAddr) -> bool {
-		self.channels.lock().unwrap().contains_key(socket_addr)
+		self.channels.lock().contains_key(socket_addr)
 	}
 
 	pub fn peer_count(&self) -> usize {
-		self.channels.lock().unwrap().len()
+		self.channels.lock().len()
 	}
 }
 

@@ -1,5 +1,4 @@
-use std::io;
-use std::str;
+use std::{io, str};
 use tokio_core::io::{Codec, EasyBuf};
 
 pub struct LineCodec;
@@ -38,14 +37,18 @@ mod tests {
 	#[test]
 	fn simple_encode() {
 		let mut buf = EasyBuf::new();
-		buf.get_mut().extend_from_slice(b"{ test: 1 }\n{ test: 2 }");
+		buf.get_mut().extend_from_slice(b"{ test: 1 }\n{ test: 2 }\n{ test: 3 }");
 
 		let mut codec = LineCodec;
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in simple test")
 			.expect("There should be at least one request in simple test");
+		let request2 = codec.decode(&mut buf)
+			.expect("There should be no error in simple test")
+			.expect("There should be at least one request in simple test");
 
-		assert_eq!(request, "{ test: 1 }")
+		assert_eq!(request, "{ test: 1 }");
+		assert_eq!(request2, "{ test: 2 }");
 	}
 }

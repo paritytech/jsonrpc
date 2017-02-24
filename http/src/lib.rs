@@ -228,8 +228,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Configures metadata extractor
-	pub fn meta_extractor(mut self, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
-		self.meta_extractor = extractor;
+	pub fn meta_extractor<T: HttpMetaExtractor<M>>(mut self, extractor: T) -> Self {
+		self.meta_extractor = Arc::new(extractor);
 		self
 	}
 

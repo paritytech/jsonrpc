@@ -2,12 +2,11 @@ extern crate jsonrpc_core;
 extern crate jsonrpc_pubsub;
 extern crate jsonrpc_http_server;
 
-use std::sync::Arc;
 use std::{time, thread};
 
 use jsonrpc_core::*;
 use jsonrpc_pubsub::*;
-use jsonrpc_http_server::*;
+use jsonrpc_tcp_server::*;
 
 use jsonrpc_core::futures::Future;
 
@@ -54,9 +53,9 @@ fn main() {
 	);
 
 	let server = ServerBuilder::new(io)
-		.meta_extractor(Arc::new(|_session: &hyper::server::Request<hyper::net::HttpStream>| {
+		.meta_extractor(|_session: &hyper::server::Request<hyper::net::HttpStream>| {
 			Meta(5)
-		}))
+		})
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
