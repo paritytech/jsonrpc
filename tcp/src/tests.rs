@@ -154,7 +154,7 @@ fn meta_server() -> ServerBuilder<SocketMetadata> {
 	io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
 		future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
 	});
-	ServerBuilder::new(io).meta_extractor(PeerMetaExtractor)
+	ServerBuilder::new(io).session_meta_extractor(PeerMetaExtractor)
 }
 
 #[test]
@@ -202,7 +202,7 @@ fn message() {
 	let extractor = PeerListMetaExtractor::default();
 	let peer_list = extractor.peers.clone();
 	let server = ServerBuilder::new(io)
-		.meta_extractor(extractor);
+		.session_meta_extractor(extractor);
 	let dispatcher = server.dispatcher();
 
 	let _server = server.start(&addr).expect("Server must run with no issues");
