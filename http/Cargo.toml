@@ -1,0 +1,20 @@
+[package]
+description = "Rust http server using JSONRPC 2.0."
+homepage = "https://github.com/ethcore/jsonrpc"
+repository = "https://github.com/ethcore/jsonrpc"
+license = "MIT"
+name = "jsonrpc-http-server"
+version = "6.0.0"
+authors = ["debris <marek.kotewicz@gmail.com>"]
+keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
+documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.html"
+
+[dependencies]
+log = "0.3"
+tokio-core = "0.1"
+jsonrpc-core = { version = "6.0", path = "../core" }
+hyper = { default-features = false, git = "https://github.com/ethcore/hyper" }
+unicase = "1.3"
+
+[features]
+default = ["jsonrpc-core/reactor"]
