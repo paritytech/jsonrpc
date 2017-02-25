@@ -29,5 +29,5 @@ after_success: |
 
 env:
   global:
-  - TARGETS: "'-p jsonrpc -p jsonrpc-core -p jsonrpc-http-server -p jsonrpc-ipc-server -p jsonrpc-tcp-server -p jsonrpc-macros'"
+  - TARGETS: "'-p jsonrpc -p jsonrpc-core -p jsonrpc-http-server -p jsonrpc-minihttp-server -p jsonrpc-ipc-server -p jsonrpc-tcp-server -p jsonrpc-macros'"
   - secure: "QA4Rw78VSsP1vH2Yve1eAVpjG32HH9DZZ79xrhxZXp34wKoemp+aGqaFN/8uXPfsXshlYxtMCTT6M9OiWTTLvku5tI5kBsDneu8mLut7eBZHVniYSp2SbKpTeqfpGMDHoCR0WD9AlWDn9Elm6txbghXjrxhCMg8gkhhsLGnQt/ARFF1wRHnXT0TjJg8fQtd+/OK0TaRfknx1RptruaznxfUi3DBwzDdzaMMZfd3VjWR1hPFRpDSL0mM+l6OjNrLbCeiR//k3lV4rpIhedsz0ODjfW2Hdk63qCaLJsXCkG1Bcuf/FYbYC+osm5SrHhGA1j2EgazWcLA6Wkzt15KPOR/HirNj+PCiS0YbGKM5Ac5LT6m6q0iYSF/pq1+jDurcSwBwYrTOY6X2FZCZQBfTP/4qnSjWgGPOkzBSMS6BNEBDQZgdc3xCASXadj7waF4Y4UGD0bDPuBtXopI4ppKLqSa7CsvKz6TX2yW0UVgUuQ5/jz/S+fkcz74o016d5x027yjaxAu/Z8fQFLSaBtiFU8sBzA+MDU3apFgjsYXiaGYZ8gDrp7WjbfHNYfBAMEHHKY4toywB5Vi8zJxF+Wn1n4hkvb/kDqSV9giFmWEg321U+pAGNAH4yY25tIJqS8gT89cz4oQJp7aWjA3Ke01e104yqqZU+N+CSyZHEeksdPt8="

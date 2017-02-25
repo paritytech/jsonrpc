@@ -1,5 +1,5 @@
-# jsonrpc-http-server
-Rust http server using JSON-RPC 2.0.
+# jsonrpc-minihttp-server
+Blazing fast HTTP server for JSON-RPC 2.0.
 
 [Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.html)
 
@@ -9,17 +9,17 @@ Rust http server using JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-http-server = { git = "https://github.com/ethcore/jsonrpc-http-server" }
+jsonrpc-minihttp-server = { git = "https://github.com/ethcore/jsonrpc-minihttp-server" }
 ```
 
 `main.rs`
 
 ```rust
 extern crate jsonrpc_core;
-extern crate jsonrpc_http_server;
+extern crate jsonrpc_minihttp_server;
 
 use jsonrpc_core::*;
-use jsonrpc_http_server::*;
+use jsonrpc_minihttp_server::*;
 
 fn main() {
     let mut io = IoHandler::default();

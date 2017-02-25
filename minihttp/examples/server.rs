@@ -1,8 +1,8 @@
 extern crate jsonrpc_core;
-extern crate jsonrpc_http_server;
+extern crate jsonrpc_minihttp_server;
 
 use jsonrpc_core::*;
-use jsonrpc_http_server::*;
+use jsonrpc_minihttp_server::*;
 
 fn main() {
 	let mut io = IoHandler::default();
