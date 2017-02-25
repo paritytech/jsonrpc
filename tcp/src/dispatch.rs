@@ -30,8 +30,14 @@ impl<S: Stream> PeerMessageQueue<S> {
 	}
 }
 
+/// Push Message Error
 #[derive(Debug)]
-pub enum PushMessageError { NoSuchPeer, Send(mpsc::SendError<String>) }
+pub enum PushMessageError {
+	/// Invalid peer
+	NoSuchPeer,
+	/// Send error
+	Send(mpsc::SendError<String>)
+}
 
 impl From<mpsc::SendError<String>> for PushMessageError {
 	fn from(send_err: mpsc::SendError<String>) -> Self {
@@ -39,17 +45,20 @@ impl From<mpsc::SendError<String>> for PushMessageError {
 	}
 }
 
+/// Peer-messages dispatcher.
 pub struct Dispatcher {
 	channels: Arc<SenderChannels>,
 }
 
 impl Dispatcher {
+	/// Creates a new dispatcher
 	pub fn new(channels: Arc<SenderChannels>) -> Self {
 		Dispatcher {
 			channels: channels,
 		}
 	}
 
+	/// Pushes message to given peer
 	pub fn push_message(&self, peer_addr: &SocketAddr, msg: String) -> Result<(), PushMessageError> {
 		let mut channels = self.channels.lock();
 
@@ -65,10 +74,12 @@ impl Dispatcher {
 		}
 	}
 
+	/// Returns `true` if the peer is still connnected
 	pub fn is_connected(&self, socket_addr: &SocketAddr) -> bool {
 		self.channels.lock().contains_key(socket_addr)
 	}
 
+	/// Returns current peer count.
 	pub fn peer_count(&self) -> usize {
 		self.channels.lock().len()
 	}

@@ -17,6 +17,7 @@ use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
 use service::Service;
 
+/// TCP server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
@@ -24,6 +25,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 }
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
+	/// Creates new `SeverBuilder` wih given `IoHandler`
 	pub fn new<T>(handler: T) -> Self where
 		T: Into<MetaIoHandler<M, S>>
 	{
@@ -34,11 +36,13 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		}
 	}
 
+	/// Sets session meta extractor
 	pub fn session_meta_extractor<T: MetaExtractor<M> + 'static>(mut self, meta_extractor: T) -> Self {
 		self.meta_extractor = Arc::new(meta_extractor);
 		self
 	}
 
+	/// Starts a new server
 	pub fn start(self, addr: &SocketAddr) -> std::io::Result<Server> {
 		let meta_extractor = self.meta_extractor.clone();
 		let rpc_handler = self.handler.clone();
@@ -135,22 +139,26 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		})
 	}
 
+	/// Returns dispatcher
 	pub fn dispatcher(&self) -> Dispatcher {
 		Dispatcher::new(self.channels.clone())
 	}
 }
 
+/// TCP Server handle
 pub struct Server {
 	handle: Option<thread::JoinHandle<std::io::Result<()>>>,
 	stop: Option<oneshot::Sender<()>>,
 }
 
 impl Server {
+	/// Closes the server (waits for finish)
 	pub fn close(mut self) -> std::io::Result<()> {
 		self.stop.take().unwrap().complete(());
 		self.wait()
 	}
 
+	/// Wait for the server to finish
 	pub fn wait(mut self) -> std::io::Result<()> {
 		self.handle.take().unwrap().join().unwrap()
 	}

@@ -13,7 +13,7 @@ use types::{PubSubMetadata, SubscriptionId, TransportSender};
 /// Keeps track of active subscriptions and unsubscribes from them upon dropping.
 pub struct Session {
 	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<Fn(SubscriptionId) + Send + 'static>>>,
-	transport: Mutex<TransportSender>,
+	transport: TransportSender,
 }
 
 impl Session {
@@ -22,13 +22,13 @@ impl Session {
 	pub fn new(sender: TransportSender) -> Self {
 		Session {
 			active_subscriptions: Default::default(),
-			transport: Mutex::new(sender),
+			transport: sender,
 		}
 	}
 
 	/// Returns transport write stream
 	pub fn sender(&self) -> TransportSender {
-		self.transport.lock().clone()
+		self.transport.clone()
 	}
 
 	/// Adds new active subscription
