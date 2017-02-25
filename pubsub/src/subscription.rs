@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-
 use parking_lot::Mutex;
+
 use core;
 use core::futures::{self, sink, future, Sink as FuturesSink, Future, BoxFuture};
 use core::futures::sync::oneshot;
@@ -154,17 +154,17 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 		match meta.session() {
 			Some(session) => {
 				let (tx, rx) = oneshot::channel();
+
+				// Register the subscription
 				let subscriber = Subscriber {
 					notification: self.notification.clone(),
 					transport: session.sender(),
 					sender: tx,
 				};
+				self.subscribe.call(params, meta, subscriber);
 
 				let unsub = self.unsubscribe.clone();
 				let notification = self.notification.clone();
-				// Register the subscription
-				self.subscribe.call(params, meta, subscriber);
-
 				rx
 					.map_err(|_| subscription_rejected())
 					.and_then(move |result| {
@@ -210,5 +210,180 @@ impl<M, G> core::RpcMethod<M> for Unsubscribe<G> where
 			(Some(_), None) => future::err(core::Error::invalid_params("Expected subscription id.")).boxed(),
 			_ => future::err(subscriptions_unavailable()).boxed(),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::sync::Arc;
+	use std::sync::atomic::{AtomicBool, Ordering};
+	use core;
+	use core::RpcMethod;
+	use core::futures::{future, Async, Future, Stream};
+	use core::futures::sync::{mpsc, oneshot};
+	use types::{SubscriptionId, PubSubMetadata};
+
+	use super::{Session, Sink, Subscriber, new_subscription};
+
+	fn session() -> (Session, mpsc::Receiver<String>) {
+		let (tx, rx) = mpsc::channel(1);
+		(Session::new(tx), rx)
+	}
+
+	#[test]
+	fn should_unregister_on_drop() {
+		// given
+		let id = SubscriptionId::Number(1);
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		let session = session().0;
+		session.add_subscription("test", &id, Box::new(move |id| {
+			assert_eq!(id, SubscriptionId::Number(1));
+			called2.store(true, Ordering::SeqCst);
+		}));
+
+		// when
+		drop(session);
+
+		// then
+		assert_eq!(called.load(Ordering::SeqCst), true);
+	}
+
+	#[test]
+	fn should_remove_subscription() {
+		// given
+		let id = SubscriptionId::Number(1);
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		let session = session().0;
+		session.add_subscription("test", &id, Box::new(move |id| {
+			assert_eq!(id, SubscriptionId::Number(1));
+			called2.store(true, Ordering::SeqCst);
+		}));
+
+		// when
+		session.remove_subscription("test", &id);
+		drop(session);
+
+		// then
+		assert_eq!(called.load(Ordering::SeqCst), false);
+	}
+
+	#[test]
+	fn should_unregister_in_case_of_collision() {
+		// given
+		let id = SubscriptionId::Number(1);
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		let session = session().0;
+		session.add_subscription("test", &id, Box::new(move |id| {
+			assert_eq!(id, SubscriptionId::Number(1));
+			called2.store(true, Ordering::SeqCst);
+		}));
+
+		// when
+		session.add_subscription("test", &id, Box::new(|_| {}));
+
+		// then
+		assert_eq!(called.load(Ordering::SeqCst), true);
+	}
+
+	#[test]
+	fn should_send_notification_to_the_transport() {
+		// given
+		let (tx, mut rx) = mpsc::channel(1);
+		let sink = Sink {
+			notification: "test".into(),
+			transport: tx,
+		};
+
+		// when
+		sink.send(core::Params::Array(vec![core::Value::Number(10.into())])).wait().unwrap();
+
+		// then
+		assert_eq!(
+			rx.poll().unwrap(),
+			Async::Ready(Some(r#"{"jsonrpc":"2.0","method":"test","params":[10]}"#.into()))
+		);
+	}
+
+	#[test]
+	fn should_assign_id() {
+		// given
+		let (transport, _) = mpsc::channel(1);
+		let (tx, mut rx) = oneshot::channel();
+		let subscriber = Subscriber {
+			notification: "test".into(),
+			transport: transport,
+			sender: tx,
+		};
+
+		// when
+		let sink = subscriber.assign_id(SubscriptionId::Number(5));
+
+		// then
+		assert_eq!(
+			rx.poll().unwrap(),
+			Async::Ready(Ok(SubscriptionId::Number(5)))
+		);
+		assert_eq!(sink.notification, "test".to_owned());
+	}
+
+	#[test]
+	fn should_reject() {
+		// given
+		let (transport, _) = mpsc::channel(1);
+		let (tx, mut rx) = oneshot::channel();
+		let subscriber = Subscriber {
+			notification: "test".into(),
+			transport: transport,
+			sender: tx,
+		};
+		let error = core::Error {
+			code: core::ErrorCode::InvalidRequest,
+			message: "Cannot start subscription now.".into(),
+			data: None,
+		};
+
+		// when
+		subscriber.reject(error.clone());
+
+		// then
+		assert_eq!(
+			rx.poll().unwrap(),
+			Async::Ready(Err(error))
+		);
+	}
+
+	#[derive(Clone, Default)]
+	struct Metadata;
+	impl core::Metadata for Metadata {}
+	impl PubSubMetadata for Metadata {
+		fn session(&self) -> Option<Arc<Session>> {
+			Some(Arc::new(session().0))
+		}
+	}
+
+	#[test]
+	fn should_subscribe() {
+		// given
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		let (subscribe, _) = new_subscription("test".into(), move |params, _meta, _subscriber| {
+			assert_eq!(params, core::Params::None);
+			called2.store(true, Ordering::SeqCst);
+		}, |_id| future::ok(core::Value::Bool(true)).boxed());
+		let meta = Metadata;
+
+		// when
+		let result = subscribe.call(core::Params::None, meta);
+
+		// then
+		assert_eq!(called.load(Ordering::SeqCst), true);
+		assert_eq!(result.wait(), Err(core::Error {
+			code: core::ErrorCode::ServerError(-32091),
+			message: "Subscription rejected".into(),
+			data: None,
+		}));
 	}
 }

@@ -38,6 +38,14 @@ pub struct PubSubHandler<T: PubSubMetadata, S: core::Middleware<T> = core::NoopM
 	handler: core::MetaIoHandler<T, S>,
 }
 
+impl<T: PubSubMetadata> Default for PubSubHandler<T> {
+	fn default() -> Self {
+		PubSubHandler {
+			handler: Default::default(),
+		}
+	}
+}
+
 impl<T: PubSubMetadata, S: core::Middleware<T>> PubSubHandler<T, S> {
 	/// Creates new `PubSubHandler`
 	pub fn new(handler: core::MetaIoHandler<T, S>) -> Self {
@@ -80,4 +88,60 @@ impl<T: PubSubMetadata, S: core::Middleware<T>> Into<core::MetaIoHandler<T, S>> 
 	fn into(self) -> core::MetaIoHandler<T, S> {
 		self.handler
 	}
+}
+
+#[cfg(test)]
+mod tests {
+	use std::sync::Arc;
+	use std::sync::atomic::{AtomicBool, Ordering};
+
+	use core;
+	use core::futures::{future, Future};
+	use core::futures::sync::mpsc;
+	use subscription::{Session, Subscriber};
+	use types::{PubSubMetadata, SubscriptionId};
+
+	use super::PubSubHandler;
+
+	#[derive(Clone, Default)]
+	struct Metadata;
+	impl core::Metadata for Metadata {}
+	impl PubSubMetadata for Metadata {
+		fn session(&self) -> Option<Arc<Session>> {
+			let (tx, _rx) = mpsc::channel(1);
+			Some(Arc::new(Session::new(tx)))
+		}
+	}
+
+	#[test]
+	fn should_handle_subscription() {
+		// given
+		let mut handler = PubSubHandler::default();
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		handler.add_subscription(
+			"hello",
+			("subscribe_hello", |params, _meta, subscriber: Subscriber| {
+				assert_eq!(params, core::Params::None);
+				let _sink = subscriber.assign_id(SubscriptionId::Number(5));
+			}),
+			("unsubscribe_hello", move |id| {
+				// Should be called because session is dropped.
+				called2.store(true, Ordering::SeqCst);
+				assert_eq!(id, SubscriptionId::Number(5));
+				future::ok(core::Value::Bool(true)).boxed()
+			}),
+		);
+
+		// when
+		let meta = Metadata;
+		let req = r#"{"jsonrpc":"2.0","id":1,"method":"subscribe_hello","params":null}"#;
+		let res = handler.handle_request_sync(req, meta);
+
+		// then
+		let response = r#"{"jsonrpc":"2.0","result":5,"id":1}"#;
+		assert_eq!(res, Some(response.into()));
+		assert_eq!(called.load(Ordering::SeqCst), true);
+	}
+
 }

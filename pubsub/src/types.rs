@@ -44,3 +44,30 @@ impl From<SubscriptionId> for core::Value {
 	}
 }
 
+#[cfg(test)]
+mod tests {
+	use core::Value;
+	use super::SubscriptionId;
+
+	#[test]
+	fn should_convert_between_value_and_subscription_id() {
+		// given
+		let val1 = Value::Number(5.into());
+		let val2 = Value::String("asdf".into());
+		let val3 = Value::Null;
+
+		// when
+		let res1 = SubscriptionId::parse_value(&val1);
+		let res2 = SubscriptionId::parse_value(&val2);
+		let res3 = SubscriptionId::parse_value(&val3);
+
+		// then
+		assert_eq!(res1, Some(SubscriptionId::Number(5)));
+		assert_eq!(res2, Some(SubscriptionId::String("asdf".into())));
+		assert_eq!(res3, None);
+
+		// and back
+		assert_eq!(Value::from(res1.unwrap()), val1);
+		assert_eq!(Value::from(res2.unwrap()), val2);
+	}
+}
