@@ -522,11 +522,11 @@ fn invalid_host() -> String {
 }
 
 fn method_not_found() -> String {
- "5A\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\",\"data\":null},\"id\":1}\n".into()
+ "4E\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
 }
 
 fn invalid_request() -> String {
- "5C\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\",\"data\":null},\"id\":null}\n".into()
+ "50\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
 }
 fn world() -> String {
  "2A\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
