@@ -19,8 +19,8 @@ pub struct PeerMessageQueue<S: Stream> {
 impl<S: Stream> PeerMessageQueue<S> {
 	pub fn new(
 		response_stream: S,
-	   receiver: mpsc::Receiver<String>,
-	   addr: SocketAddr,
+		receiver: mpsc::Receiver<String>,
+		addr: SocketAddr,
 	) -> Self {
 		PeerMessageQueue {
 			up: response_stream,
