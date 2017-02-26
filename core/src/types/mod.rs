@@ -9,6 +9,7 @@ pub mod version;
 
 pub use serde_json::Value;
 pub use serde_json::value::to_value;
+pub use serde_json::to_string;
 
 pub use self::error::{ErrorCode, Error};
 pub use self::id::Id;

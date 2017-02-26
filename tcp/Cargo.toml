@@ -18,6 +18,7 @@ rand = "0.3"
 tokio-core = "0.1"
 tokio-service = "0.1"
 tokio-proto = "0.1"
+parking_lot = "0.3"
 
 [features]
 default = ["jsonrpc-core/reactor"]

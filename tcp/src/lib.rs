@@ -5,42 +5,46 @@
 //! extern crate jsonrpc_tcp_server;
 //! extern crate rand;
 //!
-//! use std::sync::Arc;
 //! use jsonrpc_core::*;
-//! use jsonrpc_tcp_server::Server;
-//! use std::net::SocketAddr;
-//! use std::str::FromStr;
+//! use jsonrpc_tcp_server::ServerBuilder;
 //!
 //! fn main() {
-//! 	let mut io = MetaIoHandler::<()>::default();
+//! 	let mut io = IoHandler::default();
 //! 	io.add_method("say_hello", |_params| {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	});
-//! 	let server = Server::new(SocketAddr::from_str("0.0.0.0:9993").unwrap(), Arc::new(io));
-//!     ::std::thread::spawn(move || server.run().expect("Server must run with no issues"));
+//! 	let server = ServerBuilder::new(io)
+//!			.start(&"0.0.0.0:0".parse().unwrap())
+//!			.expect("Server must start with no issues.");
+//!
+//!		server.wait().unwrap();
 //! }
 //! ```
 
+#![warn(missing_docs)]
+
 extern crate jsonrpc_core as jsonrpc;
-extern crate serde_json;
+extern crate parking_lot;
 extern crate rand;
+extern crate serde_json;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
 
 #[macro_use] extern crate log;
+
 #[cfg(test)] #[macro_use] extern crate lazy_static;
 #[cfg(test)] extern crate env_logger;
 
-mod line_codec;
-mod service;
-mod server;
-mod meta;
 mod dispatch;
+mod line_codec;
+mod meta;
+mod server;
+mod service;
 
 #[cfg(test)] mod logger;
 #[cfg(test)] mod tests;
 
-pub use server::Server;
 pub use dispatch::{Dispatcher, PushMessageError};
 pub use meta::{MetaExtractor, RequestContext};
+pub use server::ServerBuilder;

@@ -1,29 +1,27 @@
-use std::sync::{Arc, Mutex};
 use std::cell::RefCell;
-use std::str::FromStr;
 use std::net::SocketAddr;
-use std::thread;
-
-use tokio_core::reactor::{Core, Timeout};
-use tokio_core::net::TcpStream;
-use tokio_core::io;
+use std::str::FromStr;
+use std::sync::Arc;
 
 use jsonrpc::{MetaIoHandler, Value, Metadata};
 use jsonrpc::futures::{Future, future};
-use Server;
+
+use tokio_core::io;
+use tokio_core::net::TcpStream;
+use tokio_core::reactor::{Core, Timeout};
+
+use parking_lot::Mutex;
+
+use ServerBuilder;
 use MetaExtractor;
 use RequestContext;
 
-fn casual_server(socket_addr: &SocketAddr) -> Server {
+fn casual_server() -> ServerBuilder {
 	let mut io = MetaIoHandler::<()>::default();
 	io.add_method("say_hello", |_params| {
 		Ok(Value::String("hello".to_string()))
 	});
-	Server::new(socket_addr.clone(), Arc::new(io))
-}
-
-fn wait(millis: u64) {
-	thread::sleep(::std::time::Duration::from_millis(millis));
+	ServerBuilder::new(io)
 }
 
 #[test]
@@ -34,17 +32,19 @@ fn doc_test() {
 	io.add_method("say_hello", |_params| {
 		Ok(Value::String("hello".to_string()))
 	});
-	let server = Server::new(SocketAddr::from_str("0.0.0.0:17770").unwrap(), Arc::new(io));
-	thread::spawn(move || server.run().expect("Server must run with no issues"));
+	let server = ServerBuilder::new(io);
+
+	server.start(&SocketAddr::from_str("0.0.0.0:17770").unwrap())
+		.expect("Server must run with no issues")
+		.close().unwrap()
 }
 
 #[test]
 fn doc_test_connect() {
 	::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17775".parse().unwrap();
-	let server = casual_server(&addr);
-	thread::spawn(move || server.run().expect("Server must run with no issues"));
-	wait(100);
+	let server = casual_server();
+	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	let mut core = Core::new().expect("Tokio Core should be created with no errors");
 	let stream = TcpStream::connect(&addr, &core.handle());
@@ -57,10 +57,9 @@ fn doc_test_connect() {
 fn disconnect() {
 	::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17777".parse().unwrap();
-	let server = casual_server(&addr);
+	let server = casual_server();
 	let dispatcher = server.dispatcher();
-	thread::spawn(move || server.run().expect("Server must run with no issues"));
-	wait(100);
+	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	{
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
@@ -70,7 +69,7 @@ fn disconnect() {
 		core.run(stream).expect("tcp/ip session should finalize with no errors in disconnect test");
 	}
 
-	wait(50);
+	::std::thread::sleep(::std::time::Duration::from_millis(50));
 
 	assert_eq!(0, dispatcher.peer_count());
 }
@@ -102,9 +101,8 @@ fn dummy_request_str(addr: &SocketAddr, data: &[u8]) -> String {
 fn doc_test_handle() {
 	::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17780".parse().unwrap();
-	let server = casual_server(&addr);
-	thread::spawn(move || server.run().expect("Server must run with no issues"));
-	wait(100);
+	let server = casual_server();
+	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	let result = dummy_request_str(
 		&addr,
@@ -151,21 +149,20 @@ impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
 	}
 }
 
-fn meta_server(socket_addr: &SocketAddr) -> Server<SocketMetadata> {
+fn meta_server() -> ServerBuilder<SocketMetadata> {
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
 	io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
 		future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
 	});
-	Server::new(socket_addr.clone(), Arc::new(io)).extractor(Arc::new(PeerMetaExtractor) as Arc<MetaExtractor<SocketMetadata>>)
+	ServerBuilder::new(io).session_meta_extractor(PeerMetaExtractor)
 }
 
 #[test]
 fn peer_meta() {
 	::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17785".parse().unwrap();
-	let server = meta_server(&addr);
-	thread::spawn(move || server.run().expect("Server must run with no issues"));
-	wait(100);
+	let server = meta_server();
+	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	let result = dummy_request_str(
 		&addr,
@@ -181,13 +178,13 @@ fn peer_meta() {
 
 #[derive(Default)]
 pub struct PeerListMetaExtractor {
-	peers: Mutex<Vec<SocketAddr>>,
+	peers: Arc<Mutex<Vec<SocketAddr>>>,
 }
 
 impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
 	fn extract(&self, context: &RequestContext) -> SocketMetadata {
 		trace!(target: "tcp", "extracting to peer list...");
-		self.peers.lock().unwrap().push(context.peer_addr.clone());
+		self.peers.lock().push(context.peer_addr.clone());
 		context.peer_addr.into()
 	}
 }
@@ -202,13 +199,13 @@ fn message() {
 	io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {
 		future::ok(Value::String("hello".to_owned())).boxed()
 	});
-	let peer_list = Arc::new(PeerListMetaExtractor::default());
-	let server = Server::new(addr.clone(), Arc::new(io))
-		.extractor(peer_list.clone() as Arc<MetaExtractor<SocketMetadata>>);
+	let extractor = PeerListMetaExtractor::default();
+	let peer_list = extractor.peers.clone();
+	let server = ServerBuilder::new(io)
+		.session_meta_extractor(extractor);
 	let dispatcher = server.dispatcher();
 
-	thread::spawn(move || server.run().expect("Server must run with no issues"));
-	wait(100);
+	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	let mut core = Core::new().expect("Tokio Core should be created with no errors");
 	let timeout = Timeout::new(::std::time::Duration::from_millis(100), &core.handle())
@@ -224,7 +221,7 @@ fn message() {
 			future::ok(stream).join(timeout)
 		})
 	.and_then(|stream| {
-		let peer_addr = peer_list.peers.lock().unwrap()[0].clone();
+		let peer_addr = peer_list.lock()[0].clone();
 		dispatcher.push_message(
 			&peer_addr,
 			"ping".to_owned(),
