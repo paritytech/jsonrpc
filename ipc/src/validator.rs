@@ -16,46 +16,40 @@
 
 //! Request boundary validator
 
-use std::mem;
-
 pub fn extract_requests(buf: &[u8]) -> (Vec<String>, usize) {
-	let utf8 = match String::from_utf8(buf.to_vec()) {
-		Ok(val) => val,
-		Err(_) => { return (Vec::new(), 0) }
-	};
-
-	let mut str_buf = String::new();
 	let mut depth = 0;
 	let mut res = Vec::new();
 	let mut last_req = 0;
 	let mut in_str = false;
 	let mut is_escaped = false;
-	let mut ever_started = false;
+	let mut start_idx = 0;
 
-	for (idx, char) in utf8.char_indices() {
-		str_buf.push(char);
-
-		if (char == '{' || char == '[') && !in_str {
+	for (idx, &byte) in buf.iter().enumerate() {
+		if (byte == b'{' || byte == b'[') && !in_str {
 			if depth == 0 {
-				ever_started = true;
+				start_idx = idx;
 			}
 			depth += 1;
 		}
-		else if (char == '}' || char == ']') && !in_str {
+		else if (byte == b'}' || byte == b']') && !in_str {
 			depth -= 1;
 		}
-		else if char == '"' && !is_escaped {
+		else if byte == b'"' && !is_escaped {
 			in_str = !in_str;
 		}
-		else if char == '\\' && is_escaped && !in_str {
+		else if byte == b'\\' && is_escaped && !in_str {
 			is_escaped = !is_escaped;
 		}
 
-		if depth == 0 && str_buf.len() > 0 {
-			if ever_started {
-				res.push(mem::replace(&mut str_buf, String::new()));
-			}
-			ever_started = false;
+		if depth == 0 && idx != start_idx {
+			let slice = &buf[start_idx .. idx + 1];
+			let req = match String::from_utf8(slice.to_vec()) {
+				Ok(val) => val,
+				Err(_) => return (res, last_req)
+			};
+
+			res.push(req);
+
 			last_req = idx;
 		}
 	}

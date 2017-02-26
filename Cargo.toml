@@ -14,5 +14,6 @@ jsonrpc-http-server = { path = "http" }
 jsonrpc-minihttp-server = { path = "minihttp" }
 jsonrpc-ipc-server = { path = "ipc" }
 jsonrpc-tcp-server = { path = "tcp" }
-jsonrpc-macros= { path = "macros" }
+jsonrpc-macros = { path = "macros" }
+jsonrpc-pubsub = { path = "pubsub" }
 

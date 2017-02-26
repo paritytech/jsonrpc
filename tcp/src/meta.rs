@@ -1,32 +1,33 @@
-// Copyright 2015, 2016 Ethcore (UK) Ltd.
-// This file is part of Parity.
-
-// Parity is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-
-// Parity is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-
-// You should have received a copy of the GNU General Public License
-// along with Parity.  If not, see <http://www.gnu.org/licenses/>.
-
 use std::net::SocketAddr;
+
+use jsonrpc::futures::sync::mpsc;
 use jsonrpc::Metadata;
 
+/// Request context
 pub struct RequestContext {
-    pub peer_addr: SocketAddr,
+	/// Peer Address
+	pub peer_addr: SocketAddr,
+	/// Peer Sender channel
+	pub sender: mpsc::Sender<String>,
 }
 
+/// Metadata extractor (per session)
 pub trait MetaExtractor<M: Metadata> : Send + Sync {
-    fn extract(&self, context: &RequestContext) -> M;
+	/// Extracts metadata from request context
+	fn extract(&self, context: &RequestContext) -> M;
 }
 
-pub struct NoopExtractor;
+impl<M, F> MetaExtractor<M> for F where
+	M: Metadata,
+	F: Fn(&RequestContext) -> M + Send + Sync,
+{
+	fn extract(&self, context: &RequestContext) -> M {
+		(*self)(context)
+	}
+}
 
+/// Noop-extractor
+pub struct NoopExtractor;
 impl<M: Metadata> MetaExtractor<M> for NoopExtractor {
-    fn extract(&self, _context: &RequestContext) -> M { M::default() }
+	fn extract(&self, _context: &RequestContext) -> M { M::default() }
 }

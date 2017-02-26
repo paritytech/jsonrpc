@@ -18,6 +18,7 @@ tokio-service = "0.1"
 # tokio-proto = "0.1"
 # Referencing git version to solve build issues.
 tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }
+parking_lot = "0.3"
 
 [dev-dependencies]
 lazy_static = "0.2"
