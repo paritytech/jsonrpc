@@ -15,9 +15,12 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate jsonrpc_core;
+extern crate rand;
+
 #[macro_use] extern crate log;
-#[macro_use] extern crate lazy_static;
-extern crate env_logger;
+
+#[cfg(test)] #[macro_use] extern crate lazy_static;
+#[cfg(test)] extern crate env_logger;
 
 #[cfg(windows)]
 extern crate miow;
@@ -28,40 +31,15 @@ extern crate slab;
 extern crate mio;
 #[cfg(not(windows))]
 extern crate bytes;
-extern crate rand;
-
-#[cfg(not(windows))] mod nix;
-#[cfg(windows)] mod win;
 
 mod validator;
 
-#[cfg(test)] pub mod tests;
+#[cfg(test)]
+mod tests;
 
-#[cfg(not(windows))] pub use nix::{Server, Error};
-
+#[cfg(windows)] mod win;
 #[cfg(windows)] pub use win::{Server, Error, Result as PipeResult};
 
-use std::env;
-use log::LogLevelFilter;
-use env_logger::LogBuilder;
+#[cfg(not(windows))] mod nix;
+#[cfg(not(windows))] pub use nix::{Server, Error};
 
-lazy_static! {
-	static ref LOG_DUMMY: bool = {
-		let mut builder = LogBuilder::new();
-		builder.filter(None, LogLevelFilter::Info);
-
-		if let Ok(log) = env::var("RUST_LOG") {
-			builder.parse(&log);
-		}
-
-		if let Ok(_) = builder.init() {
-			println!("logger initialized");
-		}
-		true
-	};
-}
-
-/// Intialize log with default settings
-pub fn init_log() {
-	let _ = *LOG_DUMMY;
-}

@@ -240,7 +240,6 @@ impl IoHandler {
 }
 
 impl<M: Metadata> IoHandler<M> {
-
 	/// Handle given request asynchronously.
 	pub fn handle_request(&self, request: &str) -> BoxFuture<Option<String>, ()> {
 		self.0.handle_request(request, M::default())
@@ -354,7 +353,7 @@ mod tests {
 		let io = IoHandler::new();
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
-		let response = r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found","data":null},"id":1}"#;
+		let response = r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":1}"#;
 
 		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
 	}

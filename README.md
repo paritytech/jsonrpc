@@ -13,6 +13,7 @@ Transport-agnostic `core` and transport servers for `http`, `ipc` and `tcp`.
 ## Sub-projects
 - [jsonrpc-core](./core)
 - [jsonrpc-http-server](./http)
+- [jsonrpc-minihttp-server](./http)
 - [jsonrpc-ipc-server](./ipc)
 - [jsonrpc-tcp-server](./tcp)
 - [jsonrpc-macros](./macros)
@@ -26,10 +27,10 @@ Transport-agnostic `core` and transport servers for `http`, `ipc` and `tcp`.
 
 ```rust
 extern crate jsonrpc_core;
-extern crate jsonrpc_http_server;
+extern crate jsonrpc_minihttp_server;
 
 use jsonrpc_core::{IoHandler, Value, Params};
-use jsonrpc_http_server::{ServerBuilder};
+use jsonrpc_minihttp_server::{ServerBuilder};
 
 fn main() {
 	let mut io = IoHandler::new();
@@ -38,6 +39,7 @@ fn main() {
 	});
 
 	let server = ServerBuilder::new(io)
+		.threads(3)
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.unwrap();
 
