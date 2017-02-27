@@ -1,8 +1,12 @@
 use core;
 use ws;
 
+use session;
+
 /// Request context
 pub struct RequestContext {
+	/// Session id
+	pub session_id: session::SessionId,
 	/// Direct channel to send messages to a client.
 	pub out: ws::Sender,
 }

@@ -1,5 +1,7 @@
 //! `WebSockets` server.
 
+#![warn(missing_docs)]
+
 extern crate jsonrpc_core as core;
 extern crate ws;
 
@@ -39,6 +41,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	allowed_origins: Option<Vec<String>>,
+	session_stats: Option<Arc<session::SessionStats>>,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
@@ -50,6 +53,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
 			allowed_origins: None,
+			session_stats: None,
 		}
 	}
 
@@ -65,8 +69,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-	// TODO [ToDr] Session statistics
-	// TODO [ToDr] Connection middleware
+	/// Session stats
+	pub fn session_stats<T: session::SessionStats>(mut self, stats: T) -> Self {
+		self.session_stats = Some(Arc::new(stats));
+		self
+	}
+
+	// TODO [ToDr] Handshake middleware
 
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
@@ -76,6 +85,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.handler,
 			self.meta_extractor,
 			self.allowed_origins,
+			self.session_stats,
 		)
 	}
 

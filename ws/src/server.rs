@@ -29,6 +29,7 @@ impl Server {
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
 		allowed_origins: Option<Vec<String>>,
+		stats: Option<Arc<session::SessionStats>>,
 	) -> Result<Server, ServerError> {
 		let config = {
 			let mut config = ws::Settings::default();
@@ -41,7 +42,7 @@ impl Server {
 
 		// Create WebSocket
 		let ws = ws::Builder::new().with_settings(config).build(
-			session::Factory::new(handler, meta_extractor, allowed_origins)
+			session::Factory::new(handler, meta_extractor, allowed_origins, stats)
 		)?;
 		let broadcaster = ws.broadcaster();
 
