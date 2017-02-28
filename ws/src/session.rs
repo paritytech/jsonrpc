@@ -54,6 +54,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone();
 
+		// TODO [ToDr] to event loop
 		self.handler.handle_request(req, metadata)
 			.wait()
 			.map_err(|_| unreachable!())
