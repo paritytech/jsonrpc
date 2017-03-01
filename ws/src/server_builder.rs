@@ -32,6 +32,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	allowed_origins: Option<Vec<String>>,
+	request_middleware: Option<Arc<session::RequestMiddleware>>,
 	session_stats: Option<Arc<session::SessionStats>>,
 }
 
@@ -44,6 +45,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
 			allowed_origins: None,
+			request_middleware: None,
 			session_stats: None,
 		}
 	}
@@ -66,7 +68,12 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-	// TODO [ToDr] Handshake middleware
+	/// Sets a request middleware. Middleware will be invoked before each handshake request.
+	/// You can either terminate the handshake in the middleware or run a default behaviour after.
+	pub fn request_middleware<T: session::RequestMiddleware>(mut self, middleware: T) -> Self {
+		self.request_middleware = Some(Arc::new(middleware));
+		self
+	}
 
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
@@ -76,6 +83,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.handler,
 			self.meta_extractor,
 			self.allowed_origins,
+			self.request_middleware,
 			self.session_stats,
 		)
 	}

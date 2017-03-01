@@ -4,15 +4,14 @@ use std::io::{Read, Write};
 
 use core;
 use core::futures::Future;
+use ws;
 
 use server::Server;
 use server_builder::ServerBuilder;
 
 struct Response {
 	status: String,
-	#[allow(dead_code)]
-	headers: String,
-	#[allow(dead_code)]
+	_headers: String,
 	body: String,
 }
 
@@ -25,7 +24,7 @@ impl Response {
 
 		Response {
 			status: status,
-			headers: headers,
+			_headers: headers,
 			body: body,
 		}
 	}
@@ -65,6 +64,15 @@ fn serve(port: u16) -> Server {
 
 	ServerBuilder::new(io)
 		.allowed_origins(Some(vec!["https://parity.io".into()]))
+		.request_middleware(|req: &ws::Request| {
+			if req.resource() == "/intercepted" {
+				let mut res = ws::Response::new(200, "OK");
+				res.set_body(b"Hello World!");
+				Some(res)
+			} else {
+				None
+			}
+		})
 		.start(&format!("127.0.0.1:{}", 30000 + port).parse().unwrap())
 		.unwrap()
 }
@@ -109,4 +117,26 @@ fn should_allow_whitelisted_origins() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 400 Bad Request".to_owned());
+}
+
+#[test]
+fn should_intercept_in_middleware() {
+	// given
+	let server = serve(3);
+
+	// when
+	let response = request(server,
+		"\
+			GET /intercepted HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: https://parity.io\r\n\
+			Connection: close\r\n\
+			\r\n\
+			{}\r\n\
+		"
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, "Hello World!\n".to_owned());
 }
