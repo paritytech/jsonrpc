@@ -11,14 +11,18 @@ documentation = "https://ethcore.github.io/jsonrpc/json_tcp_server/index.html"
 [dependencies]
 jsonrpc-core = { version = "6.0", path = "../core" }
 log = "0.3"
-env_logger = "0.3"
-lazy_static = "0.2"
 serde_json = "0.9"
 rand = "0.3"
 tokio-core = "0.1"
 tokio-service = "0.1"
-tokio-proto = "0.1"
+# tokio-proto = "0.1"
+# Referencing git version to solve build issues.
+tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }
 parking_lot = "0.3"
+
+[dev-dependencies]
+lazy_static = "0.2"
+env_logger = "0.4"
 
 [features]
 default = ["jsonrpc-core/reactor"]

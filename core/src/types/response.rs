@@ -8,7 +8,7 @@ use super::{Id, Value, Error, ErrorCode, Version};
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Success {
 	/// Protocol version
-    #[serde(skip_serializing_if = "Option::is_none")]	
+    #[serde(skip_serializing_if = "Option::is_none")]
 	pub jsonrpc: Option<Version>,
 	/// Result
 	pub result: Value,
@@ -20,6 +20,7 @@ pub struct Success {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Failure {
 	/// Protocol Version
+    #[serde(skip_serializing_if = "Option::is_none")]
 	pub jsonrpc: Option<Version>,
 	/// Error
 	pub error: Error,
@@ -176,7 +177,21 @@ fn failure_output_serialize() {
 	});
 
 	let serialized = serde_json::to_string(&fo).unwrap();
-	assert_eq!(serialized, r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error","data":null},"id":1}"#);
+	assert_eq!(serialized, r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#);
+}
+
+#[test]
+fn failure_output_serialize_jsonrpc_1() {
+	use serde_json;
+
+	let fo = Output::Failure(Failure {
+		jsonrpc: None,
+		error: Error::parse_error(),
+		id: Id::Num(1)
+	});
+
+	let serialized = serde_json::to_string(&fo).unwrap();
+	assert_eq!(serialized, r#"{"error":{"code":-32700,"message":"Parse error"},"id":1}"#);
 }
 
 #[test]
