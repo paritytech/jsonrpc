@@ -20,7 +20,6 @@
 //! extern crate jsonrpc_core;
 //! extern crate jsonrpc_ipc_server;
 //!
-//! use std::sync::Arc;
 //! use jsonrpc_core::*;
 //! use jsonrpc_ipc_server::Server;
 //!
