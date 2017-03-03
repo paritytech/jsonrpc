@@ -6,9 +6,9 @@ use std::sync::Arc;
 use jsonrpc::{MetaIoHandler, Value, Metadata};
 use jsonrpc::futures::{Future, future};
 
-use tokio_core::io;
-use tokio_core::net::TcpStream;
-use tokio_core::reactor::{Core, Timeout};
+use server_utils::tokio_core::io;
+use server_utils::tokio_core::net::TcpStream;
+use server_utils::tokio_core::reactor::{Core, Timeout};
 
 use parking_lot::Mutex;
 
@@ -36,7 +36,7 @@ fn doc_test() {
 
 	server.start(&SocketAddr::from_str("0.0.0.0:17770").unwrap())
 		.expect("Server must run with no issues")
-		.close().unwrap()
+		.close()
 }
 
 #[test]

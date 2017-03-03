@@ -1,6 +1,8 @@
 use hyper::{server, header};
 use hyper::net::HttpStream;
 
+// TODO [ToDr] Share with server-utils
+
 /// Returns `true` when `Host` header in provided `Request` is whitelisted in `allowed_hosts`.
 pub fn is_host_header_valid(request: &server::Request<HttpStream>, allowed_hosts: &[String]) -> bool {
 	let host = request.headers().get::<header::Host>();

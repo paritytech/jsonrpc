@@ -1,19 +1,42 @@
-use cors;
 use Rpc;
 
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::io::{self, Read};
 
-use unicase::UniCase;
-use hyper::{mime, server, Next, Encoder, Decoder, Control};
-use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
+use hyper::{self, mime, server, Next, Encoder, Decoder, Control};
+use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders, AccessControlAllowOrigin};
 use hyper::method::Method;
 use hyper::net::HttpStream;
-use hyper::header::AccessControlAllowOrigin;
+use parking_lot::Mutex;
+use unicase::UniCase;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
+use jsonrpc::futures::Future;
+use jsonrpc_server_utils::{cors, hosts};
 use request_response::{Request, Response};
 use hosts_validator::is_host_header_valid;
+
+/// Reads Origin header from the request.
+pub fn read_origin<'a>(req: &'a hyper::server::Request<'a, HttpStream>) -> Option<&'a str> {
+	match req.headers().get_raw("origin") {
+		Some(ref v) if v.len() == 1 => {
+			::std::str::from_utf8(&v[0]).ok()
+		},
+		_ => None
+	}
+}
+
+/// Returns correct CORS header (if any) given list of allowed origins and current origin.
+pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<cors::AccessControlAllowOrigin>>) -> Option<AccessControlAllowOrigin> {
+	cors::get_cors_header(origin, allowed).map(|origin| {
+		use self::cors::AccessControlAllowOrigin::*;
+		match origin {
+			Value(val) => AccessControlAllowOrigin::Value(val),
+			Null => AccessControlAllowOrigin::Null,
+			Any => AccessControlAllowOrigin::Any,
+		}
+	})
+}
 
 /// PanicHandling function
 pub struct PanicHandler {
@@ -25,8 +48,8 @@ pub struct PanicHandler {
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	panic_handler: PanicHandler,
 	jsonrpc_handler: Rpc<M, S>,
-	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
-	allowed_hosts: Option<Vec<String>>,
+	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
+	allowed_hosts: Option<Vec<hosts::Host>>,
 	metadata: Option<M>,
 	control: Control,
 	request: Request,
@@ -39,7 +62,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 impl<M: Metadata, S: Middleware<M>> Drop for ServerHandler<M, S> {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
-			let handler = self.panic_handler.handler.lock().unwrap();
+			let handler = self.panic_handler.handler.lock();
 			if let Some(ref h) = *handler {
 				h();
 			}
@@ -51,8 +74,8 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	/// Create new request handler.
 	pub fn new(
 		jsonrpc_handler: Rpc<M, S>,
-		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
-		allowed_hosts: Option<Vec<String>>,
+		cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
+		allowed_hosts: Option<Vec<hosts::Host>>,
 		panic_handler: PanicHandler,
 		control: Control,
 	) -> Self {
@@ -75,17 +98,17 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	fn response_headers(&self, origin: &Option<String>) -> Headers {
 		let mut headers = Headers::new();
 		headers.set(self.response.content_type.clone());
-		headers.set(Allow(vec![
-			Method::Options,
-			Method::Post,
-		]));
-		headers.set(AccessControlAllowHeaders(vec![
-			UniCase("origin".to_owned()),
-			UniCase("content-type".to_owned()),
-			UniCase("accept".to_owned()),
-		]));
 
-		if let Some(cors_domain) = cors::get_cors_header(&self.cors_domains, origin) {
+		if let Some(cors_domain) = get_cors_header(origin.as_ref().map(|s| s.as_str()), &self.cors_domains) {
+			headers.set(Allow(vec![
+				Method::Options,
+				Method::Post,
+			]));
+			headers.set(AccessControlAllowHeaders(vec![
+				UniCase("origin".to_owned()),
+				UniCase("content-type".to_owned()),
+				UniCase("accept".to_owned()),
+			]));
 			headers.set(cors_domain);
 		}
 
@@ -112,7 +135,7 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 		}
 
 		// Read origin
-		self.request.origin = cors::read_origin(&request);
+		self.request.origin = read_origin(&request).map(String::from);
 		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
 
 		match *request.method() {
@@ -142,26 +165,30 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
 		match decoder.read_to_string(&mut self.request.content) {
 			Ok(0) => {
-				let control = self.control.clone();
-				let sender = self.waiting_sender.clone();
 				let metadata = self.metadata.take().unwrap_or_default();
+				let future = self.jsonrpc_handler.handler.handle_request(&self.request.content, metadata);
 
-				self.jsonrpc_handler.handle_request(&self.request.content, metadata, move |response| {
-					let response = match response {
-						None => Response::ok(String::new()),
-						// Add new line to have nice output when using CLI clients (curl)
-						Some(result) => Response::ok(format!("{}\n", result)),
-					};
+				let sender = self.waiting_sender.clone();
+				let control = self.control.clone();
 
-					let result = sender.send(response)
-						.map_err(|e| format!("{:?}", e))
-						.and_then(|_| {
-							control.ready(Next::write()).map_err(|e| format!("{:?}", e))
-						});
+				self.jsonrpc_handler.remote.spawn(move |_| {
+						future.map(move |response| {
+							let response = match response {
+								None => Response::ok(String::new()),
+								// Add new line to have nice output when using CLI clients (curl)
+								Some(result) => Response::ok(format!("{}\n", result)),
+							};
 
-					if let Err(e) = result {
-						warn!("Error while resuming async call: {:?}", e);
-					}
+							let result = sender.send(response)
+								.map_err(|e| format!("{:?}", e))
+								.and_then(|_| {
+									control.ready(Next::write()).map_err(|e| format!("{:?}", e))
+								});
+
+							if let Err(e) = result {
+								warn!("Error while resuming async call: {:?}", e);
+							}
+						})
 				});
 
 				Next::wait()

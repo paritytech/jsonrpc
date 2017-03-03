@@ -1,7 +1,7 @@
 //! Convenient Response utils used internally
 
 use tokio_minihttp::Response;
-use cors;
+use jsonrpc_server_utils::cors;
 
 const SERVER: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 

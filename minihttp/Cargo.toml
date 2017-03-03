@@ -13,8 +13,8 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_minihttp_server/index
 log = "0.3"
 futures = "0.1"
 jsonrpc-core = { version = "6.0", path = "../core" }
+jsonrpc-server-utils = { version = "6.0", path = "../server-utils" }
 parking_lot = "0.3"
-tokio-core = "0.1"
 tokio-service = "0.1"
 tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }
 tokio-minihttp = { git = "https://github.com/tomusdrw/tokio-minihttp" }

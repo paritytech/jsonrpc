@@ -2,6 +2,8 @@
 
 use std::ascii::AsciiExt;
 
+// TODO [ToDr] Pre-process origins (should only contain protocol, host and port)
+
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessControlAllowOrigin {

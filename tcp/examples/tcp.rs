@@ -15,6 +15,6 @@ fn main() {
 		.start(&"0.0.0.0:3030".parse().unwrap())
 		.expect("Server must start with no issues");
 
-	server.wait().unwrap()
+	server.wait()
 }
 
