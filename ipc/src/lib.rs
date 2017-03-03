@@ -41,5 +41,6 @@ mod tests;
 #[cfg(windows)] pub use win::{Server, Error, Result as PipeResult};
 
 #[cfg(not(windows))] mod nix;
+#[cfg(not(windows))] mod stream_codec;
 #[cfg(not(windows))] pub use nix::{Server, Error};
 
