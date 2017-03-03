@@ -35,6 +35,7 @@ mod tests {
 	#[test]
 	fn simple_encode() {
 		let mut buf = EasyBuf::new();
+		// TODO: maybe ignore new lines here also if the output is enveloped with those
 		buf.get_mut().extend_from_slice(b"{ test: 1 }{ test: 2 }{ test: 3 }");
 
 		let mut codec = StreamCodec;
