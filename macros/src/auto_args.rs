@@ -109,30 +109,45 @@ macro_rules! build_rpc_trait {
 	};
 
 	( WRAP $del: expr =>
-		(name = $name: expr)
+		(name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
 		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, Error>
 	) => {
 		$del.add_method($name, move |base, params| {
 			$crate::Wrap::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, Error>), base, params)
-		})
+		});
+		$(
+			$(
+				$del.add_alias($name, $alias);
+			)+
+		)*
 	};
 
 	( WRAP $del: expr =>
-		(async, name = $name: expr)
+		(async, name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
 		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, Error>
 	) => {
 		$del.add_async_method($name, move |base, params| {
 			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, Error>), base, params)
-		})
+		});
+		$(
+			$(
+				$del.add_alias($name, $alias);
+			)+
+		)*
 	};
 
 	( WRAP $del: expr =>
-		(meta, name = $name: expr)
+		(meta, name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
 		fn $method: ident (&self, Self::Metadata $(, $param: ty)*) -> $result: tt <$out: ty, Error>
 	) => {
 		$del.add_method_with_meta($name, move |base, params, meta| {
 			$crate::WrapMeta::wrap_rpc(&(Self::$method as fn(&_, Self::Metadata $(, $param)*) -> $result <$out, Error>), base, params, meta)
-		})
+		});
+		$(
+			$(
+				$del.add_alias($name, $alias);
+			)+
+		)*
 	};
 }
 

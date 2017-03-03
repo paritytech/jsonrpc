@@ -40,7 +40,9 @@ pub enum RemoteProcedure<T: Metadata> {
 	/// A method call
 	Method(Box<RpcMethod<T>>),
 	/// A notification
-	Notification(Box<RpcNotification<T>>)
+	Notification(Box<RpcNotification<T>>),
+	/// An alias to other method,
+	Alias(String),
 }
 
 impl<F: Send + Sync + 'static> RpcMethodSync for F where

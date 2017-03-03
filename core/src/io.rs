@@ -93,6 +93,14 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		}
 	}
 
+	/// Adds an alias to a method.
+	pub fn add_alias(&mut self, alias: &str, other: &str) {
+		self.methods.insert(
+			alias.into(),
+			RemoteProcedure::Alias(other.into()),
+		);
+	}
+
 	/// Adds new supported synchronous method
 	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: RpcMethodSync,
@@ -195,6 +203,10 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				let result = match (valid_version, self.methods.get(&method.method)) {
 					(false, _) => futures::failed(Error::invalid_version()).boxed(),
 					(true, Some(&RemoteProcedure::Method(ref method))) => method.call(params, meta),
+					(true, Some(&RemoteProcedure::Alias(ref alias))) => match self.methods.get(alias) {
+						Some(&RemoteProcedure::Method(ref method)) => method.call(params, meta),
+						_ => futures::failed(Error::method_not_found()).boxed(),
+					},
 					(true, _) => futures::failed(Error::method_not_found()).boxed(),
 				};
 
@@ -209,8 +221,16 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 					return futures::finished(None).boxed();
 				}
 
-				if let Some(&RemoteProcedure::Notification(ref notification)) = self.methods.get(&notification.method) {
-					notification.execute(params, meta);
+				match self.methods.get(&notification.method) {
+					Some(&RemoteProcedure::Notification(ref notification)) => {
+						notification.execute(params, meta);
+					},
+					Some(&RemoteProcedure::Alias(ref alias)) => {
+						if let Some(&RemoteProcedure::Notification(ref notification)) = self.methods.get(alias) {
+							notification.execute(params, meta);
+						}
+					},
+					_ => {},
 				}
 
 				futures::finished(None).boxed()
@@ -356,6 +376,40 @@ mod tests {
 		let response = r#"{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":1}"#;
 
 		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
+	}
+
+	#[test]
+	fn test_method_alias() {
+		let mut io = IoHandler::new();
+		io.add_method("say_hello", |_| {
+			Ok(Value::String("hello".to_string()))
+		});
+		io.add_alias("say_hello_alias", "say_hello");
+
+
+		let request = r#"{"jsonrpc": "2.0", "method": "say_hello_alias", "params": [42, 23], "id": 1}"#;
+		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
+
+		assert_eq!(io.handle_request_sync(request), Some(response.to_string()));
+	}
+
+	#[test]
+	fn test_notification_alias() {
+		use std::sync::Arc;
+		use std::sync::atomic;
+
+		let mut io = IoHandler::new();
+
+		let called = Arc::new(atomic::AtomicBool::new(false));
+		let c = called.clone();
+		io.add_notification("say_hello", move |_| {
+			c.store(true, atomic::Ordering::SeqCst);
+		});
+		io.add_alias("say_hello_alias", "say_hello");
+
+		let request = r#"{"jsonrpc": "2.0", "method": "say_hello_alias", "params": [42, 23]}"#;
+		assert_eq!(io.handle_request_sync(request), None);
+		assert_eq!(called.load(atomic::Ordering::SeqCst), true);
 	}
 
 	#[test]
