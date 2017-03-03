@@ -22,7 +22,7 @@ build_rpc_trait! {
 		fn call(&self, u64) -> BoxFuture<String, Error>;
 
 		/// Performs asynchronous operation with meta
-		#[rpc(meta, name = "callAsyncMeta")]
+		#[rpc(meta, name = "callAsyncMeta", alias = [ "callAsyncMetaAlias", ])]
 		fn call_meta(&self, Self::Metadata, u64) -> BoxFuture<String, Error>;
 	}
 }
