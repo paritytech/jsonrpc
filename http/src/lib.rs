@@ -29,7 +29,6 @@ pub extern crate hyper;
 
 pub mod request_response;
 mod handler;
-mod hosts_validator;
 #[cfg(test)]
 mod tests;
 
@@ -45,7 +44,6 @@ use parking_lot::Mutex;
 pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use jsonrpc_server_utils::cors::AccessControlAllowOrigin;
 pub use handler::{PanicHandler, ServerHandler};
-pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, RpcServerError>;
