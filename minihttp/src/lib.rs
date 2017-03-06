@@ -310,7 +310,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 		// Validate content type
 		let content_type = request.header("Content-type");
-		if !is_json(content_type) {
+		if !is_options && !is_json(content_type) {
 			return future::ok(
 				res::invalid_content_type()
 			).boxed();
