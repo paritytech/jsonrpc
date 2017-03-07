@@ -88,6 +88,22 @@ fn should_return_method_not_allowed_for_get() {
 }
 
 #[test]
+fn should_ignore_media_type_if_options() {
+	// given
+	let server = serve();
+
+	// when
+	let response = request(server,
+		Method::Options,
+		Headers::new(),
+		"{}",
+	);
+
+	// then
+	assert_eq!(response.status, StatusCode::Ok);
+}
+
+#[test]
 fn should_return_unsupported_media_type_if_not_json() {
 	// given
 	let server = serve();

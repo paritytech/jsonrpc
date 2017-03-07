@@ -308,14 +308,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 			).boxed();
 		}
 
-		// Validate content type
-		let content_type = request.header("Content-type");
-		if !is_json(content_type) {
-			return future::ok(
-				res::invalid_content_type()
-			).boxed();
-		}
-
 		// Extract CORS headers
 		let origin = request.header("Origin");
 		let cors = cors::get_cors_header(origin, &self.cors_domains);
@@ -324,6 +316,14 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 		if is_options {
 			return future::ok(
 				res::new("", cors)
+			).boxed();
+		}
+
+		// Validate content type
+		let content_type = request.header("Content-type");
+		if !is_json(content_type) {
+			return future::ok(
+				res::invalid_content_type()
 			).boxed();
 		}
 
