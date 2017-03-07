@@ -36,7 +36,7 @@ build_rpc_trait! {
 
 		#[pubsub(name = "hello")] {
 			/// Hello subscription
-			#[rpc(name = "hello_subscribe")]
+			#[rpc(name = "hello_subscribe", alias = ["hello_sub", ])]
 			fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
 
 			/// Unsubscribe from hello subscription.

@@ -215,9 +215,9 @@ macro_rules! build_rpc_trait {
 
 	( WRAP $del: expr =>
 		pubsub: (name = $name: expr)
-		subscribe: (name = $subscribe: expr)
+		subscribe: (name = $subscribe: expr $(, alias = [ $( $sub_alias: expr, )+ ])*)
 		fn $sub_method: ident (&self, Self::Metadata $(, $sub_p: ty)+);
-		unsubscribe: (name = $unsubscribe: expr)
+		unsubscribe: (name = $unsubscribe: expr $(, alias = [ $( $unsub_alias: expr, )+ ])*)
 		fn $unsub_method: ident (&self $(, $unsub_p: ty)+) -> $result: tt <$out: ty, Error>;
 	) => {
 		$del.add_subscription(
@@ -235,7 +235,17 @@ macro_rules! build_rpc_trait {
 				Self::$unsub_method(base, id).map($crate::to_value).boxed()
 			}),
 		);
-		// TODO [aliases]
+
+		$(
+			$(
+				$del.add_alias($subscribe, $sub_alias);
+			)*
+		)*
+		$(
+			$(
+				$del.add_alias($unsubscribe, $unsub_alias);
+			)*
+		)*
 	};
 }
 

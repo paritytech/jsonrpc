@@ -72,7 +72,6 @@ impl Sink {
 			params: Some(val),
 		};
 
-		// TODO [ToDr] Unwraps
 		self.transport.clone().send(core::to_string(&notification).unwrap())
 	}
 }
