@@ -43,7 +43,6 @@ use std::io::{Read, Write};
 use std::sync::atomic::*;
 use std::sync::{Arc, Mutex};
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use jsonrpc_core::futures::Future;
 use jsonrpc_server_utils::reactor;
 use jsonrpc_server_utils::tokio_core::reactor::Remote;
 use validator;
@@ -71,14 +70,15 @@ impl std::convert::From<std::io::Error> for Error {
 pub struct PipeHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	waiting_pipe: NamedPipe,
 	handler: Arc<MetaIoHandler<M, S>>,
-	remote: Remote,
+	// TODO [ToDr] To be used by async implementation of IPC.
+	_remote: Remote,
 }
 
 impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	/// start ipc rpc server
 	pub fn start(
 		addr: &str,
-		io_handler: Arc<RpcHandler<M, S>>,
+		handler: Arc<MetaIoHandler<M, S>>,
 		remote: Remote,
 	) -> Result<Self> {
 		Ok(PipeHandler {
@@ -94,7 +94,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 					.create()
 			),
 			handler: handler,
-			remote: remote,
+			_remote: remote,
 		})
 	}
 
@@ -210,7 +210,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 		socket_addr: &str,
 		io_handler: T,
 		remote: reactor::UnitializedRemote,
-	) -> Result<Server<M, S>, Error> where
+	) -> Result<Server<M, S>> where
 		T: Into<MetaIoHandler<M, S>>,
 	{
 		let remote = remote.initialize()?;
@@ -248,8 +248,13 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 		let thread_stopped = self.is_stopped.clone();
 		let thread_handler = self.io_handler.clone();
 		let addr = self.addr.clone();
+		let remote = self.remote.clone();
 		std::thread::spawn(move || {
-			let mut pipe_handler = PipeHandler::start(&addr, thread_handler).unwrap();
+			let mut pipe_handler = PipeHandler::start(
+				&addr,
+				thread_handler,
+				remote,
+			).unwrap();
 			while !thread_stopping.load(Ordering::Relaxed) {
 				trace!(target: "ipc", "Accepting pipe connection");
 				if let Err(pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
