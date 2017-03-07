@@ -12,3 +12,7 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_macros/index.html"
 [dependencies]
 serde = "0.9"
 jsonrpc-core = { version = "6.0", path = "../core" }
+jsonrpc-pubsub = { version = "6.0", path = "../pubsub" }
+
+[dev-dependencies]
+jsonrpc-tcp-server = { version = "6.0", path = "../tcp" }
