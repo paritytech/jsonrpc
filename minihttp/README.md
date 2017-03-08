@@ -9,6 +9,7 @@ Blazing fast HTTP server for JSON-RPC 2.0.
 
 ```
 [dependencies]
+jsonrpc-core = "6.0"
 jsonrpc-minihttp-server = { git = "https://github.com/ethcore/jsonrpc-minihttp-server" }
 ```
 
