@@ -1,6 +1,7 @@
 //! CORS handling utility functions
 
 use std::ascii::AsciiExt;
+use hosts::Host;
 
 /// Origin Protocol
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -17,28 +18,31 @@ pub enum OriginProtocol {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Origin {
 	protocol: OriginProtocol,
-	hostname: String,
-	port: Option<u16>,
+	host: Host,
 	as_string: String,
 }
 
-impl From<&'static str> for Origin {
-	fn from(string: &'static str) -> Self {
+impl<'a> From<&'a str> for Origin {
+	fn from(string: &'a str) -> Self {
 		Origin::parse(string)
 	}
 }
 
 impl Origin {
-	/// Creates new origin given protocol, hostname and port parts.
-	/// Pre-processes input data if necessary.
-	pub fn new(protocol: OriginProtocol, hostname: &str, port: Option<u16>) -> Self {
-		let string = Self::to_string(&protocol, hostname, port);
+	fn with_host(protocol: OriginProtocol, host: Host) -> Self {
+		let string = Self::to_string(&protocol, &host);
+
 		Origin {
 			protocol: protocol,
-			hostname: hostname.into(),
-			port: port,
+			host: host,
 			as_string: string,
 		}
+	}
+
+	/// Creates new origin given protocol, hostname and port parts.
+	/// Pre-processes input data if necessary.
+	pub fn new(protocol: OriginProtocol, host: &str, port: Option<u16>) -> Self {
+		Self::with_host(protocol, Host::new(host, port))
 	}
 
 	/// Attempts to parse given string as a `Origin`.
@@ -54,10 +58,7 @@ impl Origin {
 		}
 
 		let proto = proto.map(|s| s.to_lowercase());
-		let hostname = hostname.map(|s| {
-			let mut it = s.split('/');
-			it.next().unwrap().to_lowercase()
-		}).unwrap();
+		let hostname = Host::parse(hostname.unwrap());
 
 		let protocol = match proto {
 			None => OriginProtocol::Http,
@@ -66,25 +67,18 @@ impl Origin {
 			Some(other) => OriginProtocol::Custom(other),
 		};
 
-		let mut hostname = hostname.split(':');
-		let host = hostname.next().unwrap();
-		let port = hostname.next().and_then(|port| port.parse().ok());
-		Origin::new(protocol, &host, port)
+		Origin::with_host(protocol, hostname)
 	}
 
-	fn to_string(protocol: &OriginProtocol, hostname: &str, port: Option<u16>) -> String {
+	fn to_string(protocol: &OriginProtocol, host: &Host) -> String {
 		format!(
-			"{}://{}{}",
+			"{}://{}",
 			match *protocol {
 				OriginProtocol::Http => "http",
 				OriginProtocol::Https => "https",
 				OriginProtocol::Custom(ref protocol) => protocol,
 			},
-			hostname,
-			match port {
-				Some(port) => format!(":{}", port),
-				None => "".into(),
-			},
+			host.as_ref(),
 		)
 	}
 }
