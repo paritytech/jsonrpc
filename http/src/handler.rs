@@ -174,23 +174,23 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 				let control = self.control.clone();
 
 				self.jsonrpc_handler.remote.spawn(move |_| {
-						future.map(move |response| {
-							let response = match response {
-								None => Response::ok(String::new()),
-								// Add new line to have nice output when using CLI clients (curl)
-								Some(result) => Response::ok(format!("{}\n", result)),
-							};
+					future.map(move |response| {
+						let response = match response {
+							None => Response::ok(String::new()),
+							// Add new line to have nice output when using CLI clients (curl)
+							Some(result) => Response::ok(format!("{}\n", result)),
+						};
 
-							let result = sender.send(response)
-								.map_err(|e| format!("{:?}", e))
-								.and_then(|_| {
-									control.ready(Next::write()).map_err(|e| format!("{:?}", e))
-								});
+						let result = sender.send(response)
+							.map_err(|e| format!("{:?}", e))
+							.and_then(|_| {
+								control.ready(Next::write()).map_err(|e| format!("{:?}", e))
+							});
 
-							if let Err(e) = result {
-								warn!("Error while resuming async call: {:?}", e);
-							}
-						})
+						if let Err(e) = result {
+							warn!("Error while resuming async call: {:?}", e);
+						}
+					})
 				});
 
 				Next::wait()
