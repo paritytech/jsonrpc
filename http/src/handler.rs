@@ -108,7 +108,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		cors::get_cors_header(origin, allowed).map(|origin| {
 			use self::cors::AccessControlAllowOrigin::*;
 			match origin {
-				Value(val) => header::AccessControlAllowOrigin::Value(val),
+				Value(val) => header::AccessControlAllowOrigin::Value((*val).to_owned()),
 				Null => header::AccessControlAllowOrigin::Null,
 				Any => header::AccessControlAllowOrigin::Any,
 			}

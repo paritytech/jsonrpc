@@ -8,7 +8,7 @@ use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
 
-fn serve_hosts(hosts: Vec<String>) -> Server {
+fn serve_hosts(hosts: Vec<Host>) -> Server {
 	ServerBuilder::new(IoHandler::default())
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
 		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
@@ -231,7 +231,7 @@ fn should_add_cors_headers() {
 		&format!("\
 			POST / HTTP/1.1\r\n\
 			Host: 127.0.0.1:8080\r\n\
-			Origin: ethcore.io\r\n\
+			Origin: http://ethcore.io\r\n\
 			Connection: close\r\n\
 			Content-Type: application/json\r\n\
 			Content-Length: {}\r\n\
@@ -243,7 +243,7 @@ fn should_add_cors_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: ethcore.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("Access-Control-Allow-Origin: http://ethcore.io"), "Headers missing in {}", response.headers);
 }
 
 #[test]

@@ -3,16 +3,17 @@
 use std::ascii::AsciiExt;
 
 /// Host type
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct Host {
 	hostname: String,
 	port: Option<u16>,
 	as_string: String,
 }
 
-impl<'a> From<&'a str> for Host {
-	fn from(string: &'a str) -> Self {
-		Host::parse(string)
+
+impl<T: AsRef<str>> From<T> for Host {
+	fn from(string: T) -> Self {
+		Host::parse(string.as_ref())
 	}
 }
 
@@ -65,8 +66,9 @@ impl Host {
 	}
 }
 
-impl AsRef<str> for Host {
-	fn as_ref(&self) -> &str {
+impl ::std::ops::Deref for Host {
+	type Target = str;
+	fn deref(&self) -> &Self::Target {
 		&self.as_string
 	}
 }
@@ -105,10 +107,7 @@ pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> b
 		Some(ref allowed_hosts) => match host {
 			None => false,
 			Some(ref host) => {
-				allowed_hosts.iter().any(|h| {
-					let h_str = h.as_ref();
-					h_str.eq_ignore_ascii_case(host) || &h_str == host
-				})
+				allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(host) || *host == &**h)
 			}
 		}
 	}

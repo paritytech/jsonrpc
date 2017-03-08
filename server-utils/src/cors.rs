@@ -4,7 +4,7 @@ use std::ascii::AsciiExt;
 use hosts::Host;
 
 /// Origin Protocol
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Hash, Debug, PartialEq, Eq)]
 pub enum OriginProtocol {
 	/// Http protocol
 	Http,
@@ -22,9 +22,9 @@ pub struct Origin {
 	as_string: String,
 }
 
-impl<'a> From<&'a str> for Origin {
-	fn from(string: &'a str) -> Self {
-		Origin::parse(string)
+impl<T: AsRef<str>> From<T> for Origin {
+	fn from(string: T) -> Self {
+		Origin::parse(string.as_ref())
 	}
 }
 
@@ -78,13 +78,14 @@ impl Origin {
 				OriginProtocol::Https => "https",
 				OriginProtocol::Custom(ref protocol) => protocol,
 			},
-			host.as_ref(),
+			&**host,
 		)
 	}
 }
 
-impl AsRef<str> for Origin {
-	fn as_ref(&self) -> &str {
+impl ::std::ops::Deref for Origin {
+	type Target = str;
+	fn deref(&self) -> &Self::Target {
 		&self.as_string
 	}
 }
@@ -113,7 +114,7 @@ pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlA
 				allowed.iter().find(|cors| {
 					match **cors {
 						AccessControlAllowOrigin::Any => true,
-						AccessControlAllowOrigin::Value(ref val) if val.as_ref().eq_ignore_ascii_case(origin) => true,
+						AccessControlAllowOrigin::Value(ref val) if val.eq_ignore_ascii_case(origin) => true,
 						_ => false
 					}
 				}).map(|cors| {

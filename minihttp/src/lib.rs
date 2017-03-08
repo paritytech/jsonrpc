@@ -155,11 +155,10 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 	fn update_hosts(hosts: Option<Vec<Host>>, address: SocketAddr) -> Option<Vec<Host>> {
 		hosts.map(|current_hosts| {
-			// TODO [ToDr] Pre-process hosts (so that they don't contain the path)
 			let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
 			let address = address.to_string();
-			new_hosts.insert(address.clone());
-			new_hosts.insert(address.replace("127.0.0.1", "localhost"));
+			new_hosts.insert(address.clone().into());
+			new_hosts.insert(address.replace("127.0.0.1", "localhost").into());
 			new_hosts.into_iter().collect()
 		})
 	}
