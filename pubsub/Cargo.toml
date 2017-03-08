@@ -4,7 +4,7 @@ homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-pubsub"
-version = "6.0.0"
+version = "7.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_pubsub/index.html"
@@ -12,7 +12,7 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_pubsub/index.html"
 [dependencies]
 log = "0.3"
 parking_lot = "0.3"
-jsonrpc-core = { version = "6.0", path = "../core" }
+jsonrpc-core = { version = "7.0", path = "../core" }
 
 [dev-dependencies]
-jsonrpc-tcp-server = { version = "6.0", path = "../tcp" }
+jsonrpc-tcp-server = { version = "7.0", path = "../tcp" }
