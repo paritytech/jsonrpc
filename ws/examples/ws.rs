@@ -1,30 +1,13 @@
-# jsonrpc-tcp-server
-TCP server for JSON-RPC 2.0.
-
-[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_tcp_server/index.html)
-
-## Example
-
-`Cargo.toml`
-
-```
-[dependencies]
-jsonrpc-core = "6.0"
-jsonrpc-tcp-server = "6.0"
-```
-
-`main.rs`
-
-```rust
 extern crate jsonrpc_core;
-extern crate jsonrpc_tcp_server;
+extern crate jsonrpc_ws_server;
 
 use jsonrpc_core::*;
-use jsonrpc_tcp_server::*;
+use jsonrpc_ws_server::*;
 
 fn main() {
 	let mut io = IoHandler::default();
 	io.add_method("say_hello", |_params| {
+		println!("Processing");
 		Ok(Value::String("hello".to_owned()))
 	});
 
@@ -34,6 +17,3 @@ fn main() {
 
 	server.wait().unwrap()
 }
-```
-
-

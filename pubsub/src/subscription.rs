@@ -14,6 +14,7 @@ use types::{PubSubMetadata, SubscriptionId, TransportSender};
 pub struct Session {
 	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<Fn(SubscriptionId) + Send + 'static>>>,
 	transport: TransportSender,
+	on_drop: Mutex<Vec<Box<Fn() + Send>>>,
 }
 
 impl Session {
@@ -23,12 +24,18 @@ impl Session {
 		Session {
 			active_subscriptions: Default::default(),
 			transport: sender,
+			on_drop: Default::default(),
 		}
 	}
 
 	/// Returns transport write stream
 	pub fn sender(&self) -> TransportSender {
 		self.transport.clone()
+	}
+
+	/// Adds a function to call when session is dropped.
+	pub fn on_drop(&self, on_drop: Box<Fn() + Send>) {
+		self.on_drop.lock().push(on_drop);
 	}
 
 	/// Adds new active subscription
@@ -51,6 +58,11 @@ impl Drop for Session {
 		let mut active = self.active_subscriptions.lock();
 		for (id, remove) in active.drain() {
 			remove(id.0)
+		}
+
+		let mut on_drop = self.on_drop.lock();
+		for on_drop in on_drop.drain(..) {
+			on_drop();
 		}
 	}
 }
