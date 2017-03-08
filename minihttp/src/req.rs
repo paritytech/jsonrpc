@@ -2,7 +2,7 @@
 
 use std::ascii::AsciiExt;
 use tokio_minihttp;
-use tokio_core::io::EasyBuf;
+use jsonrpc_server_utils::tokio_core::io::EasyBuf;
 
 /// HTTP Method used
 #[derive(Debug, Clone, PartialEq, Eq)]

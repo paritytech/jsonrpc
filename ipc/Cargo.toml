@@ -10,6 +10,7 @@ documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
 jsonrpc-core = { version = "6.0", path = "../core" }
+jsonrpc-server-utils = { version = "6.0", path = "../server-utils" }
 mio = "0.5"
 slab   = "0.1.0"
 bytes  = "0.3.0"
@@ -20,6 +21,3 @@ rand = "0.3"
 [dev-dependencies]
 lazy_static = "0.2"
 env_logger = "0.4"
-
-[features]
-default = ["jsonrpc-core/reactor"]

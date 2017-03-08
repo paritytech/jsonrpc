@@ -23,14 +23,12 @@
 extern crate futures;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
+extern crate jsonrpc_server_utils;
 extern crate parking_lot;
-extern crate tokio_core;
 extern crate tokio_proto;
 extern crate tokio_service;
 extern crate tokio_minihttp;
 
-pub mod cors;
-pub mod hosts;
 mod req;
 mod res;
 #[cfg(test)]
@@ -45,7 +43,10 @@ use std::collections::HashSet;
 use parking_lot::RwLock;
 use futures::{future, Future, BoxFuture};
 use jsonrpc::MetaIoHandler;
+use jsonrpc_server_utils::hosts;
 
+pub use jsonrpc_server_utils::cors;
+pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use req::Req;
 
 /// Result of starting the Server.
@@ -61,33 +62,6 @@ pub enum RpcServerError {
 impl From<io::Error> for RpcServerError {
 	fn from(err: io::Error) -> Self {
 		RpcServerError::IoError(err)
-	}
-}
-
-/// Specifies if domains should be validated.
-pub enum DomainsValidation<T> {
-	/// Allow only domains on the list.
-	AllowOnly(Vec<T>),
-	/// Disable domains validation completely.
-	Disabled,
-}
-
-impl<T> Into<Option<Vec<T>>> for DomainsValidation<T> {
-	fn into(self) -> Option<Vec<T>> {
-		use DomainsValidation::*;
-		match self {
-			AllowOnly(list) => Some(list),
-			Disabled => None,
-		}
-	}
-}
-
-impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
-	fn from(other: Option<Vec<T>>) -> Self {
-		match other {
-			Some(list) => DomainsValidation::AllowOnly(list),
-			None => DomainsValidation::Disabled,
-		}
 	}
 }
 
@@ -117,16 +91,13 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	jsonrpc_handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
-	allowed_hosts: Option<Vec<String>>,
+	allowed_hosts: Option<Vec<Host>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 	threads: usize,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
-	///
-	/// If you want to re-use the same handler in couple places
-	/// see `with_remote` function.
 	///
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
@@ -177,12 +148,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Specify a list of valid `Host` headers. Binding address is allowed automatically.
-	pub fn allowed_hosts(mut self, allowed_hosts: DomainsValidation<String>) -> Self {
+	pub fn allowed_hosts(mut self, allowed_hosts: DomainsValidation<Host>) -> Self {
 		self.allowed_hosts = allowed_hosts.into();
 		self
 	}
 
-	fn update_hosts(hosts: Option<Vec<String>>, address: SocketAddr) -> Option<Vec<String>> {
+	fn update_hosts(hosts: Option<Vec<Host>>, address: SocketAddr) -> Option<Vec<Host>> {
 		hosts.map(|current_hosts| {
 			// TODO [ToDr] Pre-process hosts (so that they don't contain the path)
 			let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
@@ -269,7 +240,7 @@ impl Drop for PanicHandler {
 pub struct RpcService<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
-	hosts: Option<Vec<String>>,
+	hosts: Option<Vec<Host>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 }
 

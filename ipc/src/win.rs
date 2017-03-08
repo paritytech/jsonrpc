@@ -43,7 +43,8 @@ use std::io::{Read, Write};
 use std::sync::atomic::*;
 use std::sync::{Arc, Mutex};
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
+use jsonrpc_server_utils::reactor;
+use jsonrpc_server_utils::tokio_core::reactor::Remote;
 use validator;
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -68,12 +69,18 @@ impl std::convert::From<std::io::Error> for Error {
 
 pub struct PipeHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	waiting_pipe: NamedPipe,
-	io_handler: RpcHandler<M, S>,
+	handler: Arc<MetaIoHandler<M, S>>,
+	// TODO [ToDr] To be used by async implementation of IPC.
+	_remote: Remote,
 }
 
 impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	/// start ipc rpc server
-	pub fn start(addr: &str, io_handler: RpcHandler<M, S>) -> Result<Self> {
+	pub fn start(
+		addr: &str,
+		handler: Arc<MetaIoHandler<M, S>>,
+		remote: Remote,
+	) -> Result<Self> {
 		Ok(PipeHandler {
 			waiting_pipe: try!(
 				NamedPipeBuilder::new(addr)
@@ -86,7 +93,8 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 					.in_buffer_size(MAX_REQUEST_LEN)
 					.create()
 			),
-			io_handler: io_handler.clone(),
+			handler: handler,
+			_remote: remote,
 		})
 	}
 
@@ -118,7 +126,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 				.in_buffer_size(MAX_REQUEST_LEN)
 				.create()));
 
-		let thread_handler = self.io_handler.clone();
+		let thread_handler = self.handler.clone();
 		std::thread::spawn(move || {
 			let mut buf = vec![0u8; MAX_REQUEST_LEN as usize];
 			let mut fin = REQUEST_READ_BATCH;
@@ -179,8 +187,9 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 pub struct Server<M: Metadata = (), S: Middleware<M> + 'static = NoopMiddleware> {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
-	io_handler: RpcHandler<M, S>,
-	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
+	io_handler: Arc<MetaIoHandler<M, S>>,
+	remote_handle: Mutex<Option<reactor::Remote>>,
+	remote: Remote,
 	addr: String,
 }
 
@@ -189,26 +198,40 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Self> where
 		T: Into<MetaIoHandler<M, S>>,
 	{
-		let rpc_loop = RpcEventLoop::spawn();
-		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler(Arc::new(io_handler.into()))));
-		server.rpc_event_loop = Mutex::new(Some(rpc_loop.into()));
-		Ok(server)
+		Self::with_remote(
+			socket_addr,
+			io_handler,
+			reactor::UnitializedRemote::Unspawned,
+		)
 	}
 
-	// New Server using RpcHandler
-	pub fn with_rpc_handler(socket_addr: &str, io_handler: RpcHandler<M, S>) -> Result<Self> {
+	/// New Server using RpcHandler
+	pub fn with_remote<T:>(
+		socket_addr: &str,
+		io_handler: T,
+		remote: reactor::UnitializedRemote,
+	) -> Result<Server<M, S>> where
+		T: Into<MetaIoHandler<M, S>>,
+	{
+		let remote = remote.initialize()?;
+
 		Ok(Server {
-			io_handler: io_handler,
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
-			rpc_event_loop: Mutex::new(None),
+			io_handler: Arc::new(io_handler.into()),
+			remote: remote.remote(),
+			remote_handle: Mutex::new(Some(remote)),
 			addr: socket_addr.to_owned(),
 		})
 	}
 
 	/// Run server (in this thread)
 	pub fn run(&self) -> Result<()> {
-		let mut pipe_handler = try!(PipeHandler::start(&self.addr, self.io_handler.clone()));
+		let mut pipe_handler = PipeHandler::start(
+			&self.addr,
+			self.io_handler.clone(),
+			self.remote.clone(),
+		)?;
 		loop  {
 			try!(pipe_handler.handle_incoming(&self.addr, Arc::new(AtomicBool::new(false))));
 		}
@@ -225,8 +248,13 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 		let thread_stopped = self.is_stopped.clone();
 		let thread_handler = self.io_handler.clone();
 		let addr = self.addr.clone();
+		let remote = self.remote.clone();
 		std::thread::spawn(move || {
-			let mut pipe_handler = PipeHandler::start(&addr, thread_handler).unwrap();
+			let mut pipe_handler = PipeHandler::start(
+				&addr,
+				thread_handler,
+				remote,
+			).unwrap();
 			while !thread_stopping.load(Ordering::Relaxed) {
 				trace!(target: "ipc", "Accepting pipe connection");
 				if let Err(pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
@@ -241,7 +269,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 	}
 
 	pub fn stop_async(&self) -> Result<()> {
-		self.rpc_event_loop.lock().unwrap().take().map(|s| s.close());
+		self.remote_handle.lock().unwrap().take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -249,7 +277,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 	}
 
 	pub fn stop(&self) -> Result<()> {
-		self.rpc_event_loop.lock().unwrap().take().map(|s| s.close());
+		self.remote_handle.lock().unwrap().take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);

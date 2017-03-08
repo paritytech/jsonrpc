@@ -43,7 +43,9 @@ use std::sync::atomic::*;
 
 use bytes::{ByteBuf, MutByteBuf};
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
+use jsonrpc_core::futures::Future;
+use jsonrpc_server_utils::reactor;
+use jsonrpc_server_utils::tokio_core::reactor::Remote;
 use mio::*;
 use mio::unix::*;
 
@@ -61,7 +63,8 @@ const REQUEST_CHUNK_SIZE: usize = 4096;
 
 struct SocketConnection<M: Metadata, S: Middleware<M>> {
 	socket: UnixStream,
-	session: RpcHandler<M, S>,
+	handler: Arc<MetaIoHandler<M, S>>,
+	remote: Remote,
 	write_buf: Option<Bytes>,
 	read_buf: MutByteBuf,
 	token: Option<Token>,
@@ -72,10 +75,11 @@ struct SocketConnection<M: Metadata, S: Middleware<M>> {
 type Slab<T> = slab::Slab<T, Token>;
 
 impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
-	fn new(sock: UnixStream, session: RpcHandler<M, S>) -> Self {
+	fn new(sock: UnixStream, handler: Arc<MetaIoHandler<M, S>>, remote: Remote) -> Self {
 		SocketConnection {
 			socket: sock,
-			session: session,
+			handler: handler,
+			remote: remote,
 			write_buf: None,
 			read_buf: ByteBuf::mut_with_capacity(REQUEST_CHUNK_SIZE),
 			token: None,
@@ -132,13 +136,16 @@ impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
 						// TODO [ToDr] Extract metadata in future
 						let metadata = Default::default();
 
-						self.session.handle_request(&rpc_msg, metadata, move |response: Option<String>| {
-							if let Some(response_str) = response {
-								trace!(target: "ipc", "Response: {}", &response_str);
-								if let Err(e) = channel.send(RpcMessage::Write(token, response_str.into_bytes())) {
- 									warn!(target: "ipc", "Error waking up the event loop: {:?}", e);
- 								}
-							}
+						let future = self.handler.handle_request(&rpc_msg, metadata);
+						self.remote.spawn(move |_| {
+							future.map(move |response: Option<String>| {
+								if let Some(response_str) = response {
+									trace!(target: "ipc", "Response: {}", &response_str);
+									if let Err(e) = channel.send(RpcMessage::Write(token, response_str.into_bytes())) {
+										warn!(target: "ipc", "Error waking up the event loop: {:?}", e);
+									}
+								}
+							})
 						});
 					}
 
@@ -166,16 +173,17 @@ impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
 struct RpcServer<M: Metadata, S: Middleware<M>> {
 	socket: UnixListener,
 	connections: Slab<SocketConnection<M, S>>,
-	io_handler: RpcHandler<M, S>,
+	handler: Arc<MetaIoHandler<M, S>>,
+	remote: Remote,
 	tokens: VecDeque<Token>,
 }
 
 pub struct Server<M: Metadata = (), S: Middleware<M> + Send + Sync + 'static = NoopMiddleware> {
 	rpc_server: Arc<RwLock<RpcServer<M, S>>>,
 	event_loop: Arc<RwLock<EventLoop<RpcServer<M, S>>>>,
+	remote: Mutex<Option<reactor::Remote>>,
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
-	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
 	addr: String,
 }
 
@@ -199,21 +207,29 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Server<M, S>, Error> where
 		T: Into<MetaIoHandler<M, S>>,
 	{
-		let rpc_loop = RpcEventLoop::spawn();
-		let mut server = try!(Self::with_rpc_handler(socket_addr, rpc_loop.handler(Arc::new(io_handler.into()))));
-		server.rpc_event_loop = Mutex::new(Some(rpc_loop.into()));
-		Ok(server)
+		Self::with_remote(
+			socket_addr,
+			io_handler,
+			reactor::UnitializedRemote::Unspawned,
+		)
 	}
 
-	pub fn with_rpc_handler(socket_addr: &str, io_handler: RpcHandler<M, S>) -> Result<Server<M, S>, Error> {
-		let (server, event_loop) = try!(RpcServer::start(socket_addr, io_handler));
+	pub fn with_remote<T:>(
+		socket_addr: &str,
+		io_handler: T,
+		remote: reactor::UnitializedRemote,
+	) -> Result<Server<M, S>, Error> where
+		T: Into<MetaIoHandler<M, S>>,
+	{
+		let remote = remote.initialize()?;
+		let (server, event_loop) = RpcServer::start(socket_addr, io_handler.into(), remote.remote())?;
 
 		Ok(Server {
 			rpc_server: Arc::new(RwLock::new(server)),
 			event_loop: Arc::new(RwLock::new(event_loop)),
+			remote: Mutex::new(Some(remote)),
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
-			rpc_event_loop: Mutex::new(None),
 			addr: socket_addr.to_owned(),
 		})
 	}
@@ -256,7 +272,7 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 	}
 
 	pub fn stop_async(&self) -> Result<(), Error> {
-		self.rpc_event_loop.lock().unwrap().take().map(|s| s.close());
+		self.remote.lock().unwrap().take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping) }
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -264,7 +280,7 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 	}
 
 	pub fn stop(&self) -> Result<(), Error> {
-		self.rpc_event_loop.lock().unwrap().take().map(|s| s.close());
+		self.remote.lock().unwrap().take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping) }
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -283,15 +299,20 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Drop for Server<M, S
 
 impl<M: Metadata, S: Middleware<M>> RpcServer<M, S> {
 	/// start ipc rpc server
-	pub fn start(addr: &str, io_handler: RpcHandler<M, S>) -> Result<(RpcServer<M, S>, EventLoop<RpcServer<M, S>>), Error> {
-		let mut event_loop = try!(EventLoop::new());
+	pub fn start(
+		addr: &str,
+		handler: MetaIoHandler<M, S>,
+		remote: Remote,
+	) -> Result<(RpcServer<M, S>, EventLoop<RpcServer<M, S>>), Error> {
+		let mut event_loop = EventLoop::new()?;
 		::std::fs::remove_file(addr).unwrap_or_else(|_| {}); // ignore error (if no file)
-		let socket = try!(UnixListener::bind(&addr));
+		let socket = UnixListener::bind(&addr)?;
 		event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
 		let server = RpcServer {
 			socket: socket,
 			connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
-			io_handler: io_handler.clone(),
+			handler: Arc::new(handler),
+			remote: remote,
 			tokens: VecDeque::new(),
 		};
 		Ok((server, event_loop))
@@ -299,7 +320,11 @@ impl<M: Metadata, S: Middleware<M>> RpcServer<M, S> {
 
 	fn accept(&mut self, event_loop: &mut EventLoop<RpcServer<M, S>>) -> io::Result<()> {
 		let new_client_socket = self.socket.accept().unwrap().unwrap();
-		let connection = SocketConnection::new(new_client_socket, self.io_handler.clone());
+		let connection = SocketConnection::new(
+			new_client_socket,
+			self.handler.clone(),
+			self.remote.clone(),
+		);
 		if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
 			// max connections
 			return Ok(());

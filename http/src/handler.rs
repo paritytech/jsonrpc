@@ -1,19 +1,19 @@
-use cors;
 use Rpc;
 
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use std::io::{self, Read};
 
-use unicase::UniCase;
-use hyper::{mime, server, Next, Encoder, Decoder, Control};
-use hyper::header::{Headers, Allow, ContentType, AccessControlAllowHeaders};
+use hyper::{self, mime, server, Next, Encoder, Decoder, Control};
+use hyper::header::{self, Headers};
 use hyper::method::Method;
 use hyper::net::HttpStream;
-use hyper::header::AccessControlAllowOrigin;
+use parking_lot::Mutex;
+use unicase::UniCase;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
+use jsonrpc::futures::Future;
+use jsonrpc_server_utils::{cors, hosts};
 use request_response::{Request, Response};
-use hosts_validator::is_host_header_valid;
 
 /// PanicHandling function
 pub struct PanicHandler {
@@ -25,8 +25,8 @@ pub struct PanicHandler {
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	panic_handler: PanicHandler,
 	jsonrpc_handler: Rpc<M, S>,
-	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
-	allowed_hosts: Option<Vec<String>>,
+	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
+	allowed_hosts: Option<Vec<hosts::Host>>,
 	metadata: Option<M>,
 	control: Control,
 	request: Request,
@@ -39,7 +39,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 impl<M: Metadata, S: Middleware<M>> Drop for ServerHandler<M, S> {
 	fn drop(&mut self) {
 		if ::std::thread::panicking() {
-			let handler = self.panic_handler.handler.lock().unwrap();
+			let handler = self.panic_handler.handler.lock();
 			if let Some(ref h) = *handler {
 				h();
 			}
@@ -51,8 +51,8 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	/// Create new request handler.
 	pub fn new(
 		jsonrpc_handler: Rpc<M, S>,
-		cors_domains: Option<Vec<AccessControlAllowOrigin>>,
-		allowed_hosts: Option<Vec<String>>,
+		cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
+		allowed_hosts: Option<Vec<hosts::Host>>,
 		panic_handler: PanicHandler,
 		control: Control,
 	) -> Self {
@@ -72,28 +72,53 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		}
 	}
 
-	fn response_headers(&self, origin: &Option<String>) -> Headers {
+	fn response_headers(&self, cors_header: Option<header::AccessControlAllowOrigin>) -> Headers {
 		let mut headers = Headers::new();
 		headers.set(self.response.content_type.clone());
-		headers.set(Allow(vec![
-			Method::Options,
-			Method::Post,
-		]));
-		headers.set(AccessControlAllowHeaders(vec![
-			UniCase("origin".to_owned()),
-			UniCase("content-type".to_owned()),
-			UniCase("accept".to_owned()),
-		]));
 
-		if let Some(cors_domain) = cors::get_cors_header(&self.cors_domains, origin) {
+		if let Some(cors_domain) = cors_header {
+			headers.set(header::Allow(vec![
+				Method::Options,
+				Method::Post,
+			]));
+			headers.set(header::AccessControlAllowHeaders(vec![
+				UniCase("origin".to_owned()),
+				UniCase("content-type".to_owned()),
+				UniCase("accept".to_owned()),
+			]));
 			headers.set(cors_domain);
 		}
 
 		headers
 	}
 
-	fn is_json(&self, content_type: Option<&ContentType>) -> bool {
-		if let Some(&ContentType(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _))) = content_type {
+	fn get_header<'a>(req: &'a hyper::server::Request<'a, HttpStream>, header: &str) -> Option<&'a str> {
+		match req.headers().get_raw(header) {
+			Some(ref v) if v.len() == 1 => {
+				::std::str::from_utf8(&v[0]).ok()
+			},
+			_ => None
+		}
+	}
+
+	fn cors_header(
+		origin: Option<&str>,
+		allowed: &Option<Vec<cors::AccessControlAllowOrigin>>,
+	) -> Option<header::AccessControlAllowOrigin> {
+		cors::get_cors_header(origin, allowed).map(|origin| {
+			use self::cors::AccessControlAllowOrigin::*;
+			match origin {
+				Value(val) => header::AccessControlAllowOrigin::Value(val),
+				Null => header::AccessControlAllowOrigin::Null,
+				Any => header::AccessControlAllowOrigin::Any,
+			}
+		})
+	}
+
+	fn is_json(content_type: Option<&header::ContentType>) -> bool {
+		if let Some(&header::ContentType(
+			mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _)
+		)) = content_type {
 			true
 		} else {
 			false
@@ -104,33 +129,33 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandler<M, S> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Validate host
-		if let Some(ref allowed_hosts) = self.allowed_hosts {
-			if !is_host_header_valid(&request, allowed_hosts) {
-				self.response = Response::host_not_allowed();
-				return Next::write();
-			}
+		if !hosts::is_host_valid(Self::get_header(&request, "host"), &self.allowed_hosts) {
+			self.response = Response::host_not_allowed();
+			return Next::write();
 		}
 
 		// Read origin
-		self.request.origin = cors::read_origin(&request);
+		self.request.cors_header = Self::cors_header(Self::get_header(&request, "origin"), &self.cors_domains);
+		// Read metadata
 		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
 
 		match *request.method() {
+			// Validate the ContentType header
+			// to prevent Cross-Origin XHRs with text/plain
+			Method::Post if Self::is_json(request.headers().get::<header::ContentType>()) => {
+				Next::read()
+			},
+			// Just return error for unsupported content type
+			Method::Post => {
+				self.response = Response::unsupported_content_type();
+				Next::write()
+			},
 			// Don't validate content type on options
 			Method::Options => {
 				self.response = Response::empty();
 				Next::write()
 			},
-			// Validate the ContentType header
-			// to prevent Cross-Origin XHRs with text/plain
-			Method::Post if self.is_json(request.headers().get::<ContentType>()) => {
-				Next::read()
-			},
-			Method::Post => {
-				// Just return error
-				self.response = Response::unsupported_content_type();
-				Next::write()
-			},
+			// Disallow other methods.
 			_ => {
 				self.response = Response::method_not_allowed();
 				Next::write()
@@ -142,26 +167,30 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
 		match decoder.read_to_string(&mut self.request.content) {
 			Ok(0) => {
-				let control = self.control.clone();
-				let sender = self.waiting_sender.clone();
 				let metadata = self.metadata.take().unwrap_or_default();
+				let future = self.jsonrpc_handler.handler.handle_request(&self.request.content, metadata);
 
-				self.jsonrpc_handler.handle_request(&self.request.content, metadata, move |response| {
-					let response = match response {
-						None => Response::ok(String::new()),
-						// Add new line to have nice output when using CLI clients (curl)
-						Some(result) => Response::ok(format!("{}\n", result)),
-					};
+				let sender = self.waiting_sender.clone();
+				let control = self.control.clone();
 
-					let result = sender.send(response)
-						.map_err(|e| format!("{:?}", e))
-						.and_then(|_| {
-							control.ready(Next::write()).map_err(|e| format!("{:?}", e))
-						});
+				self.jsonrpc_handler.remote.spawn(move |_| {
+					future.map(move |response| {
+						let response = match response {
+							None => Response::ok(String::new()),
+							// Add new line to have nice output when using CLI clients (curl)
+							Some(result) => Response::ok(format!("{}\n", result)),
+						};
 
-					if let Err(e) = result {
-						warn!("Error while resuming async call: {:?}", e);
-					}
+						let result = sender.send(response)
+							.map_err(|e| format!("{:?}", e))
+							.and_then(|_| {
+								control.ready(Next::write()).map_err(|e| format!("{:?}", e))
+							});
+
+						if let Err(e) = result {
+							warn!("Error while resuming async call: {:?}", e);
+						}
+					})
 				});
 
 				Next::wait()
@@ -185,7 +214,8 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 			self.response = output;
 		}
 
-		*response.headers_mut() = self.response_headers(&self.request.origin);
+		let cors_header = self.request.cors_header.take();
+		*response.headers_mut() = self.response_headers(cors_header);
 		response.set_status(self.response.code);
 		Next::write()
 	}

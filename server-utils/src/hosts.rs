@@ -2,8 +2,40 @@
 
 use std::ascii::AsciiExt;
 
+// TODO [ToDr] Pre-process hosts (so that they don't contain the path)
+
+/// Host type
+pub type Host = String;
+
+/// Specifies if domains should be validated.
+pub enum DomainsValidation<T> {
+	/// Allow only domains on the list.
+	AllowOnly(Vec<T>),
+	/// Disable domains validation completely.
+	Disabled,
+}
+
+impl<T> Into<Option<Vec<T>>> for DomainsValidation<T> {
+	fn into(self) -> Option<Vec<T>> {
+		use self::DomainsValidation::*;
+		match self {
+			AllowOnly(list) => Some(list),
+			Disabled => None,
+		}
+	}
+}
+
+impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
+	fn from(other: Option<Vec<T>>) -> Self {
+		match other {
+			Some(list) => DomainsValidation::AllowOnly(list),
+			None => DomainsValidation::Disabled,
+		}
+	}
+}
+
 /// Returns `true` when `Host` header is whitelisted in `allowed_hosts`.
-pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<String>>) -> bool {
+pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> bool {
 	match allowed_hosts.as_ref() {
 		None => true,
 		Some(ref allowed_hosts) => match host {
