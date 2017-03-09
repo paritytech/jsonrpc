@@ -43,5 +43,6 @@ mod tests;
 
 #[cfg(not(windows))] mod nix;
 #[cfg(not(windows))] mod stream_codec;
+#[cfg(not(windows))] mod uds;
 #[cfg(not(windows))] pub use nix::{Server, Error};
 
