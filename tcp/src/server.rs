@@ -1,16 +1,14 @@
 use std;
-use std::thread;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tokio_core::reactor::Core;
-use tokio_core::net::TcpListener;
-use tokio_core::io::Io;
 use tokio_service::Service as TokioService;
 
 use jsonrpc::{MetaIoHandler, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
+use server_utils::{reactor, tokio_core};
+use server_utils::tokio_core::io::Io;
 
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 use line_codec::LineCodec;
@@ -19,6 +17,7 @@ use service::Service;
 
 /// TCP server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+	remote: reactor::UnitializedRemote,
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	channels: Arc<SenderChannels>,
@@ -30,10 +29,17 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		T: Into<MetaIoHandler<M, S>>
 	{
 		ServerBuilder {
+			remote: reactor::UnitializedRemote::Unspawned,
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
 			channels: Default::default(),
 		}
+	}
+
+	/// Utilize existing event loop remote.
+	pub fn event_loop_remote(mut self, remote: tokio_core::reactor::Remote) -> Self {
+		self.remote = reactor::UnitializedRemote::Shared(remote);
+		self
 	}
 
 	/// Sets session meta extractor
@@ -48,16 +54,16 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		let rpc_handler = self.handler.clone();
 		let channels = self.channels.clone();
 		let address = addr.to_owned();
-		let (tx, rx) = std::sync::mpsc::sync_channel(1);
+		let (tx, rx) = std::sync::mpsc::channel();
 		let (signal, stop) = oneshot::channel();
 
-		let handle = thread::spawn(move || {
-			let start = move || {
-				let core = Core::new()?;
-				let handle = core.handle();
+		let remote = self.remote.initialize()?;
 
-				let listener = TcpListener::bind(&address, &handle)?;
+		remote.remote().spawn(move |handle| {
+			let start = move || {
+				let listener = tokio_core::net::TcpListener::bind(&address, handle)?;
 				let connections = listener.incoming();
+				let remote = handle.remote().clone();
 				let server = connections.for_each(move |(socket, peer_addr)| {
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
 					let (sender, receiver) = mpsc::channel(65536);
@@ -100,33 +106,37 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					};
 
 					let shared_channels = channels.clone();
-					let server = writer.send_all(peer_message_queue).then(move |_| {
+					let writer = writer.send_all(peer_message_queue).then(move |_| {
 						trace!(target: "tcp", "Peer {}: service finished", peer_addr);
 						let mut channels = shared_channels.lock();
 						channels.remove(&peer_addr);
 						Ok(())
 					});
 
-					handle.spawn(server);
+					remote.spawn(|_| writer);
 
 					Ok(())
 				});
 
-				Ok((core, server))
+				Ok(server)
 			};
 
+			let stop = stop.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			match start() {
-				Ok((mut core, server)) => {
+				Ok(server) => {
 					tx.send(Ok(())).unwrap();
-
-					match core.run(server.select(stop.map_err(|_| std::io::ErrorKind::Interrupted.into()))) {
-						Ok(_) => Ok(()),
-						Err((e, _)) => Err(e),
-					}
+					future::Either::A(server.select(stop)
+						.map(|_| ())
+						.map_err(|(e, _)| {
+							error!("Error while executing the server: {:?}", e);
+						}))
 				},
 				Err(e) => {
 					tx.send(Err(e)).unwrap();
-					Ok(())
+					future::Either::B(stop
+						.map_err(|e| {
+							error!("Error while executing the server: {:?}", e);
+						}))
 				},
 			}
 		});
@@ -134,7 +144,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		let res = rx.recv().unwrap();
 
 		res.map(|_| Server {
-			handle: Some(handle),
+			remote: Some(remote),
 			stop: Some(signal),
 		})
 	}
@@ -147,25 +157,26 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 /// TCP Server handle
 pub struct Server {
-	handle: Option<thread::JoinHandle<std::io::Result<()>>>,
+	remote: Option<reactor::Remote>,
 	stop: Option<oneshot::Sender<()>>,
 }
 
 impl Server {
 	/// Closes the server (waits for finish)
-	pub fn close(mut self) -> std::io::Result<()> {
+	pub fn close(mut self) {
 		self.stop.take().unwrap().complete(());
-		self.wait()
+		self.remote.take().unwrap().close();
 	}
 
 	/// Wait for the server to finish
-	pub fn wait(mut self) -> std::io::Result<()> {
-		self.handle.take().unwrap().join().unwrap()
+	pub fn wait(mut self) {
+		self.remote.take().unwrap().wait();
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
 		self.stop.take().map(|stop| stop.complete(()));
+		self.remote.take().map(|remote| remote.close());
 	}
 }

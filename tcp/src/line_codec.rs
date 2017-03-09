@@ -1,5 +1,5 @@
 use std::{io, str};
-use tokio_core::io::{Codec, EasyBuf};
+use server_utils::tokio_core::io::{Codec, EasyBuf};
 
 pub struct LineCodec;
 
@@ -32,7 +32,7 @@ impl Codec for LineCodec {
 mod tests {
 
 	use super::LineCodec;
-	use tokio_core::io::{Codec, EasyBuf};
+	use server_utils::tokio_core::io::{Codec, EasyBuf};
 
 	#[test]
 	fn simple_encode() {

@@ -17,18 +17,17 @@
 //!			.start(&"0.0.0.0:0".parse().unwrap())
 //!			.expect("Server must start with no issues.");
 //!
-//!		server.wait().unwrap();
+//!		server.wait();
 //! }
 //! ```
 
 #![warn(missing_docs)]
 
 extern crate jsonrpc_core as jsonrpc;
+extern crate jsonrpc_server_utils as server_utils;
 extern crate parking_lot;
 extern crate rand;
 extern crate serde_json;
-extern crate tokio_core;
-extern crate tokio_proto;
 extern crate tokio_service;
 
 #[macro_use] extern crate log;

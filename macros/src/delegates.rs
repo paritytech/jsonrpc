@@ -110,6 +110,10 @@ impl<T, M> IoDelegate<T, M> where
 		}
 	}
 
+	pub fn add_alias(&mut self, from: &str, to: &str) {
+		self.methods.insert(from.into(), RemoteProcedure::Alias(to.into()));
+	}
+
 	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: Fn(&T, Params) -> Data,
 		F: Send + Sync + 'static,
