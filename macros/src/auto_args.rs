@@ -4,14 +4,12 @@
 
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
-use jsonrpc_core::{self, Error, Params, Value, Metadata};
+use jsonrpc_core::{Error, Params, Value, Metadata};
 use jsonrpc_core::futures::{self, BoxFuture, Future};
+use jsonrpc_pubsub::{PubSubMetadata, Subscriber};
+use pubsub;
 use serde::{Serialize, Deserialize};
-use util::{invalid_params, expect_no_params};
-
-fn to_value<T>(value: T) -> Value where T: Serialize {
-	jsonrpc_core::to_value(value).expect("Expected always-serializable type.")
-}
+use util::{invalid_params, expect_no_params, to_value};
 
 /// Auto-generates an RPC trait from trait definition.
 ///
@@ -19,7 +17,7 @@ fn to_value<T>(value: T) -> Value where T: Serialize {
 /// function `to_delegate` which will automatically wrap each strongly-typed
 /// function in a wrapper which handles parameter and output type serialization.
 ///
-/// RPC functions may come in a couple forms: async and synchronous.
+/// RPC functions may come in a couple forms: synchronous, async and async with metadata.
 /// These are parsed with the custom `#[rpc]` attribute, which must follow
 /// documentation.
 ///
@@ -28,6 +26,7 @@ fn to_value<T>(value: T) -> Value where T: Serialize {
 /// Valid forms:
 ///  - `#[rpc(name = "name_here")]` (a synchronous rpc function which should be bound to the given name)
 ///  - `#[rpc(async, name = "name_here")]` (an async rpc function which should be bound to the given name)
+///  - `#[rpc(meta, name = "name_here")]` (an async rpc function with metadata which should be bound to the given name)
 ///
 /// Synchronous function format:
 /// `fn foo(&self, Param1, Param2, Param3) -> Result<Out, Error>`.
@@ -35,7 +34,41 @@ fn to_value<T>(value: T) -> Value where T: Serialize {
 /// Asynchronous RPC functions must come in this form:
 /// `fn foo(&self, Param1, Param2, Param3) -> BoxFuture<Out, Error>;
 ///
+/// Asynchronous RPC functions with metadata must come in this form:
+/// `fn foo(&self, Self::Metadata, Param1, Param2, Param3) -> BoxFuture<Out, Error>;
+///
 /// Anything else will be rejected by the code generator.
+///
+/// ## The #[pubsub] attribute
+///
+/// Valid form:
+/// ```rust,ignore
+///	#[pubsub(name = "hello")] {
+///	  #[rpc(name = "hello_subscribe")]
+///	  fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
+///	  #[rpc(name = "hello_unsubscribe")]
+///	  fn unsubscribe(&self, SubscriptionId) -> BoxFuture<bool, Error>;
+///	}
+///	```
+///
+/// The attribute is used to create a new pair of subscription methods
+/// (if underlying transport supports that.)
+
+
+#[macro_export]
+macro_rules! metadata {
+	() => {
+		/// Requests metadata
+		type Metadata: ::jsonrpc_core::Metadata;
+	};
+	(
+		$( $sub_name: ident )+
+	) => {
+		/// Requests metadata
+		type Metadata: ::jsonrpc_pubsub::PubSubMetadata;
+	};
+}
+
 #[macro_export]
 macro_rules! build_rpc_trait {
 	// entry-point. todo: make another for traits w/ bounds.
@@ -76,21 +109,43 @@ macro_rules! build_rpc_trait {
 		$(#[$t_attr: meta])*
 		pub trait $name: ident {
 			type Metadata;
+
 			$(
-				$( #[doc=$m_doc:expr] )*
+				$( #[ doc=$m_doc:expr ] )*
 				#[ rpc( $($t:tt)* ) ]
 				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, Error>;
 			)*
+
+			$(
+				#[ pubsub( $($pubsub_t:tt)+ ) ] {
+					$( #[ doc= $sub_doc:expr ] )*
+					#[ rpc( $($sub_t:tt)* ) ]
+					fn $sub_name: ident ( $($sub_p: tt)* );
+					$( #[ doc= $unsub_doc:expr ] )*
+					#[ rpc( $($unsub_t:tt)* ) ]
+					fn $unsub_name: ident ( $($unsub_p: tt)* ) -> $sub_result: tt <$sub_out: ty, Error>;
+				}
+			)*
+
 		}
 	) => {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
-			/// Requests metadata
-			type Metadata: ::jsonrpc_core::Metadata;
+			// Metadata bound differs for traits with subscription methods.
+			metadata! (
+				$( $sub_name )*
+			);
 
 			$(
 				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result<$out, Error> ;
+				fn $m_name ( $($p)* ) -> $result <$out, Error>;
+			)*
+
+			$(
+				$(#[doc=$sub_doc])*
+				fn $sub_name ( $($sub_p)* );
+				$(#[doc=$unsub_doc])*
+				fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out, Error>;
 			)*
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
@@ -101,6 +156,15 @@ macro_rules! build_rpc_trait {
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
 						fn $m_name ( $($p)* ) -> $result <$out, Error>
+					);
+				)*
+				$(
+					build_rpc_trait!(WRAP del =>
+						pubsub: ( $($pubsub_t)* )
+						subscribe: ( $($sub_t)* )
+						fn $sub_name ( $($sub_p)* );
+						unsubscribe: ( $($unsub_t)* )
+						fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out, Error>;
 					);
 				)*
 				del
@@ -149,6 +213,41 @@ macro_rules! build_rpc_trait {
 			)+
 		)*
 	};
+
+	( WRAP $del: expr =>
+		pubsub: (name = $name: expr)
+		subscribe: (name = $subscribe: expr $(, alias = [ $( $sub_alias: expr, )+ ])*)
+		fn $sub_method: ident (&self, Self::Metadata $(, $sub_p: ty)+);
+		unsubscribe: (name = $unsubscribe: expr $(, alias = [ $( $unsub_alias: expr, )+ ])*)
+		fn $unsub_method: ident (&self $(, $unsub_p: ty)+) -> $result: tt <$out: ty, Error>;
+	) => {
+		$del.add_subscription(
+			$name,
+			($subscribe, move |base, params, meta, subscriber| {
+				$crate::WrapSubscribe::wrap_rpc(
+					&(Self::$sub_method as fn(&_, Self::Metadata $(, $sub_p)*)),
+					base,
+					params,
+					meta,
+					subscriber,
+				)
+			}),
+			($unsubscribe, move |base, id| {
+				Self::$unsub_method(base, id).map($crate::to_value).boxed()
+			}),
+		);
+
+		$(
+			$(
+				$del.add_alias($subscribe, $sub_alias);
+			)*
+		)*
+		$(
+			$(
+				$del.add_alias($unsubscribe, $unsub_alias);
+			)*
+		)*
+	};
 }
 
 /// A wrapper type without an implementation of `Deserialize`
@@ -157,18 +256,23 @@ macro_rules! build_rpc_trait {
 pub struct Trailing<T: Default + Deserialize>(pub T);
 
 /// Wrapper trait for synchronous RPC functions.
-pub trait Wrap<B: Send + Sync + 'static> {
+pub trait Wrap<B> {
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error>;
 }
 
 /// Wrapper trait for asynchronous RPC functions.
-pub trait WrapAsync<B: Send + Sync + 'static> {
+pub trait WrapAsync<B> {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error>;
 }
 
 /// Wrapper trait for meta RPC functions.
-pub trait WrapMeta<B: Send + Sync + 'static, M: Metadata> {
+pub trait WrapMeta<B, M> {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error>;
+}
+
+/// Wrapper trait for subscribe RPC functions.
+pub trait WrapSubscribe<B, M> {
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber);
 }
 
 // special impl for no parameters.
@@ -204,6 +308,16 @@ impl<B, M, OUT> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, Error>
 	}
 }
 
+impl<B, M, OUT> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>)
+	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata
+{
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
+		match expect_no_params(params) {
+			Ok(()) => (self)(base, meta, pubsub::Subscriber::new(subscriber)),
+			Err(e) => subscriber.reject(e),
+		}
+	}
+}
 
 // creates a wrapper implementation which deserializes the parameters,
 // calls the function with concrete type, and serializes the output.
@@ -248,6 +362,21 @@ macro_rules! wrap {
 				match params.parse::<($($x,)+)>() {
 					Ok(($($x,)+)) => (self)(base, meta, $($x,)+).map(to_value).boxed(),
 					Err(e) => futures::failed(e).boxed(),
+				}
+			}
+		}
+
+		// subscribe implementation
+		impl <
+			BASE: Send + Sync + 'static,
+			META: PubSubMetadata,
+			OUT: Serialize,
+			$($x: Deserialize,)+
+		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+) {
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber){
+				match params.parse::<($($x,)+)>() {
+					Ok(($($x,)+)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), $($x,)+),
+					Err(e) => subscriber.reject(e),
 				}
 			}
 		}

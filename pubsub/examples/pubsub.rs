@@ -43,7 +43,7 @@ fn main() {
 			if params != Params::None {
 				subscriber.reject(Error {
 					code: ErrorCode::ParseError,
-					message: "Invalid paramters. Subscription rejected.".into(),
+					message: "Invalid parameters. Subscription rejected.".into(),
 					data: None,
 				});
 				return;

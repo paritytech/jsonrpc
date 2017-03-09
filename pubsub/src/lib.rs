@@ -12,6 +12,10 @@ mod handler;
 mod subscription;
 mod types;
 
+
 pub use self::handler::{PubSubHandler, SubscribeRpcMethod, UnsubscribeRpcMethod};
-pub use self::subscription::{Session, Sink, Subscriber};
+pub use self::subscription::{Session, Sink, Subscriber, new_subscription};
 pub use self::types::{PubSubMetadata, SubscriptionId};
+
+/// Subscription send result.
+pub type SinkResult = core::futures::sink::Send<types::TransportSender>;
