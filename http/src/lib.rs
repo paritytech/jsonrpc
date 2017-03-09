@@ -43,6 +43,7 @@ use parking_lot::Mutex;
 
 pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use jsonrpc_server_utils::cors::AccessControlAllowOrigin;
+pub use jsonrpc_server_utils::tokio_core;
 pub use handler::{PanicHandler, ServerHandler};
 
 /// Result of starting the Server.
