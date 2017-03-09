@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::thread;
 
 use core;
+use server_utils::cors::Origin;
 use ws;
 
 use metadata;
@@ -28,7 +29,7 @@ impl Server {
 		addr: &SocketAddr,
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
-		allowed_origins: Option<Vec<String>>,
+		allowed_origins: Option<Vec<Origin>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<session::SessionStats>>,
 	) -> Result<Server, ServerError> {
