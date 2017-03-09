@@ -12,6 +12,3 @@ documentation = "https://ethcore.github.io/jsonrpc/json_ws_server/index.html"
 log = "0.3"
 jsonrpc-core = { version = "6.0", path = "../core" }
 ws = { git = "https://github.com/tomusdrw/ws-rs" }
-
-[features]
-default = ["jsonrpc-core/reactor"]
