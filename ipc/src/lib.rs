@@ -44,3 +44,4 @@ mod tests;
 #[cfg(not(windows))] mod nix;
 #[cfg(not(windows))] pub use nix::{Server, Error};
 
+pub use self::jsonrpc_server_utils::tokio_core;

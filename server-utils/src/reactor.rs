@@ -103,11 +103,11 @@ impl RpcEventLoop {
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> thread::Result<()> {
-		self.handle.take().unwrap().join()
+		self.handle.take().expect("Handle is always set before self is consumed.").join()
 	}
 
 	/// Finishes this event loop.
 	pub fn close(mut self) {
-		self.close.take().unwrap().complete(())
+		self.close.take().expect("Close is always set before self is consumed.").complete(())
 	}
 }

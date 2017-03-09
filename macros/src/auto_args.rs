@@ -10,7 +10,7 @@ use serde::{Serialize, Deserialize};
 use util::{invalid_params, expect_no_params};
 
 fn to_value<T>(value: T) -> Value where T: Serialize {
-	jsonrpc_core::to_value(value).unwrap()
+	jsonrpc_core::to_value(value).expect("Expected always-serializable type.")
 }
 
 /// Auto-generates an RPC trait from trait definition.

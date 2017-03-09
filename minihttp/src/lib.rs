@@ -325,12 +325,12 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		self.close.take().map(|close| close.complete(()));
+		self.close.take().expect("Close is always set before self is consumed.").complete(());
 	}
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) -> thread::Result<()> {
-		self.handle.take().unwrap().join()
+		self.handle.take().expect("Handle is always set before set is consumed.").join()
 	}
 }
 

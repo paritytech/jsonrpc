@@ -82,8 +82,7 @@ impl Sink {
 			params: Some(val),
 		};
 
-		// TODO [ToDr] Unwraps
-		self.transport.clone().send(core::to_string(&notification).unwrap())
+		self.transport.clone().send(core::to_string(&notification).expect("Notification serialization never fails."))
 	}
 }
 
