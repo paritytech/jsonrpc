@@ -2,6 +2,8 @@
 
 use std::ascii::AsciiExt;
 
+const SPLIT_PROOF: &'static str = "split always returns non-empty iterator.";
+
 /// Host type
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct Host {
@@ -35,7 +37,7 @@ impl Host {
 	pub fn parse(hostname: &str) -> Self {
 		let hostname = Self::pre_process(hostname);
 		let mut hostname = hostname.split(':');
-		let host = hostname.next().unwrap();
+		let host = hostname.next().expect(SPLIT_PROOF);
 		let port = hostname.next().and_then(|port| port.parse().ok());
 
 		Host::new(host, port)
@@ -44,14 +46,14 @@ impl Host {
 	fn pre_process(host: &str) -> String {
 		// Remove possible protocol definition
 		let mut it = host.split("://");
-		let protocol = it.next().unwrap();
+		let protocol = it.next().expect(SPLIT_PROOF);
 		let host = match it.next() {
 			Some(data) => data,
 			None => protocol,
 		};
 
 		let mut it = host.split('/');
-		it.next().unwrap().to_lowercase()
+		it.next().expect(SPLIT_PROOF).to_lowercase()
 	}
 
 	fn to_string(hostname: &str, port: Option<u16>) -> String {

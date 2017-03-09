@@ -49,16 +49,16 @@ impl Origin {
 	/// NOTE: This method always succeeds and falls back to sensible defaults.
 	pub fn parse(data: &str) -> Self {
 		let mut it = data.split("://");
-		let mut proto = it.next();
-		let mut hostname = it.next();
+		let proto = it.next().expect("split always returns non-empty iterator.");
+		let hostname = it.next();
 
-		if hostname.is_none() {
-			hostname = proto;
-			proto = None;
-		}
+		let (proto, hostname) = match hostname {
+			None => (None, proto),
+			Some(hostname) => (Some(proto), hostname),
+		};
 
-		let proto = proto.map(|s| s.to_lowercase());
-		let hostname = Host::parse(hostname.unwrap());
+		let proto = proto.map(str::to_lowercase);
+		let hostname = Host::parse(hostname);
 
 		let protocol = match proto {
 			None => OriginProtocol::Http,
