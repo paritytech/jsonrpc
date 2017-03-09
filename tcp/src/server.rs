@@ -124,7 +124,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 			let stop = stop.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			match start() {
 				Ok(server) => {
-					tx.send(Ok(())).unwrap();
+					tx.send(Ok(())).expect("Rx is blocking parent thread.");
 					future::Either::A(server.select(stop)
 						.map(|_| ())
 						.map_err(|(e, _)| {
@@ -132,7 +132,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 						}))
 				},
 				Err(e) => {
-					tx.send(Err(e)).unwrap();
+					tx.send(Err(e)).expect("Rx is blocking parent thread.");
 					future::Either::B(stop
 						.map_err(|e| {
 							error!("Error while executing the server: {:?}", e);
@@ -141,7 +141,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 			}
 		});
 
-		let res = rx.recv().unwrap();
+		let res = rx.recv().expect("Response is always sent before tx is dropped.");
 
 		res.map(|_| Server {
 			remote: Some(remote),

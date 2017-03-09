@@ -4,6 +4,7 @@ use std::thread;
 
 use core;
 use server_utils::cors::Origin;
+use server_utils::reactor::{UnitializedRemote, Remote};
 use ws;
 
 use metadata;
@@ -14,6 +15,7 @@ use {ServerError};
 pub struct Server {
 	addr: SocketAddr,
 	handle: Option<thread::JoinHandle<Result<(), ServerError>>>,
+	remote: Option<Remote>,
 	broadcaster: ws::Sender,
 }
 
@@ -32,6 +34,7 @@ impl Server {
 		allowed_origins: Option<Vec<Origin>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<session::SessionStats>>,
+		remote: UnitializedRemote,
 	) -> Result<Server, ServerError> {
 		let config = {
 			let mut config = ws::Settings::default();
@@ -42,9 +45,14 @@ impl Server {
 			config
 		};
 
+
+		// Spawn event loop (if necessary)
+		let eloop = remote.initialize()?;
+		let remote = eloop.remote();
+
 		// Create WebSocket
 		let ws = ws::Builder::new().with_settings(config).build(
-			session::Factory::new(handler, meta_extractor, allowed_origins, request_middleware, stats)
+			session::Factory::new(handler, meta_extractor, allowed_origins, request_middleware, stats, remote)
 		)?;
 		let broadcaster = ws.broadcaster();
 
@@ -65,6 +73,7 @@ impl Server {
 		Ok(Server {
 			addr: addr.to_owned(),
 			handle: Some(handle),
+			remote: Some(eloop),
 			broadcaster: broadcaster,
 		})
 	}
@@ -73,18 +82,20 @@ impl Server {
 impl Server {
 	/// Consumes the server and waits for completion
 	pub fn wait(mut self) -> Result<(), ServerError> {
-		self.handle.take().unwrap().join().unwrap()
+		self.handle.take().expect("Handle is always Some at start.").join().expect("Non-panic exit")
 	}
 
 	/// Closes the server and waits for it to finish
-	pub fn close(self) {
+	pub fn close(mut self) {
 		let _ = self.broadcaster.shutdown();
+		self.remote.take().expect("Remote is always Some at start.").close();
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
 		let _ = self.broadcaster.shutdown();
+		self.remote.take().map(|remote| remote.close());
 		self.handle.take().map(|handle| handle.join());
 	}
 }
