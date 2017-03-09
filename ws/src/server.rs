@@ -81,13 +81,13 @@ impl Server {
 impl Server {
 	/// Consumes the server and waits for completion
 	pub fn wait(mut self) -> Result<(), ServerError> {
-		self.handle.take().unwrap().join().unwrap()
+		self.handle.take().expect("Handle is always Some at start.").join().expect("Non-panic exit")
 	}
 
 	/// Closes the server and waits for it to finish
 	pub fn close(mut self) {
 		let _ = self.broadcaster.shutdown();
-		self.remote.take().unwrap().close();
+		self.remote.take().expect("Remote is always Some at start.").close();
 	}
 }
 
