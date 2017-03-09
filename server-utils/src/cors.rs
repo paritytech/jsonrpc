@@ -2,11 +2,14 @@
 
 use std::ascii::AsciiExt;
 
+// TODO [ToDr] Pre-process origins (should only contain protocol, host and port)
+pub type Origin = String;
+
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessControlAllowOrigin {
 	/// Specific hostname
-	Value(String),
+	Value(Origin),
 	/// null-origin (file:///, sandboxed iframe)
 	Null,
 	/// Any non-null origin

@@ -21,30 +21,29 @@
 
 #[macro_use] extern crate log;
 extern crate unicase;
+extern crate parking_lot;
 extern crate jsonrpc_core as jsonrpc;
-extern crate tokio_core;
+extern crate jsonrpc_server_utils;
 
 pub extern crate hyper;
 
 pub mod request_response;
-pub mod cors;
 mod handler;
-mod hosts_validator;
 #[cfg(test)]
 mod tests;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
-use std::ops::Deref;
 use hyper::server;
 use jsonrpc::MetaIoHandler;
-use jsonrpc::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
+use jsonrpc_server_utils::reactor::{Remote, UnitializedRemote};
+use parking_lot::Mutex;
 
-pub use hyper::header::AccessControlAllowOrigin;
+pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
+pub use jsonrpc_server_utils::cors::AccessControlAllowOrigin;
 pub use handler::{PanicHandler, ServerHandler};
-pub use hosts_validator::is_host_header_valid;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, RpcServerError>;
@@ -73,30 +72,50 @@ impl From<hyper::error::Error> for RpcServerError {
 	}
 }
 
-/// Specifies if domains should be validated.
-pub enum DomainsValidation<T> {
-	/// Allow only domains on the list.
-	AllowOnly(Vec<T>),
-	/// Disable domains validation completely.
-	Disabled,
+/// Action undertaken by a middleware.
+pub enum RequestMiddlewareAction {
+	/// Proceed with standard RPC handling
+	Proceed,
+	/// Intercept the request and respond differently.
+	Respond {
+		/// Should standard hosts validation be performed?
+		should_validate_hosts: bool,
+		/// hyper handler used to process the request
+		handler: Box<hyper::server::Handler<hyper::net::HttpStream> + Send>,
+	}
 }
 
-impl<T> Into<Option<Vec<T>>> for DomainsValidation<T> {
-	fn into(self) -> Option<Vec<T>> {
-		use DomainsValidation::*;
-		match self {
-			AllowOnly(list) => Some(list),
-			Disabled => None,
+impl<T: hyper::server::Handler<hyper::net::HttpStream> + Send + 'static> From<Option<T>> for RequestMiddlewareAction {
+	fn from(o: Option<T>) -> Self {
+		match o {
+			None => RequestMiddlewareAction::Proceed,
+			Some(handler) => RequestMiddlewareAction::Respond {
+				should_validate_hosts: true,
+				handler: Box::new(handler),
+			},
 		}
 	}
 }
 
-impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
-	fn from(other: Option<Vec<T>>) -> Self {
-		match other {
-			Some(list) => DomainsValidation::AllowOnly(list),
-			None => DomainsValidation::Disabled,
-		}
+/// Allows to intercept request and handle it differently.
+pub trait RequestMiddleware: Send + Sync + 'static {
+	/// Takes a request and decides how to proceed with it.
+	fn on_request(&self, request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction;
+}
+
+impl<F> RequestMiddleware for F where
+	F: Fn(&server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction + Sync + Send + 'static,
+{
+	fn on_request(&self, request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
+		(*self)(request)
+	}
+}
+
+#[derive(Default)]
+struct NoopRequestMiddleware;
+impl RequestMiddleware for NoopRequestMiddleware {
+	fn on_request(&self, _request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
+		RequestMiddlewareAction::Proceed
 	}
 }
 
@@ -124,7 +143,9 @@ impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
 /// RPC Handler bundled with metadata extractor.
 pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	/// RPC Handler
-	pub handler: RpcHandler<M, S>,
+	pub handler: Arc<MetaIoHandler<M, S>>,
+	/// Remote
+	pub remote: jsonrpc_server_utils::tokio_core::reactor::Remote,
 	/// Metadata extractor
 	pub extractor: Arc<HttpMetaExtractor<M>>,
 }
@@ -133,49 +154,21 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 	fn clone(&self) -> Self {
 		Rpc {
 			handler: self.handler.clone(),
+			remote: self.remote.clone(),
 			extractor: self.extractor.clone(),
 		}
 	}
 }
 
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Rpc<M, S> {
-	/// Creates new RPC with extractor
-	pub fn new(handler: RpcHandler<M, S>, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
-		Rpc {
-			handler: handler,
-			extractor: extractor,
-		}
-	}
-}
-
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> From<RpcHandler<M, S>> for Rpc<M, S> {
-	fn from(handler: RpcHandler<M, S>) -> Self {
-		Rpc {
-			handler: handler,
-			extractor: Arc::new(NoopExtractor),
-		}
-	}
-}
-
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Deref for Rpc<M, S> {
-	type Target = RpcHandler<M, S>;
-
-	fn deref(&self) -> &Self::Target {
-		&self.handler
-	}
-}
-
-enum Handler<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
-	Simple(MetaIoHandler<M, S>),
-	WithLoop(RpcHandler<M, S>),
-}
 
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
-	jsonrpc_handler: Handler<M, S>,
+	handler: MetaIoHandler<M, S>,
+	remote: UnitializedRemote,
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
+	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
-	allowed_hosts: Option<Vec<String>>,
+	allowed_hosts: Option<Vec<Host>>,
 	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
@@ -192,27 +185,20 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		T: Into<MetaIoHandler<M, S>>
 	{
 		ServerBuilder {
-			jsonrpc_handler: Handler::Simple(handler.into()),
+			handler: handler.into(),
+			remote: UnitializedRemote::Unspawned,
 			meta_extractor: Arc::new(NoopExtractor::default()),
+			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			allowed_hosts: None,
 			panic_handler: None,
 		}
 	}
 
-	/// Creates new `ServerBuilder` given access to the event loop `Remote`.
-	///
-	/// By default:
-	/// 1. Server is not sending any CORS headers.
-	/// 2. Server is validating `Host` header.
-	pub fn with_rpc_handler(handler: RpcHandler<M, S>) -> Self {
-		ServerBuilder {
-			jsonrpc_handler: Handler::WithLoop(handler),
-			meta_extractor: Arc::new(NoopExtractor::default()),
-			cors_domains: None,
-			allowed_hosts: None,
-			panic_handler: None,
-		}
+	/// Utilize existing event loop remote to poll RPC results.
+	pub fn event_loop_remote(mut self, remote: jsonrpc_server_utils::tokio_core::reactor::Remote) -> Self {
+		self.remote = UnitializedRemote::Shared(remote);
+		self
 	}
 
 	/// Sets handler invoked in case of server panic.
@@ -224,6 +210,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Configures a list of allowed CORS origins.
 	pub fn cors(mut self, cors_domains: DomainsValidation<AccessControlAllowOrigin>) -> Self {
 		self.cors_domains = cors_domains.into();
+		self
+	}
+
+	/// Configures request middleware
+	pub fn request_middleware<T: RequestMiddleware>(mut self, middleware: T) -> Self {
+		self.request_middleware = Arc::new(middleware);
 		self
 	}
 
@@ -240,42 +232,44 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Specify a list of valid `Host` headers. Binding address is allowed automatically.
-	pub fn allowed_hosts(mut self, allowed_hosts: DomainsValidation<String>) -> Self {
+	pub fn allowed_hosts(mut self, allowed_hosts: DomainsValidation<Host>) -> Self {
 		self.allowed_hosts = allowed_hosts.into();
 		self
 	}
 
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
-		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let cors_domains = self.cors_domains;
+		let request_middleware = self.request_middleware;
+		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
 
-		let (handler, event_loop) = match self.jsonrpc_handler {
-			Handler::WithLoop(handler) => (handler, None),
-			Handler::Simple(io_handler) => {
-				let event_loop = RpcEventLoop::spawn();
-				(event_loop.handler(Arc::new(io_handler)), Some(event_loop.into()))
-			},
-		};
-
+		let eloop = self.remote.initialize()?;
 		let jsonrpc_handler = Rpc {
-			handler: handler,
+			handler: Arc::new(self.handler),
+			remote: eloop.remote(),
 			extractor: self.meta_extractor,
 		};
 
-		let (l, srv) = try!(try!(hyper::Server::http(addr)).handle(move |control| {
+		let (l, srv) = hyper::Server::http(addr)?.handle(move |control| {
 			let handler = PanicHandler { handler: panic_for_server.clone() };
-			let hosts = hosts.lock().unwrap().clone();
-			ServerHandler::new(jsonrpc_handler.clone(), cors_domains.clone(), hosts, handler, control)
-		}));
+			let hosts = hosts.lock().clone();
+			ServerHandler::new(
+				jsonrpc_handler.clone(),
+				cors_domains.clone(),
+				hosts,
+				request_middleware.clone(),
+				handler,
+				control,
+			)
+		})?;
 
 		// Add current host to allowed headers.
 		// NOTE: we need to use `l.addrs()` instead of `addr`
 		// it might be different!
 		{
-			let mut hosts = hosts_setter.lock().unwrap();
+			let mut hosts = hosts_setter.lock();
 			if let Some(current_hosts) = hosts.take() {
 				let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
 				for addr in l.addrs() {
@@ -295,7 +289,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		Ok(Server {
 			server: Some(l),
 			handle: Some(handle),
-			event_loop: event_loop,
+			remote: Some(eloop),
 		})
 	}
 }
@@ -304,7 +298,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 pub struct Server {
 	server: Option<server::Listening>,
 	handle: Option<thread::JoinHandle<()>>,
-	event_loop: Option<RpcEventLoopHandle>,
+	remote: Option<Remote>,
 }
 
 impl Server {
@@ -315,8 +309,8 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
+		self.remote.take().unwrap().close();
 		self.server.take().unwrap().close();
-		self.event_loop.take().map(|v| v.close());
 	}
 
 	/// Will block, waiting for the server to finish.
@@ -327,7 +321,7 @@ impl Server {
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.server.take().unwrap().close();
-		self.event_loop.take().map(|v| v.close());
+		self.remote.take().map(|remote| remote.close());
+		self.server.take().map(|server| server.close());
 	}
 }

@@ -1,8 +1,8 @@
 extern crate jsonrpc_core;
-extern crate jsonrpc_tcp_server;
+extern crate jsonrpc_ws_server;
 
 use jsonrpc_core::*;
-use jsonrpc_tcp_server::*;
+use jsonrpc_ws_server::*;
 
 fn main() {
 	let mut io = IoHandler::default();
@@ -15,6 +15,5 @@ fn main() {
 		.start(&"0.0.0.0:3030".parse().unwrap())
 		.expect("Server must start with no issues");
 
-	server.wait()
+	server.wait().unwrap()
 }
-

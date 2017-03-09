@@ -15,6 +15,7 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 extern crate jsonrpc_core;
+extern crate jsonrpc_server_utils;
 extern crate rand;
 
 #[macro_use] extern crate log;

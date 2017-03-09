@@ -7,14 +7,14 @@ use self::reqwest::{StatusCode, Method};
 use self::reqwest::header::{self, Headers};
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 use self::jsonrpc_core::futures::{self, Future};
-use super::{ServerBuilder, Server, cors, DomainsValidation};
+use super::{ServerBuilder, Server, cors, hosts};
 
 fn serve_hosts(hosts: Vec<String>) -> Server {
 	let _ = env_logger::init();
 
 	ServerBuilder::new(IoHandler::default())
-		.cors(DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Value("http://parity.io".into())]))
-		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
+		.cors(hosts::DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Value("http://parity.io".into())]))
+		.allowed_hosts(hosts::DomainsValidation::AllowOnly(hosts))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
 }
@@ -38,7 +38,7 @@ fn serve() -> Server {
 	});
 
 	ServerBuilder::new(io)
-		.cors(DomainsValidation::AllowOnly(vec![
+		.cors(hosts::DomainsValidation::AllowOnly(vec![
 			cors::AccessControlAllowOrigin::Value("http://parity.io".into()),
 			cors::AccessControlAllowOrigin::Null,
 		]))
@@ -85,6 +85,22 @@ fn should_return_method_not_allowed_for_get() {
 	// then
 	assert_eq!(response.status, StatusCode::MethodNotAllowed);
 	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required.\n".to_owned());
+}
+
+#[test]
+fn should_ignore_media_type_if_options() {
+	// given
+	let server = serve();
+
+	// when
+	let response = request(server,
+		Method::Options,
+		Headers::new(),
+		"{}",
+	);
+
+	// then
+	assert_eq!(response.status, StatusCode::Ok);
 }
 
 #[test]
