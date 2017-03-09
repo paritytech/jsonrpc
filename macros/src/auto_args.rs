@@ -131,6 +131,7 @@ macro_rules! build_rpc_trait {
 	) => {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
+			// Metadata bound differs for traits with subscription methods.
 			metadata! (
 				$( $sub_name )*
 			);
