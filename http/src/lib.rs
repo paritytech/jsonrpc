@@ -43,6 +43,7 @@ use parking_lot::Mutex;
 
 pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use jsonrpc_server_utils::cors::AccessControlAllowOrigin;
+pub use jsonrpc_server_utils::tokio_core;
 pub use handler::{PanicHandler, ServerHandler};
 
 /// Result of starting the Server.
@@ -301,21 +302,22 @@ pub struct Server {
 	remote: Option<Remote>,
 }
 
+const PROOF: &'static str = "Server is always Some until self is consumed.";
 impl Server {
 	/// Returns addresses of this server
 	pub fn addrs(&self) -> &[SocketAddr] {
-		self.server.as_ref().unwrap().addrs()
+		self.server.as_ref().expect(PROOF).addrs()
 	}
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		self.remote.take().unwrap().close();
-		self.server.take().unwrap().close();
+		self.remote.take().expect(PROOF).close();
+		self.server.take().expect(PROOF).close();
 	}
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) -> thread::Result<()> {
-		self.handle.take().unwrap().join()
+		self.handle.take().expect(PROOF).join()
 	}
 }
 
