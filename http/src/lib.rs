@@ -275,8 +275,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
 				for addr in l.addrs() {
 					let address = addr.to_string();
-					new_hosts.insert(address.clone());
-					new_hosts.insert(address.replace("127.0.0.1", "localhost"));
+					new_hosts.insert(address.clone().into());
+					new_hosts.insert(address.replace("127.0.0.1", "localhost").into());
 				}
 				// Override hosts
 				*hosts = Some(new_hosts.into_iter().collect());

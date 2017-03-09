@@ -1,9 +1,94 @@
 //! CORS handling utility functions
 
 use std::ascii::AsciiExt;
+use hosts::Host;
 
-// TODO [ToDr] Pre-process origins (should only contain protocol, host and port)
-pub type Origin = String;
+/// Origin Protocol
+#[derive(Clone, Hash, Debug, PartialEq, Eq)]
+pub enum OriginProtocol {
+	/// Http protocol
+	Http,
+	/// Https protocol
+	Https,
+	/// Custom protocol
+	Custom(String),
+}
+
+/// Request Origin
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Origin {
+	protocol: OriginProtocol,
+	host: Host,
+	as_string: String,
+}
+
+impl<T: AsRef<str>> From<T> for Origin {
+	fn from(string: T) -> Self {
+		Origin::parse(string.as_ref())
+	}
+}
+
+impl Origin {
+	fn with_host(protocol: OriginProtocol, host: Host) -> Self {
+		let string = Self::to_string(&protocol, &host);
+
+		Origin {
+			protocol: protocol,
+			host: host,
+			as_string: string,
+		}
+	}
+
+	/// Creates new origin given protocol, hostname and port parts.
+	/// Pre-processes input data if necessary.
+	pub fn new(protocol: OriginProtocol, host: &str, port: Option<u16>) -> Self {
+		Self::with_host(protocol, Host::new(host, port))
+	}
+
+	/// Attempts to parse given string as a `Origin`.
+	/// NOTE: This method always succeeds and falls back to sensible defaults.
+	pub fn parse(data: &str) -> Self {
+		let mut it = data.split("://");
+		let proto = it.next().expect("split always returns non-empty iterator.");
+		let hostname = it.next();
+
+		let (proto, hostname) = match hostname {
+			None => (None, proto),
+			Some(hostname) => (Some(proto), hostname),
+		};
+
+		let proto = proto.map(str::to_lowercase);
+		let hostname = Host::parse(hostname);
+
+		let protocol = match proto {
+			None => OriginProtocol::Http,
+			Some(ref p) if p == "http" => OriginProtocol::Http,
+			Some(ref p) if p == "https" => OriginProtocol::Https,
+			Some(other) => OriginProtocol::Custom(other),
+		};
+
+		Origin::with_host(protocol, hostname)
+	}
+
+	fn to_string(protocol: &OriginProtocol, host: &Host) -> String {
+		format!(
+			"{}://{}",
+			match *protocol {
+				OriginProtocol::Http => "http",
+				OriginProtocol::Https => "https",
+				OriginProtocol::Custom(ref protocol) => protocol,
+			},
+			&**host,
+		)
+	}
+}
+
+impl ::std::ops::Deref for Origin {
+	type Target = str;
+	fn deref(&self) -> &Self::Target {
+		&self.as_string
+	}
+}
 
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,7 +119,7 @@ pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlA
 					}
 				}).map(|cors| {
 					match *cors {
-						AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value((*origin).to_owned()),
+						AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(Origin::parse(origin)),
 						ref cors => cors.clone(),
 					}
 				})
@@ -46,7 +131,18 @@ pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlA
 
 #[cfg(test)]
 mod tests {
-	use super::{get_cors_header, AccessControlAllowOrigin};
+	use super::{get_cors_header, AccessControlAllowOrigin, Origin, OriginProtocol};
+
+	#[test]
+	fn should_parse_origin() {
+		use self::OriginProtocol::*;
+
+		assert_eq!(Origin::parse("http://parity.io"), Origin::new(Http, "parity.io", None));
+		assert_eq!(Origin::parse("https://parity.io:8443"), Origin::new(Https, "parity.io", Some(8443)));
+		assert_eq!(Origin::parse("chrome-extension://124.0.0.1"), Origin::new(Custom("chrome-extension".into()), "124.0.0.1", None));
+		assert_eq!(Origin::parse("parity.io/somepath"), Origin::new(Http, "parity.io", None));
+		assert_eq!(Origin::parse("127.0.0.1:8545/somepath"), Origin::new(Http, "127.0.0.1", Some(8545)));
+	}
 
 	#[test]
 	fn should_return_none_when_there_are_no_cors_domains() {

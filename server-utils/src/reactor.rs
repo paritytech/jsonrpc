@@ -9,7 +9,9 @@ use core::futures::{self, Future};
 
 /// Possibly uninitialized event loop remote.
 pub enum UnitializedRemote {
+	/// Shared instance of remote.
 	Shared(tokio_core::reactor::Remote),
+	/// Event Loop should be spawned by the transport.
 	Unspawned,
 }
 

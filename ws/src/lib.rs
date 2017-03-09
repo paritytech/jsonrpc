@@ -19,5 +19,7 @@ pub use self::metadata::{RequestContext, MetaExtractor, NoopExtractor};
 pub use self::server::Server;
 pub use self::session::{SessionStats, SessionId, RequestMiddleware, MiddlewareAction};
 pub use self::server_builder::{ServerBuilder, ServerError};
+pub use self::server_utils::cors::Origin;
+pub use self::server_utils::hosts::DomainsValidation;
 pub use self::server_utils::tokio_core;
 

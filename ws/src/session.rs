@@ -1,8 +1,10 @@
 use std;
+use std::ascii::AsciiExt;
 use std::sync::Arc;
 
 use core;
 use core::futures::Future;
+use server_utils::cors::Origin;
 use server_utils::tokio_core::reactor::Remote;
 use ws;
 
@@ -66,7 +68,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	context: metadata::RequestContext,
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
-	allowed_origins: Option<Vec<String>>,
+	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
@@ -142,7 +144,7 @@ pub struct Factory<M: core::Metadata, S: core::Middleware<M>> {
 	session_id: SessionId,
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
-	allowed_origins: Option<Vec<String>>,
+	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
 	remote: Remote,
@@ -152,7 +154,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	pub fn new(
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
-		allowed_origins: Option<Vec<String>>,
+		allowed_origins: Option<Vec<Origin>>,
 		request_middleware: Option<Arc<RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
 		remote: Remote,
@@ -192,7 +194,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 	}
 }
 
-fn origin_is_allowed(allowed_origins: &Option<Vec<String>>, header: Option<&[u8]>) -> bool {
+fn origin_is_allowed(allowed_origins: &Option<Vec<Origin>>, header: Option<&[u8]>) -> bool {
 	let header = header.map(std::str::from_utf8);
 
 	match (header, allowed_origins.as_ref()) {
@@ -203,7 +205,7 @@ fn origin_is_allowed(allowed_origins: &Option<Vec<String>>, header: Option<&[u8]
 		// Validate Origin
 		(Some(Ok(origin)), Some(origins)) => {
 			for o in origins {
-				if o == origin {
+				if origin.eq_ignore_ascii_case(&o) {
 					return true
 				}
 			}

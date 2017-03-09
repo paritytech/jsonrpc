@@ -4,6 +4,8 @@ use std::sync::Arc;
 
 use core;
 use server_utils;
+use server_utils::cors::Origin;
+use server_utils::hosts::DomainsValidation;
 use server_utils::reactor::UnitializedRemote;
 use ws;
 
@@ -39,7 +41,7 @@ impl From<io::Error> for ServerError {
 pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
-	allowed_origins: Option<Vec<String>>,
+	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
 	session_stats: Option<Arc<session::SessionStats>>,
 	remote: UnitializedRemote,
@@ -73,8 +75,8 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Allowed origins.
-	pub fn allowed_origins(mut self, allowed_origins: Option<Vec<String>>) -> Self {
-		self.allowed_origins = allowed_origins;
+	pub fn allowed_origins(mut self, allowed_origins: DomainsValidation<Origin>) -> Self {
+		self.allowed_origins = allowed_origins.into();
 		self
 	}
 

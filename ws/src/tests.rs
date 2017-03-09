@@ -4,6 +4,7 @@ use std::io::{Read, Write};
 
 use core;
 use core::futures::Future;
+use server_utils::hosts::DomainsValidation;
 use ws;
 
 use server::Server;
@@ -63,7 +64,7 @@ fn serve(port: u16) -> Server {
 	});
 
 	ServerBuilder::new(io)
-		.allowed_origins(Some(vec!["https://parity.io".into()]))
+		.allowed_origins(DomainsValidation::AllowOnly(vec!["https://parity.io".into()]))
 		.request_middleware(|req: &ws::Request| {
 			if req.resource() == "/intercepted" {
 				let mut res = ws::Response::new(200, "OK");
