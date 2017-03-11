@@ -6,17 +6,17 @@ pub extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
 
 use std;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use self::tokio_service::Service as TokioService;
 use self::jsonrpc::futures::{future, Future, Stream, Sink};
-use self::jsonrpc::futures::sync::{mpsc, oneshot};
+use self::jsonrpc::futures::sync::oneshot;
 use self::jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use self::jsonrpc::futures::BoxFuture;
 use self::server_utils::tokio_core::io::Io;
-use self::server_utils::{reactor, tokio_core};
+use self::server_utils::reactor;
 
-use meta::{MetaExtractor, NoopExtractor};
+use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
@@ -74,7 +74,6 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 
 	/// Run server (in separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
-		use self::tokio_uds::UnixListener;
 
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler.clone();		
@@ -84,6 +83,7 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 		let (start_signal, start_receiver) = oneshot::channel();
 
 		remote.remote().spawn(move |handle| {
+			use self::tokio_uds::UnixListener;
 			use stream_codec::StreamCodec;
 
 			let listener = match UnixListener::bind(&endpoint_addr, handle) {
@@ -103,7 +103,7 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 				trace!("Accepted incoming UDS connection: {:?}", client_addr);
 
 				// TODO: meta
-				let meta = Default::default();
+				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &client_addr });
 
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = unix_stream.framed(StreamCodec).split();
@@ -180,15 +180,24 @@ impl Drop for Server {
 	}
 }
 
+pub fn server<I, M: Metadata, S: Middleware<M> + Send + Sync + 'static>(
+	io: I, 
+	path: &str
+) -> std::io::Result<Server>
+	where I: Into<MetaIoHandler<M, S>>
+{
+	ServerBuilder::new(io).start(path)
+}
+
 #[cfg(test)]
 mod tests {
 	use std::thread;
 	use super::{ServerBuilder, Server};
-	use super::jsonrpc::{MetaIoHandler, Value, Metadata};
+	use super::jsonrpc::{MetaIoHandler, Value};
 	use super::jsonrpc::futures::{Future, future};
 	use super::tokio_uds::UnixStream;
-	use super::tokio_core::reactor::Core;
-	use super::tokio_core::io;
+	use super::server_utils::tokio_core::reactor::Core;
+	use super::server_utils::tokio_core::io;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -246,7 +255,7 @@ mod tests {
 		let path = "/tmp/test-ipc-30000";
 		let _server = run(path);
 
-		let mut core = Core::new().expect("Tokio Core should be created with no errors");
+		let core = Core::new().expect("Tokio Core should be created with no errors");
 		UnixStream::connect(path, &core.handle()).expect("Socket should connect");
 	}
 
@@ -276,7 +285,7 @@ mod tests {
 		server.close();
 
 		assert!(::std::fs::metadata(path).is_err(), "There should be no socket file left");	
-		let mut core = Core::new().expect("Tokio Core should be created with no errors");
+		let core = Core::new().expect("Tokio Core should be created with no errors");
 		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
 	}
 }

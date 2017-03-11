@@ -34,18 +34,20 @@ extern crate mio;
 #[cfg(not(windows))]
 extern crate bytes;
 
+
+#[cfg(windows)]
 mod validator;
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 #[cfg(windows)] mod win;
-#[cfg(windows)] pub use win::{Server, Error, Result as PipeResult};
+#[cfg(windows)] pub use win::{Server, Error, Result as PipeResult, server};
 
-#[cfg(not(windows))] mod nix;
 #[cfg(not(windows))] mod stream_codec;
 #[cfg(not(windows))] mod uds;
 #[cfg(not(windows))] mod meta;
-#[cfg(not(windows))] pub use nix::{Server, Error};
+#[cfg(not(windows))] pub use uds::{server, Server, ServerBuilder};
 
 pub use self::jsonrpc_server_utils::tokio_core;

@@ -1,10 +1,9 @@
-use uds::jsonrpc::futures::sync::mpsc;
 use uds::jsonrpc::Metadata;
 
 /// Request context
-pub struct RequestContext {
+pub struct RequestContext<'a> {
 	/// Remote UDS endpoint
-	pub endpoint_addr: String,
+	pub endpoint_addr: &'a ::std::os::unix::net::SocketAddr,
 }
 
 /// Metadata extractor (per session)

@@ -292,3 +292,16 @@ impl<M: Metadata, S: Middleware<M> + 'static> Drop for Server<M, S> {
 		trace!(target: "ipc", "IPC Server : shutdown");
 	}
 }
+
+
+pub fn server<I, M: Metadata, S: Middleware<M> + Send + Sync + 'static>(
+	io: I, 
+	path: &str
+) -> Result<Server<M, S>>
+	where I: Into<MetaIoHandler<M, S>>
+{
+	let server = Server::new(path, io)?;
+	server.run_async()?;
+
+	Ok(server)
+}

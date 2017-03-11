@@ -56,7 +56,6 @@ pub fn dummy_io_handler() -> IoHandler {
 	io
 }
 
-#[cfg(not(windows))]
 pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
 	use std::io::{Read, Write};
 	use mio::*;
@@ -74,23 +73,6 @@ pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
 	sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
 	buf
 }
-
-#[cfg(windows)]
-pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
-	use std::io::{Read, Write};
-	use miow::pipe::NamedPipe;
-	use std::fs::OpenOptions;
-
-	NamedPipe::wait(addr, None).unwrap();
-	let mut f = OpenOptions::new().read(true).write(true).open(addr).unwrap();
-	f.write_all(buf).unwrap();
-	f.flush().unwrap();
-
-	let mut buf = vec![0u8; 65536];
-	let sz = f.read(&mut buf).unwrap_or_else(|_| { 0 });
-	(&buf[0..sz]).to_vec()
-}
-
 
 pub fn random_ipc_endpoint() -> String {
 	let name = thread_rng().gen_ascii_chars().take(30).collect::<String>();
