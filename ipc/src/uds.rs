@@ -1,3 +1,4 @@
+extern crate futures;
 extern crate tokio_uds;
 extern crate tokio_service;
 
@@ -48,24 +49,6 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	remote: reactor::UnitializedRemote,
 }
 
-/// IPC Server handle
-pub struct Server {
-	remote: Option<reactor::Remote>,
-	path: String,
-}
-
-impl Drop for Server {
-	fn drop(&mut self) {
-		::std::fs::remove_file(&self.path).unwrap_or_else(|_| {}); // ignoer error - server could have never been started
-	}
-}
-
-impl Server {
-	fn with_remote(remote: reactor::Remote, path: String) -> Self {
-		Server { remote: Some(remote), path: path }
-	}
-}
-
 impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> {
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
@@ -91,23 +74,27 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 
 	/// Run server (in separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
+		use self::tokio_uds::UnixListener;
+
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler.clone();		
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor.clone();
+		let (stop_signal, stop_receiver) = oneshot::channel();
+		let (start_signal, start_receiver) = oneshot::channel();
 
 		remote.remote().spawn(move |handle| {
-			use self::tokio_uds::UnixListener;
 			use stream_codec::StreamCodec;
 
 			let listener = match UnixListener::bind(&endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
-					error!("Error binding domain socket: {}", e);
-					return future::err(e).map_err(|_| ()).boxed();
+					start_signal.complete(Err(e));
+					return future::ok(()).boxed();
 				}
 			};
 
+			start_signal.complete(Ok(()));
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
 
@@ -147,18 +134,56 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 				Ok(())
 			});
 
-			server.map_err(|e| { error!("Error starting: {:?}", e); }).boxed()
+			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
+			server.select(stop).map(|_| ()).map_err(|_| ()).boxed()
 		});
 
-
-		Ok(Server::with_remote(remote, path.to_owned()))			
+		match start_receiver.wait().expect("Message should always be sent") {
+			Ok(()) => Ok(Server { path: path.to_owned(), remote: Some(remote), stop: Some(stop_signal) }),
+			Err(e) => Err(e)
+		}	
 	}	
+}
+
+
+/// IPC Server handle
+pub struct Server {
+	path: String,
+	remote: Option<reactor::Remote>,
+	stop: Option<oneshot::Sender<()>>,
+}
+
+impl Server {
+	/// Closes the server (waits for finish)
+	pub fn close(mut self) {
+		self.stop.take().unwrap().complete(());
+		self.remote.take().unwrap().close();
+		self.clear_file();
+	}
+
+	/// Wait for the server to finish
+	pub fn wait(mut self) {
+		self.remote.take().unwrap().wait();
+	}
+
+	/// Remove socket file
+	fn clear_file(&self) {
+		::std::fs::remove_file(&self.path).unwrap_or_else(|_| {}); // ignore error, file could have been gone somewhere
+	}
+}
+
+impl Drop for Server {
+	fn drop(&mut self) {
+		self.stop.take().map(|stop| stop.complete(()));
+		self.remote.take().map(|remote| remote.close());	
+		self.clear_file();	
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use std::thread;
-	use super::ServerBuilder;
+	use super::{ServerBuilder, Server};
 	use super::jsonrpc::{MetaIoHandler, Value, Metadata};
 	use super::jsonrpc::futures::{Future, future};
 	use super::tokio_uds::UnixStream;
@@ -173,6 +198,12 @@ mod tests {
 		ServerBuilder::new(io)
 	}
 
+	fn run(path: &str) -> Server {
+		let builder = server_builder();
+		let server = builder.start(path).expect("Server must run with no issues");
+		thread::sleep(::std::time::Duration::from_millis(50));	
+		server	
+	}
 
 	fn dummy_request(path: &str, data: &[u8]) -> Vec<u8> {
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
@@ -213,9 +244,7 @@ mod tests {
 	fn connect() {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-30000";
-		let builder = server_builder();
-		let _server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(50));
+		let _server = run(path);
 
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
 		UnixStream::connect(path, &core.handle()).expect("Socket should connect");
@@ -225,9 +254,7 @@ mod tests {
 	fn request() {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
-		let server = server_builder();
-		let _server = server.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(50));
+		let _server = run(path);
 
 		let result = dummy_request_str(
 			path,
@@ -239,5 +266,17 @@ mod tests {
 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
 			"Response does not exactly much the expected response",
 			);
+	}
+
+	#[test]
+	fn close() {
+		::logger::init_log();
+		let path = "/tmp/test-ipc-50000";
+		let server = run(path);
+		server.close();
+
+		assert!(::std::fs::metadata(path).is_err(), "There should be no socket file left");	
+		let mut core = Core::new().expect("Tokio Core should be created with no errors");
+		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
 	}
 }
