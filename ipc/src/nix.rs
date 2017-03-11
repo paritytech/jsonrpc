@@ -214,7 +214,7 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 		)
 	}
 
-	pub fn with_remote<T:>(
+	pub fn with_remote<T>(
 		socket_addr: &str,
 		io_handler: T,
 		remote: reactor::UnitializedRemote,
