@@ -73,7 +73,6 @@ mod tests {
 	#[test]
 	fn simple_encode() {
 		let mut buf = EasyBuf::new();
-		// TODO: maybe ignore new lines here also if the output is enveloped with those
 		buf.get_mut().extend_from_slice(b"{ test: 1 }{ test: 2 }{ test: 3 }");
 
 		let mut codec = StreamCodec;
@@ -107,7 +106,6 @@ mod tests {
 		let request3 = codec.decode(&mut buf)
 			.expect("There should be no error in first 3rd test")
 			.expect("There should be a request in 3rd whitespace test");
-		// TODO: maybe actually trim it out
 		assert_eq!(request3, "\n\r{\n test: 3 }");
 
 		let request4 = codec.decode(&mut buf)
@@ -118,7 +116,6 @@ mod tests {
 	#[test]
 	fn fragmented_encode() {
 		let mut buf = EasyBuf::new();	
-		// TODO: maybe ignore new lines here also if the output is enveloped with those
 		buf.get_mut().extend_from_slice(b"{ test: 1 }{ test: 2 }{ tes");
 
 		let mut codec = StreamCodec;

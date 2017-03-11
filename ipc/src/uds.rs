@@ -99,12 +99,9 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 			let connections = listener.incoming();
 
 			let server = connections.for_each(move |(unix_stream, client_addr)| {
-
 				trace!("Accepted incoming UDS connection: {:?}", client_addr);
 
-				// TODO: meta
 				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &client_addr });
-
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = unix_stream.framed(StreamCodec).split();
 				let responses = reader.and_then(
