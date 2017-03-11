@@ -74,7 +74,6 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 
 	/// Run server (in separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
-
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler.clone();		
 		let endpoint_addr = path.to_owned();
