@@ -4,7 +4,7 @@ homepage = "https://github.com/ethcore/jsonrpc"
 repository = "https://github.com/ethcore/jsonrpc"
 license = "MIT"
 name = "jsonrpc-minihttp-server"
-version = "6.0.0"
+version = "7.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_minihttp_server/index.html"
@@ -12,8 +12,8 @@ documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_minihttp_server/index
 [dependencies]
 log = "0.3"
 futures = "0.1"
-jsonrpc-core = { version = "6.0", path = "../core" }
-jsonrpc-server-utils = { version = "6.0", path = "../server-utils" }
+jsonrpc-core = { version = "7.0", path = "../core" }
+jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
 parking_lot = "0.3"
 tokio-service = "0.1"
 tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }

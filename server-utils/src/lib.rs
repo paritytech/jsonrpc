@@ -1,4 +1,6 @@
-/// JSON-RPC servers utilities.
+//! JSON-RPC servers utilities.
+
+#![warn(missing_docs)]
 
 extern crate jsonrpc_core as core;
 pub extern crate tokio_core;

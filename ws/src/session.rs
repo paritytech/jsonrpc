@@ -1,8 +1,11 @@
 use std;
+use std::ascii::AsciiExt;
 use std::sync::Arc;
 
 use core;
 use core::futures::Future;
+use server_utils::cors::Origin;
+use server_utils::tokio_core::reactor::Remote;
 use ws;
 
 use metadata;
@@ -65,10 +68,11 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	context: metadata::RequestContext,
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
-	allowed_origins: Option<Vec<String>>,
+	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
+	remote: Remote,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
@@ -121,10 +125,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone();
 
-		// TODO [ToDr] to event loop
-		self.handler.handle_request(req, metadata)
-			.wait()
-			.map_err(|_| unreachable!())
+		let future = self.handler.handle_request(req, metadata)
 			.map(move |response| {
 				if let Some(result) = response {
 					let res = out.send(result);
@@ -132,7 +133,10 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 						warn!(target: "signer", "Error while sending response: {:?}", e);
 					}
 				}
-			})
+			});
+		self.remote.spawn(|_| future);
+
+		Ok(())
 	}
 }
 
@@ -140,18 +144,20 @@ pub struct Factory<M: core::Metadata, S: core::Middleware<M>> {
 	session_id: SessionId,
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
-	allowed_origins: Option<Vec<String>>,
+	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
+	remote: Remote,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	pub fn new(
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
-		allowed_origins: Option<Vec<String>>,
+		allowed_origins: Option<Vec<Origin>>,
 		request_middleware: Option<Arc<RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
+		remote: Remote,
 	) -> Self {
 		Factory {
 			session_id: 0,
@@ -160,6 +166,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 			allowed_origins: allowed_origins,
 			request_middleware: request_middleware,
 			stats: stats,
+			remote: remote,
 		}
 	}
 }
@@ -182,11 +189,12 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			stats: self.stats.clone(),
 			request_middleware: self.request_middleware.clone(),
 			metadata: Default::default(),
+			remote: self.remote.clone(),
 		}
 	}
 }
 
-fn origin_is_allowed(allowed_origins: &Option<Vec<String>>, header: Option<&[u8]>) -> bool {
+fn origin_is_allowed(allowed_origins: &Option<Vec<Origin>>, header: Option<&[u8]>) -> bool {
 	let header = header.map(std::str::from_utf8);
 
 	match (header, allowed_origins.as_ref()) {
@@ -197,7 +205,7 @@ fn origin_is_allowed(allowed_origins: &Option<Vec<String>>, header: Option<&[u8]
 		// Validate Origin
 		(Some(Ok(origin)), Some(origins)) => {
 			for o in origins {
-				if o == origin {
+				if origin.eq_ignore_ascii_case(&o) {
 					return true
 				}
 			}

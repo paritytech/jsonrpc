@@ -1,5 +1,6 @@
 use std::fmt;
-use jsonrpc_core::{Error, Params, ErrorCode, Value};
+use jsonrpc_core::{self, Error, Params, ErrorCode, Value};
+use serde;
 
 pub fn invalid_params<T>(param: &str, details: T) -> Error where T: fmt::Debug {
 	Error {
@@ -16,3 +17,6 @@ pub fn expect_no_params(params: Params) -> Result<(), Error> {
 	}
 }
 
+pub fn to_value<T>(value: T) -> Value where T: serde::Serialize {
+	jsonrpc_core::to_value(value).expect("Expected always-serializable type.")
+}

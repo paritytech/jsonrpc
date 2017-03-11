@@ -9,7 +9,7 @@ use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 use self::jsonrpc_core::futures::{self, Future};
 use super::{ServerBuilder, Server, cors, hosts};
 
-fn serve_hosts(hosts: Vec<String>) -> Server {
+fn serve_hosts(hosts: Vec<hosts::Host>) -> Server {
 	let _ = env_logger::init();
 
 	ServerBuilder::new(IoHandler::default())

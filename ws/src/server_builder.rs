@@ -3,6 +3,10 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use core;
+use server_utils;
+use server_utils::cors::Origin;
+use server_utils::hosts::DomainsValidation;
+use server_utils::reactor::UnitializedRemote;
 use ws;
 
 use metadata::{MetaExtractor, NoopExtractor};
@@ -27,13 +31,20 @@ impl From<ws::Error> for ServerError {
 	}
 }
 
+impl From<io::Error> for ServerError {
+	fn from(err: io::Error) -> Self {
+		ServerError::IoError(err)
+	}
+}
+
 /// Builder for `WebSockets` server
 pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
-	allowed_origins: Option<Vec<String>>,
+	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
 	session_stats: Option<Arc<session::SessionStats>>,
+	remote: UnitializedRemote,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
@@ -47,7 +58,14 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			allowed_origins: None,
 			request_middleware: None,
 			session_stats: None,
+			remote: UnitializedRemote::Unspawned,
 		}
+	}
+
+	/// Utilize existing event loop remote to poll RPC results.
+	pub fn event_loop_remote(mut self, remote: server_utils::tokio_core::reactor::Remote) -> Self {
+		self.remote = UnitializedRemote::Shared(remote);
+		self
 	}
 
 	/// Sets a meta extractor.
@@ -57,8 +75,8 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Allowed origins.
-	pub fn allowed_origins(mut self, allowed_origins: Option<Vec<String>>) -> Self {
-		self.allowed_origins = allowed_origins;
+	pub fn allowed_origins(mut self, allowed_origins: DomainsValidation<Origin>) -> Self {
+		self.allowed_origins = allowed_origins.into();
 		self
 	}
 
@@ -85,6 +103,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.allowed_origins,
 			self.request_middleware,
 			self.session_stats,
+			self.remote,
 		)
 	}
 
