@@ -22,6 +22,7 @@ extern crate rand;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
 #[cfg(test)] extern crate env_logger;
+#[cfg(test)] mod logger;
 
 #[cfg(windows)]
 extern crate miow;
@@ -44,6 +45,7 @@ mod tests;
 #[cfg(not(windows))] mod nix;
 #[cfg(not(windows))] mod stream_codec;
 #[cfg(not(windows))] mod uds;
+#[cfg(not(windows))] mod meta;
 #[cfg(not(windows))] pub use nix::{Server, Error};
 
 pub use self::jsonrpc_server_utils::tokio_core;
