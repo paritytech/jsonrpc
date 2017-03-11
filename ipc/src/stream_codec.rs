@@ -5,6 +5,13 @@ use stream_codec::tokio_core::io::{Codec, EasyBuf};
 
 pub struct StreamCodec;
 
+fn is_whitespace(byte: u8) -> bool {
+	match byte {
+		0x0D | 0x0A | 0x20 | 0x09 => true,
+		_ => false,
+	} 
+}
+
 impl Codec for StreamCodec {
 	type In = String;
 	type Out = String;
@@ -14,6 +21,7 @@ impl Codec for StreamCodec {
 		let mut in_str = false;
 		let mut is_escaped = false;
 		let mut start_idx = 0;
+		let mut whitespaces = 0;
 
 		for idx in 0..buf.as_ref().len() {
 			let byte = buf.as_ref()[idx];
@@ -33,8 +41,11 @@ impl Codec for StreamCodec {
 			else if byte == b'\\' && is_escaped && !in_str {
 				is_escaped = !is_escaped;
 			}
+			else if is_whitespace(byte) {
+				whitespaces += 1;
+			}
 
-			if depth == 0 && idx != start_idx {
+			if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
 				let bts = buf.drain_to(idx + 1);
 				match String::from_utf8(bts.as_ref().to_vec()) {
 					Ok(val) => { return Ok(Some(val)) },
@@ -72,6 +83,36 @@ mod tests {
 			.expect("There should be at least one request in simple test");
 
 		assert_eq!(request, "{ test: 1 }");
+	}
+
+	#[test]
+	fn whitespace() {
+		let mut buf = EasyBuf::new();
+		buf.get_mut().extend_from_slice(b"{ test: 1 }\n\n\n\n{ test: 2 }\n\r{\n test: 3 }  ");
+
+		let mut codec = StreamCodec;
+
+		let request = codec.decode(&mut buf)
+			.expect("There should be no error in first whitespace test")
+			.expect("There should be a request in first whitespace test");
+
+		assert_eq!(request, "{ test: 1 }");
+
+		let request2 = codec.decode(&mut buf)
+			.expect("There should be no error in first 2nd test")
+			.expect("There should be aa request in 2nd whitespace test");
+		// TODO: maybe actually trim it out
+		assert_eq!(request2, "\n\n\n\n{ test: 2 }");
+
+		let request3 = codec.decode(&mut buf)
+			.expect("There should be no error in first 3rd test")
+			.expect("There should be a request in 3rd whitespace test");
+		// TODO: maybe actually trim it out
+		assert_eq!(request3, "\n\r{\n test: 3 }");
+
+		let request4 = codec.decode(&mut buf)
+			.expect("There should be no error in first 4th test");
+		assert!(request4.is_none(), "There should be no 4th request because it contains only whitespaces");
 	}
 
 	#[test]
