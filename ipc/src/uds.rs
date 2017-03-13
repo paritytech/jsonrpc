@@ -107,18 +107,19 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> 
 					move |req| service.call(req).then(|response| match response {
 						Err(e) => {
 							warn!(target: "uds", "Error while processing request: {:?}", e);
-							future::ok(String::new())
+							future::ok(None)
 						},
 						Ok(None) => {
-							trace!(target: "uds", "JSON RPC request produced no response");
-							future::ok(String::new())
+							future::ok(None)
 						},
 						Ok(Some(response_data)) => {
 							trace!(target: "uds", "Sent response: {}", &response_data);
-							future::ok(response_data)
+							future::ok(Some(response_data))
 						}
 					})
-				);	
+				)
+				.filter_map(|x| x);
+
 
 				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "uds", "Peer {:?}: service finished", client_addr);
