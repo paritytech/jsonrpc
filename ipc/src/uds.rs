@@ -49,7 +49,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	remote: reactor::UnitializedRemote,
 }
 
-impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> ServerBuilder<M, S> {
+impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
 	{
@@ -177,7 +177,7 @@ impl Drop for Server {
 	}
 }
 
-pub fn server<I, M: Metadata, S: Middleware<M> + Send + Sync + 'static>(
+pub fn server<I, M: Metadata, S: Middleware<M> + 'static>(
 	io: I, 
 	path: &str
 ) -> std::io::Result<Server>
