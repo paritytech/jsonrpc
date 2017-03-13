@@ -22,26 +22,24 @@ extern crate rand;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
 #[cfg(test)] extern crate env_logger;
+#[cfg(test)] mod logger;
 
 #[cfg(windows)]
 extern crate miow;
 
-#[cfg(not(windows))]
-extern crate slab;
-#[cfg(not(windows))]
-extern crate mio;
-#[cfg(not(windows))]
-extern crate bytes;
-
+#[cfg(windows)]
 mod validator;
 
 #[cfg(test)]
+#[cfg(windows)]
 mod tests;
 
 #[cfg(windows)] mod win;
-#[cfg(windows)] pub use win::{Server, Error, Result as PipeResult};
+#[cfg(windows)] pub use win::{Server, Error, Result as PipeResult, server};
 
-#[cfg(not(windows))] mod nix;
-#[cfg(not(windows))] pub use nix::{Server, Error};
+#[cfg(not(windows))] mod stream_codec;
+#[cfg(not(windows))] mod uds;
+#[cfg(not(windows))] mod meta;
+#[cfg(not(windows))] pub use uds::{server, Server, ServerBuilder};
 
 pub use self::jsonrpc_server_utils::tokio_core;

@@ -18,4 +18,3 @@ jsonrpc-ws-server = { path = "ws" }
 jsonrpc-macros = { path = "macros" }
 jsonrpc-pubsub = { path = "pubsub" }
 jsonrpc-server-utils = { path = "server-utils" }
-
