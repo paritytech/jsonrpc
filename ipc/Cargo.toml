@@ -17,6 +17,8 @@ bytes  = "0.3.0"
 miow = "0.1"
 log = "0.3"
 rand = "0.3"
+tokio-uds = "0.1"
+tokio-service = "0.1"
 
 [dev-dependencies]
 lazy_static = "0.2"

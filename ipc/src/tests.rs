@@ -21,28 +21,6 @@ use rand::{thread_rng, Rng};
 use log::LogLevelFilter;
 use env_logger::LogBuilder;
 
-lazy_static! {
-	static ref LOG_DUMMY: bool = {
-		let mut builder = LogBuilder::new();
-		builder.filter(None, LogLevelFilter::Info);
-
-		if let Ok(log) = env::var("RUST_LOG") {
-			builder.parse(&log);
-		}
-
-		if let Ok(_) = builder.init() {
-			println!("logger initialized");
-		}
-		true
-	};
-}
-
-/// Intialize log with default settings
-pub fn init_log() {
-	let _ = *LOG_DUMMY;
-}
-
-#[cfg(test)]
 pub fn dummy_io_handler() -> IoHandler {
 	use jsonrpc_core::*;
 
@@ -56,26 +34,6 @@ pub fn dummy_io_handler() -> IoHandler {
 	io
 }
 
-#[cfg(not(windows))]
-pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
-	use std::io::{Read, Write};
-	use mio::*;
-	use mio::unix::*;
-
-	let mut poll = Poll::new().unwrap();
-	let mut sock = UnixStream::connect(addr).unwrap();
-	poll.register(&sock, Token(0), EventSet::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-	poll.poll(Some(500)).unwrap();
-	sock.write_all(buf).unwrap();
-	poll.reregister(&sock, Token(0), EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-	poll.poll(Some(500)).unwrap();
-
-	let mut buf = Vec::new();
-	sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
-	buf
-}
-
-#[cfg(windows)]
 pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
 	use std::io::{Read, Write};
 	use miow::pipe::NamedPipe;
@@ -118,8 +76,6 @@ pub fn test_reqrep() {
 
 #[test]
 pub fn test_reqrep_two_sequental_connections() {
-	init_log();
-
 	let addr = random_ipc_endpoint();
 	let io = dummy_io_handler();
 	let server = Server::new(&addr, io).unwrap();
@@ -160,8 +116,6 @@ pub fn test_reqrep_three_sequental_connections() {
 #[test]
 #[ignore]
 pub fn test_reqrep_100_connections() {
-	init_log();
-
 	let addr = random_ipc_endpoint();
 	let io = dummy_io_handler();
 	let server = Server::new(&addr, io).unwrap();
@@ -178,8 +132,6 @@ pub fn test_reqrep_100_connections() {
 #[test]
 #[ignore]
 pub fn test_reqrep_10_pubsub() {
-	init_log();
-
 	let addr = random_ipc_endpoint();
 	let io = dummy_io_handler();
 	let server = Server::new(&addr, io).unwrap();
@@ -195,7 +147,6 @@ pub fn test_reqrep_10_pubsub() {
 
 #[test]
 pub fn big_request() {
-
 	let addr = random_ipc_endpoint();
 	let io = dummy_io_handler();
 
