@@ -210,14 +210,14 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 		Self::with_remote(
 			socket_addr,
 			io_handler,
-			reactor::UnitializedRemote::Unspawned,
+			reactor::UninitializedRemote::Unspawned,
 		)
 	}
 
 	pub fn with_remote<T:>(
 		socket_addr: &str,
 		io_handler: T,
-		remote: reactor::UnitializedRemote,
+		remote: reactor::UninitializedRemote,
 	) -> Result<Server<M, S>, Error> where
 		T: Into<MetaIoHandler<M, S>>,
 	{

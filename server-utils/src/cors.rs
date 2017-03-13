@@ -1,5 +1,6 @@
 //! CORS handling utility functions
 
+use std::{fmt, ops};
 use std::ascii::AsciiExt;
 use hosts::Host;
 
@@ -83,7 +84,7 @@ impl Origin {
 	}
 }
 
-impl ::std::ops::Deref for Origin {
+impl ops::Deref for Origin {
 	type Target = str;
 	fn deref(&self) -> &Self::Target {
 		&self.as_string
@@ -99,6 +100,26 @@ pub enum AccessControlAllowOrigin {
 	Null,
 	/// Any non-null origin
 	Any,
+}
+
+impl fmt::Display for AccessControlAllowOrigin {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", match *self {
+			AccessControlAllowOrigin::Any => "*",
+			AccessControlAllowOrigin::Null => "null",
+			AccessControlAllowOrigin::Value(ref val) => val,
+		})
+	}
+}
+
+impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
+	fn from(s: T) -> AccessControlAllowOrigin {
+		match s.into().as_str() {
+			"all" | "*" | "any" => AccessControlAllowOrigin::Any,
+			"null" => AccessControlAllowOrigin::Null,
+			origin => AccessControlAllowOrigin::Value(origin.into()),
+		}
+	}
 }
 
 /// Returns correct CORS header (if any) given list of allowed origins and current origin.
