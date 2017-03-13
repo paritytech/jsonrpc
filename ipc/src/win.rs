@@ -183,7 +183,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	}
 }
 
-pub struct Server<M: Metadata = (), S: Middleware<M> + 'static = NoopMiddleware> {
+pub struct Server<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
 	io_handler: Arc<MetaIoHandler<M, S>>,
@@ -192,7 +192,7 @@ pub struct Server<M: Metadata = (), S: Middleware<M> + 'static = NoopMiddleware>
 	addr: String,
 }
 
-impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
+impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 	/// New server
 	pub fn new<T>(socket_addr: &str, io_handler: T) -> Result<Self> where
 		T: Into<MetaIoHandler<M, S>>,
@@ -285,7 +285,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M> + 'static> Drop for Server<M, S> {
+impl<M: Metadata, S: Middleware<M>> Drop for Server<M, S> {
 	fn drop(&mut self) {
 		self.stop_async().unwrap_or_else(|_| {}); // ignore error - can be stopped already
 		// todo : no stable logging for windows?
@@ -293,8 +293,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Drop for Server<M, S> {
 	}
 }
 
-
-pub fn server<I, M: Metadata, S: Middleware<M> + Send + Sync + 'static>(
+pub fn server<I, M: Metadata, S: Middleware<M>>(
 	io: I, 
 	path: &str
 ) -> Result<Server<M, S>>

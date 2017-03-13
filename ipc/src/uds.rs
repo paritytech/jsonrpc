@@ -1,9 +1,8 @@
-extern crate futures;
 extern crate tokio_uds;
 extern crate tokio_service;
 
 pub extern crate jsonrpc_core as jsonrpc;
-extern crate jsonrpc_server_utils as server_utils;
+pub extern crate jsonrpc_server_utils as server_utils;
 
 use std;
 use std::sync::Arc;
@@ -49,7 +48,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	remote: reactor::UnitializedRemote,
 }
 
-impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
+impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
 	{
@@ -177,7 +176,7 @@ impl Drop for Server {
 	}
 }
 
-pub fn server<I, M: Metadata, S: Middleware<M> + 'static>(
+pub fn server<I, M: Metadata, S: Middleware<M>>(
 	io: I, 
 	path: &str
 ) -> std::io::Result<Server>

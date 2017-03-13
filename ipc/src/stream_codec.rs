@@ -1,7 +1,5 @@
-extern crate tokio_core;
-
 use std::io;
-use stream_codec::tokio_core::io::{Codec, EasyBuf};
+use uds::server_utils::tokio_core::io::{Codec, EasyBuf};
 
 pub struct StreamCodec;
 
@@ -68,7 +66,7 @@ impl Codec for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
-	use super::tokio_core::io::{Codec, EasyBuf};
+	use uds::server_utils::tokio_core::io::{Codec, EasyBuf};
 
 	#[test]
 	fn simple_encode() {
