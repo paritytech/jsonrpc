@@ -27,14 +27,6 @@ extern crate rand;
 #[cfg(windows)]
 extern crate miow;
 
-#[cfg(not(windows))]
-extern crate slab;
-#[cfg(not(windows))]
-extern crate mio;
-#[cfg(not(windows))]
-extern crate bytes;
-
-
 #[cfg(windows)]
 mod validator;
 
