@@ -4,43 +4,24 @@ use std::sync::{mpsc, Arc};
 use std::io::{self, Read};
 use std::ops::{Deref, DerefMut};
 
-use hyper::{self, mime, server, Next, Encoder, Decoder, Control};
+use hyper::{mime, server, Next, Encoder, Decoder, Control};
 use hyper::header::{self, Headers};
 use hyper::method::Method;
 use hyper::net::HttpStream;
-use parking_lot::Mutex;
 use unicase::UniCase;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::Future;
-use jsonrpc_server_utils::{cors, hosts};
 use request_response::{Request, Response};
+use jsonrpc_server_utils::{cors, hosts};
 
-use {RequestMiddleware, RequestMiddlewareAction};
-
-/// PanicHandling function
-pub struct PanicHandler {
-	/// Actual handler
-	pub handler: Arc<Mutex<Option<Box<Fn() -> () + Send + 'static>>>>
-}
+use {utils, RequestMiddleware, RequestMiddlewareAction};
 
 /// jsonrpc http request handler.
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
-	panic_handler: PanicHandler,
 	allowed_hosts: Option<Vec<hosts::Host>>,
 	middleware: Arc<RequestMiddleware>,
 	handler: Handler<M, S>,
-}
-
-impl<M: Metadata, S: Middleware<M>> Drop for ServerHandler<M, S> {
-	fn drop(&mut self) {
-		if ::std::thread::panicking() {
-			let handler = self.panic_handler.handler.lock();
-			if let Some(ref h) = *handler {
-				h();
-			}
-		}
-	}
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
@@ -50,13 +31,11 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 		allowed_hosts: Option<Vec<hosts::Host>>,
 		middleware: Arc<RequestMiddleware>,
-		panic_handler: PanicHandler,
 		control: Control,
 	) -> Self {
 		let (sender, receiver) = mpsc::channel();
 
 		ServerHandler {
-			panic_handler: panic_handler,
 			allowed_hosts: allowed_hosts,
 			middleware: middleware,
 			handler: Handler::Rpc(RpcHandler {
@@ -83,7 +62,7 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 		};
 
 		// Validate host
-		if should_validate_hosts && !hosts::is_host_valid(read_header(&request, "host"), &self.allowed_hosts) {
+		if should_validate_hosts && !utils::is_host_allowed(&request, &self.allowed_hosts) {
 			self.handler = Handler::Error(Response::host_not_allowed());
 			return Next::write();
 		}
@@ -169,23 +148,10 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				UniCase("accept".to_owned()),
 			]));
 			headers.set(cors_domain);
+			headers.set(header::Vary::Items(vec!["Origin".into()]));
 		}
 
 		headers
-	}
-
-	fn cors_header(
-		origin: Option<&str>,
-		allowed: &Option<Vec<cors::AccessControlAllowOrigin>>,
-	) -> Option<header::AccessControlAllowOrigin> {
-		cors::get_cors_header(origin, allowed).map(|origin| {
-			use self::cors::AccessControlAllowOrigin::*;
-			match origin {
-				Value(val) => header::AccessControlAllowOrigin::Value((*val).to_owned()),
-				Null => header::AccessControlAllowOrigin::Null,
-				Any => header::AccessControlAllowOrigin::Any,
-			}
-		})
 	}
 
 	fn is_json(content_type: Option<&header::ContentType>) -> bool {
@@ -202,7 +168,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M, S> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Read origin
-		self.request.cors_header = Self::cors_header(read_header(&request, "origin"), &self.cors_domains);
+		self.request.cors_header = utils::cors_header(&request, &self.cors_domains);
 		// Read metadata
 		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
 
@@ -291,12 +257,3 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M
 	}
 }
 
-
-fn read_header<'a>(req: &'a hyper::server::Request<'a, HttpStream>, header: &str) -> Option<&'a str> {
-	match req.headers().get_raw(header) {
-		Some(ref v) if v.len() == 1 => {
-			::std::str::from_utf8(&v[0]).ok()
-		},
-		_ => None
-	}
-}

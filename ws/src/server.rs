@@ -4,7 +4,7 @@ use std::thread;
 
 use core;
 use server_utils::cors::Origin;
-use server_utils::reactor::{UnitializedRemote, Remote};
+use server_utils::reactor::{UninitializedRemote, Remote};
 use ws;
 
 use metadata;
@@ -34,7 +34,7 @@ impl Server {
 		allowed_origins: Option<Vec<Origin>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<session::SessionStats>>,
-		remote: UnitializedRemote,
+		remote: UninitializedRemote,
 	) -> Result<Server, ServerError> {
 		let config = {
 			let mut config = ws::Settings::default();

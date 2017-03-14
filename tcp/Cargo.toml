@@ -17,7 +17,6 @@ rand = "0.3"
 tokio-service = "0.1"
 parking_lot = "0.3"
 
-
 [dev-dependencies]
 lazy_static = "0.2"
 env_logger = "0.4"

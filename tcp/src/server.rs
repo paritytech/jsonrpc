@@ -17,7 +17,7 @@ use service::Service;
 
 /// TCP server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
-	remote: reactor::UnitializedRemote,
+	remote: reactor::UninitializedRemote,
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	channels: Arc<SenderChannels>,
@@ -29,7 +29,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		T: Into<MetaIoHandler<M, S>>
 	{
 		ServerBuilder {
-			remote: reactor::UnitializedRemote::Unspawned,
+			remote: reactor::UninitializedRemote::Unspawned,
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
 			channels: Default::default(),
@@ -38,7 +38,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 	/// Utilize existing event loop remote.
 	pub fn event_loop_remote(mut self, remote: tokio_core::reactor::Remote) -> Self {
-		self.remote = reactor::UnitializedRemote::Shared(remote);
+		self.remote = reactor::UninitializedRemote::Shared(remote);
 		self
 	}
 

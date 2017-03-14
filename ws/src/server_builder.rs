@@ -6,7 +6,7 @@ use core;
 use server_utils;
 use server_utils::cors::Origin;
 use server_utils::hosts::DomainsValidation;
-use server_utils::reactor::UnitializedRemote;
+use server_utils::reactor::UninitializedRemote;
 use ws;
 
 use metadata::{MetaExtractor, NoopExtractor};
@@ -44,7 +44,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	allowed_origins: Option<Vec<Origin>>,
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
 	session_stats: Option<Arc<session::SessionStats>>,
-	remote: UnitializedRemote,
+	remote: UninitializedRemote,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
@@ -58,13 +58,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			allowed_origins: None,
 			request_middleware: None,
 			session_stats: None,
-			remote: UnitializedRemote::Unspawned,
+			remote: UninitializedRemote::Unspawned,
 		}
 	}
 
 	/// Utilize existing event loop remote to poll RPC results.
 	pub fn event_loop_remote(mut self, remote: server_utils::tokio_core::reactor::Remote) -> Self {
-		self.remote = UnitializedRemote::Shared(remote);
+		self.remote = UninitializedRemote::Shared(remote);
 		self
 	}
 
