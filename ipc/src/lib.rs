@@ -20,12 +20,12 @@
 
 extern crate jsonrpc_core;
 extern crate jsonrpc_server_utils;
-extern crate rand;
 
 #[macro_use] extern crate log;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
 #[cfg(test)] extern crate env_logger;
+#[cfg(test)] extern crate rand;
 #[cfg(test)] mod logger;
 
 #[cfg(windows)]
