@@ -8,21 +8,21 @@ use tokio_core;
 use core::futures::{self, Future};
 
 /// Possibly uninitialized event loop remote.
-pub enum UnitializedRemote {
+pub enum UninitializedRemote {
 	/// Shared instance of remote.
 	Shared(tokio_core::reactor::Remote),
 	/// Event Loop should be spawned by the transport.
 	Unspawned,
 }
 
-impl UnitializedRemote {
+impl UninitializedRemote {
 	/// Initializes remote.
 	/// In case there is no shared remote, will spawn a new event loop.
 	/// Dropping `Remote` closes the loop.
 	pub fn initialize(self) -> io::Result<Remote> {
 		match self {
-			UnitializedRemote::Shared(remote) => Ok(Remote::Shared(remote)),
-			UnitializedRemote::Unspawned => RpcEventLoop::spawn().map(Remote::Spawned),
+			UninitializedRemote::Shared(remote) => Ok(Remote::Shared(remote)),
+			UninitializedRemote::Unspawned => RpcEventLoop::spawn().map(Remote::Spawned),
 		}
 	}
 }

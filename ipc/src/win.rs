@@ -200,7 +200,7 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		Self::with_remote(
 			socket_addr,
 			io_handler,
-			reactor::UnitializedRemote::Unspawned,
+			reactor::UninitializedRemote::Unspawned,
 		)
 	}
 
@@ -208,7 +208,7 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 	pub fn with_remote<T:>(
 		socket_addr: &str,
 		io_handler: T,
-		remote: reactor::UnitializedRemote,
+		remote: reactor::UninitializedRemote,
 	) -> Result<Server<M, S>> where
 		T: Into<MetaIoHandler<M, S>>,
 	{

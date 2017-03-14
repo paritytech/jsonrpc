@@ -92,7 +92,6 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<Host>>,
-	panic_handler: Option<Box<Fn() -> () + Send>>,
 	threads: usize,
 }
 
@@ -110,7 +109,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(NoopExtractor::default()),
 			cors_domains: None,
 			allowed_hosts: None,
-			panic_handler: None,
 			threads: 1,
 		}
 	}
@@ -120,12 +118,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	pub fn threads(mut self, threads: usize) -> Self {
 		assert!(threads > 0);
 		self.threads = threads;
-		self
-	}
-
-	/// Sets handler invoked in case of server panic.
-	pub fn panic_handler<F>(mut self, handler: F) -> Self where F : Fn() -> () + Send + 'static {
-		self.panic_handler = Some(Box::new(handler));
 		self
 	}
 
@@ -169,15 +161,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let allowed_hosts = self.allowed_hosts;
 		let handler = self.jsonrpc_handler;
 		let meta_extractor = self.meta_extractor;
-		let panic_handler = self.panic_handler;
 		let threads = self.threads;
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = futures::sync::oneshot::channel();
 		let addr = addr.to_owned();
 		let handle = thread::spawn(move || {
-			let _panic_handler = PanicHandler { handler: panic_handler };
-
 			// TODO [ToDr] Errors?
 			let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
 			let hosts2 = hosts.clone();
@@ -218,20 +207,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			handle: Some(handle),
 			close: Some(close),
 		})
-	}
-}
-
-struct PanicHandler {
-	handler: Option<Box<Fn() -> () + Send>>,
-}
-
-impl Drop for PanicHandler {
-	fn drop(&mut self) {
-		if ::std::thread::panicking() {
-			if let Some(ref h) = self.handler {
-				h();
-			}
-		}
 	}
 }
 

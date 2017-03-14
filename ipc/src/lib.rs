@@ -43,3 +43,4 @@ mod tests;
 #[cfg(not(windows))] pub use uds::{server, Server, ServerBuilder};
 
 pub use self::jsonrpc_server_utils::tokio_core;
+pub use self::jsonrpc_server_utils::reactor::UninitializedRemote;

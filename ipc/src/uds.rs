@@ -45,7 +45,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
-	remote: reactor::UnitializedRemote,
+	remote: reactor::UninitializedRemote,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
@@ -54,13 +54,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	{
 		Self::with_remote(
 			io_handler,
-			reactor::UnitializedRemote::Unspawned,
+			reactor::UninitializedRemote::Unspawned,
 		)
 	}
 
 	pub fn with_remote<T>(
 		io_handler: T,
-		remote: reactor::UnitializedRemote,
+		remote: reactor::UninitializedRemote,
 	) -> ServerBuilder<M, S>
 		where T: Into<MetaIoHandler<M, S>>,
 	{
@@ -69,12 +69,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(NoopExtractor),
 			remote: remote,
 		}
-	}	
+	}
 
 	/// Run server (in separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
-		let rpc_handler = self.handler.clone();		
+		let rpc_handler = self.handler.clone();
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor.clone();
 		let (stop_signal, stop_receiver) = oneshot::channel();
@@ -137,8 +137,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		match start_receiver.wait().expect("Message should always be sent") {
 			Ok(()) => Ok(Server { path: path.to_owned(), remote: Some(remote), stop: Some(stop_signal) }),
 			Err(e) => Err(e)
-		}	
-	}	
+		}
+	}
 }
 
 
@@ -171,13 +171,13 @@ impl Server {
 impl Drop for Server {
 	fn drop(&mut self) {
 		self.stop.take().map(|stop| stop.complete(()));
-		self.remote.take().map(|remote| remote.close());	
-		self.clear_file();	
+		self.remote.take().map(|remote| remote.close());
+		self.clear_file();
 	}
 }
 
 pub fn server<I, M: Metadata, S: Middleware<M>>(
-	io: I, 
+	io: I,
 	path: &str
 ) -> std::io::Result<Server>
 	where I: Into<MetaIoHandler<M, S>>
@@ -206,8 +206,8 @@ mod tests {
 	fn run(path: &str) -> Server {
 		let builder = server_builder();
 		let server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(50));	
-		server	
+		thread::sleep(::std::time::Duration::from_millis(50));
+		server
 	}
 
 	fn dummy_request(path: &str, data: &[u8]) -> Vec<u8> {
@@ -280,7 +280,7 @@ mod tests {
 		let server = run(path);
 		server.close();
 
-		assert!(::std::fs::metadata(path).is_err(), "There should be no socket file left");	
+		assert!(::std::fs::metadata(path).is_err(), "There should be no socket file left");
 		let core = Core::new().expect("Tokio Core should be created with no errors");
 		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
 	}

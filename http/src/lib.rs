@@ -29,6 +29,7 @@ pub extern crate hyper;
 
 pub mod request_response;
 mod handler;
+mod utils;
 #[cfg(test)]
 mod tests;
 
@@ -38,37 +39,38 @@ use std::thread;
 use std::collections::HashSet;
 use hyper::server;
 use jsonrpc::MetaIoHandler;
-use jsonrpc_server_utils::reactor::{Remote, UnitializedRemote};
+use jsonrpc_server_utils::reactor::{Remote, UninitializedRemote};
 use parking_lot::Mutex;
 
 pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
-pub use jsonrpc_server_utils::cors::AccessControlAllowOrigin;
+pub use jsonrpc_server_utils::cors::{AccessControlAllowOrigin, Origin};
 pub use jsonrpc_server_utils::tokio_core;
-pub use handler::{PanicHandler, ServerHandler};
+pub use handler::ServerHandler;
+pub use utils::{is_host_allowed, cors_header};
 
 /// Result of starting the Server.
-pub type ServerResult = Result<Server, RpcServerError>;
+pub type ServerResult = Result<Server, Error>;
 
 /// RPC Server startup error.
 #[derive(Debug)]
-pub enum RpcServerError {
+pub enum Error {
 	/// IO Error
 	IoError(std::io::Error),
 	/// Other Error (hyper)
 	Other(hyper::error::Error),
 }
 
-impl From<std::io::Error> for RpcServerError {
+impl From<std::io::Error> for Error {
 	fn from(err: std::io::Error) -> Self {
-		RpcServerError::IoError(err)
+		Error::IoError(err)
 	}
 }
 
-impl From<hyper::error::Error> for RpcServerError {
+impl From<hyper::error::Error> for Error {
 	fn from(err: hyper::error::Error) -> Self {
 		match err {
-			hyper::error::Error::Io(e) => RpcServerError::IoError(e),
-			e => RpcServerError::Other(e)
+			hyper::error::Error::Io(e) => Error::IoError(e),
+			e => Error::Other(e)
 		}
 	}
 }
@@ -165,12 +167,11 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	handler: MetaIoHandler<M, S>,
-	remote: UnitializedRemote,
+	remote: UninitializedRemote,
 	meta_extractor: Arc<HttpMetaExtractor<M>>,
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<Host>>,
-	panic_handler: Option<Box<Fn() -> () + Send>>,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
@@ -187,24 +188,17 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	{
 		ServerBuilder {
 			handler: handler.into(),
-			remote: UnitializedRemote::Unspawned,
+			remote: UninitializedRemote::Unspawned,
 			meta_extractor: Arc::new(NoopExtractor::default()),
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			allowed_hosts: None,
-			panic_handler: None,
 		}
 	}
 
 	/// Utilize existing event loop remote to poll RPC results.
 	pub fn event_loop_remote(mut self, remote: jsonrpc_server_utils::tokio_core::reactor::Remote) -> Self {
-		self.remote = UnitializedRemote::Shared(remote);
-		self
-	}
-
-	/// Sets handler invoked in case of server panic.
-	pub fn panic_handler<F>(mut self, handler: F) -> Self where F : Fn() -> () + Send + 'static {
-		self.panic_handler = Some(Box::new(handler));
+		self.remote = UninitializedRemote::Shared(remote);
 		self
 	}
 
@@ -242,7 +236,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
 		let cors_domains = self.cors_domains;
 		let request_middleware = self.request_middleware;
-		let panic_for_server = Arc::new(Mutex::new(self.panic_handler));
 		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
 		let hosts_setter = hosts.clone();
 
@@ -254,14 +247,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		};
 
 		let (l, srv) = hyper::Server::http(addr)?.handle(move |control| {
-			let handler = PanicHandler { handler: panic_for_server.clone() };
 			let hosts = hosts.lock().clone();
 			ServerHandler::new(
 				jsonrpc_handler.clone(),
 				cors_domains.clone(),
 				hosts,
 				request_middleware.clone(),
-				handler,
 				control,
 			)
 		})?;
@@ -327,3 +318,4 @@ impl Drop for Server {
 		self.server.take().map(|server| server.close());
 	}
 }
+
