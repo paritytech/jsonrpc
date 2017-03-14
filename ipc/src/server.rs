@@ -180,6 +180,7 @@ pub fn server<I, M: Metadata, S: Middleware<M>>(
 }
 
 #[cfg(test)]
+#[cfg(not(windows))]
 mod tests {
 	extern crate tokio_uds;
 
