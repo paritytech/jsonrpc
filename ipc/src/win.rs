@@ -39,8 +39,8 @@ use miow::pipe::{NamedPipe, NamedPipeBuilder};
 use std;
 use std::io;
 use std::io::{Read, Write};
-use std::sync::atomic::*;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc_server_utils::reactor;
 use jsonrpc_server_utils::tokio_core::reactor::Remote;
@@ -171,6 +171,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	}
 }
 
+/// Windows IPC server
 pub struct Server<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
@@ -195,7 +196,7 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 	}
 
 	/// New Server using RpcHandler
-	pub fn with_remote<T>(
+	pub fn with_remote<T, E>(
 		socket_addr: &str,
 		io_handler: T,
 		meta_extractor: E,
@@ -263,6 +264,7 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		Ok(())
 	}
 
+	/// Stops the server, doesn't wait for it to finish.
 	pub fn stop_async(&mut self) -> Result<()> {
 		self.remote_handle.take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
@@ -271,6 +273,7 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		Ok(())
 	}
 
+	/// Stops the server and waits for it to finish.
 	pub fn stop(&mut self) -> Result<()> {
 		self.remote_handle.take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
@@ -290,7 +293,7 @@ impl<M: Metadata, S: Middleware<M>> Drop for Server<M, S> {
 }
 
 impl<M: Metadata, S: Middleware<M>> IpcServer<M, S> for Server<M, S> {
-	fn start<I>(
+	fn start<I, E>(
 		io: I,
 		path: &str,
 		remote: Remote,
@@ -299,7 +302,7 @@ impl<M: Metadata, S: Middleware<M>> IpcServer<M, S> for Server<M, S> {
 		I: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M>,
 	{
-		let server = Server::with_remote(path, io, extractor, UninitializedRemote::Shared(remote))?;
+		let server = Server::with_remote(path, io, extractor, reactor::UninitializedRemote::Shared(remote))?;
 		server.run_async()?;
 		Ok(server)
 	}
