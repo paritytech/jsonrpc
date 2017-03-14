@@ -1,21 +1,20 @@
 extern crate tokio_uds;
 extern crate tokio_service;
 
-pub extern crate jsonrpc_core as jsonrpc;
-pub extern crate jsonrpc_server_utils as server_utils;
-
 use std;
 use std::sync::Arc;
+use std::marker::PhantomData;
 
 use self::tokio_service::Service as TokioService;
-use self::jsonrpc::futures::{future, Future, Stream, Sink};
-use self::jsonrpc::futures::sync::oneshot;
-use self::jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use self::jsonrpc::futures::BoxFuture;
-use self::server_utils::tokio_core::io::Io;
-use self::server_utils::reactor;
+use jsonrpc_core::futures::{future, Future, Stream, Sink};
+use jsonrpc_core::futures::sync::oneshot;
+use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc_core::futures::BoxFuture;
+use jsonrpc_server_utils::tokio_core::io::Io;
+use jsonrpc_server_utils::tokio_core::reactor::Remote;
+use jsonrpc_server_utils::reactor;
 
-use meta::{MetaExtractor, NoopExtractor, RequestContext};
+use shared::{Result, IpcServer, MetaExtractor, NoopExtractor, RequestContext};
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
@@ -42,6 +41,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 	}
 }
 
+/// UDS server builder.
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
@@ -49,30 +49,33 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
+	/// Creates a new `ServerBuilder`.
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
-	{
-		Self::with_remote(
-			io_handler,
-			reactor::UninitializedRemote::Unspawned,
-		)
-	}
-
-	pub fn with_remote<T>(
-		io_handler: T,
-		remote: reactor::UninitializedRemote,
-	) -> ServerBuilder<M, S>
-		where T: Into<MetaIoHandler<M, S>>,
 	{
 		ServerBuilder {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
-			remote: remote,
+			remote: reactor::UninitializedRemote::Unspawned,
 		}
 	}
 
+	/// Sets shared different event loop remote.
+	pub fn event_loop_remote(mut self, remote: Remote) -> Self {
+		self.remote = reactor::UninitializedRemote::Shared(remote);
+		self
+	}
+
+	/// Sets session metadata extractor.
+	pub fn session_metadata_extractor<X>(mut self, meta_extractor: X) -> Self where
+		X: MetaExtractor<M> + 'static,
+	{
+		self.meta_extractor = Arc::new(meta_extractor);
+		self
+	}
+
 	/// Run server (in separate thread)
-	pub fn start(self, path: &str) -> std::io::Result<Server> {
+	pub fn start(self, path: &str) -> std::io::Result<Server<M, S>> {
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler.clone();
 		let endpoint_addr = path.to_owned();
@@ -99,7 +102,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let server = connections.for_each(move |(unix_stream, client_addr)| {
 				trace!("Accepted incoming UDS connection: {:?}", client_addr);
 
-				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &client_addr });
+				let meta = meta_extractor.extract(&RequestContext);
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = unix_stream.framed(StreamCodec).split();
 				let responses = reader.and_then(
@@ -135,7 +138,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		});
 
 		match start_receiver.wait().expect("Message should always be sent") {
-			Ok(()) => Ok(Server { path: path.to_owned(), remote: Some(remote), stop: Some(stop_signal) }),
+			Ok(()) => Ok(Server {
+				path: path.to_owned(),
+				remote: Some(remote),
+				stop: Some(stop_signal),
+				_meta: PhantomData,
+				_middleware: PhantomData,
+			}),
 			Err(e) => Err(e)
 		}
 	}
@@ -143,13 +152,16 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 
 /// IPC Server handle
-pub struct Server {
+pub struct Server<M = (), S = NoopMiddleware> {
 	path: String,
 	remote: Option<reactor::Remote>,
 	stop: Option<oneshot::Sender<()>>,
+	// TODO [ToDr] To keep the API constent with Win we need those.
+	_meta: PhantomData<M>,
+	_middleware: PhantomData<S>,
 }
 
-impl Server {
+impl<M, S> Server<M, S> {
 	/// Closes the server (waits for finish)
 	pub fn close(mut self) {
 		self.stop.take().unwrap().complete(());
@@ -168,7 +180,7 @@ impl Server {
 	}
 }
 
-impl Drop for Server {
+impl<M, S> Drop for Server<M, S> {
 	fn drop(&mut self) {
 		self.stop.take().map(|stop| stop.complete(()));
 		self.remote.take().map(|remote| remote.close());
@@ -176,24 +188,33 @@ impl Drop for Server {
 	}
 }
 
-pub fn server<I, M: Metadata, S: Middleware<M>>(
-	io: I,
-	path: &str
-) -> std::io::Result<Server>
-	where I: Into<MetaIoHandler<M, S>>
-{
-	ServerBuilder::new(io).start(path)
+impl<M: Metadata, S: Middleware<M>> IpcServer<M, S> for Server<M, S> {
+	fn start<I, E>(
+		io: I,
+		path: &str,
+		remote: Remote,
+		extractor: E,
+	) -> Result<Self> where
+		I: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
+	{
+		Ok(ServerBuilder::new(io)
+			.event_loop_remote(remote)
+			.session_metadata_extractor(extractor)
+			.start(path)?
+		)
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use std::thread;
 	use super::{ServerBuilder, Server};
-	use super::jsonrpc::{MetaIoHandler, Value};
-	use super::jsonrpc::futures::{Future, future};
 	use super::tokio_uds::UnixStream;
-	use super::server_utils::tokio_core::reactor::Core;
-	use super::server_utils::tokio_core::io;
+	use jsonrpc_core::{MetaIoHandler, Value};
+	use jsonrpc_core::futures::{Future, future};
+	use jsonrpc_server_utils::tokio_core::reactor::Core;
+	use jsonrpc_server_utils::tokio_core::io;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
