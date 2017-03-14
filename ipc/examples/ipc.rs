@@ -10,4 +10,3 @@ fn main() {
 	});
 	let _server = jsonrpc_ipc_server::server(io, "/tmp/parity-example.ipc").expect("Server should start ok");
 }
-
