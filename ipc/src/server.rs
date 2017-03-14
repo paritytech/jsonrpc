@@ -31,7 +31,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 	type Future = BoxFuture<Self::Response, Self::Error>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
-		trace!(target: "tcp", "Accepted request: {}", req);
+		trace!(target: "ipc", "Received request: {}", req);
 		self.handler.handle_request(&req, self.meta.clone())
 	}
 }
@@ -91,7 +91,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let connections = listener.incoming();
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
-				trace!("Accepted incoming UDS connection");
+				trace!("Accepted incoming IPC connection");
 
 				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
 				let service = Service::new(rpc_handler.clone(), meta);
@@ -99,14 +99,14 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				let responses = reader.and_then(
 					move |req| service.call(req).then(|response| match response {
 						Err(e) => {
-							warn!(target: "uds", "Error while processing request: {:?}", e);
+							warn!(target: "ipc", "Error while processing request: {:?}", e);
 							future::ok(None)
 						},
 						Ok(None) => {
 							future::ok(None)
 						},
 						Ok(Some(response_data)) => {
-							trace!(target: "uds", "Sent response: {}", &response_data);
+							trace!(target: "ipc", "Sent response: {}", &response_data);
 							future::ok(Some(response_data))
 						}
 					})
@@ -115,7 +115,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 
 				let writer = writer.send_all(responses).then(move |_| {
-					trace!(target: "uds", "Peer: service finished");
+					trace!(target: "ipc", "Peer: service finished");
 					Ok(())
 				});
 

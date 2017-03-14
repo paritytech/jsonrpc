@@ -155,8 +155,8 @@ mod tests {
 
 		let mut codec = StreamCodec;
 		let parsed_request = codec.decode(&mut buf)
-			.expect("There should be no error in first fragmented test")
-			.expect("There should be at least one request in first fragmented test");
+			.expect("There should be no error in huge test")
+			.expect("There should be at least one request huge test");
 		assert_eq!(request, parsed_request);
 	}
 }
