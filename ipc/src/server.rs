@@ -1,19 +1,13 @@
-extern crate tokio_uds;
-extern crate tokio_service;
-
-pub extern crate jsonrpc_core as jsonrpc;
-pub extern crate jsonrpc_server_utils as server_utils;
-
 use std;
 use std::sync::Arc;
 
-use self::tokio_service::Service as TokioService;
-use self::jsonrpc::futures::{future, Future, Stream, Sink};
-use self::jsonrpc::futures::sync::oneshot;
-use self::jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use self::jsonrpc::futures::BoxFuture;
-use self::server_utils::tokio_core::io::Io;
-use self::server_utils::reactor;
+use tokio_service::{self, Service as TokioService};
+use jsonrpc::futures::{future, Future, Stream, Sink};
+use jsonrpc::futures::sync::oneshot;
+use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::futures::BoxFuture;
+use server_utils::tokio_core::io::Io;
+use server_utils::reactor;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
@@ -81,10 +75,10 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let (start_signal, start_receiver) = oneshot::channel();
 
 		remote.remote().spawn(move |handle| {
-			use self::tokio_uds::UnixListener;
+			use parity_tokio_ipc::Endpoint;
 			use stream_codec::StreamCodec;
 
-			let listener = match UnixListener::bind(&endpoint_addr, handle) {
+			let listener = match Endpoint::new(endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
 					start_signal.complete(Err(e));
@@ -96,12 +90,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
 
-			let server = connections.for_each(move |(unix_stream, client_addr)| {
-				trace!("Accepted incoming UDS connection: {:?}", client_addr);
+			let server = connections.for_each(move |(io_stream, remote_id)| {
+				trace!("Accepted incoming UDS connection");
 
-				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &client_addr });
+				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = unix_stream.framed(StreamCodec).split();
+				let (writer, reader) = io_stream.framed(StreamCodec).split();
 				let responses = reader.and_then(
 					move |req| service.call(req).then(|response| match response {
 						Err(e) => {
@@ -121,7 +115,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 
 				let writer = writer.send_all(responses).then(move |_| {
-					trace!(target: "uds", "Peer {:?}: service finished", client_addr);
+					trace!(target: "uds", "Peer: service finished");
 					Ok(())
 				});
 
@@ -187,13 +181,15 @@ pub fn server<I, M: Metadata, S: Middleware<M>>(
 
 #[cfg(test)]
 mod tests {
+	extern crate tokio_uds;
+
 	use std::thread;
 	use super::{ServerBuilder, Server};
-	use super::jsonrpc::{MetaIoHandler, Value};
-	use super::jsonrpc::futures::{Future, future};
-	use super::tokio_uds::UnixStream;
-	use super::server_utils::tokio_core::reactor::Core;
-	use super::server_utils::tokio_core::io;
+	use jsonrpc::{MetaIoHandler, Value};
+	use jsonrpc::futures::{Future, future};
+	use self::tokio_uds::UnixStream;
+	use server_utils::tokio_core::reactor::Core;
+	use server_utils::tokio_core::io;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();

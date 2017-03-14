@@ -1,9 +1,9 @@
-use uds::jsonrpc::Metadata;
+use jsonrpc::Metadata;
 
 /// Request context
 pub struct RequestContext<'a> {
 	/// Remote UDS endpoint
-	pub endpoint_addr: &'a ::std::os::unix::net::SocketAddr,
+	pub endpoint_addr: &'a ::parity_tokio_ipc::RemoteId,
 }
 
 /// Metadata extractor (per session)

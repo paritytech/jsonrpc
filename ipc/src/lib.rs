@@ -14,9 +14,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-extern crate jsonrpc_core;
-extern crate jsonrpc_server_utils;
 extern crate rand;
+extern crate tokio_service;
+
+extern crate jsonrpc_core as jsonrpc;
+extern crate jsonrpc_server_utils as server_utils;
+
+extern crate parity_tokio_ipc;
 
 #[macro_use] extern crate log;
 
@@ -24,22 +28,9 @@ extern crate rand;
 #[cfg(test)] extern crate env_logger;
 #[cfg(test)] mod logger;
 
-#[cfg(windows)]
-extern crate miow;
+mod stream_codec;
+mod server;
+mod meta;
+pub use server::{server, Server, ServerBuilder};
 
-#[cfg(windows)]
-mod validator;
-
-#[cfg(test)]
-#[cfg(windows)]
-mod tests;
-
-#[cfg(windows)] mod win;
-#[cfg(windows)] pub use win::{Server, Error, Result as PipeResult, server};
-
-#[cfg(not(windows))] mod stream_codec;
-#[cfg(not(windows))] mod uds;
-#[cfg(not(windows))] mod meta;
-#[cfg(not(windows))] pub use uds::{server, Server, ServerBuilder};
-
-pub use self::jsonrpc_server_utils::tokio_core;
+pub use self::server_utils::tokio_core;
