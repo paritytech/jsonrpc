@@ -9,17 +9,18 @@ repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
+log = "0.3"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
-mio = "0.5"
-slab   = "0.1.0"
-bytes  = "0.3.0"
-miow = "0.1"
-log = "0.3"
-rand = "0.3"
+
+[target.'cfg(not(windows))'.dependencies]
 tokio-uds = "0.1"
 tokio-service = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+miow = "0.1"
 
 [dev-dependencies]
 lazy_static = "0.2"
 env_logger = "0.4"
+rand = "0.3"

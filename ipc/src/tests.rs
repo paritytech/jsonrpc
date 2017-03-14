@@ -16,14 +16,14 @@
 
 use jsonrpc_core::IoHandler;
 use super::Server;
-use std::{self, env};
+use std;
 use rand::{thread_rng, Rng};
-use log::LogLevelFilter;
-use env_logger::LogBuilder;
+use logger::init_log;
 
 pub fn dummy_io_handler() -> IoHandler {
 	use jsonrpc_core::*;
-
+	init_log();
+	
 	let mut io = IoHandler::default();
 	io.add_method("say_hello", |params: Params| {
 		let (request_p1, request_p2) = params.parse::<(u64, u64)>().unwrap();

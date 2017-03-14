@@ -13,7 +13,6 @@ jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
 log = "0.3"
 serde_json = "0.9"
-rand = "0.3"
 tokio-service = "0.1"
 parking_lot = "0.3"
 

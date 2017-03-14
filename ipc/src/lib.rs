@@ -14,33 +14,37 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
+//! JSON-RPC cross platform IPC server implementation.
+
+#![warn(missing_docs)]
+
 extern crate jsonrpc_core;
 extern crate jsonrpc_server_utils;
-extern crate rand;
 
 #[macro_use] extern crate log;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
 #[cfg(test)] extern crate env_logger;
+#[cfg(test)] extern crate rand;
 #[cfg(test)] mod logger;
 
 #[cfg(windows)]
 extern crate miow;
-
-#[cfg(windows)]
-mod validator;
 
 #[cfg(test)]
 #[cfg(windows)]
 mod tests;
 
 #[cfg(windows)] mod win;
-#[cfg(windows)] pub use win::{Server, Error, Result as PipeResult, server};
+#[cfg(windows)] mod validator;
+#[cfg(windows)] pub use win::{Server};
 
 #[cfg(not(windows))] mod stream_codec;
 #[cfg(not(windows))] mod uds;
-#[cfg(not(windows))] mod meta;
-#[cfg(not(windows))] pub use uds::{server, Server, ServerBuilder};
+#[cfg(not(windows))] pub use uds::{Server, ServerBuilder};
+
+mod shared;
+pub use shared::{Result, Error, IpcServer, MetaExtractor, RequestContext};
 
 pub use self::jsonrpc_server_utils::tokio_core;
 pub use self::jsonrpc_server_utils::reactor::UninitializedRemote;

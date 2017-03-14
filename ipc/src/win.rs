@@ -39,36 +39,21 @@ use miow::pipe::{NamedPipe, NamedPipeBuilder};
 use std;
 use std::io;
 use std::io::{Read, Write};
-use std::sync::atomic::*;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc_server_utils::reactor;
 use jsonrpc_server_utils::tokio_core::reactor::Remote;
 use validator;
-
-pub type Result<T> = std::result::Result<T, Error>;
+use shared::{Result, Error, IpcServer, MetaExtractor, NoopExtractor, RequestContext};
 
 const MAX_REQUEST_LEN: u32 = 65536;
 const REQUEST_READ_BATCH: usize = 4096;
 
-#[derive(Debug)]
-pub enum Error {
-	Io(std::io::Error),
-	NotStarted,
-	AlreadyStopping,
-	NotStopped,
-	IsStopping,
-}
-
-impl std::convert::From<std::io::Error> for Error {
-	fn from(io_error: std::io::Error) -> Error {
-		Error::Io(io_error)
-	}
-}
-
 pub struct PipeHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	waiting_pipe: NamedPipe,
 	handler: Arc<MetaIoHandler<M, S>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
 	// TODO [ToDr] To be used by async implementation of IPC.
 	_remote: Remote,
 }
@@ -78,6 +63,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	pub fn start(
 		addr: &str,
 		handler: Arc<MetaIoHandler<M, S>>,
+		meta_extractor: Arc<MetaExtractor<M>>,
 		remote: Remote,
 	) -> Result<Self> {
 		Ok(PipeHandler {
@@ -93,6 +79,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 					.create()
 			),
 			handler: handler,
+			meta_extractor: meta_extractor,
 			_remote: remote,
 		})
 	}
@@ -126,6 +113,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 				.create()));
 
 		let thread_handler = self.handler.clone();
+		let meta_extractor = self.meta_extractor.clone();
 		std::thread::spawn(move || {
 			let mut buf = vec![0u8; MAX_REQUEST_LEN as usize];
 			let mut fin = REQUEST_READ_BATCH;
@@ -145,7 +133,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 							let mut response_buf = Vec::new();
 							for rpc_msg in requests  {
 								trace!(target: "ipc", "Request: {}", rpc_msg);
-								let meta = Default::default();
+								let meta = meta_extractor.extract(&RequestContext);
 								let response: Option<String> = thread_handler.handle_request_sync(&rpc_msg, meta);
 
 								if let Some(response_str) = response {
@@ -183,11 +171,13 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	}
 }
 
+/// Windows IPC server
 pub struct Server<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
 	io_handler: Arc<MetaIoHandler<M, S>>,
-	remote_handle: Mutex<Option<reactor::Remote>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
+	remote_handle: Option<reactor::Remote>,
 	remote: Remote,
 	addr: String,
 }
@@ -200,17 +190,20 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		Self::with_remote(
 			socket_addr,
 			io_handler,
+			NoopExtractor,
 			reactor::UninitializedRemote::Unspawned,
 		)
 	}
 
 	/// New Server using RpcHandler
-	pub fn with_remote<T:>(
+	pub fn with_remote<T, E>(
 		socket_addr: &str,
 		io_handler: T,
+		meta_extractor: E,
 		remote: reactor::UninitializedRemote,
 	) -> Result<Server<M, S>> where
 		T: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
 	{
 		let remote = remote.initialize()?;
 
@@ -218,8 +211,9 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
 			io_handler: Arc::new(io_handler.into()),
+			meta_extractor: Arc::new(meta_extractor),
 			remote: remote.remote(),
-			remote_handle: Mutex::new(Some(remote)),
+			remote_handle: Some(remote),
 			addr: socket_addr.to_owned(),
 		})
 	}
@@ -229,6 +223,7 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		let mut pipe_handler = PipeHandler::start(
 			&self.addr,
 			self.io_handler.clone(),
+			self.meta_extractor.clone(),
 			self.remote.clone(),
 		)?;
 		loop  {
@@ -248,10 +243,12 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		let thread_handler = self.io_handler.clone();
 		let addr = self.addr.clone();
 		let remote = self.remote.clone();
+		let meta_extractor = self.meta_extractor.clone();
 		std::thread::spawn(move || {
 			let mut pipe_handler = PipeHandler::start(
 				&addr,
 				thread_handler,
+				meta_extractor,
 				remote,
 			).unwrap();
 			while !thread_stopping.load(Ordering::Relaxed) {
@@ -267,16 +264,18 @@ impl<M: Metadata, S: Middleware<M>> Server<M, S> {
 		Ok(())
 	}
 
-	pub fn stop_async(&self) -> Result<()> {
-		self.remote_handle.lock().unwrap().take().map(|s| s.close());
+	/// Stops the server, doesn't wait for it to finish.
+	pub fn stop_async(&mut self) -> Result<()> {
+		self.remote_handle.take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
 		Ok(())
 	}
 
-	pub fn stop(&self) -> Result<()> {
-		self.remote_handle.lock().unwrap().take().map(|s| s.close());
+	/// Stops the server and waits for it to finish.
+	pub fn stop(&mut self) -> Result<()> {
+		self.remote_handle.take().map(|s| s.close());
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
@@ -293,14 +292,18 @@ impl<M: Metadata, S: Middleware<M>> Drop for Server<M, S> {
 	}
 }
 
-pub fn server<I, M: Metadata, S: Middleware<M>>(
-	io: I, 
-	path: &str
-) -> Result<Server<M, S>>
-	where I: Into<MetaIoHandler<M, S>>
-{
-	let server = Server::new(path, io)?;
-	server.run_async()?;
-
-	Ok(server)
+impl<M: Metadata, S: Middleware<M>> IpcServer<M, S> for Server<M, S> {
+	fn start<I, E>(
+		io: I,
+		path: &str,
+		remote: Remote,
+		extractor: E,
+	) -> Result<Self> where
+		I: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
+	{
+		let server = Server::with_remote(path, io, extractor, reactor::UninitializedRemote::Shared(remote))?;
+		server.run_async()?;
+		Ok(server)
+	}
 }
