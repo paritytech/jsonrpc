@@ -3,7 +3,7 @@ use log::LogLevelFilter;
 use env_logger::LogBuilder;
 
 lazy_static! {
-	static ref LOG_DUMMY: bool = {
+	static ref _LOG_DUMMY: bool = {
 		let mut builder = LogBuilder::new();
 		builder.filter(None, LogLevelFilter::Info);
 
@@ -20,5 +20,5 @@ lazy_static! {
 
 /// Intialize log with default settings
 pub fn init_log() {
-	let _ = *LOG_DUMMY;
+	let _ = *_LOG_DUMMY;
 }
