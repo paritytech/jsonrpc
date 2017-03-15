@@ -20,8 +20,6 @@
 #![warn(missing_docs)]
 
 #[macro_use] extern crate log;
-extern crate futures;
-extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
 extern crate parking_lot;
@@ -41,7 +39,7 @@ use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
 use parking_lot::RwLock;
-use futures::{future, Future, BoxFuture};
+use jsonrpc::futures::{self, future, Future, BoxFuture};
 use jsonrpc::MetaIoHandler;
 use jsonrpc_server_utils::hosts;
 

@@ -7,16 +7,19 @@ use jsonrpc::futures::sync::oneshot;
 use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
 use server_utils::tokio_core::io::Io;
+use server_utils::tokio_core::reactor::Remote;
 use server_utils::reactor;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
+/// IPC server session
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta: M,
 }
 
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
+	/// Create new IPC server session with given handler and metadata.
 	pub fn new(handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
 		Service { handler: handler, meta: meta }
 	}
@@ -36,6 +39,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 	}
 }
 
+/// IPC server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
@@ -43,29 +47,32 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
+	///
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
-	{
-		Self::with_remote(
-			io_handler,
-			reactor::UninitializedRemote::Unspawned,
-		)
-	}
-
-	pub fn with_remote<T>(
-		io_handler: T,
-		remote: reactor::UninitializedRemote,
-	) -> ServerBuilder<M, S>
-		where T: Into<MetaIoHandler<M, S>>,
 	{
 		ServerBuilder {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
-			remote: remote,
+			remote: reactor::UninitializedRemote::Unspawned,
 		}
 	}
 
-	/// Run server (in separate thread)
+	/// Sets shared different event loop remote.
+	pub fn event_loop_remote(mut self, remote: Remote) -> Self {
+		self.remote = reactor::UninitializedRemote::Shared(remote);
+		self
+	}
+
+	/// Sets session metadata extractor.
+	pub fn session_metadata_extractor<X>(mut self, meta_extractor: X) -> Self where
+		X: MetaExtractor<M>,
+	{
+		self.meta_extractor = Arc::new(meta_extractor);
+		self
+	}
+
+	/// Run server (in a separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler.clone();
@@ -168,15 +175,6 @@ impl Drop for Server {
 		self.remote.take().map(|remote| remote.close());
 		self.clear_file();
 	}
-}
-
-pub fn server<I, M: Metadata, S: Middleware<M>>(
-	io: I,
-	path: &str
-) -> std::io::Result<Server>
-	where I: Into<MetaIoHandler<M, S>>
-{
-	ServerBuilder::new(io).start(path)
 }
 
 #[cfg(test)]

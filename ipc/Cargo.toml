@@ -9,13 +9,15 @@ repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
+log = "0.3"
+tokio-service = "0.1"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
-log = "0.3"
 parity-tokio-ipc = { git = "https://github.com/nikvolf/parity-tokio-ipc" }
-tokio-service = "0.1"
-tokio-uds = "0.1"
 
 [dev-dependencies]
 env_logger = "0.4"
 lazy_static = "0.2"
+
+[target.'cfg(not(windows))'.dev-dependencies]
+tokio-uds = "0.1"
