@@ -8,6 +8,6 @@ fn main() {
 	io.add_method("say_hello", |_params| {
 		Ok(Value::String("hello".to_string()))
 	});
-	let _server = jsonrpc_ipc_server::server(io, "/tmp/parity-example.ipc").expect("Server should start ok");
+	let _server = jsonrpc_ipc_server::ServerBuilder::new(io)
+			.start("/tmp/parity-example.ipc").expect("Server should start ok");
 }
-

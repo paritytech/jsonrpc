@@ -3,7 +3,6 @@
 //! ```no_run
 //! extern crate jsonrpc_core;
 //! extern crate jsonrpc_tcp_server;
-//! extern crate rand;
 //!
 //! use jsonrpc_core::*;
 //! use jsonrpc_tcp_server::ServerBuilder;
@@ -26,7 +25,6 @@
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate parking_lot;
-extern crate rand;
 extern crate serde_json;
 extern crate tokio_service;
 

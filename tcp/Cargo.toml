@@ -9,14 +9,13 @@ repository = "https://github.com/ethcore/jsonrpc"
 documentation = "https://ethcore.github.io/jsonrpc/json_tcp_server/index.html"
 
 [dependencies]
+log = "0.3"
+parking_lot = "0.3"
+serde_json = "0.9"
+tokio-service = "0.1"
+
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
-log = "0.3"
-serde_json = "0.9"
-rand = "0.3"
-tokio-service = "0.1"
-parking_lot = "0.3"
-
 
 [dev-dependencies]
 lazy_static = "0.2"

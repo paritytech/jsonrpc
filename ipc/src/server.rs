@@ -1,28 +1,25 @@
-extern crate tokio_uds;
-extern crate tokio_service;
-
-pub extern crate jsonrpc_core as jsonrpc;
-pub extern crate jsonrpc_server_utils as server_utils;
-
 use std;
 use std::sync::Arc;
 
-use self::tokio_service::Service as TokioService;
-use self::jsonrpc::futures::{future, Future, Stream, Sink};
-use self::jsonrpc::futures::sync::oneshot;
-use self::jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use self::jsonrpc::futures::BoxFuture;
-use self::server_utils::tokio_core::io::Io;
-use self::server_utils::reactor;
+use tokio_service::{self, Service as TokioService};
+use jsonrpc::futures::{future, Future, Stream, Sink};
+use jsonrpc::futures::sync::oneshot;
+use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::futures::BoxFuture;
+use server_utils::tokio_core::io::Io;
+use server_utils::tokio_core::reactor::Remote;
+use server_utils::reactor;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
+/// IPC server session
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta: M,
 }
 
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
+	/// Create new IPC server session with given handler and metadata.
 	pub fn new(handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
 		Service { handler: handler, meta: meta }
 	}
@@ -37,11 +34,12 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 	type Future = BoxFuture<Self::Response, Self::Error>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
-		trace!(target: "tcp", "Accepted request: {}", req);
+		trace!(target: "ipc", "Received request: {}", req);
 		self.handler.handle_request(&req, self.meta.clone())
 	}
 }
 
+/// IPC server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
@@ -49,29 +47,32 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
+	///
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
-	{
-		Self::with_remote(
-			io_handler,
-			reactor::UninitializedRemote::Unspawned,
-		)
-	}
-
-	pub fn with_remote<T>(
-		io_handler: T,
-		remote: reactor::UninitializedRemote,
-	) -> ServerBuilder<M, S>
-		where T: Into<MetaIoHandler<M, S>>,
 	{
 		ServerBuilder {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
-			remote: remote,
+			remote: reactor::UninitializedRemote::Unspawned,
 		}
 	}
 
-	/// Run server (in separate thread)
+	/// Sets shared different event loop remote.
+	pub fn event_loop_remote(mut self, remote: Remote) -> Self {
+		self.remote = reactor::UninitializedRemote::Shared(remote);
+		self
+	}
+
+	/// Sets session metadata extractor.
+	pub fn session_metadata_extractor<X>(mut self, meta_extractor: X) -> Self where
+		X: MetaExtractor<M>,
+	{
+		self.meta_extractor = Arc::new(meta_extractor);
+		self
+	}
+
+	/// Run server (in a separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler.clone();
@@ -81,10 +82,10 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let (start_signal, start_receiver) = oneshot::channel();
 
 		remote.remote().spawn(move |handle| {
-			use self::tokio_uds::UnixListener;
+			use parity_tokio_ipc::Endpoint;
 			use stream_codec::StreamCodec;
 
-			let listener = match UnixListener::bind(&endpoint_addr, handle) {
+			let listener = match Endpoint::new(endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
 					start_signal.complete(Err(e));
@@ -96,23 +97,23 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
 
-			let server = connections.for_each(move |(unix_stream, client_addr)| {
-				trace!("Accepted incoming UDS connection: {:?}", client_addr);
+			let server = connections.for_each(move |(io_stream, remote_id)| {
+				trace!("Accepted incoming IPC connection");
 
-				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &client_addr });
+				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = unix_stream.framed(StreamCodec).split();
+				let (writer, reader) = io_stream.framed(StreamCodec).split();
 				let responses = reader.and_then(
 					move |req| service.call(req).then(|response| match response {
 						Err(e) => {
-							warn!(target: "uds", "Error while processing request: {:?}", e);
+							warn!(target: "ipc", "Error while processing request: {:?}", e);
 							future::ok(None)
 						},
 						Ok(None) => {
 							future::ok(None)
 						},
 						Ok(Some(response_data)) => {
-							trace!(target: "uds", "Sent response: {}", &response_data);
+							trace!(target: "ipc", "Sent response: {}", &response_data);
 							future::ok(Some(response_data))
 						}
 					})
@@ -121,7 +122,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 
 				let writer = writer.send_all(responses).then(move |_| {
-					trace!(target: "uds", "Peer {:?}: service finished", client_addr);
+					trace!(target: "ipc", "Peer: service finished");
 					Ok(())
 				});
 
@@ -176,24 +177,18 @@ impl Drop for Server {
 	}
 }
 
-pub fn server<I, M: Metadata, S: Middleware<M>>(
-	io: I,
-	path: &str
-) -> std::io::Result<Server>
-	where I: Into<MetaIoHandler<M, S>>
-{
-	ServerBuilder::new(io).start(path)
-}
-
 #[cfg(test)]
+#[cfg(not(windows))]
 mod tests {
+	extern crate tokio_uds;
+
 	use std::thread;
 	use super::{ServerBuilder, Server};
-	use super::jsonrpc::{MetaIoHandler, Value};
-	use super::jsonrpc::futures::{Future, future};
-	use super::tokio_uds::UnixStream;
-	use super::server_utils::tokio_core::reactor::Core;
-	use super::server_utils::tokio_core::io;
+	use jsonrpc::{MetaIoHandler, Value};
+	use jsonrpc::futures::{Future, future};
+	use self::tokio_uds::UnixStream;
+	use server_utils::tokio_core::reactor::Core;
+	use server_utils::tokio_core::io;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
