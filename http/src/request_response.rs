@@ -60,7 +60,7 @@ impl Response {
 	pub fn host_not_allowed() -> Self {
 		Response {
 			code: StatusCode::Forbidden,
-			content_type: header::ContentType::html(),
+			content_type: header::ContentType::plaintext(),
 			content: "Provided Host header is not whitelisted.\n".to_owned(),
 			write_pos: 0,
 		}
@@ -70,7 +70,7 @@ impl Response {
 	pub fn unsupported_content_type() -> Self {
 		Response {
 			code: StatusCode::UnsupportedMediaType,
-			content_type: header::ContentType::html(),
+			content_type: header::ContentType::plaintext(),
 			content: "Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned(),
 			write_pos: 0,
 		}
@@ -80,7 +80,7 @@ impl Response {
 	pub fn method_not_allowed() -> Self {
 		Response {
 			code: StatusCode::MethodNotAllowed,
-			content_type: header::ContentType::html(),
+			content_type: header::ContentType::plaintext(),
 			content: "Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned(),
 			write_pos: 0,
 		}
@@ -90,7 +90,7 @@ impl Response {
 	pub fn invalid_cors() -> Self {
 		Response {
 			code: StatusCode::Forbidden,
-			content_type: header::ContentType::html(),
+			content_type: header::ContentType::plaintext(),
 			content: "Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
 			write_pos: 0,
 		}
