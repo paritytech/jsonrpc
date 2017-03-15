@@ -122,16 +122,55 @@ impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
 	}
 }
 
+/// CORS Header Result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CorsHeader<T = AccessControlAllowOrigin> {
+	/// CORS header was not required. Origin is not present in the request.
+	NotRequired,
+	/// CORS header is not returned, Origin is not allowed to access the resource.
+	Invalid,
+	/// CORS header to include in the response. Origin is allowed to access the resource.
+	Ok(T),
+}
+
+impl<T> CorsHeader<T> {
+	/// Maps `Ok` variant of `CorsHeader`.
+	pub fn map<F, O>(self, f: F) -> CorsHeader<O> where
+		F: FnOnce(T) -> O,
+	{
+		use self::CorsHeader::*;
+
+		match self {
+			NotRequired => NotRequired,
+			Invalid => Invalid,
+			Ok(val) => Ok(f(val)),
+		}
+	}
+}
+
+impl<T> Into<Option<T>> for CorsHeader<T> {
+	fn into(self) -> Option<T> {
+		use self::CorsHeader::*;
+
+		match self {
+			NotRequired | Invalid => None,
+			Ok(header) => Some(header),
+		}
+	}
+}
+
 /// Returns correct CORS header (if any) given list of allowed origins and current origin.
-pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> Option<AccessControlAllowOrigin> {
-	match allowed.as_ref() {
-		None => None,
-		Some(ref allowed) => match origin {
-			None => None,
-			Some("null") => {
+pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> CorsHeader {
+	match origin {
+		None => CorsHeader::NotRequired,
+		Some(ref origin) => match allowed.as_ref() {
+			None => CorsHeader::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
+			Some(ref allowed) if *origin == "null" => {
 				allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
+					.map(CorsHeader::Ok)
+					.unwrap_or(CorsHeader::Invalid)
 			},
-			Some(ref origin) => {
+			Some(ref allowed) => {
 				allowed.iter().find(|cors| {
 					match **cors {
 						AccessControlAllowOrigin::Any => true,
@@ -143,16 +182,16 @@ pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlA
 						AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(Origin::parse(origin)),
 						ref cors => cors.clone(),
 					}
-				})
+				}).map(CorsHeader::Ok).unwrap_or(CorsHeader::Invalid)
 			},
-		}
+		},
 	}
 }
 
 
 #[cfg(test)]
 mod tests {
-	use super::{get_cors_header, AccessControlAllowOrigin, Origin, OriginProtocol};
+	use super::{get_cors_header, CorsHeader, AccessControlAllowOrigin, Origin, OriginProtocol};
 
 	#[test]
 	fn should_parse_origin() {
@@ -166,7 +205,7 @@ mod tests {
 	}
 
 	#[test]
-	fn should_return_none_when_there_are_no_cors_domains() {
+	fn should_return_none_when_there_are_no_cors_domains_and_no_origin() {
 		// given
 		let origin = None;
 
@@ -174,7 +213,19 @@ mod tests {
 		let res = get_cors_header(origin, &None);
 
 		// then
-		assert_eq!(res, None);
+		assert_eq!(res, CorsHeader::NotRequired);
+	}
+
+	#[test]
+	fn should_return_domain_when_all_are_allowed() {
+		// given
+		let origin = Some("parity.io");
+
+		// when
+		let res = get_cors_header(origin, &None);
+
+		// then
+		assert_eq!(res, CorsHeader::Ok("parity.io".into()));
 	}
 
 	#[test]
@@ -189,7 +240,7 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, None);
+		assert_eq!(res, CorsHeader::NotRequired);
 	}
 
 	#[test]
@@ -201,7 +252,7 @@ mod tests {
 		let res = get_cors_header(origin, &Some(Vec::new()));
 
 		// then
-		assert_eq!(res, None);
+		assert_eq!(res, CorsHeader::NotRequired);
 	}
 
 	#[test]
@@ -216,7 +267,7 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, None);
+		assert_eq!(res, CorsHeader::Invalid);
 	}
 
 	#[test]
@@ -228,7 +279,7 @@ mod tests {
 		let res = get_cors_header(origin, &Some(vec![AccessControlAllowOrigin::Any]));
 
 		// then
-		assert_eq!(res, Some(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
+		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
 	}
 
 	#[test]
@@ -243,7 +294,7 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, None);
+		assert_eq!(res, CorsHeader::NotRequired);
 	}
 
 	#[test]
@@ -258,7 +309,7 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, Some(AccessControlAllowOrigin::Null));
+		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Null));
 	}
 
 	#[test]
@@ -273,6 +324,6 @@ mod tests {
 		);
 
 		// then
-		assert_eq!(res, Some(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
+		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
 	}
 }

@@ -1,6 +1,7 @@
 use hyper::{self, header};
 
 use jsonrpc_server_utils::{cors, hosts};
+pub use jsonrpc_server_utils::cors::CorsHeader;
 
 /// Extracts string value of a single header in request.
 fn read_header<'a>(req: &'a hyper::server::Request<'a, hyper::net::HttpStream>, header: &str) -> Option<&'a str> {
@@ -24,7 +25,7 @@ pub fn is_host_allowed(
 pub fn cors_header(
 	request: &hyper::server::Request<hyper::net::HttpStream>,
 	cors_domains: &Option<Vec<cors::AccessControlAllowOrigin>>
-) -> Option<header::AccessControlAllowOrigin> {
+) -> CorsHeader<header::AccessControlAllowOrigin> {
 	cors::get_cors_header(read_header(request, "origin"), cors_domains).map(|origin| {
 		use self::cors::AccessControlAllowOrigin::*;
 		match origin {

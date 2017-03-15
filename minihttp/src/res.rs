@@ -5,6 +5,14 @@ use jsonrpc_server_utils::cors;
 
 const SERVER: &'static str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
 
+pub fn options(cors: Option<cors::AccessControlAllowOrigin>) -> Response {
+	let mut response = new("", cors);
+	response
+		.header("Allow", "OPTIONS, POST")
+		.header("Accept", "application/json");
+	response
+}
+
 pub fn method_not_allowed() -> Response {
 	let mut response = Response::new();
 	response
@@ -22,6 +30,16 @@ pub fn invalid_host() -> Response {
 		.server(SERVER)
 		.header("Content-Type", "text/plain")
 		.body("Provided Host header is not whitelisted.\n");
+	response
+}
+
+pub fn invalid_cors() -> Response {
+	let mut response = Response::new();
+	response
+		.status_code(403, "Forbidden")
+		.server(SERVER)
+		.header("Content-Type", "text/plain")
+		.body("Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n");
 	response
 }
 
