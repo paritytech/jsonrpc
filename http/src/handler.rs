@@ -47,6 +47,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 				response: Response::method_not_allowed(),
 				waiting_sender: sender,
 				waiting_response: receiver,
+				continue_on_invalid_cors: false,
 			})
 		}
 	}
@@ -56,15 +57,25 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		let action = self.middleware.on_request(&request);
 
-		let (should_validate_hosts, handler) = match action {
-			RequestMiddlewareAction::Proceed => (true, None),
-			RequestMiddlewareAction::Respond { should_validate_hosts, handler } => (should_validate_hosts, Some(handler)),
+		let (should_validate_hosts, should_continue_on_invalid_cors, handler) = match action {
+			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors }=> (
+				true, should_continue_on_invalid_cors, None
+			),
+			RequestMiddlewareAction::Respond { should_validate_hosts, handler } => (
+				should_validate_hosts, false, Some(handler)
+			),
 		};
 
 		// Validate host
 		if should_validate_hosts && !utils::is_host_allowed(&request, &self.allowed_hosts) {
 			self.handler = Handler::Error(Response::host_not_allowed());
 			return Next::write();
+		}
+
+		if should_continue_on_invalid_cors {
+			if let Handler::Rpc(ref mut rpc) = self.handler {
+				rpc.continue_on_invalid_cors = true;
+			}
 		}
 
 		// Replace handler with the one returned by middleware.
@@ -127,6 +138,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	control: Control,
 	request: Request,
 	response: Response,
+	continue_on_invalid_cors: bool,
 	/// Asynchronous response waiting to be moved into `response` field.
 	waiting_sender: mpsc::Sender<Response>,
 	waiting_response: mpsc::Receiver<Response>,
@@ -181,7 +193,7 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Read origin
 		let cors_header = utils::cors_header(&request, &self.cors_domains);
-		if cors_header == cors::CorsHeader::Invalid {
+		if cors_header == cors::CorsHeader::Invalid && !self.continue_on_invalid_cors {
 			self.response = Response::invalid_cors();
 			return Next::write();
 		}
