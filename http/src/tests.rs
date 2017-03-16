@@ -27,7 +27,7 @@ fn serve() -> Server {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
 			thread::sleep(::std::time::Duration::from_millis(10));
-			c.complete(Value::String("world".into()));
+			c.send(Value::String("world".into())).unwrap();
 		});
 		p.map_err(|_| Error::invalid_request()).boxed()
 	});
@@ -267,8 +267,57 @@ fn should_not_add_cors_headers() {
 	);
 
 	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.body, cors_invalid());
+}
+
+#[test]
+fn should_not_process_the_request_in_case_of_invalid_cors() {
+	// given
+	let server = serve();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: fake.io\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.body, cors_invalid());
+}
+
+
+#[test]
+fn should_return_proper_headers_on_options() {
+	// given
+	let server = serve();
+
+	// when
+	let response = request(server,
+		"\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Connection: close\r\n\
+			Content-Length: 0\r\n\
+			\r\n\
+		"
+	);
+
+	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert_eq!(response.body, method_not_found());
+	assert!(response.headers.contains("Allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("Accept: application/json"), "Headers missing in {}", response.headers);
+	assert_eq!(response.body, "0\n");
 }
 
 #[test]
@@ -519,6 +568,10 @@ fn should_handle_sync_batch_requests_correctly() {
 
 fn invalid_host() -> String {
 	"29\nProvided Host header is not whitelisted.\n".into()
+}
+
+fn cors_invalid() -> String {
+	"76\nOrigin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn method_not_found() -> String {

@@ -98,18 +98,21 @@ pub struct Subscriber {
 
 impl Subscriber {
 	/// Consumes `Subscriber` and assigns unique id to a requestor.
-	pub fn assign_id(self, id: SubscriptionId) -> Sink {
-		self.sender.complete(Ok(id));
+	/// Returns `Err` if request has already terminated.
+	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink, ()> {
+		self.sender.send(Ok(id)).map_err(|_| ())?;
 
-		Sink {
+		Ok(Sink {
 			notification: self.notification,
 			transport: self.transport,
-		}
+		})
 	}
 
 	/// Rejects this subscription request with given error.
-	pub fn reject(self, error: core::Error) {
-		self.sender.complete(Err(error))
+	/// Returns `Err` if request has already terminated.
+	pub fn reject(self, error: core::Error) -> Result<(), ()> {
+		self.sender.send(Err(error)).map_err(|_| ())?;
+		Ok(())
 	}
 }
 
@@ -332,7 +335,7 @@ mod tests {
 		};
 
 		// when
-		let sink = subscriber.assign_id(SubscriptionId::Number(5));
+		let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
 
 		// then
 		assert_eq!(
@@ -359,7 +362,7 @@ mod tests {
 		};
 
 		// when
-		subscriber.reject(error.clone());
+		subscriber.reject(error.clone()).unwrap();
 
 		// then
 		assert_eq!(

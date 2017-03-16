@@ -4,5 +4,7 @@ version = "7.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 
 [dependencies]
+log = "0.3"
 jsonrpc-core = { version = "7.0", path = "../core" }
 tokio-core = { version = "0.1" }
+tokio-io = { version = "0.1" }

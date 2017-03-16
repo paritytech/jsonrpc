@@ -46,7 +46,7 @@ pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use jsonrpc_server_utils::cors::{AccessControlAllowOrigin, Origin};
 pub use jsonrpc_server_utils::tokio_core;
 pub use handler::ServerHandler;
-pub use utils::{is_host_allowed, cors_header};
+pub use utils::{is_host_allowed, cors_header, CorsHeader};
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, Error>;

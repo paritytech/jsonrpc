@@ -255,10 +255,17 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 		let origin = request.header("Origin");
 		let cors = cors::get_cors_header(origin, &self.cors_domains);
 
+		// Validate cors header
+		if let cors::CorsHeader::Invalid = cors {
+			return future::ok(
+				res::invalid_cors()
+			).boxed();
+		}
+
 		// Don't process data if it's OPTIONS
 		if is_options {
 			return future::ok(
-				res::new("", cors)
+				res::options(cors.into())
 			).boxed();
 		}
 
@@ -277,7 +284,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 		let data = request.body();
 		self.handler.handle_request(data, metadata).map(|result| {
 			let result = format!("{}\n", result.unwrap_or_default());
-			res::new(&result, cors)
+			res::new(&result, cors.into())
 		}).map_err(|_| unimplemented!()).boxed()
 	}
 }
@@ -297,7 +304,7 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		self.close.take().expect("Close is always set before self is consumed.").complete(());
+		let _ = self.close.take().expect("Close is always set before self is consumed.").send(());
 	}
 
 	/// Will block, waiting for the server to finish.
@@ -308,6 +315,6 @@ impl Server {
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.close.take().map(|close| close.complete(()));
+		self.close.take().map(|close| close.send(()));
 	}
 }

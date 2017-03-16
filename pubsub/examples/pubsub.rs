@@ -45,11 +45,11 @@ fn main() {
 					code: ErrorCode::ParseError,
 					message: "Invalid parameters. Subscription rejected.".into(),
 					data: None,
-				});
+				}).unwrap();
 				return;
 			}
 
-			let sink = subscriber.assign_id(SubscriptionId::Number(5));
+			let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
 			// or subscriber.reject(Error {} );
 			// or drop(subscriber)
 			thread::spawn(move || {

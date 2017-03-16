@@ -32,7 +32,7 @@ fn serve() -> Server {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
 			thread::sleep(::std::time::Duration::from_millis(10));
-			c.complete(Value::String("world".into()));
+			c.send(Value::String("world".into())).unwrap();
 		});
 		p.map_err(|_| Error::invalid_request()).boxed()
 	});
@@ -96,11 +96,39 @@ fn should_ignore_media_type_if_options() {
 	let response = request(server,
 		Method::Options,
 		Headers::new(),
-		"{}",
+		"",
 	);
 
 	// then
 	assert_eq!(response.status, StatusCode::Ok);
+	assert_eq!(
+		response.headers.get::<reqwest::header::Allow>(),
+		Some(&reqwest::header::Allow(vec![Method::Options, Method::Post]))
+	);
+	assert!(response.headers.get::<reqwest::header::Accept>().is_some());
+	assert_eq!(response.body, "");
+}
+
+
+#[test]
+fn should_return_403_for_options_if_origin_is_invalid() {
+	// given
+	let server = serve();
+
+	// when
+	let response = request(server,
+		Method::Post,
+		{
+			let mut headers = content_type_json();
+			headers.append_raw("origin", b"http://invalid.io".to_vec());
+			headers
+		},
+		""
+	);
+
+	// then
+	assert_eq!(response.status, StatusCode::Forbidden);
+	assert_eq!(response.body, cors_invalid());
 }
 
 #[test]
@@ -247,7 +275,7 @@ fn should_add_cors_headers_for_options() {
 }
 
 #[test]
-fn should_not_add_cors_headers() {
+fn should_not_process_request_with_invalid_cors() {
 	// given
 	let server = serve();
 
@@ -263,8 +291,8 @@ fn should_not_add_cors_headers() {
 	);
 
 	// then
-	assert_eq!(response.status, StatusCode::Ok);
-	assert_eq!(response.body, method_not_found());
+	assert_eq!(response.status, StatusCode::Forbidden);
+	assert_eq!(response.body, cors_invalid());
 }
 
 #[test]
@@ -448,6 +476,10 @@ fn should_handle_sync_batch_requests_correctly() {
 
 fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
+}
+
+fn cors_invalid() -> String {
+	"Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn method_not_found() -> String {

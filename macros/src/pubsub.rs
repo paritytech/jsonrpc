@@ -20,16 +20,16 @@ impl<T> Subscriber<T> {
 		}
 	}
 
-	pub fn reject(self, error: core::Error) {
+	pub fn reject(self, error: core::Error) -> Result<(), ()> {
 		self.subscriber.reject(error)
 	}
 
-	pub fn assign_id(self, id: SubscriptionId) -> Sink<T> {
-		let sink = self.subscriber.assign_id(id);
-		Sink {
+	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T>, ()> {
+		let sink = self.subscriber.assign_id(id)?;
+		Ok(Sink {
 			sink: sink,
 			_data: PhantomData,
-		}
+		})
 	}
 }
 

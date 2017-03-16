@@ -133,14 +133,24 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 }
 
 impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
-	fn response_headers(&self, cors_header: Option<header::AccessControlAllowOrigin>) -> Headers {
+	fn response_headers(&self, is_options: bool, cors_header: Option<header::AccessControlAllowOrigin>) -> Headers {
 		let mut headers = Headers::new();
 		headers.set(self.response.content_type.clone());
 
-		if let Some(cors_domain) = cors_header {
+		if is_options {
 			headers.set(header::Allow(vec![
 				Method::Options,
 				Method::Post,
+			]));
+			headers.set(header::Accept(vec![
+				header::qitem(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, vec![]))
+			]));
+		}
+
+		if let Some(cors_domain) = cors_header {
+			headers.set(header::AccessControlAllowMethods(vec![
+				Method::Options,
+				Method::Post
 			]));
 			headers.set(header::AccessControlAllowHeaders(vec![
 				UniCase("origin".to_owned()),
@@ -148,7 +158,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				UniCase("accept".to_owned()),
 			]));
 			headers.set(cors_domain);
-			headers.set(header::Vary::Items(vec!["Origin".into()]));
+			headers.set(header::Vary::Items(vec![
+				UniCase("origin".to_owned())
+			]));
 		}
 
 		headers
@@ -168,11 +180,19 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M, S> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
 		// Read origin
-		self.request.cors_header = utils::cors_header(&request, &self.cors_domains);
+		let cors_header = utils::cors_header(&request, &self.cors_domains);
+		if cors_header == cors::CorsHeader::Invalid {
+			self.response = Response::invalid_cors();
+			return Next::write();
+		}
+
+		// Set request params
+		self.request.cors_header = cors_header.into();
+		self.request.method = request.method().clone();
 		// Read metadata
 		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
 
-		match *request.method() {
+		match self.request.method {
 			// Validate the ContentType header
 			// to prevent Cross-Origin XHRs with text/plain
 			Method::Post if Self::is_json(request.headers().get::<header::ContentType>()) => {
@@ -245,8 +265,9 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M
 			self.response = output;
 		}
 
+		let is_options = self.request.method == Method::Options;
 		let cors_header = self.request.cors_header.take();
-		*response.headers_mut() = self.response_headers(cors_header);
+		*response.headers_mut() = self.response_headers(is_options, cors_header);
 
 		self.response.on_response(response)
 	}

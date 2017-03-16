@@ -314,7 +314,9 @@ impl<B, M, OUT> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>)
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
 		match expect_no_params(params) {
 			Ok(()) => (self)(base, meta, pubsub::Subscriber::new(subscriber)),
-			Err(e) => subscriber.reject(e),
+			Err(e) => {
+				let _ = subscriber.reject(e);
+			},
 		}
 	}
 }
@@ -376,7 +378,9 @@ macro_rules! wrap {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber){
 				match params.parse::<($($x,)+)>() {
 					Ok(($($x,)+)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), $($x,)+),
-					Err(e) => subscriber.reject(e),
+					Err(e) => {
+						let _ = subscriber.reject(e);
+					},
 				}
 			}
 		}
