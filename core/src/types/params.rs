@@ -30,7 +30,7 @@ impl Params {
 		};
 
 		from_value(value).map_err(|e| {
-			Error::invalid_params(format!("{}", e))
+			Error::invalid_params(format!("Invalid params: {}.", e))
 		})
 	}
 }
@@ -117,10 +117,10 @@ mod tests {
 
 		// then
 		assert_eq!(err1.code, ErrorCode::InvalidParams);
-		assert_eq!(err1.message, "invalid type: boolean `true`, expected a string");
+		assert_eq!(err1.message, "Invalid params: invalid type: boolean `true`, expected a string.");
 		assert_eq!(err1.data, None);
 		assert_eq!(err2.code, ErrorCode::InvalidParams);
-		assert_eq!(err2.message, "invalid length 2, expected a tuple of size 3");
+		assert_eq!(err2.message, "Invalid params: invalid length 2, expected a tuple of size 3.");
 		assert_eq!(err2.data, None);
 	}
 }

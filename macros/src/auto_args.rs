@@ -391,7 +391,7 @@ fn params_len(params: &Params) -> Result<usize, Error> {
 	match *params {
 		Params::Array(ref v) => Ok(v.len()),
 		Params::None => Ok(0),
-		_ => Err(invalid_params("not an array", "")),
+		_ => Err(invalid_params("`params` should be an array", "")),
 	}
 }
 
@@ -400,7 +400,7 @@ fn parse_trailing_param<T: Default + Deserialize>(params: Params) -> Result<(T, 
 	let id = match len {
 		0 => Ok((T::default(),)),
 		1 => params.parse::<(T,)>(),
-		_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
+		_ => Err(invalid_params("Expecting only one optional parameter.", "")),
 	};
 
 	id
@@ -462,7 +462,7 @@ macro_rules! wrap_with_trailing {
 						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
 					1 => params.parse::<($($x,)+ TRAILING)>()
 						.map(|($($x,)+ id)| ($($x,)+ id)),
-					_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
+					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
 				let ($($x,)+ id) = try!(params);
@@ -488,7 +488,7 @@ macro_rules! wrap_with_trailing {
 						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
 					1 => params.parse::<($($x,)+ TRAILING)>()
 						.map(|($($x,)+ id)| ($($x,)+ id)),
-					_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
+					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
 				match params {
@@ -517,7 +517,7 @@ macro_rules! wrap_with_trailing {
 						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
 					1 => params.parse::<($($x,)+ TRAILING)>()
 						.map(|($($x,)+ id)| ($($x,)+ id)),
-					_ => Err(Error::invalid_params("Expected 0 or 1 parameters.")),
+					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
 				match params {
