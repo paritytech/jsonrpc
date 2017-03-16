@@ -143,15 +143,15 @@ mod tests {
 
 	#[test]
 	fn should_reject_if_header_not_on_the_list() {
-		let valid = is_host_valid(Some("ethcore.io"), &Some(vec![]));
+		let valid = is_host_valid(Some("parity.io"), &Some(vec![]));
 		assert_eq!(valid, false);
 	}
 
 	#[test]
 	fn should_accept_if_on_the_list() {
 		let valid = is_host_valid(
-			Some("ethcore.io"),
-			&Some(vec!["ethcore.io".into()]),
+			Some("parity.io"),
+			&Some(vec!["parity.io".into()]),
 		);
 		assert_eq!(valid, true);
 	}
@@ -159,8 +159,8 @@ mod tests {
 	#[test]
 	fn should_accept_if_on_the_list_with_port() {
 		let valid = is_host_valid(
-			Some("ethcore.io:443"),
-			&Some(vec!["ethcore.io:443".into()]),
+			Some("parity.io:443"),
+			&Some(vec!["parity.io:443".into()]),
 		);
 		assert_eq!(valid, true);
 	}

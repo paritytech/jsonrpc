@@ -258,7 +258,7 @@ mod tests {
 	#[test]
 	fn should_return_none_for_not_matching_origin() {
 		// given
-		let origin = Some("http://ethcore.io".into());
+		let origin = Some("http://parity.io".into());
 
 		// when
 		let res = get_cors_header(
@@ -273,13 +273,13 @@ mod tests {
 	#[test]
 	fn should_return_specific_origin_if_we_allow_any() {
 		// given
-		let origin = Some("http://ethcore.io".into());
+		let origin = Some("http://parity.io".into());
 
 		// when
 		let res = get_cors_header(origin, &Some(vec![AccessControlAllowOrigin::Any]));
 
 		// then
-		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
+		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
 	}
 
 	#[test]
@@ -315,15 +315,15 @@ mod tests {
 	#[test]
 	fn should_return_specific_origin_if_there_is_a_match() {
 		// given
-		let origin = Some("http://ethcore.io".into());
+		let origin = Some("http://parity.io".into());
 
 		// when
 		let res = get_cors_header(
 			origin,
-			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://ethcore.io".into())]),
+			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://parity.io".into())]),
 		);
 
 		// then
-		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://ethcore.io".into())));
+		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
 	}
 }

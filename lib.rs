@@ -1,4 +1,4 @@
-//! Ethcore JSON-RPC 2.0 Implementation
+//! Parity JSON-RPC 2.0 Implementation
 //!
 //! ```no_run
 //! extern crate jsonrpc_core;

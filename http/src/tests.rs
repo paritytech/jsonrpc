@@ -10,7 +10,7 @@ use super::*;
 
 fn serve_hosts(hosts: Vec<Host>) -> Server {
 	ServerBuilder::new(IoHandler::default())
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("ethcore.io".into())]))
+		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("parity.io".into())]))
 		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
@@ -34,7 +34,7 @@ fn serve() -> Server {
 
 	ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![
-			AccessControlAllowOrigin::Value("ethcore.io".into()),
+			AccessControlAllowOrigin::Value("parity.io".into()),
 			AccessControlAllowOrigin::Null,
 		]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
@@ -231,7 +231,7 @@ fn should_add_cors_headers() {
 		&format!("\
 			POST / HTTP/1.1\r\n\
 			Host: 127.0.0.1:8080\r\n\
-			Origin: http://ethcore.io\r\n\
+			Origin: http://parity.io\r\n\
 			Connection: close\r\n\
 			Content-Type: application/json\r\n\
 			Content-Length: {}\r\n\
@@ -243,7 +243,7 @@ fn should_add_cors_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: http://ethcore.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("Access-Control-Allow-Origin: http://parity.io"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -348,7 +348,7 @@ fn should_add_cors_header_for_null_origin() {
 #[test]
 fn should_reject_invalid_hosts() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -372,7 +372,7 @@ fn should_reject_invalid_hosts() {
 #[test]
 fn should_reject_missing_host() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -395,14 +395,14 @@ fn should_reject_missing_host() {
 #[test]
 fn should_allow_if_host_is_valid() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
-			Host: ethcore.io\r\n\
+			Host: parity.io\r\n\
 			Connection: close\r\n\
 			Content-Type: application/json\r\n\
 			Content-Length: {}\r\n\
@@ -419,7 +419,7 @@ fn should_allow_if_host_is_valid() {
 #[test]
 fn should_always_allow_the_bind_address() {
 	// given
-	let server = serve_hosts(vec!["ethcore.io".into()]);
+	let server = serve_hosts(vec!["parity.io".into()]);
 	let addr = server.addrs()[0].clone();
 
 	// when
