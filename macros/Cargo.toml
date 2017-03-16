@@ -1,13 +1,13 @@
 [package]
 description = "Helper macros for jsonrpc-core"
-homepage = "https://github.com/ethcore/jsonrpc"
-repository = "https://github.com/ethcore/jsonrpc"
+homepage = "https://github.com/paritytech/jsonrpc"
+repository = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-macros"
 version = "7.0.0"
-authors = ["rphmeier <robert@ethcore.io>"]
+authors = ["rphmeier <robert@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
-documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_macros/index.html"
+documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_macros/index.html"
 
 [dependencies]
 serde = "0.9"

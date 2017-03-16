@@ -5,10 +5,10 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 [![Build Status][travis-image]][travis-url]
 
-[travis-image]: https://travis-ci.org/ethcore/jsonrpc.svg?branch=master
-[travis-url]: https://travis-ci.org/ethcore/jsonrpc
+[travis-image]: https://travis-ci.org/paritytech/jsonrpc.svg?branch=master
+[travis-url]: https://travis-ci.org/paritytech/jsonrpc
 
-[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc/index.html)
+[Documentation](http://paritytech.github.io/jsonrpc/jsonrpc/index.html)
 
 ## Sub-projects
 - [jsonrpc-core](./core)
