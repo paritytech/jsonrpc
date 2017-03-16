@@ -78,7 +78,11 @@ impl From<hyper::error::Error> for Error {
 /// Action undertaken by a middleware.
 pub enum RequestMiddlewareAction {
 	/// Proceed with standard RPC handling
-	Proceed,
+	Proceed {
+		/// Should the request be processed even if invalid CORS headers are detected?
+		/// This allows for side effects to take place.
+		should_continue_on_invalid_cors: bool,
+	},
 	/// Intercept the request and respond differently.
 	Respond {
 		/// Should standard hosts validation be performed?
@@ -91,7 +95,9 @@ pub enum RequestMiddlewareAction {
 impl<T: hyper::server::Handler<hyper::net::HttpStream> + Send + 'static> From<Option<T>> for RequestMiddlewareAction {
 	fn from(o: Option<T>) -> Self {
 		match o {
-			None => RequestMiddlewareAction::Proceed,
+			None => RequestMiddlewareAction::Proceed {
+				should_continue_on_invalid_cors: false,
+			},
 			Some(handler) => RequestMiddlewareAction::Respond {
 				should_validate_hosts: true,
 				handler: Box::new(handler),
@@ -118,7 +124,9 @@ impl<F> RequestMiddleware for F where
 struct NoopRequestMiddleware;
 impl RequestMiddleware for NoopRequestMiddleware {
 	fn on_request(&self, _request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
-		RequestMiddlewareAction::Proceed
+		RequestMiddlewareAction::Proceed {
+			should_continue_on_invalid_cors: false,
+		}
 	}
 }
 
