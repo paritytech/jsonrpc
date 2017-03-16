@@ -1,7 +1,7 @@
 # jsonrpc-http-server
 Rust http server using JSON-RPC 2.0.
 
-[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.html)
+[Documentation](http://paritytech.github.io/jsonrpc/jsonrpc_http_server/index.html)
 
 ## Example
 
@@ -10,7 +10,7 @@ Rust http server using JSON-RPC 2.0.
 ```
 [dependencies]
 jsonrpc-core = "6.0"
-jsonrpc-http-server = { git = "https://github.com/ethcore/jsonrpc" }
+jsonrpc-http-server = { git = "https://github.com/paritytech/jsonrpc" }
 ```
 
 `main.rs`

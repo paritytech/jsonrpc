@@ -1,7 +1,7 @@
 # jsonrpc-tcp-server
 TCP server for JSON-RPC 2.0.
 
-[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_tcp_server/index.html)
+[Documentation](http://paritytech.github.io/jsonrpc/jsonrpc_tcp_server/index.html)
 
 ## Example
 

@@ -1,7 +1,7 @@
 # jsonrpc-minihttp-server
 Blazing fast HTTP server for JSON-RPC 2.0.
 
-[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_http_server/index.html)
+[Documentation](http://paritytech.github.io/jsonrpc/jsonrpc_http_server/index.html)
 
 ## Example
 
@@ -10,7 +10,7 @@ Blazing fast HTTP server for JSON-RPC 2.0.
 ```
 [dependencies]
 jsonrpc-core = "6.0"
-jsonrpc-minihttp-server = { git = "https://github.com/ethcore/jsonrpc-minihttp-server" }
+jsonrpc-minihttp-server = { git = "https://github.com/paritytech/jsonrpc-minihttp-server" }
 ```
 
 `main.rs`

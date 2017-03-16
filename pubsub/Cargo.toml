@@ -1,13 +1,13 @@
 [package]
 description = "Publish-Subscribe extension for jsonrpc."
-homepage = "https://github.com/ethcore/jsonrpc"
-repository = "https://github.com/ethcore/jsonrpc"
+homepage = "https://github.com/paritytech/jsonrpc"
+repository = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-pubsub"
 version = "7.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
-documentation = "https://ethcore.github.io/jsonrpc/jsonrpc_pubsub/index.html"
+documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_pubsub/index.html"
 
 [dependencies]
 log = "0.3"

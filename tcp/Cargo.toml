@@ -4,9 +4,9 @@ description = "TCP/IP server for JSON-RPC"
 version = "7.0.0"
 authors = ["NikVolf <nikvolf@gmail.com>"]
 license = "MIT"
-homepage = "https://github.com/ethcore/jsonrpc"
-repository = "https://github.com/ethcore/jsonrpc"
-documentation = "https://ethcore.github.io/jsonrpc/json_tcp_server/index.html"
+homepage = "https://github.com/paritytech/jsonrpc"
+repository = "https://github.com/paritytech/jsonrpc"
+documentation = "https://paritytech.github.io/jsonrpc/json_tcp_server/index.html"
 
 [dependencies]
 log = "0.3"

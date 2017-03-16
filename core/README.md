@@ -1,7 +1,7 @@
 # jsonrpc-core
 Transport agnostic rust implementation of JSON-RPC 2.0 Specification.
 
-[Documentation](http://ethcore.github.io/jsonrpc/jsonrpc_core/index.html)
+[Documentation](http://paritytech.github.io/jsonrpc/jsonrpc_core/index.html)
 
 - [x] - server side
 - [x] - client side
