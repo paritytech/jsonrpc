@@ -41,7 +41,7 @@ use std;
 use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::*;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 use validator;
@@ -67,7 +67,7 @@ impl std::convert::From<std::io::Error> for Error {
 }
 
 pub struct PipeHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
-	waiting_pipe: NamedPipe,
+	waiting_pipe: RwLock<NamedPipe>,
 	io_handler: RpcHandler<M, S>,
 }
 
@@ -75,7 +75,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	/// start ipc rpc server
 	pub fn start(addr: &str, io_handler: RpcHandler<M, S>) -> Result<Self> {
 		Ok(PipeHandler {
-			waiting_pipe: try!(
+			waiting_pipe: RwLock::new(try!(
 				NamedPipeBuilder::new(addr)
 					.first(true)
 					.accept_remote(true)
@@ -85,12 +85,16 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 					.out_buffer_size(MAX_REQUEST_LEN)
 					.in_buffer_size(MAX_REQUEST_LEN)
 					.create()
-			),
+			)),
 			io_handler: io_handler.clone(),
 		})
 	}
 
-	fn handle_incoming(&mut self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
+	pub fn stop(&self) {
+		self.waiting_pipe.read().unwrap().disconnect().ok();
+	}
+
+	fn handle_incoming(&self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
 		trace!(target: "ipc", "Waiting for client: [{}]", addr);
 
 		// blocking wait with small timeouts
@@ -98,7 +102,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 		// (`connect` does not allow that, it will block indefinitely)
 		loop {
 			if let Ok(_) = NamedPipe::wait(addr, Some(200)) {
-				try!(self.waiting_pipe.connect());
+				try!(self.waiting_pipe.read().unwrap().connect());
 				trace!(target: "ipc", "Received connection to address [{}]", addr);
 				break;
 			}
@@ -108,7 +112,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 			}
 		}
 
-		let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe,
+		let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe.write().unwrap(),
 			try!(NamedPipeBuilder::new(addr)
 				.first(false)
 				.accept_remote(true)
@@ -179,7 +183,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 pub struct Server<M: Metadata = (), S: Middleware<M> + 'static = NoopMiddleware> {
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
-	io_handler: RpcHandler<M, S>,
+	pipe_handler: Arc<PipeHandler<M, S>>,
 	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
 	addr: String,
 }
@@ -197,20 +201,20 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 
 	// New Server using RpcHandler
 	pub fn with_rpc_handler(socket_addr: &str, io_handler: RpcHandler<M, S>) -> Result<Self> {
+		let pipe_handler = PipeHandler::start(socket_addr, io_handler).unwrap();
 		Ok(Server {
-			io_handler: io_handler,
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
 			rpc_event_loop: Mutex::new(None),
 			addr: socket_addr.to_owned(),
+			pipe_handler: Arc::new(pipe_handler),
 		})
 	}
 
 	/// Run server (in this thread)
 	pub fn run(&self) -> Result<()> {
-		let mut pipe_handler = try!(PipeHandler::start(&self.addr, self.io_handler.clone()));
 		loop  {
-			try!(pipe_handler.handle_incoming(&self.addr, Arc::new(AtomicBool::new(false))));
+			try!(self.pipe_handler.handle_incoming(&self.addr, Arc::new(AtomicBool::new(false))));
 		}
 	}
 
@@ -223,10 +227,9 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 
 		let thread_stopping = self.is_stopping.clone();
 		let thread_stopped = self.is_stopped.clone();
-		let thread_handler = self.io_handler.clone();
 		let addr = self.addr.clone();
+		let pipe_handler = self.pipe_handler.clone();
 		std::thread::spawn(move || {
-			let mut pipe_handler = PipeHandler::start(&addr, thread_handler).unwrap();
 			while !thread_stopping.load(Ordering::Relaxed) {
 				trace!(target: "ipc", "Accepting pipe connection");
 				if let Err(pipe_listener_error) = pipe_handler.handle_incoming(&addr, thread_stopping.clone()) {
@@ -245,6 +248,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
+		self.pipe_handler.stop();
 		Ok(())
 	}
 
@@ -253,6 +257,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 		if self.is_stopped.load(Ordering::Relaxed) { return Err(Error::NotStarted) }
 		if self.is_stopping.load(Ordering::Relaxed) { return Err(Error::AlreadyStopping)}
 		self.is_stopping.store(true, Ordering::Relaxed);
+		self.pipe_handler.stop();
 		while !self.is_stopped.load(Ordering::Relaxed) { std::thread::park_timeout(std::time::Duration::new(0, 50)); }
 		Ok(())
 	}
@@ -260,7 +265,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> Server<M, S> {
 
 impl<M: Metadata, S: Middleware<M> + 'static> Drop for Server<M, S> {
 	fn drop(&mut self) {
-		self.stop_async().unwrap_or_else(|_| {}); // ignore error - can be stopped already
+		self.stop().unwrap_or_else(|_| {}); // ignore error - can be stopped already
 		// todo : no stable logging for windows?
 		trace!(target: "ipc", "IPC Server : shutdown");
 	}
