@@ -64,13 +64,13 @@ impl Rpc for RpcImpl {
 				code: ErrorCode::InvalidParams,
 				message: "Rejecting subscription - invalid parameters provided.".into(),
 				data: None,
-			});
+			}).unwrap();
 			return;
 		}
 
 		let id = self.uid.fetch_add(1, atomic::Ordering::SeqCst);
 		let sub_id = SubscriptionId::Number(id as u64);
-		let sink = subscriber.assign_id(sub_id.clone());
+		let sink = subscriber.assign_id(sub_id.clone()).unwrap();
 		self.active.write().unwrap().insert(sub_id, sink);
 	}
 

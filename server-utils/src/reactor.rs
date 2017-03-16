@@ -68,7 +68,7 @@ pub struct RpcEventLoop {
 
 impl Drop for RpcEventLoop {
 	fn drop(&mut self) {
-		self.close.take().map(|v| v.complete(()));
+		self.close.take().map(|v| v.send(()));
 	}
 }
 
@@ -110,6 +110,8 @@ impl RpcEventLoop {
 
 	/// Finishes this event loop.
 	pub fn close(mut self) {
-		self.close.take().expect("Close is always set before self is consumed.").complete(())
+		let _ = self.close.take().expect("Close is always set before self is consumed.").send(()).map_err(|e| {
+			warn!("Event Loop is already finished. {:?}", e);
+		});
 	}
 }

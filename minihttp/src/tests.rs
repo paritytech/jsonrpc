@@ -32,7 +32,7 @@ fn serve() -> Server {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
 			thread::sleep(::std::time::Duration::from_millis(10));
-			c.complete(Value::String("world".into()));
+			c.send(Value::String("world".into())).unwrap();
 		});
 		p.map_err(|_| Error::invalid_request()).boxed()
 	});

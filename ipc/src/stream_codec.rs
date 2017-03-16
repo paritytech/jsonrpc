@@ -7,7 +7,7 @@ fn is_whitespace(byte: u8) -> bool {
 	match byte {
 		0x0D | 0x0A | 0x20 | 0x09 => true,
 		_ => false,
-	} 
+	}
 }
 
 impl Codec for StreamCodec {
@@ -52,7 +52,7 @@ impl Codec for StreamCodec {
 			}
 		}
 
-		Ok(None)	
+		Ok(None)
 	}
 
 	fn encode(&mut self, msg: String, buf: &mut Vec<u8>) -> io::Result<()> {
@@ -113,7 +113,7 @@ mod tests {
 
 	#[test]
 	fn fragmented_encode() {
-		let mut buf = EasyBuf::new();	
+		let mut buf = EasyBuf::new();
 		buf.get_mut().extend_from_slice(b"{ test: 1 }{ test: 2 }{ tes");
 
 		let mut codec = StreamCodec;
@@ -150,7 +150,7 @@ mod tests {
 			]
 		}"#;
 
-		let mut buf = EasyBuf::new();	
+		let mut buf = EasyBuf::new();
 		buf.get_mut().extend_from_slice(request.as_bytes());
 
 		let mut codec = StreamCodec;

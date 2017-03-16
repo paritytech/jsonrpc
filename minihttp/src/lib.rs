@@ -304,7 +304,7 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		self.close.take().expect("Close is always set before self is consumed.").complete(());
+		let _ = self.close.take().expect("Close is always set before self is consumed.").send(());
 	}
 
 	/// Will block, waiting for the server to finish.
@@ -315,6 +315,6 @@ impl Server {
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.close.take().map(|close| close.complete(()));
+		self.close.take().map(|close| close.send(()));
 	}
 }
