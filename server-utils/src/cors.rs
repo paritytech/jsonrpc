@@ -160,30 +160,43 @@ impl<T> Into<Option<T>> for CorsHeader<T> {
 }
 
 /// Returns correct CORS header (if any) given list of allowed origins and current origin.
-pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> CorsHeader {
+pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> CorsHeader {
 	match origin {
 		None => CorsHeader::NotRequired,
-		Some(ref origin) => match allowed.as_ref() {
-			None => CorsHeader::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
-			Some(ref allowed) if *origin == "null" => {
-				allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
-					.map(CorsHeader::Ok)
-					.unwrap_or(CorsHeader::Invalid)
-			},
-			Some(ref allowed) => {
-				allowed.iter().find(|cors| {
-					match **cors {
-						AccessControlAllowOrigin::Any => true,
-						AccessControlAllowOrigin::Value(ref val) if val.eq_ignore_ascii_case(origin) => true,
-						_ => false
+		Some(ref origin) => {
+			if let Some(host) = host {
+				// Request initiated from the same server.
+				if origin.ends_with(host) {
+					// Additional check
+					let origin = Origin::parse(origin);
+					if &*origin.host == host {
+						return CorsHeader::NotRequired;
 					}
-				}).map(|cors| {
-					match *cors {
-						AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(Origin::parse(origin)),
-						ref cors => cors.clone(),
-					}
-				}).map(CorsHeader::Ok).unwrap_or(CorsHeader::Invalid)
-			},
+				}
+			}
+
+			match allowed.as_ref() {
+				None => CorsHeader::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
+				Some(ref allowed) if *origin == "null" => {
+					allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
+						.map(CorsHeader::Ok)
+						.unwrap_or(CorsHeader::Invalid)
+				},
+				Some(ref allowed) => {
+					allowed.iter().find(|cors| {
+						match **cors {
+							AccessControlAllowOrigin::Any => true,
+							AccessControlAllowOrigin::Value(ref val) if val.eq_ignore_ascii_case(origin) => true,
+							_ => false
+						}
+					}).map(|cors| {
+						match *cors {
+							AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(Origin::parse(origin)),
+							ref cors => cors.clone(),
+						}
+					}).map(CorsHeader::Ok).unwrap_or(CorsHeader::Invalid)
+				},
+			}
 		},
 	}
 }
@@ -191,6 +204,7 @@ pub fn get_cors_header(origin: Option<&str>, allowed: &Option<Vec<AccessControlA
 
 #[cfg(test)]
 mod tests {
+	use hosts::Host;
 	use super::{get_cors_header, CorsHeader, AccessControlAllowOrigin, Origin, OriginProtocol};
 
 	#[test]
@@ -205,12 +219,49 @@ mod tests {
 	}
 
 	#[test]
+	fn should_not_allow_partially_matching_origin() {
+		// given
+		let origin1 = Origin::parse("http://subdomain.somedomain.io");
+		let origin2 = Origin::parse("http://somedomain.io:8080");
+		let host = Host::parse("http://somedomain.io");
+
+		let origin1 = Some(&*origin1);
+		let origin2 = Some(&*origin2);
+		let host = Some(&*host);
+
+		// when
+		let res1 = get_cors_header(origin1, host, &Some(vec![]));
+		let res2 = get_cors_header(origin2, host, &Some(vec![]));
+
+		// then
+		assert_eq!(res1, CorsHeader::Invalid);
+		assert_eq!(res2, CorsHeader::Invalid);
+	}
+
+	#[test]
+	fn should_allow_origins_that_matches_hosts() {
+		// given
+		let origin = Origin::parse("http://127.0.0.1:8080");
+		let host = Host::parse("http://127.0.0.1:8080");
+
+		let origin = Some(&*origin);
+		let host = Some(&*host);
+
+		// when
+		let res = get_cors_header(origin, host, &None);
+
+		// then
+		assert_eq!(res, CorsHeader::NotRequired);
+	}
+
+	#[test]
 	fn should_return_none_when_there_are_no_cors_domains_and_no_origin() {
 		// given
 		let origin = None;
+		let host = None;
 
 		// when
-		let res = get_cors_header(origin, &None);
+		let res = get_cors_header(origin, host, &None);
 
 		// then
 		assert_eq!(res, CorsHeader::NotRequired);
@@ -220,9 +271,10 @@ mod tests {
 	fn should_return_domain_when_all_are_allowed() {
 		// given
 		let origin = Some("parity.io");
+		let host = None;
 
 		// when
-		let res = get_cors_header(origin, &None);
+		let res = get_cors_header(origin, host, &None);
 
 		// then
 		assert_eq!(res, CorsHeader::Ok("parity.io".into()));
@@ -232,10 +284,12 @@ mod tests {
 	fn should_return_none_for_empty_origin() {
 		// given
 		let origin = None;
+		let host = None;
 
 		// when
 		let res = get_cors_header(
 			origin,
+			host,
 			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())]),
 		);
 
@@ -247,9 +301,10 @@ mod tests {
 	fn should_return_none_for_empty_list() {
 		// given
 		let origin = None;
+		let host = None;
 
 		// when
-		let res = get_cors_header(origin, &Some(Vec::new()));
+		let res = get_cors_header(origin, host, &Some(Vec::new()));
 
 		// then
 		assert_eq!(res, CorsHeader::NotRequired);
@@ -259,10 +314,12 @@ mod tests {
 	fn should_return_none_for_not_matching_origin() {
 		// given
 		let origin = Some("http://parity.io".into());
+		let host = None;
 
 		// when
 		let res = get_cors_header(
 			origin,
+			host,
 			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())]),
 		);
 
@@ -274,9 +331,10 @@ mod tests {
 	fn should_return_specific_origin_if_we_allow_any() {
 		// given
 		let origin = Some("http://parity.io".into());
+		let host = None;
 
 		// when
-		let res = get_cors_header(origin, &Some(vec![AccessControlAllowOrigin::Any]));
+		let res = get_cors_header(origin, host, &Some(vec![AccessControlAllowOrigin::Any]));
 
 		// then
 		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
@@ -286,10 +344,12 @@ mod tests {
 	fn should_return_none_if_origin_is_not_defined() {
 		// given
 		let origin = None;
+		let host = None;
 
 		// when
 		let res = get_cors_header(
 			origin,
+			host,
 			&Some(vec![AccessControlAllowOrigin::Null]),
 		);
 
@@ -301,10 +361,12 @@ mod tests {
 	fn should_return_null_if_origin_is_null() {
 		// given
 		let origin = Some("null".into());
+		let host = None;
 
 		// when
 		let res = get_cors_header(
 			origin,
+			host,
 			&Some(vec![AccessControlAllowOrigin::Null]),
 		);
 
@@ -316,10 +378,12 @@ mod tests {
 	fn should_return_specific_origin_if_there_is_a_match() {
 		// given
 		let origin = Some("http://parity.io".into());
+		let host = None;
 
 		// when
 		let res = get_cors_header(
 			origin,
+			host,
 			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://parity.io".into())]),
 		);
 

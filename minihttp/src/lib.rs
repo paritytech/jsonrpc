@@ -245,7 +245,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 		// Validate allowed hosts
 		let host = request.header("Host");
-		if !hosts::is_host_valid(host, &self.hosts) {
+		if !hosts::is_host_valid(host.clone(), &self.hosts) {
 			return future::ok(
 				res::invalid_host()
 			).boxed();
@@ -253,7 +253,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 		// Extract CORS headers
 		let origin = request.header("Origin");
-		let cors = cors::get_cors_header(origin, &self.cors_domains);
+		let cors = cors::get_cors_header(origin, host, &self.cors_domains);
 
 		// Validate cors header
 		if let cors::CorsHeader::Invalid = cors {
