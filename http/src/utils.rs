@@ -26,7 +26,7 @@ pub fn cors_header(
 	request: &hyper::server::Request<hyper::net::HttpStream>,
 	cors_domains: &Option<Vec<cors::AccessControlAllowOrigin>>
 ) -> CorsHeader<header::AccessControlAllowOrigin> {
-	cors::get_cors_header(read_header(request, "origin"), cors_domains).map(|origin| {
+	cors::get_cors_header(read_header(request, "origin"), read_header(request, "host"), cors_domains).map(|origin| {
 		use self::cors::AccessControlAllowOrigin::*;
 		match origin {
 			Value(val) => header::AccessControlAllowOrigin::Value((*val).to_owned()),
