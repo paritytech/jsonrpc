@@ -20,6 +20,7 @@
 extern crate futures;
 extern crate parking_lot;
 extern crate hyper;
+extern crate tokio_io;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
 
@@ -36,7 +37,7 @@ use jsonrpc::MetaIoHandler;
 use jsonrpc_server_utils::reactor::{Remote, UninitializedRemote};
 use jsonrpc_server_utils::cors::{AccessControlAllowOrigin};
 use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
-use handlero::ServerHandler;
+use handler::ServerHandler;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, Error>;
@@ -236,6 +237,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		};
 
 		let server_handler = ServerHandler {
+			jsonrpc_handler: jsonrpc_handler,
+			cors_domains: self.cors_domains,
 			allowed_hosts: self.allowed_hosts,
 			middleware: self.request_middleware,
 		};
