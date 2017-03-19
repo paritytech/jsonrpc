@@ -1,9 +1,10 @@
 //! Basic Request/Response structures used internally.
 
 use std::io;
-use hyper::{net, server, Next, Encoder, Decoder};
+//use hyper::{net, server, Next, Encoder, Decoder};
+use hyper::{net, server};
 
-pub use hyper::Method;
+//pub use hyper::Method;
 pub use hyper::status::StatusCode;
 pub use hyper::header;
 
