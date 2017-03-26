@@ -11,7 +11,7 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_minihttp_server/in
 
 [dependencies]
 log = "0.3"
-parking_lot = "0.3"
+parking_lot = "0.4"
 tokio-service = "0.1"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }

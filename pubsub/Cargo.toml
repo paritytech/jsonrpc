@@ -11,7 +11,7 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_pubsub/index.html"
 
 [dependencies]
 log = "0.3"
-parking_lot = "0.3"
+parking_lot = "0.4"
 jsonrpc-core = { version = "7.0", path = "../core" }
 
 [dev-dependencies]
