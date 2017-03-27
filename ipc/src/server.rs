@@ -88,7 +88,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			if cfg!(unix) {
 				// warn about existing file and remove it
 				if ::std::fs::remove_file(&endpoint_addr).is_ok() {
-					warn!("File '{}' exists: there might be another parity/geth running.", &endpoint_addr);
+					warn!("Removed existing file '{}'.", &endpoint_addr);
 				} 
 			}
 
