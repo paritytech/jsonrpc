@@ -85,6 +85,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			use parity_tokio_ipc::Endpoint;
 			use stream_codec::StreamCodec;
 
+			if cfg!(unix) {
+				// warn about existing file and remove it
+				if ::std::fs::remove_file(&endpoint_addr).is_ok() {
+					warn!("Removed existing file '{}'.", &endpoint_addr);
+				} 
+			}
+
 			let listener = match Endpoint::new(endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
