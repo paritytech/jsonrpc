@@ -37,7 +37,7 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use std::thread;
 use std::collections::HashSet;
-use hyper::server;
+use hyper::{server, net};
 use jsonrpc::MetaIoHandler;
 use jsonrpc_server_utils::reactor::{Remote, UninitializedRemote};
 use parking_lot::Mutex;
@@ -88,11 +88,11 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// hyper handler used to process the request
-		handler: Box<hyper::server::Handler<hyper::net::HttpStream> + Send>,
+		handler: Box<server::Handler<net::HttpStream> + Send>,
 	}
 }
 
-impl<T: hyper::server::Handler<hyper::net::HttpStream> + Send + 'static> From<Option<T>> for RequestMiddlewareAction {
+impl<T: server::Handler<net::HttpStream> + Send + 'static> From<Option<T>> for RequestMiddlewareAction {
 	fn from(o: Option<T>) -> Self {
 		match o {
 			None => RequestMiddlewareAction::Proceed {
@@ -109,21 +109,21 @@ impl<T: hyper::server::Handler<hyper::net::HttpStream> + Send + 'static> From<Op
 /// Allows to intercept request and handle it differently.
 pub trait RequestMiddleware: Send + Sync + 'static {
 	/// Takes a request and decides how to proceed with it.
-	fn on_request(&self, request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction;
+	fn on_request(&self, request: &server::Request<net::HttpStream>, control: &hyper::Control) -> RequestMiddlewareAction;
 }
 
 impl<F> RequestMiddleware for F where
-	F: Fn(&server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction + Sync + Send + 'static,
+	F: Fn(&server::Request<net::HttpStream>, &hyper::Control) -> RequestMiddlewareAction + Sync + Send + 'static,
 {
-	fn on_request(&self, request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
-		(*self)(request)
+	fn on_request(&self, request: &server::Request<net::HttpStream>, control: &hyper::Control) -> RequestMiddlewareAction {
+		(*self)(request, control)
 	}
 }
 
 #[derive(Default)]
 struct NoopRequestMiddleware;
 impl RequestMiddleware for NoopRequestMiddleware {
-	fn on_request(&self, _request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
+	fn on_request(&self, _request: &server::Request<net::HttpStream>, _control: &hyper::Control) -> RequestMiddlewareAction {
 		RequestMiddlewareAction::Proceed {
 			should_continue_on_invalid_cors: false,
 		}
@@ -133,16 +133,16 @@ impl RequestMiddleware for NoopRequestMiddleware {
 /// Extracts metadata from the HTTP request.
 pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
-	fn read_metadata(&self, _: &server::Request<hyper::net::HttpStream>) -> M {
+	fn read_metadata(&self, _: &server::Request<net::HttpStream>) -> M {
 		Default::default()
 	}
 }
 
 impl<M, F> HttpMetaExtractor<M> for F where
 	M: jsonrpc::Metadata,
-	F: Fn(&server::Request<hyper::net::HttpStream>) -> M + Sync + Send + 'static,
+	F: Fn(&server::Request<net::HttpStream>) -> M + Sync + Send + 'static,
 {
-	fn read_metadata(&self, req: &server::Request<hyper::net::HttpStream>) -> M {
+	fn read_metadata(&self, req: &server::Request<net::HttpStream>) -> M {
 		(*self)(req)
 	}
 }
