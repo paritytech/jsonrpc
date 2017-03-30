@@ -17,36 +17,27 @@
 //! }
 //! ```
 
-#![warn(missing_docs)]
-
-#[macro_use] extern crate log;
-extern crate unicase;
+extern crate futures;
 extern crate parking_lot;
+extern crate hyper;
+extern crate tokio_io;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
 
-pub extern crate hyper;
-
-pub mod request_response;
 mod handler;
 mod utils;
-#[cfg(test)]
-mod tests;
 
+use std::net;
 use std::sync::Arc;
-use std::net::SocketAddr;
-use std::thread;
-use std::collections::HashSet;
+use futures::{finished, Future};
+use futures::future::BoxFuture;
+use parking_lot::{Mutex};
 use hyper::server;
 use jsonrpc::MetaIoHandler;
 use jsonrpc_server_utils::reactor::{Remote, UninitializedRemote};
-use parking_lot::Mutex;
-
-pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
-pub use jsonrpc_server_utils::cors::{AccessControlAllowOrigin, Origin};
-pub use jsonrpc_server_utils::tokio_core;
-pub use handler::ServerHandler;
-pub use utils::{is_host_allowed, cors_header, CorsHeader};
+use jsonrpc_server_utils::cors::{AccessControlAllowOrigin};
+use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
+use handler::ServerHandler;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, Error>;
@@ -88,11 +79,11 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// hyper handler used to process the request
-		handler: Box<hyper::server::Handler<hyper::net::HttpStream> + Send>,
+		handler: Box<hyper::server::Handler>,
 	}
 }
 
-impl<T: hyper::server::Handler<hyper::net::HttpStream> + Send + 'static> From<Option<T>> for RequestMiddlewareAction {
+impl<T: hyper::server::Handler + 'static> From<Option<T>> for RequestMiddlewareAction {
 	fn from(o: Option<T>) -> Self {
 		match o {
 			None => RequestMiddlewareAction::Proceed {
@@ -109,13 +100,12 @@ impl<T: hyper::server::Handler<hyper::net::HttpStream> + Send + 'static> From<Op
 /// Allows to intercept request and handle it differently.
 pub trait RequestMiddleware: Send + Sync + 'static {
 	/// Takes a request and decides how to proceed with it.
-	fn on_request(&self, request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction;
+	fn on_request(&self, request: &server::Request) -> BoxFuture<RequestMiddlewareAction, ()>;
 }
 
 impl<F> RequestMiddleware for F where
-	F: Fn(&server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction + Sync + Send + 'static,
-{
-	fn on_request(&self, request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
+	F: Fn(&server::Request) -> BoxFuture<RequestMiddlewareAction, ()> + Send + Sync + 'static {
+	fn on_request(&self, request: &server::Request) -> BoxFuture<RequestMiddlewareAction, ()> {
 		(*self)(request)
 	}
 }
@@ -123,26 +113,26 @@ impl<F> RequestMiddleware for F where
 #[derive(Default)]
 struct NoopRequestMiddleware;
 impl RequestMiddleware for NoopRequestMiddleware {
-	fn on_request(&self, _request: &server::Request<hyper::net::HttpStream>) -> RequestMiddlewareAction {
-		RequestMiddlewareAction::Proceed {
+	fn on_request(&self, _request: &server::Request) -> BoxFuture<RequestMiddlewareAction, ()> {
+		let action = RequestMiddlewareAction::Proceed {
 			should_continue_on_invalid_cors: false,
-		}
+		};
+		finished(action).boxed()
 	}
 }
 
 /// Extracts metadata from the HTTP request.
 pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
-	fn read_metadata(&self, _: &server::Request<hyper::net::HttpStream>) -> M {
+	fn read_metadata(&self, _: &server::Request) -> M {
 		Default::default()
 	}
 }
 
 impl<M, F> HttpMetaExtractor<M> for F where
 	M: jsonrpc::Metadata,
-	F: Fn(&server::Request<hyper::net::HttpStream>) -> M + Sync + Send + 'static,
-{
-	fn read_metadata(&self, req: &server::Request<hyper::net::HttpStream>) -> M {
+	F: Fn(&server::Request) -> M + Sync + Send + 'static {
+	fn read_metadata(&self, req: &server::Request) -> M {
 		(*self)(req)
 	}
 }
@@ -171,8 +161,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 	}
 }
 
-
-/// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	handler: MetaIoHandler<M, S>,
 	remote: UninitializedRemote,
@@ -191,9 +179,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn new<T>(handler: T) -> Self where
-		T: Into<MetaIoHandler<M, S>>
-	{
+	pub fn new<T>(handler: T) -> Self where T: Into<MetaIoHandler<M, S>> {
 		ServerBuilder {
 			handler: handler.into(),
 			remote: UninitializedRemote::Unspawned,
@@ -241,11 +227,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
-	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
-		let cors_domains = self.cors_domains;
-		let request_middleware = self.request_middleware;
-		let hosts = Arc::new(Mutex::new(self.allowed_hosts));
-		let hosts_setter = hosts.clone();
+	pub fn start_http(self, addr: &net::SocketAddr) -> ServerResult {
 
 		let eloop = self.remote.initialize()?;
 		let jsonrpc_handler = Rpc {
@@ -254,42 +236,17 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			extractor: self.meta_extractor,
 		};
 
-		let (l, srv) = hyper::Server::http(addr)?.handle(move |control| {
-			let hosts = hosts.lock().clone();
-			ServerHandler::new(
-				jsonrpc_handler.clone(),
-				cors_domains.clone(),
-				hosts,
-				request_middleware.clone(),
-				control,
-			)
-		})?;
+		let server_handler = ServerHandler {
+			jsonrpc_handler: jsonrpc_handler,
+			cors_domains: self.cors_domains,
+			allowed_hosts: self.allowed_hosts,
+			middleware: self.request_middleware,
+		};
 
-		// Add current host to allowed headers.
-		// NOTE: we need to use `l.addrs()` instead of `addr`
-		// it might be different!
-		{
-			let mut hosts = hosts_setter.lock();
-			if let Some(current_hosts) = hosts.take() {
-				let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
-				for addr in l.addrs() {
-					let address = addr.to_string();
-					new_hosts.insert(address.clone().into());
-					new_hosts.insert(address.replace("127.0.0.1", "localhost").into());
-				}
-				// Override hosts
-				*hosts = Some(new_hosts.into_iter().collect());
-			}
-		}
-
-		let handle = thread::spawn(move || {
-			srv.run();
-		});
+		let listening = hyper::Server::http(addr)?.handle(server_handler)?;
 
 		Ok(Server {
-			server: Some(l),
-			handle: Some(handle),
-			remote: Some(eloop),
+			server: Some(listening),
 		})
 	}
 }
@@ -297,33 +254,4 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 /// jsonrpc http server instance
 pub struct Server {
 	server: Option<server::Listening>,
-	handle: Option<thread::JoinHandle<()>>,
-	remote: Option<Remote>,
 }
-
-const PROOF: &'static str = "Server is always Some until self is consumed.";
-impl Server {
-	/// Returns addresses of this server
-	pub fn addrs(&self) -> &[SocketAddr] {
-		self.server.as_ref().expect(PROOF).addrs()
-	}
-
-	/// Closes the server.
-	pub fn close(mut self) {
-		self.remote.take().expect(PROOF).close();
-		self.server.take().expect(PROOF).close();
-	}
-
-	/// Will block, waiting for the server to finish.
-	pub fn wait(mut self) -> thread::Result<()> {
-		self.handle.take().expect(PROOF).join()
-	}
-}
-
-impl Drop for Server {
-	fn drop(&mut self) {
-		self.remote.take().map(|remote| remote.close());
-		self.server.take().map(|server| server.close());
-	}
-}
-
