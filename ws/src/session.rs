@@ -1,9 +1,10 @@
 use std;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use core;
-use core::futures::Future;
+use core::futures::{Async, Future, Poll};
 use server_utils::cors::Origin;
 use server_utils::tokio_core::reactor::Remote;
 use ws;
@@ -64,6 +65,23 @@ impl MiddlewareAction {
 	}
 }
 
+// future for checking session liveness.
+// this returns `NotReady` until the inner flag is `false`, and then
+// returns Ready(()).
+struct LivenessPoll(Arc<AtomicBool>);
+
+impl Future for LivenessPoll {
+	type Item = ();
+	type Error = ();
+
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		match self.0.load(Ordering::SeqCst) {
+			true => Ok(Async::NotReady), // Todo: park and unpark task?
+			false => Ok(Async::Ready(())),
+		}
+	}
+}
+
 pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	context: metadata::RequestContext,
 	handler: Arc<core::MetaIoHandler<M, S>>,
@@ -73,10 +91,12 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
 	remote: Remote,
+	is_alive: Arc<AtomicBool>,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
+		self.is_alive.store(false, Ordering::SeqCst);
 		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
 	}
 }
@@ -133,7 +153,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 						warn!(target: "signer", "Error while sending response: {:?}", e);
 					}
 				}
-			});
+			})
+			.select(LivenessPoll(self.is_alive.clone()))
+			.map(|_| ())
+			.map_err(|_| ());
+
 		self.remote.spawn(|_| future);
 
 		Ok(())
@@ -190,6 +214,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			request_middleware: self.request_middleware.clone(),
 			metadata: Default::default(),
 			remote: self.remote.clone(),
+			is_alive: Arc::new(AtomicBool::new(true)),
 		}
 	}
 }

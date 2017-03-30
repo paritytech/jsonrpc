@@ -21,7 +21,10 @@ pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	/// Create new IPC server session with given handler and metadata.
 	pub fn new(handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
-		Service { handler: handler, meta: meta }
+		Service {
+			handler: handler,
+			meta: meta,
+		}
 	}
 }
 
@@ -89,7 +92,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				// warn about existing file and remove it
 				if ::std::fs::remove_file(&endpoint_addr).is_ok() {
 					warn!("Removed existing file '{}'.", &endpoint_addr);
-				} 
+				}
 			}
 
 			let listener = match Endpoint::new(endpoint_addr, handle) {
