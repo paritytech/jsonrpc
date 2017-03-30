@@ -3,10 +3,16 @@ extern crate jsonrpc_core;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::time::Duration;
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
+
+// Use only for `should_cancel_on_timeout` as tests run in parallel.
+// If we need this kind of thing for more than one test we can generalize it.
+static COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
 
 fn serve_hosts(hosts: Vec<Host>) -> Server {
 	ServerBuilder::new(IoHandler::default())
@@ -28,6 +34,17 @@ fn serve() -> Server {
 		thread::spawn(move || {
 			thread::sleep(::std::time::Duration::from_millis(10));
 			c.send(Value::String("world".into())).unwrap();
+		});
+		p.map_err(|_| Error::invalid_request()).boxed()
+	});
+	io.add_async_method("hello_async3", |_params: Params| {
+		let (c, p) = futures::oneshot();
+		thread::spawn(move || {
+			thread::sleep(Duration::from_millis(100));
+
+			if let Ok(_) = c.send(Value::String("world".into())) {
+				COUNTER.fetch_add(1, Ordering::SeqCst);
+			}
 		});
 		p.map_err(|_| Error::invalid_request()).boxed()
 	});
@@ -63,22 +80,30 @@ fn read_block(lines: &mut Lines) -> String {
 }
 
 fn request(server: Server, request: &str) -> Response {
+	request_timeout(&server, request, None).unwrap()
+}
+
+fn request_timeout(server: &Server, request: &str, timeout: Option<Duration>) -> Option<Response> {
 	let mut req = TcpStream::connect(server.addrs()[0]).unwrap();
+	req.set_read_timeout(timeout).unwrap();
 	req.write_all(request.as_bytes()).unwrap();
 
 	let mut response = String::new();
-	req.read_to_string(&mut response).unwrap();
+	if let Err(_) = req.read_to_string(&mut response) {
+		drop(req);
+		return None;
+	}
 
 	let mut lines = response.lines();
 	let status = lines.next().unwrap().to_owned();
 	let headers =	read_block(&mut lines);
 	let body = read_block(&mut lines);
 
-	Response {
+	Some(Response {
 		status: status,
 		headers: headers,
 		body: body,
-	}
+	})
 }
 
 #[test]
@@ -564,6 +589,48 @@ fn should_handle_sync_batch_requests_correctly() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
+}
+
+#[test]
+fn should_cancel_on_timeout() {
+	// given
+	let server = serve();
+	let addr = server.addrs()[0].clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async3"}"#;
+	let response1 = request_timeout(
+		&server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req),
+		Some(Duration::from_millis(50)),
+	);
+	let counter_mid = COUNTER.load(Ordering::SeqCst);
+
+	let _ = request(
+		server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req),
+	);
+
+	// then
+	assert!(response1.is_none());
+	assert_eq!(counter_mid, 0);
+	assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
 }
 
 fn invalid_host() -> String {
