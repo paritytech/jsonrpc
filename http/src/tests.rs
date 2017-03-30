@@ -3,16 +3,13 @@ extern crate jsonrpc_core;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
-
-// Use only for `should_cancel_on_timeout` as tests run in parallel.
-// If we need this kind of thing for more than one test we can generalize it.
-static COUNTER: AtomicUsize = ATOMIC_USIZE_INIT;
 
 fn serve_hosts(hosts: Vec<Host>) -> Server {
 	ServerBuilder::new(IoHandler::default())
@@ -22,9 +19,12 @@ fn serve_hosts(hosts: Vec<Host>) -> Server {
 		.unwrap()
 }
 
-fn serve() -> Server {
+fn serve() -> (Server, Arc<AtomicUsize>) {
 	use std::thread;
 	let mut io = IoHandler::default();
+	let counter = Arc::new(AtomicUsize::new(0));
+
+	let counter_handle = counter.clone();
 	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
 	io.add_async_method("hello_async", |_params: Params| {
 		futures::finished(Value::String("world".into())).boxed()
@@ -37,25 +37,33 @@ fn serve() -> Server {
 		});
 		p.map_err(|_| Error::invalid_request()).boxed()
 	});
-	io.add_async_method("hello_async3", |_params: Params| {
+	io.add_async_method("hello_async3", move |_params: Params| {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
-			thread::sleep(Duration::from_millis(100));
+			thread::sleep(Duration::from_millis(500));
 
-			if let Ok(_) = c.send(Value::String("world".into())) {
-				COUNTER.fetch_add(1, Ordering::SeqCst);
-			}
+			let _  = c.send(());
 		});
-		p.map_err(|_| Error::invalid_request()).boxed()
+
+		let counter = counter_handle.clone();
+		p.then(move |res| {
+			if res.is_ok() {
+				counter.fetch_add(1, Ordering::SeqCst);
+			}
+
+			Ok(Value::String("world".into()))
+		}).boxed()
 	});
 
-	ServerBuilder::new(io)
+	let server = ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![
 			AccessControlAllowOrigin::Value("parity.io".into()),
 			AccessControlAllowOrigin::Null,
 		]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
-		.unwrap()
+		.unwrap();
+
+	(server, counter)
 }
 
 struct Response {
@@ -109,7 +117,7 @@ fn request_timeout(server: &Server, request: &str, timeout: Option<Duration>) ->
 #[test]
 fn should_return_method_not_allowed_for_get() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let response = request(server,
@@ -130,7 +138,7 @@ fn should_return_method_not_allowed_for_get() {
 #[test]
 fn should_return_unsupported_media_type_if_not_json() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let response = request(server,
@@ -151,7 +159,7 @@ fn should_return_unsupported_media_type_if_not_json() {
 #[test]
 fn should_return_error_for_malformed_request() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"3.0","method":"x"}"#;
@@ -175,7 +183,7 @@ fn should_return_error_for_malformed_request() {
 #[test]
 fn should_return_error_for_malformed_request2() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","metho1d":""}"#;
@@ -199,7 +207,7 @@ fn should_return_error_for_malformed_request2() {
 #[test]
 fn should_return_empty_response_for_notification() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","method":"x"}"#;
@@ -224,7 +232,7 @@ fn should_return_empty_response_for_notification() {
 #[test]
 fn should_return_method_not_found() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -248,7 +256,7 @@ fn should_return_method_not_found() {
 #[test]
 fn should_add_cors_headers() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -274,7 +282,7 @@ fn should_add_cors_headers() {
 #[test]
 fn should_not_add_cors_headers() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -299,7 +307,7 @@ fn should_not_add_cors_headers() {
 #[test]
 fn should_not_process_the_request_in_case_of_invalid_cors() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
@@ -325,7 +333,7 @@ fn should_not_process_the_request_in_case_of_invalid_cors() {
 #[test]
 fn should_return_proper_headers_on_options() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let response = request(server,
@@ -348,7 +356,7 @@ fn should_return_proper_headers_on_options() {
 #[test]
 fn should_add_cors_header_for_null_origin() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -494,7 +502,7 @@ fn should_always_allow_the_bind_address_as_localhost() {
 #[test]
 fn should_handle_sync_requests_correctly() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 	let addr = server.addrs()[0].clone();
 
 	// when
@@ -519,7 +527,7 @@ fn should_handle_sync_requests_correctly() {
 #[test]
 fn should_handle_async_requests_with_immediate_response_correctly() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 	let addr = server.addrs()[0].clone();
 
 	// when
@@ -544,7 +552,7 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 #[test]
 fn should_handle_async_requests_correctly() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 	let addr = server.addrs()[0].clone();
 
 	// when
@@ -569,7 +577,7 @@ fn should_handle_async_requests_correctly() {
 #[test]
 fn should_handle_sync_batch_requests_correctly() {
 	// given
-	let server = serve();
+	let (server, _) = serve();
 	let addr = server.addrs()[0].clone();
 
 	// when
@@ -594,7 +602,7 @@ fn should_handle_sync_batch_requests_correctly() {
 #[test]
 fn should_cancel_on_timeout() {
 	// given
-	let server = serve();
+	let (server, counter) = serve();
 	let addr = server.addrs()[0].clone();
 
 	// when
@@ -612,7 +620,7 @@ fn should_cancel_on_timeout() {
 		", addr.port(), req.as_bytes().len(), req),
 		Some(Duration::from_millis(50)),
 	);
-	let counter_mid = COUNTER.load(Ordering::SeqCst);
+	let counter_mid = counter.load(Ordering::SeqCst);
 
 	let _ = request(
 		server,
@@ -630,7 +638,7 @@ fn should_cancel_on_timeout() {
 	// then
 	assert!(response1.is_none());
 	assert_eq!(counter_mid, 0);
-	assert_eq!(COUNTER.load(Ordering::SeqCst), 1);
+	assert_eq!(counter.load(Ordering::SeqCst), 1);
 }
 
 fn invalid_host() -> String {
