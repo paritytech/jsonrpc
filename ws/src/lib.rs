@@ -6,6 +6,9 @@
 extern crate log;
 extern crate jsonrpc_core as core;
 extern crate jsonrpc_server_utils as server_utils;
+extern crate parking_lot;
+extern crate slab;
+
 pub extern crate ws;
 
 mod metadata;

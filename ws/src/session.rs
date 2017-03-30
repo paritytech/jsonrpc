@@ -1,12 +1,13 @@
 use std;
 use std::ascii::AsciiExt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use core;
-use core::futures::{Async, Future, Poll};
+use core::futures::{task, Async, Future, Poll};
+use parking_lot::Mutex;
 use server_utils::cors::Origin;
 use server_utils::tokio_core::reactor::Remote;
+use slab::Slab;
 use ws;
 
 use metadata;
@@ -65,19 +66,63 @@ impl MiddlewareAction {
 	}
 }
 
+// stores two parts: liveness and parked tasks.
+// the slab is only inserted into when live.
+type TaskSlab = Arc<Mutex<(bool, Slab<task::Task>)>>;
+
 // future for checking session liveness.
 // this returns `NotReady` until the inner flag is `false`, and then
 // returns Ready(()).
-struct LivenessPoll(Arc<AtomicBool>);
+struct LivenessPoll {
+	task_slab: TaskSlab,
+	slab_handle: Option<usize>,
+}
 
 impl Future for LivenessPoll {
 	type Item = ();
 	type Error = ();
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-		match self.0.load(Ordering::SeqCst) {
-			true => Ok(Async::NotReady), // Todo: park and unpark task?
-			false => Ok(Async::Ready(())),
+		const INITIAL_SIZE: usize = 4;
+
+		let mut task_slab = self.task_slab.lock();
+		match task_slab.0 {
+			true => {
+				let task_slab = &mut task_slab.1;
+				if let Some(&slab_handle) = self.slab_handle.as_ref() {
+					let mut entry = task_slab.entry(slab_handle)
+						.expect("slab handles are not altered by anything but the creator; qed");
+
+					entry.replace(task::park());
+				} else {
+					if !task_slab.has_available() {
+						// grow the size if necessary.
+						// we don't expect this to get so big as to overflow.
+						let reserve = ::std::cmp::max(task_slab.capacity(), INITIAL_SIZE);
+						task_slab.reserve_exact(reserve);
+					}
+
+					self.slab_handle = Some(task_slab.insert(task::park())
+						.expect("just grew slab; qed"));
+				}
+
+				Ok(Async::NotReady)
+			}
+			false => {
+				if let Some(slab_handle) = self.slab_handle {
+					task_slab.1.remove(slab_handle);
+				}
+
+				Ok(Async::Ready(()))
+			},
+		}
+	}
+}
+
+impl Drop for LivenessPoll {
+	fn drop(&mut self) {
+		if let Some(slab_handle) = self.slab_handle {
+			self.task_slab.lock().1.remove(slab_handle);
 		}
 	}
 }
@@ -91,13 +136,21 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
 	remote: Remote,
-	is_alive: Arc<AtomicBool>,
+	task_slab: TaskSlab,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
-		self.is_alive.store(false, Ordering::SeqCst);
 		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
+
+		// set the liveness flag to false.
+		// and then unpark all tasks.
+		let mut task_slab = self.task_slab.lock();
+		task_slab.0 = false;
+
+		for task in task_slab.1.iter() {
+			task.unpark()
+		}
 	}
 }
 
@@ -145,6 +198,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone();
 
+		let poll_liveness = LivenessPoll {
+			task_slab: self.task_slab.clone(),
+			slab_handle: None,
+		};
+
 		let future = self.handler.handle_request(req, metadata)
 			.map(move |response| {
 				if let Some(result) = response {
@@ -154,7 +212,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 					}
 				}
 			})
-			.select(LivenessPoll(self.is_alive.clone()))
+			.select(poll_liveness)
 			.map(|_| ())
 			.map_err(|_| ());
 
@@ -214,7 +272,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			request_middleware: self.request_middleware.clone(),
 			metadata: Default::default(),
 			remote: self.remote.clone(),
-			is_alive: Arc::new(AtomicBool::new(true)),
+			task_slab: Arc::new(Mutex::new((true, Slab::with_capacity(0)))),
 		}
 	}
 }

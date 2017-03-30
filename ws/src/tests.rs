@@ -181,7 +181,9 @@ fn drop_session_should_cancel() {
 	connect("ws://127.0.0.1:30004", |out| {
     	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 1}"#).unwrap();
 
+		let incomplete = incomplete.clone();
     	move |_| {
+			assert_eq!(incomplete.load(Ordering::SeqCst), 0);
 	    	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 2}"#).unwrap();
 			out.close(CloseCode::Normal)
 		}
