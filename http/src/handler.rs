@@ -12,6 +12,7 @@ use unicase::UniCase;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::Future;
+use jsonrpc::futures::sync::oneshot;
 use request_response::{Request, Response};
 use jsonrpc_server_utils::{cors, hosts};
 
@@ -48,6 +49,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 				waiting_sender: sender,
 				waiting_response: receiver,
 				continue_on_invalid_cors: false,
+				signal_abort: None,
 			})
 		}
 	}
@@ -101,6 +103,15 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 	fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
 		self.handler.on_response_writable(encoder)
 	}
+
+	/// This event occurs when the handler is removed (usually upon error.)
+	fn on_remove(self, transport: HttpStream) {
+		match self.handler {
+			Handler::Rpc(handler) => handler.on_remove(transport),
+			Handler::Error(response) => response.on_remove(transport),
+			Handler::Middleware(_) => {} // middleware not Sized.
+		}
+	}
 }
 
 enum Handler<M: Metadata, S: Middleware<M>> {
@@ -142,6 +153,8 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	/// Asynchronous response waiting to be moved into `response` field.
 	waiting_sender: mpsc::Sender<Response>,
 	waiting_response: mpsc::Receiver<Response>,
+	// bail on attempting to respond.
+	signal_abort: Option<oneshot::Sender<()>>,
 }
 
 impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
@@ -233,6 +246,8 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M
 		match decoder.read_to_string(&mut self.request.content) {
 			Ok(0) => {
 				let metadata = self.metadata.take().unwrap_or_default();
+				let (remove_send, remove_recv) = oneshot::channel();
+
 				let future = self.jsonrpc_handler.handler.handle_request(&self.request.content, metadata);
 
 				let sender = self.waiting_sender.clone();
@@ -255,8 +270,9 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M
 						if let Err(e) = result {
 							warn!("Error while resuming async call: {:?}", e);
 						}
-					})
+					}).select(remove_recv.map_err(|_| ())).map(|_| ()).map_err(|_| ())
 				});
+				self.signal_abort = Some(remove_send);
 
 				Next::wait()
 			}
@@ -288,5 +304,12 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M
 	fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
 		self.response.on_response_writable(encoder)
 	}
-}
 
+	/// This event occurs when the request is removed on an error.
+	/// in this case, we want to drop the future for any associated request.
+	fn on_remove(self, _transport: HttpStream) {
+		if let Some(signaller) = self.signal_abort {
+			let _ = signaller.send(());
+		}
+	}
+}
