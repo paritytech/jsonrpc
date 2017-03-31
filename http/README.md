@@ -9,7 +9,7 @@ Rust http server using JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-core = "6.0"
+jsonrpc-core = { git = "https://github.com/paritytech/jsonrpc" }
 jsonrpc-http-server = { git = "https://github.com/paritytech/jsonrpc" }
 ```
 

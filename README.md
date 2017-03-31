@@ -13,7 +13,7 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 ## Sub-projects
 - [jsonrpc-core](./core)
 - [jsonrpc-http-server](./http)
-- [jsonrpc-minihttp-server](./http)
+- [jsonrpc-minihttp-server](./minihttp)
 - [jsonrpc-ipc-server](./ipc)
 - [jsonrpc-tcp-server](./tcp)
 - [jsonrpc-ws-server](./ws)
