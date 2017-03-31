@@ -21,6 +21,7 @@ use {utils, RequestMiddleware, RequestMiddlewareAction};
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	allowed_hosts: Option<Vec<hosts::Host>>,
 	middleware: Arc<RequestMiddleware>,
+	control: Control,
 	handler: Handler<M, S>,
 }
 
@@ -38,6 +39,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		ServerHandler {
 			allowed_hosts: allowed_hosts,
 			middleware: middleware,
+			control: control.clone(),
 			handler: Handler::Rpc(RpcHandler {
 				cors_domains: cors_domains,
 				jsonrpc_handler: jsonrpc_handler,
@@ -55,7 +57,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 
 impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandler<M, S> {
 	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
-		let action = self.middleware.on_request(&request);
+		let action = self.middleware.on_request(&request, &self.control);
 
 		let (should_validate_hosts, should_continue_on_invalid_cors, handler) = match action {
 			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors }=> (

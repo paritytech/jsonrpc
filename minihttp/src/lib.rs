@@ -48,30 +48,30 @@ pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use req::Req;
 
 /// Result of starting the Server.
-pub type ServerResult = Result<Server, RpcServerError>;
+pub type ServerResult = Result<Server, Error>;
 
 /// RPC Server startup error.
 #[derive(Debug)]
-pub enum RpcServerError {
+pub enum Error {
 	/// IO Error
-	IoError(io::Error),
+	Io(io::Error),
 }
 
-impl From<io::Error> for RpcServerError {
+impl From<io::Error> for Error {
 	fn from(err: io::Error) -> Self {
-		RpcServerError::IoError(err)
+		Error::Io(err)
 	}
 }
 
 /// Extracts metadata from the HTTP request.
-pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
+pub trait MetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
 	fn read_metadata(&self, _: &req::Req) -> M {
 		Default::default()
 	}
 }
 
-impl<M, F> HttpMetaExtractor<M> for F where
+impl<M, F> MetaExtractor<M> for F where
 	M: jsonrpc::Metadata,
 	F: Fn(&req::Req) -> M + Sync + Send  + 'static,
 {
@@ -82,12 +82,12 @@ impl<M, F> HttpMetaExtractor<M> for F where
 
 #[derive(Default)]
 struct NoopExtractor;
-impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
+impl<M: jsonrpc::Metadata> MetaExtractor<M> for NoopExtractor {}
 
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	jsonrpc_handler: Arc<MetaIoHandler<M, S>>,
-	meta_extractor: Arc<HttpMetaExtractor<M>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<Host>>,
 	threads: usize,
@@ -126,8 +126,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Configures metadata extractor
-	pub fn meta_extractor(mut self, extractor: Arc<HttpMetaExtractor<M>>) -> Self {
-		self.meta_extractor = extractor;
+	pub fn meta_extractor<T: MetaExtractor<M>>(mut self, extractor: T) -> Self {
+		self.meta_extractor = Arc::new(extractor);
 		self
 	}
 
@@ -197,7 +197,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 		// Wait for server initialization
 		let local_addr = local_addr_rx.recv().map_err(|_| {
-			RpcServerError::IoError(io::Error::new(io::ErrorKind::Interrupted, ""))
+			Error::Io(io::Error::new(io::ErrorKind::Interrupted, ""))
 		})?;
 
 		Ok(Server {
@@ -211,7 +211,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 /// Tokio-proto JSON-RPC HTTP Service
 pub struct RpcService<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> {
 	handler: Arc<MetaIoHandler<M, S>>,
-	meta_extractor: Arc<HttpMetaExtractor<M>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
 	hosts: Option<Vec<Host>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 }
