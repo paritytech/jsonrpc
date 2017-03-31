@@ -55,21 +55,21 @@ pub type ServerResult = Result<Server, Error>;
 #[derive(Debug)]
 pub enum Error {
 	/// IO Error
-	IoError(std::io::Error),
+	Io(std::io::Error),
 	/// Other Error (hyper)
 	Other(hyper::error::Error),
 }
 
 impl From<std::io::Error> for Error {
 	fn from(err: std::io::Error) -> Self {
-		Error::IoError(err)
+		Error::Io(err)
 	}
 }
 
 impl From<hyper::error::Error> for Error {
 	fn from(err: hyper::error::Error) -> Self {
 		match err {
-			hyper::error::Error::Io(e) => Error::IoError(e),
+			hyper::error::Error::Io(e) => Error::Io(e),
 			e => Error::Other(e)
 		}
 	}
@@ -131,14 +131,14 @@ impl RequestMiddleware for NoopRequestMiddleware {
 }
 
 /// Extracts metadata from the HTTP request.
-pub trait HttpMetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
+pub trait MetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
 	fn read_metadata(&self, _: &server::Request<net::HttpStream>) -> M {
 		Default::default()
 	}
 }
 
-impl<M, F> HttpMetaExtractor<M> for F where
+impl<M, F> MetaExtractor<M> for F where
 	M: jsonrpc::Metadata,
 	F: Fn(&server::Request<net::HttpStream>) -> M + Sync + Send + 'static,
 {
@@ -149,7 +149,7 @@ impl<M, F> HttpMetaExtractor<M> for F where
 
 #[derive(Default)]
 struct NoopExtractor;
-impl<M: jsonrpc::Metadata> HttpMetaExtractor<M> for NoopExtractor {}
+impl<M: jsonrpc::Metadata> MetaExtractor<M> for NoopExtractor {}
 
 /// RPC Handler bundled with metadata extractor.
 pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
@@ -158,7 +158,7 @@ pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::N
 	/// Remote
 	pub remote: jsonrpc_server_utils::tokio_core::reactor::Remote,
 	/// Metadata extractor
-	pub extractor: Arc<HttpMetaExtractor<M>>,
+	pub extractor: Arc<MetaExtractor<M>>,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
@@ -176,7 +176,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	handler: MetaIoHandler<M, S>,
 	remote: UninitializedRemote,
-	meta_extractor: Arc<HttpMetaExtractor<M>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: Option<Vec<AccessControlAllowOrigin>>,
 	allowed_hosts: Option<Vec<Host>>,
@@ -223,7 +223,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Configures metadata extractor
-	pub fn meta_extractor<T: HttpMetaExtractor<M>>(mut self, extractor: T) -> Self {
+	pub fn meta_extractor<T: MetaExtractor<M>>(mut self, extractor: T) -> Self {
 		self.meta_extractor = Arc::new(extractor);
 		self
 	}
