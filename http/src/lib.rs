@@ -33,6 +33,7 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
+use std::fmt;
 use std::sync::Arc;
 use std::net::SocketAddr;
 use std::thread;
@@ -73,6 +74,28 @@ impl From<hyper::error::Error> for Error {
 			e => Error::Other(e)
 		}
 	}
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(ref e) => e.fmt(f),
+            Error::Other(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        "Starting the JSON-RPC HTTP server failed"
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        Some(match *self {
+            Error::Io(ref e) => e,
+            Error::Other(ref e) => e,
+        })
+    }
 }
 
 /// Action undertaken by a middleware.
