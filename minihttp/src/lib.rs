@@ -32,6 +32,7 @@ mod res;
 #[cfg(test)]
 mod tests;
 
+use std::fmt;
 use std::io;
 use std::ascii::AsciiExt;
 use std::sync::{Arc, mpsc};
@@ -61,6 +62,26 @@ impl From<io::Error> for Error {
 	fn from(err: io::Error) -> Self {
 		Error::Io(err)
 	}
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        "Starting the JSON-RPC HTTP server failed"
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        Some(match *self {
+            Error::Io(ref e) => e,
+        })
+    }
 }
 
 /// Extracts metadata from the HTTP request.
