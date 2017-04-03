@@ -628,6 +628,7 @@ fn should_cancel_on_timeout() {
 		", addr.port(), req.as_bytes().len(), req),
 		Some(Duration::from_millis(50)),
 	);
+	::std::thread::sleep(Duration::from_millis(500));
 	let counter_mid = counter.load(Ordering::SeqCst);
 
 	let _ = request(
@@ -645,7 +646,7 @@ fn should_cancel_on_timeout() {
 
 	// then
 	assert!(response1.is_none());
-	assert_eq!(counter_mid, 0);
+	assert_eq!(counter_mid, 1);
 	assert_eq!(counter.load(Ordering::SeqCst), 1);
 }
 
