@@ -19,6 +19,14 @@ fn serve_hosts(hosts: Vec<Host>) -> Server {
 		.unwrap()
 }
 
+// helper for seeing if the future is actually removed from the pool.
+struct Guard(bool, Arc<AtomicUsize>);
+impl Drop for Guard {
+	fn drop(&mut self) {
+		if self.0 { self.1.fetch_add(1, Ordering::SeqCst); }
+	}
+}
+
 fn serve() -> (Server, Arc<AtomicUsize>) {
 	use std::thread;
 	let mut io = IoHandler::default();
@@ -39,18 +47,17 @@ fn serve() -> (Server, Arc<AtomicUsize>) {
 	});
 	io.add_async_method("hello_async3", move |_params: Params| {
 		let (c, p) = futures::oneshot();
+		let mut guard = Guard(true, counter_handle.clone());
+
 		thread::spawn(move || {
 			thread::sleep(Duration::from_millis(500));
 
 			let _  = c.send(());
 		});
 
-		let counter = counter_handle.clone();
-		p.then(move |res| {
-			if res.is_ok() {
-				counter.fetch_add(1, Ordering::SeqCst);
-			}
-
+		p.then(move |_| {
+			// defuse guard since the future was polled to completion.
+			guard.0 = false;
 			Ok(Value::String("world".into()))
 		}).boxed()
 	});
@@ -93,15 +100,16 @@ fn request(server: Server, request: &str) -> Response {
 
 fn request_timeout(server: &Server, request: &str, timeout: Option<Duration>) -> Option<Response> {
 	let mut req = TcpStream::connect(server.addrs()[0]).unwrap();
-	req.set_read_timeout(timeout).unwrap();
 	req.write_all(request.as_bytes()).unwrap();
 
 	let mut response = String::new();
-	if let Err(_) = req.read_to_string(&mut response) {
+	if let Some(timeout) = timeout {
+		::std::thread::sleep(timeout);
 		drop(req);
 		return None;
 	}
 
+	req.read_to_string(&mut response).unwrap();
 	let mut lines = response.lines();
 	let status = lines.next().unwrap().to_owned();
 	let headers =	read_block(&mut lines);
