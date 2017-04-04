@@ -15,6 +15,6 @@ fn main() {
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
-	server.wait().unwrap();
+	server.wait();
 }
 

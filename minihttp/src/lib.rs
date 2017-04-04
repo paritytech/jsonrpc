@@ -186,7 +186,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let (close, shutdown_signal) = futures::sync::oneshot::channel();
 		let addr = addr.to_owned();
 		let handle = thread::spawn(move || {
-			// TODO [ToDr] Errors?
+			// TODO TODO [ToDr] Errors?
 			let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
 			let hosts2 = hosts.clone();
 			let mut hosts_setter = hosts2.write();
