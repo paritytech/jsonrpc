@@ -2,6 +2,7 @@
 name = "jsonrpc-server-utils"
 version = "7.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
+license = "MIT"
 
 [dependencies]
 log = "0.3"
