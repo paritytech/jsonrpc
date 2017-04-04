@@ -1,4 +1,4 @@
-use hyper::{self, header, server};
+use hyper::{header, server};
 
 use jsonrpc_server_utils::{cors, hosts};
 pub use jsonrpc_server_utils::cors::CorsHeader;

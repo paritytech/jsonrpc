@@ -21,7 +21,6 @@
 
 #[macro_use] extern crate log;
 extern crate unicase;
-extern crate parking_lot;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
 
@@ -42,7 +41,6 @@ use hyper::server;
 use jsonrpc::MetaIoHandler;
 use jsonrpc::futures::{self, Future, IntoFuture, BoxFuture, Stream};
 use jsonrpc_server_utils::reactor::{Remote, UninitializedRemote};
-use parking_lot::Mutex;
 
 pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use jsonrpc_server_utils::cors::{AccessControlAllowOrigin, Origin};
@@ -306,9 +304,10 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			local_addr_tx.send(local_addr).expect("Server initialization awaits local address.");
 
 			let http = server::Http::new();
+			let handle = handle.clone();
 			listener.incoming()
 				.for_each(move |(socket, addr)| {
-					http.bind_connection(handle, socket, addr, ServerHandler::new(
+					http.bind_connection(&handle, socket, addr, ServerHandler::new(
 						jsonrpc_handler.clone(),
 						cors_domains.clone(),
 						allowed_hosts.clone(),
@@ -324,7 +323,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				}))
 				.map(|_| ())
 				.map_err(|_| ())
-				.boxed()
 		});
 
 		// Wait for server initialization

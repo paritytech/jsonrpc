@@ -1,6 +1,6 @@
 use Rpc;
 
-use std::mem;
+use std::{fmt, mem};
 use std::sync::Arc;
 
 use hyper::{self, mime, server, Method};
@@ -8,7 +8,7 @@ use hyper::header::{self, Headers};
 use unicase::UniCase;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
-use jsonrpc::futures::{self, Future, Poll, Async, BoxFuture};
+use jsonrpc::futures::{Future, Poll, Async, BoxFuture, Stream};
 use response::Response;
 use jsonrpc_server_utils::{cors, hosts};
 
@@ -105,6 +105,20 @@ impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
 	}
 }
 
+enum RpcPollState<M> {
+	Ready(RpcHandlerState<M>),
+	NotReady(RpcHandlerState<M>),
+}
+
+impl<M> RpcPollState<M> {
+	fn decompose(self) -> (RpcHandlerState<M>, bool) {
+		use self::RpcPollState::*;
+		match self {
+			Ready(handler) => (handler, true),
+			NotReady(handler) => (handler, false),
+		}
+	}
+}
 enum RpcHandlerState<M> {
 	ReadingHeaders {
 		request: server::Request,
@@ -119,6 +133,20 @@ enum RpcHandlerState<M> {
 	Writing(Response),
 	Waiting(BoxFuture<Option<String>, ()>),
 	Done,
+}
+
+impl<M> fmt::Debug for RpcHandlerState<M> {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		use self::RpcHandlerState::*;
+
+		match *self {
+			ReadingHeaders {..} => write!(fmt, "ReadingHeaders"),
+			ReadingBody {..} => write!(fmt, "ReadingBody"),
+			Writing(ref res) => write!(fmt, "Writing({:?})", res),
+			Waiting(_) => write!(fmt, "Waiting"),
+			Done => write!(fmt, "Done"),
+		}
+	}
 }
 
 pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
@@ -139,31 +167,29 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				self.cors_header = utils::cors_header(&request, &cors_domains);
 				self.is_options = *request.method() == Method::Options;
 				// Read other headers
-				self.read_headers(request, continue_on_invalid_cors)
+				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
 			},
 			RpcHandlerState::ReadingBody { body, request, metadata, } => {
-				// TODO read more from body
-				// TODO handle too large requests!
-
-				self.process_request(&request, metadata)
+				self.read_body(body, request, metadata)?
 			},
 			RpcHandlerState::Waiting(mut waiting) => {
 				match waiting.poll() {
 					Ok(Async::Ready(response)) => {
-						RpcHandlerState::Writing(match response {
+						RpcPollState::Ready(RpcHandlerState::Writing(match response {
 							// Notification, just return empty response.
 							None => Response::ok(String::new()),
 							// Add new line to have nice output when using CLI clients (curl)
 							Some(result) => Response::ok(format!("{}\n", result)),
-						}.into())
+						}.into()))
 					},
-					Ok(Async::NotReady) => RpcHandlerState::Waiting(waiting),
-					Err(_) => RpcHandlerState::Writing(Response::internal_error()),
+					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
+					Err(_) => RpcPollState::Ready(RpcHandlerState::Writing(Response::internal_error())),
 				}
 			},
-			state => state,
+			state => RpcPollState::NotReady(state),
 		};
 
+		let (new_state, is_ready) = new_state.decompose();
 		match new_state {
 			RpcHandlerState::Writing(res) => {
 				let mut response: server::Response = res.into();
@@ -173,7 +199,11 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 			},
 			state => {
 				self.state = state;
-				Ok(Async::NotReady)
+				if is_ready {
+					self.poll()
+				} else {
+					Ok(Async::NotReady)
+				}
 			},
 		}
 	}
@@ -217,21 +247,41 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 	}
 
-	fn process_request(
+	fn read_body(
 		&self,
-		body: &[u8],
+		mut body: hyper::Body,
+		mut request: Vec<u8>,
 		metadata: M,
-	) -> RpcHandlerState<M> {
+	) -> Result<RpcPollState<M>, hyper::Error> {
+		loop {
+			// TODO read more from body
+			match body.poll()? {
+				// TODO handle too large requests!
+				Async::Ready(Some(chunk)) => {
+					request.extend_from_slice(&*chunk)
+				},
+				Async::Ready(None) => {
+					let content = match ::std::str::from_utf8(&request) {
+						Ok(content) => content,
+						Err(_) => {
+							// returns empty response on invalid string
+							return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::empty())));
+						},
+					};
 
-		let content = match ::std::str::from_utf8(body) {
-			Ok(content) => content,
-			Err(err) => {
-				// returns empty response on invalid string
-				return RpcHandlerState::Writing(Response::empty());
-			},
-		};
-
-		RpcHandlerState::Waiting(self.jsonrpc_handler.handler.handle_request(content, metadata))
+					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
+						self.jsonrpc_handler.handler.handle_request(content, metadata)
+					)));
+				},
+				Async::NotReady => {
+					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {
+						body: body,
+						request: request,
+						metadata: metadata
+					}));
+				},
+			}
+		}
 	}
 
 	fn set_response_headers(headers: &mut Headers, is_options: bool, cors_header: Option<header::AccessControlAllowOrigin>) {

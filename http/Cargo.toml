@@ -11,7 +11,6 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_http_server/index.
 
 [dependencies]
 log = "0.3"
-parking_lot = "0.4"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
 hyper = { git = "https://github.com/hyperium/hyper" }

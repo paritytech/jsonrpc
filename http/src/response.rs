@@ -1,6 +1,5 @@
 //! Basic Request/Response structures used internally.
 
-use std::io;
 use hyper::server;
 
 pub use hyper::Method;
@@ -8,6 +7,7 @@ pub use hyper::status::StatusCode;
 pub use hyper::header;
 
 /// Simple server response structure
+#[derive(Debug)]
 pub struct Response {
 	/// Response code
 	pub code: StatusCode,
