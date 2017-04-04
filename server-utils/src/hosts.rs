@@ -1,6 +1,8 @@
 //! Host header validation.
 
 use std::ascii::AsciiExt;
+use std::collections::HashSet;
+use std::net::SocketAddr;
 
 const SPLIT_PROOF: &'static str = "split always returns non-empty iterator.";
 
@@ -114,6 +116,17 @@ pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> b
 			}
 		}
 	}
+}
+
+/// Updates given list of hosts with the address.
+pub fn update(hosts: Option<Vec<Host>>, address: &SocketAddr) -> Option<Vec<Host>> {
+	hosts.map(|current_hosts| {
+		let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
+		let address = address.to_string();
+		new_hosts.insert(address.clone().into());
+		new_hosts.insert(address.replace("127.0.0.1", "localhost").into());
+		new_hosts.into_iter().collect()
+	})
 }
 
 #[cfg(test)]

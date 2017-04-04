@@ -10,7 +10,7 @@ use unicase::UniCase;
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{Future, Poll, Async, BoxFuture, Stream};
 use response::Response;
-use jsonrpc_server_utils::{cors, hosts};
+use server_utils::{cors, hosts};
 
 use {utils, RequestMiddleware, RequestMiddlewareAction};
 
@@ -254,9 +254,8 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		metadata: M,
 	) -> Result<RpcPollState<M>, hyper::Error> {
 		loop {
-			// TODO read more from body
 			match body.poll()? {
-				// TODO handle too large requests!
+				// TODO [ToDr] reject too large requests?
 				Async::Ready(Some(chunk)) => {
 					request.extend_from_slice(&*chunk)
 				},
@@ -264,7 +263,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 					let content = match ::std::str::from_utf8(&request) {
 						Ok(content) => content,
 						Err(_) => {
-							// returns empty response on invalid string
+							// returns empty response on invalid utf8
 							return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::empty())));
 						},
 					};

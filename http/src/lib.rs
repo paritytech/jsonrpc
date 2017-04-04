@@ -22,7 +22,7 @@
 #[macro_use] extern crate log;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
-extern crate jsonrpc_server_utils;
+extern crate jsonrpc_server_utils as server_utils;
 
 pub extern crate hyper;
 
@@ -35,16 +35,15 @@ mod tests;
 use std::{fmt, io};
 use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
-use std::collections::HashSet;
 
 use hyper::server;
 use jsonrpc::MetaIoHandler;
 use jsonrpc::futures::{self, Future, IntoFuture, BoxFuture, Stream};
-use jsonrpc_server_utils::reactor::{Remote, UninitializedRemote};
+use server_utils::reactor::{Remote, UninitializedRemote};
 
-pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
-pub use jsonrpc_server_utils::cors::{AccessControlAllowOrigin, Origin};
-pub use jsonrpc_server_utils::tokio_core;
+pub use server_utils::hosts::{Host, DomainsValidation};
+pub use server_utils::cors::{AccessControlAllowOrigin, Origin};
+pub use server_utils::tokio_core;
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_header, CorsHeader};
 pub use response::Response;
@@ -210,6 +209,8 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	allowed_hosts: Option<Vec<Host>>,
 }
 
+const SENDER_PROOF: &'static str = "Server initialization awaits local address.";
+
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -233,7 +234,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Utilize existing event loop remote to poll RPC results.
-	pub fn event_loop_remote(mut self, remote: jsonrpc_server_utils::tokio_core::reactor::Remote) -> Self {
+	pub fn event_loop_remote(mut self, remote: tokio_core::reactor::Remote) -> Self {
 		self.remote = UninitializedRemote::Shared(remote);
 		self
 	}
@@ -285,53 +286,65 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let addr = addr.to_owned();
 		// TODO [ToDr] Consider spawning many threads like in minihttp?
 		eloop.remote().spawn(move |handle| {
-			// TODO [ToDr] Handle Errors!
+			let handle1 = handle.clone();
+			let bind = move || {
+				let listener = tokio_core::net::TcpListener::bind(&addr, &handle1)?;
+				// Add current host to allowed headers.
+				// NOTE: we need to use `l.local_addr()` instead of `addr`
+				// it might be different!
+				let local_addr = listener.local_addr()?;
 
-			let listener = tokio_core::net::TcpListener::bind(&addr, handle).unwrap();
-			// Add current host to allowed headers.
-			// NOTE: we need to use `l.local_addr()` instead of `addr`
-			// it might be different!
-			let local_addr = listener.local_addr().unwrap();
-			let allowed_hosts = allowed_hosts.map(|mut hosts| {
-				// TODO Avoid repetition?
-				let address = local_addr.to_string();
-				hosts.push(address.clone().into());
-				hosts.push(address.replace("127.0.0.1", "localhost").into());
-				hosts
-			});
+				Ok((listener, local_addr))
+			};
 
-			// Send local address
-			local_addr_tx.send(local_addr).expect("Server initialization awaits local address.");
+			let bind_result = match bind() {
+				Ok((listener, local_addr)) => {
+					// Send local address
+					local_addr_tx.send(Ok(local_addr)).expect(SENDER_PROOF);
 
-			let http = server::Http::new();
+					futures::future::ok((listener, local_addr))
+				},
+				Err(err) => {
+					// Send error
+					local_addr_tx.send(Err(err)).expect(SENDER_PROOF);
+
+					futures::future::err(())
+				}
+			};
+
 			let handle = handle.clone();
-			listener.incoming()
-				.for_each(move |(socket, addr)| {
-					http.bind_connection(&handle, socket, addr, ServerHandler::new(
-						jsonrpc_handler.clone(),
-						cors_domains.clone(),
-						allowed_hosts.clone(),
-						request_middleware.clone(),
-					));
-					Ok(())
-				})
-				.map_err(|e| {
-					warn!("Incoming streams error, closing sever: {:?}", e);
-				})
-				.select(shutdown_signal.map_err(|e| {
-					warn!("Shutdown signaller dropped, closing server: {:?}", e);
-				}))
-				.map(|_| ())
-				.map_err(|_| ())
+			bind_result.and_then(move |(listener, local_addr)| {
+				let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
+
+				let http = server::Http::new();
+				listener.incoming()
+					.for_each(move |(socket, addr)| {
+						http.bind_connection(&handle, socket, addr, ServerHandler::new(
+							jsonrpc_handler.clone(),
+							cors_domains.clone(),
+							allowed_hosts.clone(),
+							request_middleware.clone(),
+						));
+						Ok(())
+					})
+					.map_err(|e| {
+						warn!("Incoming streams error, closing sever: {:?}", e);
+					})
+					.select(shutdown_signal.map_err(|e| {
+						warn!("Shutdown signaller dropped, closing server: {:?}", e);
+					}))
+					.map(|_| ())
+					.map_err(|_| ())
+			})
 		});
 
 		// Wait for server initialization
-		let local_addr = local_addr_rx.recv().map_err(|_| {
+		let local_addr: io::Result<SocketAddr> = local_addr_rx.recv().map_err(|_| {
 			Error::Io(io::Error::new(io::ErrorKind::Interrupted, ""))
 		})?;
 
 		Ok(Server {
-			address: local_addr,
+			address: local_addr?,
 			remote: Some(eloop),
 			close: Some(close),
 		})

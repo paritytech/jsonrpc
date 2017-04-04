@@ -1,7 +1,7 @@
 use hyper::{header, server};
 
-use jsonrpc_server_utils::{cors, hosts};
-pub use jsonrpc_server_utils::cors::CorsHeader;
+use server_utils::{cors, hosts};
+pub use server_utils::cors::CorsHeader;
 
 /// Extracts string value of a single header in request.
 fn read_header<'a>(req: &'a server::Request, header: &str) -> Option<&'a str> {
