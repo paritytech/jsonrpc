@@ -133,7 +133,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		}
 	}
 
-	/// Sets number of threads of the server to run.
+	/// Sets number of threads of the server to run. (not available for windows)
 	/// Panics when set to `0`.
 	pub fn threads(mut self, threads: usize) -> Self {
 		assert!(threads > 0);

@@ -20,9 +20,16 @@ impl UninitializedRemote {
 	/// In case there is no shared remote, will spawn a new event loop.
 	/// Dropping `Remote` closes the loop.
 	pub fn initialize(self) -> io::Result<Remote> {
+		self.init_with_name("event.loop")
+	}
+
+	/// Initializes remote.
+	/// In case there is no shared remote, will spawn a new event loop.
+	/// Dropping `Remote` closes the loop.
+	pub fn init_with_name<T: Into<String>>(self, name: T) -> io::Result<Remote> {
 		match self {
 			UninitializedRemote::Shared(remote) => Ok(Remote::Shared(remote)),
-			UninitializedRemote::Unspawned => RpcEventLoop::spawn().map(Remote::Spawned),
+			UninitializedRemote::Unspawned => RpcEventLoop::with_name(Some(name.into())).map(Remote::Spawned),
 		}
 	}
 }
@@ -73,11 +80,20 @@ impl Drop for RpcEventLoop {
 }
 
 impl RpcEventLoop {
-	/// Spawns a new thread with `EventLoop` with given handler.
+	/// Spawns a new thread with the `EventLoop`.
 	pub fn spawn() -> io::Result<Self> {
+		RpcEventLoop::with_name(None)
+	}
+
+	/// Spawns a new named thread with the `EventLoop`.
+	pub fn with_name(name: Option<String>) -> io::Result<Self> {
 		let (stop, stopped) = futures::oneshot();
 		let (tx, rx) = mpsc::channel();
-		let handle = thread::spawn(move || {
+		let mut tb = thread::Builder::new();
+		if let Some(name) = name {
+			tb = tb.name(name);
+		}
+		let handle = tb.spawn(move || {
 			let el = tokio_core::reactor::Core::new();
 			match el {
 				Ok(mut el) => {
@@ -88,7 +104,7 @@ impl RpcEventLoop {
 					tx.send(Err(err)).expect("Rx is blocking upper thread.");
 				}
 			}
-		});
+		}).expect("Couldn't spawn a thread.");
 		let remote = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
 		remote.map(|remote| RpcEventLoop {
