@@ -38,7 +38,6 @@ use std::ascii::AsciiExt;
 use std::sync::{Arc, mpsc};
 use std::net::SocketAddr;
 use std::thread;
-use std::collections::HashSet;
 use parking_lot::RwLock;
 use jsonrpc::futures::{self, future, Future, BoxFuture};
 use jsonrpc::MetaIoHandler;
@@ -114,6 +113,8 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	threads: usize,
 }
 
+const SENDER_PROOF: &'static str = "Server initialization awaits local address.";
+
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -164,16 +165,6 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-	fn update_hosts(hosts: Option<Vec<Host>>, address: SocketAddr) -> Option<Vec<Host>> {
-		hosts.map(|current_hosts| {
-			let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
-			let address = address.to_string();
-			new_hosts.insert(address.clone().into());
-			new_hosts.insert(address.replace("127.0.0.1", "localhost").into());
-			new_hosts.into_iter().collect()
-		})
-	}
-
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
 		let cors_domains = self.cors_domains;
@@ -186,43 +177,53 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let (close, shutdown_signal) = futures::sync::oneshot::channel();
 		let addr = addr.to_owned();
 		let handle = thread::spawn(move || {
-			// TODO [ToDr] Errors?
-			let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
-			let hosts2 = hosts.clone();
-			let mut hosts_setter = hosts2.write();
+			let run = move || {
+				let hosts = Arc::new(RwLock::new(allowed_hosts.clone()));
+				let hosts2 = hosts.clone();
+				let mut hosts_setter = hosts2.write();
 
-			let mut server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
-			server.threads(threads);
-			let server = server.bind(move || Ok(RpcService {
-				handler: handler.clone(),
-				meta_extractor: meta_extractor.clone(),
-				hosts: hosts.read().clone(),
-				cors_domains: cors_domains.clone(),
-			})).expect("Cannot bind to socket.");
+				let mut server = tokio_proto::TcpServer::new(tokio_minihttp::Http, addr);
+				server.threads(threads);
+				let server = server.bind(move || Ok(RpcService {
+					handler: handler.clone(),
+					meta_extractor: meta_extractor.clone(),
+					hosts: hosts.read().clone(),
+					cors_domains: cors_domains.clone(),
+				}))?;
 
-			let local_addr = server.local_addr().expect("OK");
-			// Add current host to allowed headers.
-			// NOTE: we need to use `local_address` instead of `addr`
-			// it might be different!
-			*hosts_setter = Self::update_hosts(allowed_hosts, local_addr.clone());
-			drop(hosts_setter);
+				let local_addr = server.local_addr()?;
+				// Add current host to allowed headers.
+				// NOTE: we need to use `local_address` instead of `addr`
+				// it might be different!
+				*hosts_setter = hosts::update(allowed_hosts, &local_addr);
 
-			// Send local address
-			local_addr_tx.send(local_addr).expect("Server initialization awaits local address.");
+				Ok((server, local_addr))
+			};
 
-			// Start the server and wait for shutdown signal
-			server.run_until(shutdown_signal.map_err(|_| {
-				warn!("Shutdown signaller dropped, closing server.");
-			})).expect("Expected clean shutdown.")
+			match run() {
+				Ok((server, local_addr)) => {
+					// Send local address
+					local_addr_tx.send(Ok(local_addr)).expect(SENDER_PROOF);
+
+					// Start the server and wait for shutdown signal
+					server.run_until(shutdown_signal.map_err(|_| {
+						warn!("Shutdown signaller dropped, closing server.");
+					})).expect("Expected clean shutdown.")
+				},
+				Err(err) => {
+					// Send error
+					local_addr_tx.send(Err(err)).expect(SENDER_PROOF);
+				}
+			}
 		});
 
 		// Wait for server initialization
-		let local_addr = local_addr_rx.recv().map_err(|_| {
+		let local_addr: io::Result<SocketAddr> = local_addr_rx.recv().map_err(|_| {
 			Error::Io(io::Error::new(io::ErrorKind::Interrupted, ""))
 		})?;
 
 		Ok(Server {
-			address: local_addr,
+			address: local_addr?,
 			handle: Some(handle),
 			close: Some(close),
 		})
@@ -251,25 +252,29 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 	type Request = tokio_minihttp::Request;
 	type Response = tokio_minihttp::Response;
 	type Error = io::Error;
-	// TODO avoid boxing here
-	type Future = BoxFuture<tokio_minihttp::Response, io::Error>;
+	type Future = future::Either<
+		future::FutureResult<tokio_minihttp::Response, io::Error>,
+		RpcResponse,
+	>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
+		use self::future::Either;
+
 		let request = req::Req::new(request);
 		// Validate HTTP Method
 		let is_options = request.method() == req::Method::Options;
 		if !is_options && request.method() != req::Method::Post {
-			return future::ok(
+			return Either::A(future::ok(
 				res::method_not_allowed()
-			).boxed();
+			));
 		}
 
 		// Validate allowed hosts
 		let host = request.header("Host");
 		if !hosts::is_host_valid(host.clone(), &self.hosts) {
-			return future::ok(
+			return Either::A(future::ok(
 				res::invalid_host()
-			).boxed();
+			));
 		}
 
 		// Extract CORS headers
@@ -278,24 +283,24 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 		// Validate cors header
 		if let cors::CorsHeader::Invalid = cors {
-			return future::ok(
+			return Either::A(future::ok(
 				res::invalid_cors()
-			).boxed();
+			));
 		}
 
 		// Don't process data if it's OPTIONS
 		if is_options {
-			return future::ok(
+			return Either::A(future::ok(
 				res::options(cors.into())
-			).boxed();
+			));
 		}
 
 		// Validate content type
 		let content_type = request.header("Content-type");
 		if !is_json(content_type) {
-			return future::ok(
+			return Either::A(future::ok(
 				res::invalid_content_type()
-			).boxed();
+			));
 		}
 
 		// Extract metadata
@@ -303,10 +308,35 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 
 		// Read & handle request
 		let data = request.body();
-		self.handler.handle_request(data, metadata).map(|result| {
-			let result = format!("{}\n", result.unwrap_or_default());
-			res::new(&result, cors.into())
-		}).map_err(|_| unimplemented!()).boxed()
+		let future = self.handler.handle_request(data, metadata);
+		Either::B(RpcResponse {
+			future: future,
+			cors: cors.into(),
+		})
+	}
+}
+
+/// RPC response wrapper
+pub struct RpcResponse {
+	future: BoxFuture<Option<String>, ()>,
+	cors: Option<cors::AccessControlAllowOrigin>,
+}
+
+impl Future for RpcResponse {
+	type Item = tokio_minihttp::Response;
+	type Error = io::Error;
+
+	fn poll(&mut self) -> futures::Poll<Self::Item, Self::Error> {
+		use self::futures::Async::*;
+
+		match self.future.poll() {
+			Err(_) => Ok(Ready(res::internal_error())),
+			Ok(NotReady) => Ok(NotReady),
+			Ok(Ready(result)) => {
+				let result = format!("{}\n", result.unwrap_or_default());
+				Ok(Ready(res::new(&result, self.cors.take())))
+			},
+		}
 	}
 }
 

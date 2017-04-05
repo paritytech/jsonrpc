@@ -1,10 +1,10 @@
-use hyper::{self, header};
+use hyper::{header, server};
 
-use jsonrpc_server_utils::{cors, hosts};
-pub use jsonrpc_server_utils::cors::CorsHeader;
+use server_utils::{cors, hosts};
+pub use server_utils::cors::CorsHeader;
 
 /// Extracts string value of a single header in request.
-fn read_header<'a>(req: &'a hyper::server::Request<'a, hyper::net::HttpStream>, header: &str) -> Option<&'a str> {
+fn read_header<'a>(req: &'a server::Request, header: &str) -> Option<&'a str> {
 	match req.headers().get_raw(header) {
 		Some(ref v) if v.len() == 1 => {
 			::std::str::from_utf8(&v[0]).ok()
@@ -15,7 +15,7 @@ fn read_header<'a>(req: &'a hyper::server::Request<'a, hyper::net::HttpStream>, 
 
 /// Returns `true` if Host header in request matches a list of allowed hosts.
 pub fn is_host_allowed(
-	request: &hyper::server::Request<hyper::net::HttpStream>,
+	request: &server::Request,
 	allowed_hosts: &Option<Vec<hosts::Host>>,
 ) -> bool {
 	hosts::is_host_valid(read_header(request, "host"), allowed_hosts)
@@ -23,7 +23,7 @@ pub fn is_host_allowed(
 
 /// Returns a CORS header that should be returned with that request.
 pub fn cors_header(
-	request: &hyper::server::Request<hyper::net::HttpStream>,
+	request: &server::Request,
 	cors_domains: &Option<Vec<cors::AccessControlAllowOrigin>>
 ) -> CorsHeader<header::AccessControlAllowOrigin> {
 	cors::get_cors_header(read_header(request, "origin"), read_header(request, "host"), cors_domains).map(|origin| {

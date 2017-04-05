@@ -1,63 +1,56 @@
 use Rpc;
 
-use std::sync::{mpsc, Arc};
-use std::io::{self, Read};
-use std::ops::{Deref, DerefMut};
+use std::{fmt, mem};
+use std::sync::Arc;
 
-use hyper::{mime, server, Next, Encoder, Decoder, Control};
+use hyper::{self, mime, server, Method};
 use hyper::header::{self, Headers};
-use hyper::method::Method;
-use hyper::net::HttpStream;
 use unicase::UniCase;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
-use jsonrpc::futures::Future;
-use request_response::{Request, Response};
-use jsonrpc_server_utils::{cors, hosts};
+use jsonrpc::futures::{Future, Poll, Async, BoxFuture, Stream};
+use response::Response;
+use server_utils::{cors, hosts};
 
 use {utils, RequestMiddleware, RequestMiddlewareAction};
 
+
+type AllowedHosts = Option<Vec<hosts::Host>>;
+type CorsDomains = Option<Vec<cors::AccessControlAllowOrigin>>;
+
 /// jsonrpc http request handler.
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
-	allowed_hosts: Option<Vec<hosts::Host>>,
+	jsonrpc_handler: Rpc<M, S>,
+	allowed_hosts: AllowedHosts,
+	cors_domains: CorsDomains,
 	middleware: Arc<RequestMiddleware>,
-	control: Control,
-	handler: Handler<M, S>,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	/// Create new request handler.
 	pub fn new(
 		jsonrpc_handler: Rpc<M, S>,
-		cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
-		allowed_hosts: Option<Vec<hosts::Host>>,
+		cors_domains: CorsDomains,
+		allowed_hosts: AllowedHosts,
 		middleware: Arc<RequestMiddleware>,
-		control: Control,
 	) -> Self {
-		let (sender, receiver) = mpsc::channel();
-
 		ServerHandler {
+			jsonrpc_handler: jsonrpc_handler,
 			allowed_hosts: allowed_hosts,
+			cors_domains: cors_domains,
 			middleware: middleware,
-			control: control.clone(),
-			handler: Handler::Rpc(RpcHandler {
-				cors_domains: cors_domains,
-				jsonrpc_handler: jsonrpc_handler,
-				control: control,
-				metadata: None,
-				request: Request::empty(),
-				response: Response::method_not_allowed(),
-				waiting_sender: sender,
-				waiting_response: receiver,
-				continue_on_invalid_cors: false,
-			})
 		}
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandler<M, S> {
-	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
-		let action = self.middleware.on_request(&request, &self.control);
+impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
+	type Request = server::Request;
+	type Response = server::Response;
+	type Error = hyper::Error;
+	type Future = Handler<M, S>;
+
+	fn call(&self, request: Self::Request) -> Self::Future {
+		let action = self.middleware.on_request(&request);
 
 		let (should_validate_hosts, should_continue_on_invalid_cors, handler) = match action {
 			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors }=> (
@@ -70,87 +63,228 @@ impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for ServerHandle
 
 		// Validate host
 		if should_validate_hosts && !utils::is_host_allowed(&request, &self.allowed_hosts) {
-			self.handler = Handler::Error(Response::host_not_allowed());
-			return Next::write();
-		}
-
-		if should_continue_on_invalid_cors {
-			if let Handler::Rpc(ref mut rpc) = self.handler {
-				rpc.continue_on_invalid_cors = true;
-			}
+			return Handler::Error(Some(Response::host_not_allowed()));
 		}
 
 		// Replace handler with the one returned by middleware.
 		if let Some(handler) = handler {
-			self.handler = Handler::Middleware(handler);
+			return Handler::Middleware(handler);
 		}
 
-		// Fire handler
-		self.handler.on_request(request)
-	}
-
-	/// This event occurs each time the `Request` is ready to be read from.
-	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
-		self.handler.on_request_readable(decoder)
-	}
-
-	/// This event occurs after the first time this handled signals `Next::write()`.
-	fn on_response(&mut self, response: &mut server::Response) -> Next {
-		self.handler.on_response(response)
-	}
-
-	/// This event occurs each time the `Response` is ready to be written to.
-	fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
-		self.handler.on_response_writable(encoder)
+		Handler::Rpc(RpcHandler {
+			jsonrpc_handler: self.jsonrpc_handler.clone(),
+			state: RpcHandlerState::ReadingHeaders {
+				request: request,
+				cors_domains: self.cors_domains.clone(),
+				continue_on_invalid_cors: should_continue_on_invalid_cors,
+			},
+			is_options: false,
+			cors_header: cors::CorsHeader::NotRequired,
+		})
 	}
 }
 
-enum Handler<M: Metadata, S: Middleware<M>> {
+pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Rpc(RpcHandler<M, S>),
-	Error(Response),
-	Middleware(Box<server::Handler<HttpStream> + Send>),
+	Error(Option<Response>),
+	Middleware(BoxFuture<server::Response, hyper::Error>),
 }
 
-impl<M: Metadata, S: Middleware<M>> Deref for Handler<M, S> {
-	type Target = server::Handler<HttpStream>;
+impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
+	type Item = server::Response;
+	type Error = hyper::Error;
 
-	fn deref(&self) -> &Self::Target {
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		match *self {
-			Handler::Rpc(ref handler) => handler,
-			Handler::Error(ref handler) => handler,
-			Handler::Middleware(ref response) => &**response,
+			Handler::Rpc(ref mut handler) => handler.poll(),
+			Handler::Middleware(ref mut middleware) => middleware.poll(),
+			Handler::Error(ref mut response) => Ok(Async::Ready(
+				response.take().expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed").into()
+			)),
 		}
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> DerefMut for Handler<M, S> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
+enum RpcPollState<M> {
+	Ready(RpcHandlerState<M>),
+	NotReady(RpcHandlerState<M>),
+}
+
+impl<M> RpcPollState<M> {
+	fn decompose(self) -> (RpcHandlerState<M>, bool) {
+		use self::RpcPollState::*;
+		match self {
+			Ready(handler) => (handler, true),
+			NotReady(handler) => (handler, false),
+		}
+	}
+}
+enum RpcHandlerState<M> {
+	ReadingHeaders {
+		request: server::Request,
+		cors_domains: CorsDomains,
+		continue_on_invalid_cors: bool,
+	},
+	ReadingBody {
+		body: hyper::Body,
+		request: Vec<u8>,
+		metadata: M,
+	},
+	Writing(Response),
+	Waiting(BoxFuture<Option<String>, ()>),
+	Done,
+}
+
+impl<M> fmt::Debug for RpcHandlerState<M> {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		use self::RpcHandlerState::*;
+
 		match *self {
-			Handler::Rpc(ref mut handler) => handler,
-			Handler::Error(ref mut handler) => handler,
-			Handler::Middleware(ref mut response) => &mut **response,
+			ReadingHeaders {..} => write!(fmt, "ReadingHeaders"),
+			ReadingBody {..} => write!(fmt, "ReadingBody"),
+			Writing(ref res) => write!(fmt, "Writing({:?})", res),
+			Waiting(_) => write!(fmt, "Waiting"),
+			Done => write!(fmt, "Done"),
 		}
 	}
 }
 
 pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
-	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
 	jsonrpc_handler: Rpc<M, S>,
-	metadata: Option<M>,
-	control: Control,
-	request: Request,
-	response: Response,
-	continue_on_invalid_cors: bool,
-	/// Asynchronous response waiting to be moved into `response` field.
-	waiting_sender: mpsc::Sender<Response>,
-	waiting_response: mpsc::Receiver<Response>,
+	state: RpcHandlerState<M>,
+	is_options: bool,
+	cors_header: cors::CorsHeader<header::AccessControlAllowOrigin>,
+}
+
+impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
+	type Item = server::Response;
+	type Error = hyper::Error;
+
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		let new_state = match mem::replace(&mut self.state, RpcHandlerState::Done) {
+			RpcHandlerState::ReadingHeaders { request, cors_domains, continue_on_invalid_cors, } => {
+				// Read cors header
+				self.cors_header = utils::cors_header(&request, &cors_domains);
+				self.is_options = *request.method() == Method::Options;
+				// Read other headers
+				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
+			},
+			RpcHandlerState::ReadingBody { body, request, metadata, } => {
+				self.process_body(body, request, metadata)?
+			},
+			RpcHandlerState::Waiting(mut waiting) => {
+				match waiting.poll() {
+					Ok(Async::Ready(response)) => {
+						RpcPollState::Ready(RpcHandlerState::Writing(match response {
+							// Notification, just return empty response.
+							None => Response::ok(String::new()),
+							// Add new line to have nice output when using CLI clients (curl)
+							Some(result) => Response::ok(format!("{}\n", result)),
+						}.into()))
+					},
+					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
+					Err(_) => RpcPollState::Ready(RpcHandlerState::Writing(Response::internal_error())),
+				}
+			},
+			state => RpcPollState::NotReady(state),
+		};
+
+		let (new_state, is_ready) = new_state.decompose();
+		match new_state {
+			RpcHandlerState::Writing(res) => {
+				let mut response: server::Response = res.into();
+				let cors_header = mem::replace(&mut self.cors_header, cors::CorsHeader::Invalid);
+				Self::set_response_headers(response.headers_mut(), self.is_options, cors_header.into());
+				Ok(Async::Ready(response))
+			},
+			state => {
+				self.state = state;
+				if is_ready {
+					self.poll()
+				} else {
+					Ok(Async::NotReady)
+				}
+			},
+		}
+	}
 }
 
 impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
-	fn response_headers(&self, is_options: bool, cors_header: Option<header::AccessControlAllowOrigin>) -> Headers {
-		let mut headers = Headers::new();
-		headers.set(self.response.content_type.clone());
+	fn read_headers(
+		&self,
+		request: server::Request,
+		continue_on_invalid_cors: bool,
+	) -> RpcHandlerState<M> {
+		if self.cors_header == cors::CorsHeader::Invalid && !continue_on_invalid_cors {
+			return RpcHandlerState::Writing(Response::invalid_cors());
+		}
+		// Read metadata
+		let metadata = self.jsonrpc_handler.extractor.read_metadata(&request);
 
+		// Proceed
+		match *request.method() {
+			// Validate the ContentType header
+			// to prevent Cross-Origin XHRs with text/plain
+			Method::Post if Self::is_json(request.headers().get::<header::ContentType>()) => {
+				RpcHandlerState::ReadingBody {
+					metadata: metadata,
+					request: Default::default(),
+					body: request.body(),
+				}
+			},
+			// Just return error for unsupported content type
+			Method::Post => {
+				RpcHandlerState::Writing(Response::unsupported_content_type())
+			},
+			// Don't validate content type on options
+			Method::Options => {
+				RpcHandlerState::Writing(Response::empty())
+			},
+			// Disallow other methods.
+			_ => {
+				RpcHandlerState::Writing(Response::method_not_allowed())
+			},
+		}
+	}
+
+	fn process_body(
+		&self,
+		mut body: hyper::Body,
+		mut request: Vec<u8>,
+		metadata: M,
+	) -> Result<RpcPollState<M>, hyper::Error> {
+		loop {
+			match body.poll()? {
+				// TODO [ToDr] reject too large requests?
+				Async::Ready(Some(chunk)) => {
+					request.extend_from_slice(&*chunk)
+				},
+				Async::Ready(None) => {
+					let content = match ::std::str::from_utf8(&request) {
+						Ok(content) => content,
+						Err(err) => {
+							// Return utf error.
+							return Err(hyper::Error::Utf8(err));
+						},
+					};
+
+					// Content is ready
+					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
+						self.jsonrpc_handler.handler.handle_request(content, metadata)
+					)));
+				},
+				Async::NotReady => {
+					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {
+						body: body,
+						request: request,
+						metadata: metadata
+					}));
+				},
+			}
+		}
+	}
+
+	fn set_response_headers(headers: &mut Headers, is_options: bool, cors_header: Option<header::AccessControlAllowOrigin>) {
 		if is_options {
 			headers.set(header::Allow(vec![
 				Method::Options,
@@ -176,8 +310,6 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				UniCase("origin".to_owned())
 			]));
 		}
-
-		headers
 	}
 
 	fn is_json(content_type: Option<&header::ContentType>) -> bool {
@@ -190,105 +322,3 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 	}
 }
-
-impl<M: Metadata, S: Middleware<M>> server::Handler<HttpStream> for RpcHandler<M, S> {
-	fn on_request(&mut self, request: server::Request<HttpStream>) -> Next {
-		// Read origin
-		let cors_header = utils::cors_header(&request, &self.cors_domains);
-		if cors_header == cors::CorsHeader::Invalid && !self.continue_on_invalid_cors {
-			self.response = Response::invalid_cors();
-			return Next::write();
-		}
-
-		// Set request params
-		self.request.cors_header = cors_header.into();
-		self.request.method = request.method().clone();
-		// Read metadata
-		self.metadata = Some(self.jsonrpc_handler.extractor.read_metadata(&request));
-
-		match self.request.method {
-			// Validate the ContentType header
-			// to prevent Cross-Origin XHRs with text/plain
-			Method::Post if Self::is_json(request.headers().get::<header::ContentType>()) => {
-				Next::read()
-			},
-			// Just return error for unsupported content type
-			Method::Post => {
-				self.response = Response::unsupported_content_type();
-				Next::write()
-			},
-			// Don't validate content type on options
-			Method::Options => {
-				self.response = Response::empty();
-				Next::write()
-			},
-			// Disallow other methods.
-			_ => {
-				self.response = Response::method_not_allowed();
-				Next::write()
-			},
-		}
-	}
-
-	/// This event occurs each time the `Request` is ready to be read from.
-	fn on_request_readable(&mut self, decoder: &mut Decoder<HttpStream>) -> Next {
-		match decoder.read_to_string(&mut self.request.content) {
-			Ok(0) => {
-				let metadata = self.metadata.take().unwrap_or_default();
-				let future = self.jsonrpc_handler.handler.handle_request(&self.request.content, metadata);
-
-				let sender = self.waiting_sender.clone();
-				let control = self.control.clone();
-
-				self.jsonrpc_handler.remote.spawn(move |_| {
-					future.map(move |response| {
-						let response = match response {
-							None => Response::ok(String::new()),
-							// Add new line to have nice output when using CLI clients (curl)
-							Some(result) => Response::ok(format!("{}\n", result)),
-						};
-
-						let result = sender.send(response)
-							.map_err(|e| format!("{:?}", e))
-							.and_then(|_| {
-								control.ready(Next::write()).map_err(|e| format!("{:?}", e))
-							});
-
-						if let Err(e) = result {
-							warn!("Error while resuming async call: {:?}", e);
-						}
-					})
-				});
-
-				Next::wait()
-			}
-			Ok(_) => {
-				Next::read()
-			}
-			Err(e) => match e.kind() {
-				io::ErrorKind::WouldBlock => Next::read(),
-				_ => Next::end(),
-			}
-		}
-	}
-
-	/// This event occurs after the first time this handled signals `Next::write()`.
-	fn on_response(&mut self, response: &mut server::Response) -> Next {
-		// Check if there is a response pending
-		if let Ok(output) = self.waiting_response.try_recv() {
-			self.response = output;
-		}
-
-		let is_options = self.request.method == Method::Options;
-		let cors_header = self.request.cors_header.take();
-		*response.headers_mut() = self.response_headers(is_options, cors_header);
-
-		self.response.on_response(response)
-	}
-
-	/// This event occurs each time the `Response` is ready to be written to.
-	fn on_response_writable(&mut self, encoder: &mut Encoder<HttpStream>) -> Next {
-		self.response.on_response_writable(encoder)
-	}
-}
-
