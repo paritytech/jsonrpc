@@ -170,7 +170,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
 			},
 			RpcHandlerState::ReadingBody { body, request, metadata, } => {
-				self.read_body(body, request, metadata)?
+				self.process_body(body, request, metadata)?
 			},
 			RpcHandlerState::Waiting(mut waiting) => {
 				match waiting.poll() {
@@ -247,7 +247,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 	}
 
-	fn read_body(
+	fn process_body(
 		&self,
 		mut body: hyper::Body,
 		mut request: Vec<u8>,
@@ -262,12 +262,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				Async::Ready(None) => {
 					let content = match ::std::str::from_utf8(&request) {
 						Ok(content) => content,
-						Err(_) => {
-							// returns empty response on invalid utf8
-							return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::empty())));
+						Err(err) => {
+							// Return utf error.
+							return Err(hyper::Error::Utf8(err));
 						},
 					};
 
+					// Content is ready
 					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
 						self.jsonrpc_handler.handler.handle_request(content, metadata)
 					)));
