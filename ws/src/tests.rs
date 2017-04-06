@@ -110,7 +110,7 @@ fn should_disallow_not_whitelisted_hosts() {
 	let response = request(server,
 		"\
 			GET / HTTP/1.1\r\n\
-			Host: localhost:30002\r\n\
+			Host: myhost:30002\r\n\
 			Connection: close\r\n\
 			\r\n\
 			I shouldn't be read.\r\n\
