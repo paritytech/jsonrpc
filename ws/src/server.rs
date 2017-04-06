@@ -4,7 +4,7 @@ use std::thread;
 
 use core;
 use server_utils::cors::Origin;
-use server_utils::hosts::Host;
+use server_utils::hosts::{self, Host};
 use server_utils::reactor::{UninitializedRemote, Remote};
 use ws;
 
@@ -47,6 +47,8 @@ impl Server {
 			config
 		};
 
+		// Update allowed_hosts
+		let allowed_hosts = hosts::update(allowed_hosts, addr);
 
 		// Spawn event loop (if necessary)
 		let eloop = remote.initialize()?;

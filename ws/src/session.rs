@@ -145,7 +145,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 			}
 		}
 
-		self.metadata = self.meta_extractor.extract_metadata(&self.context);
+		self.metadata = self.meta_extractor.extract(&self.context);
 
 		match action {
 			MiddlewareAction::Proceed => ws::Response::from_request(req),
