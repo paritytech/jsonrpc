@@ -63,8 +63,10 @@ fn serve(port: u16) -> Server {
 		core::futures::finished(core::Value::String("world".into())).boxed()
 	});
 
+	let port = 30_000 + port;
 	ServerBuilder::new(io)
 		.allowed_origins(DomainsValidation::AllowOnly(vec!["https://parity.io".into()]))
+		.allowed_hosts(DomainsValidation::AllowOnly(vec![format!("127.0.0.1:{}", port).into()]))
 		.request_middleware(|req: &ws::Request| {
 			if req.resource() == "/intercepted" {
 				let mut res = ws::Response::new(200, "OK");
@@ -74,7 +76,7 @@ fn serve(port: u16) -> Server {
 				None
 			}
 		})
-		.start(&format!("127.0.0.1:{}", 30000 + port).parse().unwrap())
+		.start(&format!("127.0.0.1:{}", port).parse().unwrap())
 		.unwrap()
 }
 
@@ -87,8 +89,28 @@ fn should_disallow_not_whitelisted_origins() {
 	let response = request(server,
 		"\
 			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
+			Host: 127.0.0.1:30001\r\n\
 			Origin: http://test.io\r\n\
+			Connection: close\r\n\
+			\r\n\
+			I shouldn't be read.\r\n\
+		"
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+}
+
+#[test]
+fn should_disallow_not_whitelisted_hosts() {
+	// given
+	let server = serve(2);
+
+	// when
+	let response = request(server,
+		"\
+			GET / HTTP/1.1\r\n\
+			Host: myhost:30002\r\n\
 			Connection: close\r\n\
 			\r\n\
 			I shouldn't be read.\r\n\
@@ -102,13 +124,13 @@ fn should_disallow_not_whitelisted_origins() {
 #[test]
 fn should_allow_whitelisted_origins() {
 	// given
-	let server = serve(2);
+	let server = serve(3);
 
 	// when
 	let response = request(server,
 		"\
 			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
+			Host: 127.0.0.1:30003\r\n\
 			Origin: https://parity.io\r\n\
 			Connection: close\r\n\
 			\r\n\
@@ -123,13 +145,13 @@ fn should_allow_whitelisted_origins() {
 #[test]
 fn should_intercept_in_middleware() {
 	// given
-	let server = serve(3);
+	let server = serve(4);
 
 	// when
 	let response = request(server,
 		"\
 			GET /intercepted HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
+			Host: 127.0.0.1:30004\r\n\
 			Origin: https://parity.io\r\n\
 			Connection: close\r\n\
 			\r\n\
