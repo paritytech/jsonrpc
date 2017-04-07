@@ -4,17 +4,18 @@ use std::thread;
 
 use core;
 use server_utils::cors::Origin;
+use server_utils::hosts::{self, Host};
 use server_utils::reactor::{UninitializedRemote, Remote};
 use ws;
 
 use metadata;
 use session;
-use {ServerError};
+use {Error};
 
 /// `WebSockets` server implementation.
 pub struct Server {
 	addr: SocketAddr,
-	handle: Option<thread::JoinHandle<Result<(), ServerError>>>,
+	handle: Option<thread::JoinHandle<Result<(), Error>>>,
 	remote: Option<Remote>,
 	broadcaster: ws::Sender,
 }
@@ -32,10 +33,11 @@ impl Server {
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
 		allowed_origins: Option<Vec<Origin>>,
+		allowed_hosts: Option<Vec<Host>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<session::SessionStats>>,
 		remote: UninitializedRemote,
-	) -> Result<Server, ServerError> {
+	) -> Result<Server, Error> {
 		let config = {
 			let mut config = ws::Settings::default();
 			// accept only handshakes beginning with GET
@@ -45,22 +47,24 @@ impl Server {
 			config
 		};
 
+		// Update allowed_hosts
+		let allowed_hosts = hosts::update(allowed_hosts, addr);
 
 		// Spawn event loop (if necessary)
 		let eloop = remote.initialize()?;
 		let remote = eloop.remote();
 
 		// Create WebSocket
-		let ws = ws::Builder::new().with_settings(config).build(
-			session::Factory::new(handler, meta_extractor, allowed_origins, request_middleware, stats, remote)
-		)?;
+		let ws = ws::Builder::new().with_settings(config).build(session::Factory::new(
+			handler, meta_extractor, allowed_origins, allowed_hosts, request_middleware, stats, remote
+		))?;
 		let broadcaster = ws.broadcaster();
 
 		// Start listening...
 		let ws = ws.bind(addr)?;
 		// Spawn a thread with event loop
 		let handle = thread::spawn(move || {
-			match ws.run().map_err(ServerError::from) {
+			match ws.run().map_err(Error::from) {
 				Err(error) => {
 					error!("Error while running websockets server. Details: {:?}", error);
 					Err(error)
@@ -81,7 +85,7 @@ impl Server {
 
 impl Server {
 	/// Consumes the server and waits for completion
-	pub fn wait(mut self) -> Result<(), ServerError> {
+	pub fn wait(mut self) -> Result<(), Error> {
 		self.handle.take().expect("Handle is always Some at start.").join().expect("Non-panic exit")
 	}
 
