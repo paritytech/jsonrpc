@@ -5,6 +5,7 @@ use std::sync::Arc;
 use core;
 use core::futures::Future;
 use server_utils::cors::Origin;
+use server_utils::hosts::Host;
 use server_utils::tokio_core::reactor::Remote;
 use ws;
 
@@ -34,7 +35,7 @@ impl<F> RequestMiddleware for F where
 {
 	fn process(&self, req: &ws::Request) -> MiddlewareAction {
 		match (*self)(req) {
-			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true },
+			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true, validate_hosts: true },
 			None => MiddlewareAction::Proceed,
 		}
 	}
@@ -50,6 +51,8 @@ pub enum MiddlewareAction {
 		response: ws::Response,
 		/// Should origin be validated before returning the response?
 		validate_origin: bool,
+		/// Should hosts be validated before returning the response?
+		validate_hosts: bool,
 	},
 }
 
@@ -62,6 +65,15 @@ impl MiddlewareAction {
 			Respond { validate_origin, .. } => validate_origin,
 		}
 	}
+
+	fn should_verify_hosts(&self) -> bool {
+		use self::MiddlewareAction::*;
+
+		match *self {
+			Proceed => true,
+			Respond { validate_hosts, .. } => validate_hosts,
+		}
+	}
 }
 
 pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
@@ -69,6 +81,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
 	allowed_origins: Option<Vec<Origin>>,
+	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
@@ -84,11 +97,24 @@ impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 	fn verify_origin(&self, req: &ws::Request) -> Option<ws::Response> {
 		let origin = req.header("origin").map(|x| &x[..]);
-		if !origin_is_allowed(&self.allowed_origins, origin) {
+		if !header_is_allowed(&self.allowed_origins, origin) {
 			warn!(target: "signer", "Blocked connection to Signer API from untrusted origin: {:?}", origin);
 			Some(forbidden(
 				"URL Blocked",
 				"Connection Origin has been rejected.",
+			))
+		} else {
+			None
+		}
+	}
+
+	fn verify_host(&self, req: &ws::Request) -> Option<ws::Response> {
+		let host = req.header("host").map(|x| &x[..]);
+		if !header_is_allowed(&self.allowed_hosts, host) {
+			warn!(target: "signer", "Blocked connection to Signer API with untrusted host: {:?}", host);
+			Some(forbidden(
+				"URL Blocked",
+				"Connection Host has been rejected.",
 			))
 		} else {
 			None
@@ -112,7 +138,14 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 			}
 		}
 
-		self.metadata = self.meta_extractor.extract_metadata(&self.context);
+		if action.should_verify_hosts() {
+			// Verify host header.
+			if let Some(response) = self.verify_host(req) {
+				return Ok(response);
+			}
+		}
+
+		self.metadata = self.meta_extractor.extract(&self.context);
 
 		match action {
 			MiddlewareAction::Proceed => ws::Response::from_request(req),
@@ -145,6 +178,7 @@ pub struct Factory<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
 	allowed_origins: Option<Vec<Origin>>,
+	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
 	remote: Remote,
@@ -155,6 +189,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
 		allowed_origins: Option<Vec<Origin>>,
+		allowed_hosts: Option<Vec<Host>>,
 		request_middleware: Option<Arc<RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
 		remote: Remote,
@@ -164,6 +199,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 			handler: handler,
 			meta_extractor: meta_extractor,
 			allowed_origins: allowed_origins,
+			allowed_hosts: allowed_hosts,
 			request_middleware: request_middleware,
 			stats: stats,
 			remote: remote,
@@ -186,6 +222,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			handler: self.handler.clone(),
 			meta_extractor: self.meta_extractor.clone(),
 			allowed_origins: self.allowed_origins.clone(),
+			allowed_hosts: self.allowed_hosts.clone(),
 			stats: self.stats.clone(),
 			request_middleware: self.request_middleware.clone(),
 			metadata: Default::default(),
@@ -194,18 +231,20 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 	}
 }
 
-fn origin_is_allowed(allowed_origins: &Option<Vec<Origin>>, header: Option<&[u8]>) -> bool {
+fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool where
+	T: ::std::ops::Deref<Target=str>,
+{
 	let header = header.map(std::str::from_utf8);
 
-	match (header, allowed_origins.as_ref()) {
-		// Always allow if Origin is not specified
+	match (header, allowed.as_ref()) {
+		// Always allow if Origin/Host is not specified
 		(None, _) => true,
-		// Always allow if Origin validation is disabled
+		// Always allow if Origin/Host validation is disabled
 		(_, None) => true,
 		// Validate Origin
-		(Some(Ok(origin)), Some(origins)) => {
-			for o in origins {
-				if origin.eq_ignore_ascii_case(&o) {
+		(Some(Ok(val)), Some(values)) => {
+			for v in values {
+				if val.eq_ignore_ascii_case(&v) {
 					return true
 				}
 			}

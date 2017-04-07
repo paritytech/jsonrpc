@@ -14,7 +14,7 @@ pub struct RequestContext {
 /// Metadata extractor from session data.
 pub trait MetaExtractor<M: core::Metadata>: Send + Sync + 'static {
 	/// Extract metadata for given session
-	fn extract_metadata(&self, _context: &RequestContext) -> M {
+	fn extract(&self, _context: &RequestContext) -> M {
 		Default::default()
 	}
 }
