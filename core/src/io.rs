@@ -192,7 +192,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		}).boxed()
 	}
 
-	fn handle_call(&self, call: Call, meta: T) -> BoxFuture<Option<Output>, ()> {
+	/// Handle single call asynchronously.
+	pub fn handle_call(&self, call: Call, meta: T) -> BoxFuture<Option<Output>, ()> {
 		match call {
 			Call::MethodCall(method) => {
 				let params = method.params.unwrap_or(Params::None);

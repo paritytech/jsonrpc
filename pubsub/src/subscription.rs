@@ -1,5 +1,6 @@
 //! Subscription primitives.
 
+use std::fmt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::Mutex;
@@ -17,6 +18,15 @@ pub struct Session {
 	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<Fn(SubscriptionId) + Send + 'static>>>,
 	transport: TransportSender,
 	on_drop: Mutex<Vec<Box<Fn() + Send>>>,
+}
+
+impl fmt::Debug for Session {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		fmt.debug_struct("pubsub::Session")
+			.field("active_subscriptions", &self.active_subscriptions.lock().len())
+			.field("transport", &self.transport)
+			.finish()
+	}
 }
 
 impl Session {
