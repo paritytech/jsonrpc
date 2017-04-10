@@ -25,8 +25,9 @@ impl<T> Subscriber<T> {
 	}
 
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T>, ()> {
-		let sink = self.subscriber.assign_id(id)?;
+		let sink = self.subscriber.assign_id(id.clone())?;
 		Ok(Sink {
+			id: id,
 			sink: sink,
 			_data: PhantomData,
 		})
@@ -35,12 +36,17 @@ impl<T> Subscriber<T> {
 
 pub struct Sink<T> {
 	sink: pubsub::Sink,
+	id: SubscriptionId,
 	_data: PhantomData<T>,
 }
 
 impl<T: serde::Serialize> Sink<T> {
 	pub fn send(&self, val: T) -> pubsub::SinkResult {
+		let id = self.id.clone().into();
 		let val = to_value(val);
-		self.sink.send(core::Params::Array(vec![val]))
+		self.sink.send(core::Params::Map(vec![
+			("subscription".to_owned(), id),
+			("result".to_owned(), val),
+		].into_iter().collect()))
 	}
 }

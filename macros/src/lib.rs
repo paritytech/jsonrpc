@@ -1,4 +1,4 @@
-extern crate jsonrpc_core;
+pub extern crate jsonrpc_core;
 extern crate jsonrpc_pubsub;
 extern crate serde;
 
