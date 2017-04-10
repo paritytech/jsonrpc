@@ -233,7 +233,7 @@ macro_rules! build_rpc_trait {
 				)
 			}),
 			($unsubscribe, move |base, id| {
-				use futures::Future;
+				use $crate::jsonrpc_core::futures::Future;
 				Self::$unsub_method(base, id).map($crate::to_value).boxed()
 			}),
 		);
