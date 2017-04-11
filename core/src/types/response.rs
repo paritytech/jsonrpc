@@ -5,7 +5,7 @@ use serde_json::value::from_value;
 use super::{Id, Value, Error, ErrorCode, Version};
 
 /// Successful response
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Success {
 	/// Protocol version
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -17,7 +17,7 @@ pub struct Success {
 }
 
 /// Unsuccessful response
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Failure {
 	/// Protocol Version
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,7 +29,7 @@ pub struct Failure {
 }
 
 /// Represents output - failure or success
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Output {
 	/// Success
 	Success(Success),
