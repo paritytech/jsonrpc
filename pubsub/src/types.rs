@@ -6,6 +6,10 @@ use subscription::Session;
 
 /// Raw transport sink for specific client.
 pub type TransportSender = mpsc::Sender<String>;
+/// Raw transport error.
+pub type TransportError = mpsc::SendError<String>;
+/// Subscription send result.
+pub type SinkResult = core::futures::sink::Send<TransportSender>;
 
 /// Metadata extension for pub-sub method handling.
 pub trait PubSubMetadata: core::Metadata {
