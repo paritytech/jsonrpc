@@ -10,13 +10,9 @@ use unicase::UniCase;
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{Future, Poll, Async, BoxFuture, Stream};
 use response::Response;
-use server_utils::{cors, hosts};
+use server_utils::cors;
 
-use {utils, RequestMiddleware, RequestMiddlewareAction};
-
-
-type AllowedHosts = Option<Vec<hosts::Host>>;
-type CorsDomains = Option<Vec<cors::AccessControlAllowOrigin>>;
+use {utils, RequestMiddleware, RequestMiddlewareAction, CorsDomains, AllowedHosts};
 
 /// jsonrpc http request handler.
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -119,6 +115,7 @@ impl<M> RpcPollState<M> {
 		}
 	}
 }
+
 enum RpcHandlerState<M> {
 	ReadingHeaders {
 		request: server::Request,
