@@ -2,11 +2,14 @@ use core;
 use ws;
 
 use session;
+use Origin;
 
 /// Request context
 pub struct RequestContext {
 	/// Session id
 	pub session_id: session::SessionId,
+	/// Request Origin
+	pub origin: Option<Origin>,
 	/// Direct channel to send messages to a client.
 	pub out: ws::Sender,
 }

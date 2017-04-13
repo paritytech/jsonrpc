@@ -6,11 +6,11 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 
 use core;
-use core::futures::{self, sink, future, Sink as FuturesSink, Future, BoxFuture};
+use core::futures::{self, future, Sink as FuturesSink, Future, BoxFuture};
 use core::futures::sync::oneshot;
 
 use handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
-use types::{PubSubMetadata, SubscriptionId, TransportSender};
+use types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, SinkResult};
 
 /// RPC client session
 /// Keeps track of active subscriptions and unsubscribes from them upon dropping.
@@ -80,6 +80,7 @@ impl Drop for Session {
 }
 
 /// A handle to send notifications directly to subscribed client.
+#[derive(Debug, Clone)]
 pub struct Sink {
 	notification: String,
 	transport: TransportSender
@@ -87,14 +88,42 @@ pub struct Sink {
 
 impl Sink {
 	/// Sends a notification to a client.
-	pub fn send(&self, val: core::Params) -> sink::Send<TransportSender> {
+	pub fn notify(&self, val: core::Params) -> SinkResult {
+		let val = self.params_to_string(val);
+		self.transport.clone().send(val.0)
+	}
+
+	fn params_to_string(&self, val: core::Params) -> (String, core::Params) {
 		let notification = core::Notification {
 			jsonrpc: Some(core::Version::V2),
 			method: self.notification.clone(),
 			params: Some(val),
 		};
+		(
+			core::to_string(&notification).expect("Notification serialization never fails."),
+			notification.params.expect("Always Some"),
+		)
+	}
+}
 
-		self.transport.clone().send(core::to_string(&notification).expect("Notification serialization never fails."))
+impl FuturesSink for Sink {
+	type SinkItem = core::Params;
+	type SinkError = TransportError;
+
+	fn start_send(&mut self, item: Self::SinkItem) -> futures::StartSend<Self::SinkItem, Self::SinkError> {
+		let (val, params) = self.params_to_string(item);
+		self.transport.start_send(val).map(|result| match result {
+			futures::AsyncSink::Ready => futures::AsyncSink::Ready,
+			futures::AsyncSink::NotReady(_) => futures::AsyncSink::NotReady(params),
+		})
+	}
+
+	fn poll_complete(&mut self) -> futures::Poll<(), Self::SinkError> {
+		self.transport.poll_complete()
+	}
+
+	fn close(&mut self) -> futures::Poll<(), Self::SinkError> {
+		self.transport.close()
 	}
 }
 
@@ -324,7 +353,7 @@ mod tests {
 		};
 
 		// when
-		sink.send(core::Params::Array(vec![core::Value::Number(10.into())])).wait().unwrap();
+		sink.notify(core::Params::Array(vec![core::Value::Number(10.into())])).wait().unwrap();
 
 		// then
 		assert_eq!(
