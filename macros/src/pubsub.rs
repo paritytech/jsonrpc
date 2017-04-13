@@ -80,6 +80,9 @@ impl<T: serde::Serialize> futures::sink::Sink for Sink<T> {
 	type SinkError = pubsub::TransportError;
 
 	fn start_send(&mut self, item: Self::SinkItem) -> futures::StartSend<Self::SinkItem, Self::SinkError> {
+		// Make sure to always try to process the buffered entry.
+		// Since we're just a proxy to real `Sink` we don't need
+		// to schedule a `Task` wakeup. It will be done downstream.
 		if self.poll()?.is_not_ready() {
 			return Ok(futures::AsyncSink::NotReady(item));
 		}
