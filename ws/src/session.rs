@@ -95,8 +95,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
-	fn verify_origin(&self, req: &ws::Request) -> Option<ws::Response> {
-		let origin = req.header("origin").map(|x| &x[..]);
+	fn read_origin<'a>(&self, req: &'a ws::Request) -> Option<&'a [u8]> {
+		req.header("origin").map(|x| &x[..])
+	}
+
+	fn verify_origin(&self, origin: Option<&[u8]>) -> Option<ws::Response> {
 		if !header_is_allowed(&self.allowed_origins, origin) {
 			warn!(target: "signer", "Blocked connection to Signer API from untrusted origin: {:?}", origin);
 			Some(forbidden(
@@ -131,9 +134,10 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 			MiddlewareAction::Proceed
 		};
 
+		let origin = self.read_origin(req);
 		if action.should_verify_origin() {
 			// Verify request origin.
-			if let Some(response) = self.verify_origin(req) {
+			if let Some(response) = self.verify_origin(origin) {
 				return Ok(response);
 			}
 		}
@@ -145,6 +149,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 			}
 		}
 
+		self.context.origin = origin.and_then(|origin| ::std::str::from_utf8(origin).ok()).map(Into::into);
 		self.metadata = self.meta_extractor.extract(&self.context);
 
 		match action {
@@ -217,6 +222,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 		Session {
 			context: metadata::RequestContext {
 				session_id: self.session_id,
+				origin: None,
 				out: sender,
 			},
 			handler: self.handler.clone(),

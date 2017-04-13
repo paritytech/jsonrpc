@@ -10,7 +10,7 @@ use serde_json::value::from_value;
 use super::{Value, Error};
 
 /// Request parameters
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Params {
 	/// Array of values
 	Array(Vec<Value>),
