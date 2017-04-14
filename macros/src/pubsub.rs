@@ -9,12 +9,12 @@ use self::core::futures::{self, Sink as FuturesSink};
 
 pub use self::pubsub::SubscriptionId;
 
-pub struct Subscriber<T> {
+pub struct Subscriber<T, E = core::Error> {
 	subscriber: pubsub::Subscriber,
-	_data: PhantomData<T>,
+	_data: PhantomData<(T, E)>,
 }
 
-impl<T> Subscriber<T> {
+impl<T, E> Subscriber<T, E> {
 	pub fn new(subscriber: pubsub::Subscriber) -> Self {
 		Subscriber {
 			subscriber: subscriber,
@@ -26,7 +26,7 @@ impl<T> Subscriber<T> {
 		self.subscriber.reject(error)
 	}
 
-	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T>, ()> {
+	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T, E>, ()> {
 		let sink = self.subscriber.assign_id(id.clone())?;
 		Ok(Sink {
 			id: id,
@@ -37,25 +37,28 @@ impl<T> Subscriber<T> {
 	}
 }
 
-pub struct Sink<T> {
+pub struct Sink<T, E = core::Error> {
 	sink: pubsub::Sink,
 	id: SubscriptionId,
 	buffered: Option<core::Params>,
-	_data: PhantomData<T>,
+	_data: PhantomData<(T, E)>,
 }
 
-impl<T: serde::Serialize> Sink<T> {
-	pub fn notify(&self, val: T) -> pubsub::SinkResult {
+impl<T: serde::Serialize, E: serde::Serialize> Sink<T, E> {
+	pub fn notify(&self, val: Result<T, E>) -> pubsub::SinkResult {
 		self.sink.notify(self.val_to_params(val))
 	}
 
-	fn val_to_params(&self, val: T) -> core::Params {
+	fn val_to_params(&self, val: Result<T, E>) -> core::Params {
 		let id = self.id.clone().into();
-		let val = to_value(val);
+		let val = val.map(to_value).map_err(to_value);
 
 		core::Params::Map(vec![
 			("subscription".to_owned(), id),
-			("result".to_owned(), val),
+			match val {
+				Ok(val) => ("result".to_owned(), val),
+				Err(err) => ("error".to_owned(), err),
+			},
 		].into_iter().collect())
 	}
 
@@ -75,8 +78,8 @@ impl<T: serde::Serialize> Sink<T> {
 	}
 }
 
-impl<T: serde::Serialize> futures::sink::Sink for Sink<T> {
-	type SinkItem = T;
+impl<T: serde::Serialize, E: serde::Serialize> futures::sink::Sink for Sink<T, E> {
+	type SinkItem = Result<T, E>;
 	type SinkError = pubsub::TransportError;
 
 	fn start_send(&mut self, item: Self::SinkItem) -> futures::StartSend<Self::SinkItem, Self::SinkError> {
