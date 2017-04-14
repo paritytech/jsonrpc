@@ -129,6 +129,7 @@ impl FuturesSink for Sink {
 
 /// Represents a subscribing client.
 /// Subscription handlers can either reject this subscription request or assign an unique id.
+#[derive(Debug)]
 pub struct Subscriber {
 	notification: String,
 	transport: TransportSender,

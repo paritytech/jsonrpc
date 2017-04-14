@@ -258,21 +258,25 @@ pub struct Trailing<T: Default + Deserialize>(pub T);
 
 /// Wrapper trait for synchronous RPC functions.
 pub trait Wrap<B> {
+	/// Invokes RPC method.
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error>;
 }
 
 /// Wrapper trait for asynchronous RPC functions.
 pub trait WrapAsync<B> {
+	/// Invokes asynchronous RPC method.
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error>;
 }
 
 /// Wrapper trait for meta RPC functions.
 pub trait WrapMeta<B, M> {
+	/// Invokes asynchronous RPC method with Metadata.
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error>;
 }
 
 /// Wrapper trait for subscribe RPC functions.
 pub trait WrapSubscribe<B, M> {
+	/// Invokes subscription.
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber);
 }
 

@@ -1,3 +1,5 @@
+//! PUB-SUB auto-serializing structures.
+
 use std::marker::PhantomData;
 
 use jsonrpc_core as core;
@@ -9,12 +11,15 @@ use self::core::futures::{self, Sink as FuturesSink};
 
 pub use self::pubsub::SubscriptionId;
 
+/// New PUB-SUB subcriber.
+#[derive(Debug)]
 pub struct Subscriber<T, E = core::Error> {
 	subscriber: pubsub::Subscriber,
 	_data: PhantomData<(T, E)>,
 }
 
 impl<T, E> Subscriber<T, E> {
+	/// Wrap non-typed subscriber.
 	pub fn new(subscriber: pubsub::Subscriber) -> Self {
 		Subscriber {
 			subscriber: subscriber,
@@ -22,10 +27,14 @@ impl<T, E> Subscriber<T, E> {
 		}
 	}
 
+	/// Reject subscription with given error.
 	pub fn reject(self, error: core::Error) -> Result<(), ()> {
 		self.subscriber.reject(error)
 	}
 
+	/// Assign id to this subscriber.
+	/// This method consumes `Subscriber` and returns `Sink`
+	/// if the connection is still open or error otherwise.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T, E>, ()> {
 		let sink = self.subscriber.assign_id(id.clone())?;
 		Ok(Sink {
@@ -37,6 +46,8 @@ impl<T, E> Subscriber<T, E> {
 	}
 }
 
+/// Subscriber sink.
+#[derive(Debug, Clone)]
 pub struct Sink<T, E = core::Error> {
 	sink: pubsub::Sink,
 	id: SubscriptionId,
@@ -45,6 +56,7 @@ pub struct Sink<T, E = core::Error> {
 }
 
 impl<T: serde::Serialize, E: serde::Serialize> Sink<T, E> {
+	/// Sends a notification to the subscriber.
 	pub fn notify(&self, val: Result<T, E>) -> pubsub::SinkResult {
 		self.sink.notify(self.val_to_params(val))
 	}
