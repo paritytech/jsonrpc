@@ -14,7 +14,7 @@ matrix:
   - rust: nightly
 
 script:
-  - cargo build $TARGETS
+  - cargo build $TARGETS -Dwarnings
   - cargo test $TARGETS
 
 after_success: |
