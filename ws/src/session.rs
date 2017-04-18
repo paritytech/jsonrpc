@@ -34,10 +34,7 @@ impl<F> RequestMiddleware for F where
 	F: Fn(&ws::Request) -> Option<ws::Response> + Send + Sync + 'static,
 {
 	fn process(&self, req: &ws::Request) -> MiddlewareAction {
-		match (*self)(req) {
-			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true, validate_hosts: true },
-			None => MiddlewareAction::Proceed,
-		}
+		(*self)(req).into()
 	}
 }
 
@@ -72,6 +69,15 @@ impl MiddlewareAction {
 		match *self {
 			Proceed => true,
 			Respond { validate_hosts, .. } => validate_hosts,
+		}
+	}
+}
+
+impl From<Option<ws::Response>> for MiddlewareAction {
+	fn from(opt: Option<ws::Response>) -> Self {
+		match opt {
+			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true, validate_hosts: true },
+			None => MiddlewareAction::Proceed,
 		}
 	}
 }
