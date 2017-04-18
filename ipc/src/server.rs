@@ -128,7 +128,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				.filter_map(|x| x);
 
 
-				let writer = writer.send_all(responses).then(move |_| {
+				let writer = writer.send_all(responses).then(move |stream| {
 					trace!(target: "ipc", "Peer: service finished");
 					Ok(())
 				});
@@ -273,6 +273,42 @@ mod tests {
 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
 			"Response does not exactly much the expected response",
 			);
+	}
+
+	#[test]
+	fn req_parallel() {
+		use std::thread;
+
+		::logger::init_log();
+		let path = "/tmp/test-ipc-45000";
+		let _server = run(path);
+
+		let mut handles = Vec::new();
+		for _ in 0..16 {
+			let path = path.clone();
+			handles.push(
+				thread::spawn(move || {
+					for _ in 0..1000 {
+						let result = dummy_request_str(
+							&path,
+							b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+							);
+
+						assert_eq!(
+							result,
+							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+							"Response does not exactly much the expected response",
+							);				
+
+						::std::thread::sleep(::std::time::Duration::from_millis(10));	
+					}					
+				})
+			);
+		}	
+
+		for handle in handles.drain(..) {
+			handle.join().unwrap();
+		}
 	}
 
 	#[test]
