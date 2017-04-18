@@ -3,14 +3,12 @@
 //! Enables creation of "Service" objects groupping a set of RPC methods together in a typed manner.
 //!
 //! Example
+//!
 //! ```
 //! extern crate jsonrpc_core;
-//! #[macro_use]
-//! extern crate jsonrpc_macros;
-//!
+//! #[macro_use] extern crate jsonrpc_macros;
 //! use jsonrpc_core::{IoHandler, Error};
 //! use jsonrpc_core::futures::{self, BoxFuture, Future};
-//!
 //! build_rpc_trait! {
 //! 	pub trait Rpc {
 //! 		/// Returns a protocol version
@@ -26,7 +24,6 @@
 //! 		fn call(&self, u64) -> BoxFuture<String, Error>;
 //! 	}
 //! }
-//!
 //! struct RpcImpl;
 //! impl Rpc for RpcImpl {
 //! 	fn protocol_version(&self) -> Result<String, Error> {
