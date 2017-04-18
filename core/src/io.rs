@@ -164,25 +164,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		let request = read_request(request);
 		let result = match request {
 			Err(error) => futures::finished(Some(Response::from(error, self.compatibility.default_version()))).boxed(),
-			Ok(request) => self.middleware.on_request(request, meta, |request, meta| match request {
-				Request::Single(call) => {
-					self.handle_call(call, meta)
-						.map(|output| output.map(Response::Single))
-						.boxed()
-				},
-				Request::Batch(calls) => {
-					let futures: Vec<_> = calls.into_iter().map(move |call| self.handle_call(call, meta.clone())).collect();
-					futures::future::join_all(futures).map(|outs| {
-						let outs: Vec<_> = outs.into_iter().filter_map(|v| v).collect();
-						if outs.is_empty() {
-							None
-						} else {
-							Some(Response::Batch(outs))
-						}
-					})
-					.boxed()
-				},
-			}),
+			Ok(request) => self.handle_rpc_request(request, meta),
 		};
 
 		result.map(|response| {
@@ -190,6 +172,29 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			debug!(target: "rpc", "Response: {:?}.", res);
 			res
 		}).boxed()
+	}
+
+	/// Handle deserialized RPC request.
+	pub fn handle_rpc_request(&self, request: Request, meta: T) -> FutureResponse {
+		self.middleware.on_request(request, meta, |request, meta| match request {
+			Request::Single(call) => {
+				self.handle_call(call, meta)
+					.map(|output| output.map(Response::Single))
+					.boxed()
+			},
+			Request::Batch(calls) => {
+				let futures: Vec<_> = calls.into_iter().map(move |call| self.handle_call(call, meta.clone())).collect();
+				futures::future::join_all(futures).map(|outs| {
+					let outs: Vec<_> = outs.into_iter().filter_map(|v| v).collect();
+					if outs.is_empty() {
+						None
+					} else {
+						Some(Response::Batch(outs))
+					}
+				})
+				.boxed()
+			},
+		})
 	}
 
 	/// Handle single call asynchronously.
@@ -261,9 +266,19 @@ impl IoHandler {
 }
 
 impl<M: Metadata> IoHandler<M> {
-	/// Handle given request asynchronously.
+	/// Handle given string request asynchronously.
 	pub fn handle_request(&self, request: &str) -> BoxFuture<Option<String>, ()> {
 		self.0.handle_request(request, M::default())
+	}
+
+	/// Handle deserialized RPC request asynchronously.
+	pub fn handle_rpc_request(&self, request: Request) -> FutureResponse {
+		self.0.handle_rpc_request(request, M::default())
+	}
+
+	/// Handle single Call asynchronously.
+	pub fn handle_call(&self, call: Call) -> BoxFuture<Option<Output>, ()> {
+		self.0.handle_call(call, M::default())
 	}
 
 	/// Handle given request synchronously - will block until response is available.
