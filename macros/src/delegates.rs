@@ -129,10 +129,13 @@ impl<T, M> IoDelegate<T, M> where
 		}
 	}
 
+	/// Adds an alias to existing method.
+	/// NOTE: Aliases are not transitive, i.e. you cannot create alias to an alias.
 	pub fn add_alias(&mut self, from: &str, to: &str) {
 		self.methods.insert(from.into(), RemoteProcedure::Alias(to.into()));
 	}
 
+	/// Adds sync method to the delegate.
 	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: Fn(&T, Params) -> Data,
 		F: Send + Sync + 'static,
@@ -145,6 +148,7 @@ impl<T, M> IoDelegate<T, M> where
 		)));
 	}
 
+	/// Adds async method to the delegate.
 	pub fn add_async_method<F>(&mut self, name: &str, method: F) where
 		F: Fn(&T, Params) -> AsyncData,
 		F: Send + Sync + 'static,
@@ -157,6 +161,7 @@ impl<T, M> IoDelegate<T, M> where
 		)));
 	}
 
+	/// Adds async method with metadata to the delegate.
 	pub fn add_method_with_meta<F>(&mut self, name: &str, method: F) where
 		F: Fn(&T, Params, M) -> AsyncData,
 		F: Send + Sync + 'static,
@@ -169,6 +174,7 @@ impl<T, M> IoDelegate<T, M> where
 		)));
 	}
 
+	/// Adds notification to the delegate.
 	pub fn add_notification<F>(&mut self, name: &str, notification: F) where
 		F: Fn(&T, Params),
 		F: Send + Sync + 'static,
@@ -186,6 +192,7 @@ impl<T, M> IoDelegate<T, M> where
 	T: Send + Sync + 'static,
 	M: PubSubMetadata,
 {
+	/// Adds subscription to the delegate.
 	pub fn add_subscription<Sub, Unsub>(
 		&mut self,
 		name: &str,
