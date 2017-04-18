@@ -46,7 +46,7 @@
 //!	  let mut io = IoHandler::new();
 //!	  let rpc = RpcImpl;
 //!
-//!	  io.extend_with(rpc.to_delegate())
+//!	  io.extend_with(rpc.to_delegate());
 //! }
 //! ```
 
