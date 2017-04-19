@@ -182,6 +182,7 @@ pub fn big_request() {
 
 	let request = r#"
 		{
+			"id": "1",
 			"jsonrpc":"2.0",
 			"method":"say_hello",
 			"params": [
