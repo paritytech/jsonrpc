@@ -1,5 +1,34 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_ipc_server;
+extern crate log;
+extern crate env_logger;
+#[macro_use] extern crate lazy_static;
+
+use std::env;
+use log::LogLevelFilter;
+use env_logger::LogBuilder;
+
+lazy_static! {
+	static ref LOG_DUMMY: bool = {
+		let mut builder = LogBuilder::new();
+		builder.filter(None, LogLevelFilter::Info);
+
+		if let Ok(log) = env::var("RUST_LOG") {
+			builder.parse(&log);
+		}
+
+		if let Ok(_) = builder.init() {
+			println!("logger initialized");
+		}
+		true
+	};
+}
+
+/// Intialize log with default settings
+pub fn init_log() {
+	let _ = *LOG_DUMMY;
+}
+
 
 extern crate miow;
 
@@ -75,6 +104,8 @@ mod multithreaded_test {
 
     #[test]
     fn processes_several_requests_at_once() {
+        super::init_log();
+
         let mut io = IoHandler::new();
         io.add_async_method("hello", |_params| {
             ok(String::new())
@@ -96,7 +127,7 @@ mod multithreaded_test {
                                                    expected_response(1))
                                     });
         let thread2 = thread::spawn(|| {
-                                        assert_eq!(say_to_pipe(pipe_name(), message(2)),
+                                                   assert_eq!(say_to_pipe(pipe_name(), message(2)),
                                                    expected_response(2))
                                     });
 
@@ -104,3 +135,5 @@ mod multithreaded_test {
         thread2.join().unwrap();
     }
 }
+
+

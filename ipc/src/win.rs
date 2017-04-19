@@ -67,7 +67,7 @@ impl std::convert::From<std::io::Error> for Error {
 }
 
 pub struct PipeHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
-	waiting_pipe: RwLock<NamedPipe>,
+	waiting_pipe: Mutex<NamedPipe>,
 	io_handler: RpcHandler<M, S>,
 }
 
@@ -75,7 +75,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	/// start ipc rpc server
 	pub fn start(addr: &str, io_handler: RpcHandler<M, S>) -> Result<Self> {
 		Ok(PipeHandler {
-			waiting_pipe: RwLock::new(try!(
+			waiting_pipe: Mutex::new(try!(
 				NamedPipeBuilder::new(addr)
 					.first(true)
 					.accept_remote(true)
@@ -91,36 +91,41 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	}
 
 	pub fn stop(&self) {
-		self.waiting_pipe.read().unwrap().disconnect().ok();
+		self.waiting_pipe.lock().unwrap().disconnect().ok();
 	}
 
 	fn handle_incoming(&self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
 		trace!(target: "ipc", "Waiting for client: [{}]", addr);
 
-		// blocking wait with small timeouts
-		// allows check if the server is actually stopped to quit gracefully
-		// (`connect` does not allow that, it will block indefinitely)
-		loop {
-			if let Ok(_) = NamedPipe::wait(addr, Some(200)) {
-				try!(self.waiting_pipe.read().unwrap().connect());
-				trace!(target: "ipc", "Received connection to address [{}]", addr);
-				break;
-			}
-			if stop.load(Ordering::Relaxed) {
-				trace!(target: "ipc", "Stopped listening sequence [{}]", addr);
-				return Ok(())
-			}
-		}
+		let mut overlapped = ::miow::Overlapped::zero();
 
-		let mut connected_pipe = std::mem::replace::<NamedPipe>(&mut self.waiting_pipe.write().unwrap(),
-			try!(NamedPipeBuilder::new(addr)
-				.first(false)
-				.accept_remote(true)
-				.inbound(true)
-				.outbound(true)
-				.out_buffer_size(MAX_REQUEST_LEN)
-				.in_buffer_size(MAX_REQUEST_LEN)
-				.create()));
+		let mut connected_pipe = {
+			let mut pipe = self.waiting_pipe.lock().unwrap();
+			loop {
+				if unsafe { ! try!(pipe.connect_overlapped(overlapped.raw())) } {
+					::std::thread::sleep(::std::time::Duration::from_millis(200));
+				}
+				else { break }
+
+				if stop.load(Ordering::Relaxed) {
+					trace!(target: "ipc", "Stopped listening sequence [{}]", addr);
+					return Ok(())
+				}				
+			}
+			trace!(target: "ipc", "Connected client to address [{}]", addr);
+			std::mem::replace::<NamedPipe>(&mut *pipe,
+				try!(
+					NamedPipeBuilder::new(addr)
+						.first(false)
+						.accept_remote(true)
+						.inbound(true)
+						.outbound(true)
+						.out_buffer_size(MAX_REQUEST_LEN)
+						.in_buffer_size(MAX_REQUEST_LEN)
+						.create()
+				)
+			)
+		};
 
 		let thread_handler = self.io_handler.clone();
 		std::thread::spawn(move || {
