@@ -41,7 +41,7 @@ use std;
 use std::io;
 use std::io::{Read, Write};
 use std::sync::atomic::*;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 use validator;
@@ -97,12 +97,11 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 	fn handle_incoming(&self, addr: &str, stop: Arc<AtomicBool>) -> io::Result<()> {
 		trace!(target: "ipc", "Waiting for client: [{}]", addr);
 
-		let mut overlapped = ::miow::Overlapped::zero();
+		let overlapped = ::miow::Overlapped::zero();
 
 		let mut connected_pipe = {
-			let mut pipe = self.waiting_pipe.lock().unwrap();
 			loop {
-				if unsafe { ! try!(pipe.connect_overlapped(overlapped.raw())) } {
+				if unsafe { ! try!(self.waiting_pipe.lock().unwrap().connect_overlapped(overlapped.raw())) } {
 					::std::thread::sleep(::std::time::Duration::from_millis(200));
 				}
 				else { break }
@@ -113,7 +112,7 @@ impl<M: Metadata, S: Middleware<M>> PipeHandler<M, S> {
 				}				
 			}
 			trace!(target: "ipc", "Connected client to address [{}]", addr);
-			std::mem::replace::<NamedPipe>(&mut *pipe,
+			std::mem::replace::<NamedPipe>(&mut *self.waiting_pipe.lock().unwrap(),
 				try!(
 					NamedPipeBuilder::new(addr)
 						.first(false)
