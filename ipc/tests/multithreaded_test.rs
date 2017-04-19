@@ -53,27 +53,18 @@ fn pipe_name() -> &'static str {
 }
 
 #[cfg(windows)]
-fn say_to_pipe(pipe_name: &str, message: String) -> String {
-    let mut connection =
-        connect(pipe_name).expect("Failed to get a client connection to the pipe");
-    connection
-        .write_all(message.as_bytes())
-        .expect("Failed to write to the pipe");
-
-    let mut buf = [0u8; 1024];
-    connection
-        .read(&mut buf)
-        .expect("Failed to read from the pipe");
-    String::from_utf8_lossy(&buf)
-        .into_owned()
-        .trim_right_matches('\u{0}')
-        .to_string()
+fn get_connection(addr: &str) -> ::std::fs::File {
+    connect(addr).expect("Failed to get a client connection to the pipe")
 }
 
 #[cfg(not(windows))]
-fn say_to_pipe(pipe_name: &str, message: String) -> String {
-    let mut connection =
-        UnixStream::connect(pipe_name).expect("Failed to connect to unix socket");
+fn get_connection(addr: &str) -> UnixStream {
+    UnixStream::connect(pipe_name).expect("Failed to connect to unix socket")
+}
+
+fn say_to_pipe(addr: &str, message: String) -> String {
+    let mut connection = get_connection(addr);
+
     connection
         .write_all(message.as_bytes())
         .expect("Failed to write to the pipe");
