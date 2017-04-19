@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -35,6 +36,28 @@ impl From<io::Error> for Error {
 	fn from(err: io::Error) -> Self {
 		Error::Io(err)
 	}
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(ref e) => e.fmt(f),
+            Error::WebSocket(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        "Starting the JSON-RPC WebSocket server failed"
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        Some(match *self {
+            Error::Io(ref e) => e,
+            Error::WebSocket(ref e) => e,
+        })
+    }
 }
 
 /// Builder for `WebSockets` server
