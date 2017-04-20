@@ -130,7 +130,7 @@ fn req_parallel() {
 		let addr = addr.clone();
 		handles.push(
 			thread::spawn(move || {
-				for _ in 0..10 {
+				for _ in 0..100 {
 					let result = dummy_request_str(
 						&addr,
 						b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",

@@ -284,11 +284,11 @@ mod tests {
 		let _server = run(path);
 
 		let mut handles = Vec::new();
-		for _ in 0..16 {
+		for _ in 0..4 {
 			let path = path.clone();
 			handles.push(
 				thread::spawn(move || {
-					for _ in 0..1000 {
+					for _ in 0..100 {
 						let result = dummy_request_str(
 							&path,
 							b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
