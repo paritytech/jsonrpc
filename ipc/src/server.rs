@@ -6,7 +6,7 @@ use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::oneshot;
 use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
-use server_utils::tokio_core::io::Io;
+
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::reactor;
 
@@ -95,12 +95,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let listener = match Endpoint::new(endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
-					start_signal.complete(Err(e));
+					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
 					return future::ok(()).boxed();
 				}
 			};
 
-			start_signal.complete(Ok(()));
+			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
 
@@ -109,7 +109,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = io_stream.framed(StreamCodec).split();
+				let (writer, reader) = ::server_utils::tokio_io::AsyncRead::framed(io_stream, StreamCodec).split();
 				let responses = reader.and_then(
 					move |req| service.call(req).then(|response| match response {
 						Err(e) => {
@@ -128,7 +128,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				.filter_map(|x| x);
 
 
-				let writer = writer.send_all(responses).then(move |stream| {
+				let writer = writer.send_all(responses).then(|_| {
 					trace!(target: "ipc", "Peer: service finished");
 					Ok(())
 				});
@@ -160,7 +160,7 @@ pub struct Server {
 impl Server {
 	/// Closes the server (waits for finish)
 	pub fn close(mut self) {
-		self.stop.take().unwrap().complete(());
+		self.stop.take().map(|stop| stop.send(()).unwrap_or_else(|_| { /* might be closed already */ } ));
 		self.remote.take().unwrap().close();
 		self.clear_file();
 	}
@@ -178,7 +178,7 @@ impl Server {
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.stop.take().map(|stop| stop.complete(()));
+		self.stop.take().map(|stop| stop.send(()).unwrap_or_else(|_| { /* might be closed already */ } ));
 		self.remote.take().map(|remote| remote.close());
 		self.clear_file();
 	}

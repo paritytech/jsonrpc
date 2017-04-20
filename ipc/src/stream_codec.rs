@@ -45,7 +45,7 @@ impl Decoder for StreamCodec {
 			}
 
 			if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
-				let bts = buf.drain_to(idx + 1);
+				let bts = buf.split_to(idx + 1);
 				match String::from_utf8(bts.as_ref().to_vec()) {
 					Ok(val) => { return Ok(Some(val)) },
 					Err(_) => { return Ok(None); } // skip non-utf requests (TODO: log error?)
@@ -72,7 +72,7 @@ impl Encoder for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
-	use server_utils::tokio_io::codec::{Decoder, Encoder};
+	use server_utils::tokio_io::codec::Decoder;
 	use bytes::{BytesMut, BufMut};
 
 	#[test]
@@ -157,7 +157,7 @@ mod tests {
 			]
 		}"#;
 
-		let mut buf = BytesMut::with_capacity(2048);
+		let mut buf = BytesMut::with_capacity(65536);
 		buf.put_slice(request.as_bytes());
 
 		let mut codec = StreamCodec;
