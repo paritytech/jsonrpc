@@ -181,7 +181,7 @@ macro_rules! build_rpc_trait {
 		});
 		$(
 			$(
-				$del.add_alias($name, $alias);
+				$del.add_alias($alias, $name);
 			)+
 		)*
 	};
@@ -195,7 +195,7 @@ macro_rules! build_rpc_trait {
 		});
 		$(
 			$(
-				$del.add_alias($name, $alias);
+				$del.add_alias($alias, $name);
 			)+
 		)*
 	};
@@ -209,7 +209,7 @@ macro_rules! build_rpc_trait {
 		});
 		$(
 			$(
-				$del.add_alias($name, $alias);
+				$del.add_alias($alias, $name);
 			)+
 		)*
 	};
@@ -240,12 +240,12 @@ macro_rules! build_rpc_trait {
 
 		$(
 			$(
-				$del.add_alias($subscribe, $sub_alias);
+				$del.add_alias($sub_alias, $subscribe);
 			)*
 		)*
 		$(
 			$(
-				$del.add_alias($unsubscribe, $unsub_alias);
+				$del.add_alias($unsub_alias, $unsubscribe);
 			)*
 		)*
 	};
