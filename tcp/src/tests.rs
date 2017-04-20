@@ -6,7 +6,7 @@ use std::sync::Arc;
 use jsonrpc::{MetaIoHandler, Value, Metadata};
 use jsonrpc::futures::{Future, future};
 
-use server_utils::tokio_core::io;
+use server_utils::tokio_io::io;
 use server_utils::tokio_core::net::TcpStream;
 use server_utils::tokio_core::reactor::{Core, Timeout};
 
@@ -147,7 +147,7 @@ fn req_parallel() {
 	}	
 
 	for handle in handles.drain(..) {
-		handle.join();
+		handle.join().unwrap();
 	}
 }
 

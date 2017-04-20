@@ -11,7 +11,7 @@ impl Decoder for LineCodec {
 	fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
 		if let Some(i) = buf.as_ref().iter().position(|&b| b == b'\n') {
 			let line = buf.split_to(i);
-			buf.drain_to(1);
+			buf.split_to(1);
 
 			match str::from_utf8(&line.as_ref()) {
 				Ok(s) => Ok(Some(s.to_string())),
@@ -39,7 +39,7 @@ mod tests {
 
 	use super::LineCodec;
 
-	use server_utils::tokio_io::codec::{Decoder, Encoder};
+	use server_utils::tokio_io::codec::Decoder;
 	use bytes::{BytesMut, BufMut};
 
 	#[test]

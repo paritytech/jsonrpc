@@ -8,7 +8,6 @@ use jsonrpc::{MetaIoHandler, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
 use server_utils::{reactor, tokio_core};
-use server_utils::tokio_core::io::Io;
 
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 use line_codec::LineCodec;
@@ -164,19 +163,19 @@ pub struct Server {
 impl Server {
 	/// Closes the server (waits for finish)
 	pub fn close(mut self) {
-		self.stop.take().unwrap().complete(());
+		self.stop.take().map(|sg| sg.send(()).unwrap_or_else(|_| {} /* might be already dropped */));
 		self.remote.take().unwrap().close();
 	}
 
 	/// Wait for the server to finish
 	pub fn wait(mut self) {
-		self.remote.take().unwrap().wait();
+		self.remote.take().map(|handle| handle.wait());
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.stop.take().map(|stop| stop.complete(()));
+		self.stop.take().map(|sg| sg.send(()).unwrap_or_else(|_| {} /* might be already dropped */));
 		self.remote.take().map(|remote| remote.close());
 	}
 }
