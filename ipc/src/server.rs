@@ -6,8 +6,9 @@ use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::oneshot;
 use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
-use server_utils::tokio_core::io::Io;
+
 use server_utils::tokio_core::reactor::Remote;
+use server_utils::tokio_io::AsyncRead;
 use server_utils::reactor;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -95,12 +96,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let listener = match Endpoint::new(endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
-					start_signal.complete(Err(e));
+					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
 					return future::ok(()).boxed();
 				}
 			};
 
-			start_signal.complete(Ok(()));
+			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
 
@@ -128,7 +129,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				.filter_map(|x| x);
 
 
-				let writer = writer.send_all(responses).then(move |_| {
+				let writer = writer.send_all(responses).then(|_| {
 					trace!(target: "ipc", "Peer: service finished");
 					Ok(())
 				});
@@ -160,7 +161,7 @@ pub struct Server {
 impl Server {
 	/// Closes the server (waits for finish)
 	pub fn close(mut self) {
-		self.stop.take().unwrap().complete(());
+		self.stop.take().map(|stop| stop.send(()));
 		self.remote.take().unwrap().close();
 		self.clear_file();
 	}
@@ -172,13 +173,13 @@ impl Server {
 
 	/// Remove socket file
 	fn clear_file(&self) {
-		::std::fs::remove_file(&self.path).unwrap_or_else(|_| {}); // ignore error, file could have been gone somewhere
+		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.stop.take().map(|stop| stop.complete(()));
+		let _ = self.stop.take().map(|stop| stop.send(()));
 		self.remote.take().map(|remote| remote.close());
 		self.clear_file();
 	}
@@ -195,7 +196,7 @@ mod tests {
 	use jsonrpc::futures::{Future, future};
 	use self::tokio_uds::UnixStream;
 	use server_utils::tokio_core::reactor::Core;
-	use server_utils::tokio_core::io;
+	use server_utils::tokio_io::io;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -273,6 +274,42 @@ mod tests {
 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
 			"Response does not exactly much the expected response",
 			);
+	}
+
+	#[test]
+	fn req_parallel() {
+		use std::thread;
+
+		::logger::init_log();
+		let path = "/tmp/test-ipc-45000";
+		let _server = run(path);
+
+		let mut handles = Vec::new();
+		for _ in 0..4 {
+			let path = path.clone();
+			handles.push(
+				thread::spawn(move || {
+					for _ in 0..100 {
+						let result = dummy_request_str(
+							&path,
+							b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+							);
+
+						assert_eq!(
+							result,
+							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+							"Response does not exactly much the expected response",
+							);				
+
+						::std::thread::sleep(::std::time::Duration::from_millis(10));	
+					}					
+				})
+			);
+		}	
+
+		for handle in handles.drain(..) {
+			handle.join().unwrap();
+		}
 	}
 
 	#[test]
