@@ -3,7 +3,7 @@ language: rust
 branches:
   only:
   - master
-  - parity-*
+  - /^parity-.*$/
 
 cache: cargo
 
