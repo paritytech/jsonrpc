@@ -8,6 +8,7 @@ use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
 
 use server_utils::tokio_core::reactor::Remote;
+use server_utils::tokio_io::AsyncRead;
 use server_utils::reactor;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -109,7 +110,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = ::server_utils::tokio_io::AsyncRead::framed(io_stream, StreamCodec).split();
+				let (writer, reader) = io_stream.framed(StreamCodec).split();
 				let responses = reader.and_then(
 					move |req| service.call(req).then(|response| match response {
 						Err(e) => {
@@ -160,7 +161,7 @@ pub struct Server {
 impl Server {
 	/// Closes the server (waits for finish)
 	pub fn close(mut self) {
-		self.stop.take().map(|stop| stop.send(()).unwrap_or_else(|_| { /* might be closed already */ } ));
+		self.stop.take().map(|stop| stop.send(()));
 		self.remote.take().unwrap().close();
 		self.clear_file();
 	}
@@ -172,13 +173,13 @@ impl Server {
 
 	/// Remove socket file
 	fn clear_file(&self) {
-		::std::fs::remove_file(&self.path).unwrap_or_else(|_| {}); // ignore error, file could have been gone somewhere
+		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.stop.take().map(|stop| stop.send(()).unwrap_or_else(|_| { /* might be closed already */ } ));
+		let _ = self.stop.take().map(|stop| stop.send(()));
 		self.remote.take().map(|remote| remote.close());
 		self.clear_file();
 	}

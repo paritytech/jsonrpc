@@ -16,7 +16,6 @@ jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
 parity-tokio-ipc = { git = "https://github.com/nikvolf/parity-tokio-ipc" }
 bytes = "0.4"
 
-
 [dev-dependencies]
 env_logger = "0.4"
 lazy_static = "0.2"
