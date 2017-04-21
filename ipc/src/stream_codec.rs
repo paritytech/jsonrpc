@@ -1,5 +1,6 @@
 use std::io;
-use server_utils::tokio_core::io::{Codec, EasyBuf};
+use server_utils::tokio_io::codec::{Decoder, Encoder};
+use bytes::{BytesMut, BufMut};
 
 pub struct StreamCodec;
 
@@ -10,11 +11,11 @@ fn is_whitespace(byte: u8) -> bool {
 	}
 }
 
-impl Codec for StreamCodec {
-	type In = String;
-	type Out = String;
+impl Decoder for StreamCodec {
+	type Item = String;
+	type Error = io::Error;
 
-	fn decode(&mut self, buf: &mut EasyBuf) -> io::Result<Option<Self::In>> {
+	fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
 		let mut depth = 0;
 		let mut in_str = false;
 		let mut is_escaped = false;
@@ -44,7 +45,7 @@ impl Codec for StreamCodec {
 			}
 
 			if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
-				let bts = buf.drain_to(idx + 1);
+				let bts = buf.split_to(idx + 1);
 				match String::from_utf8(bts.as_ref().to_vec()) {
 					Ok(val) => { return Ok(Some(val)) },
 					Err(_) => { return Ok(None); } // skip non-utf requests (TODO: log error?)
@@ -54,10 +55,15 @@ impl Codec for StreamCodec {
 
 		Ok(None)
 	}
+}
 
-	fn encode(&mut self, msg: String, buf: &mut Vec<u8>) -> io::Result<()> {
-		buf.extend_from_slice(msg.as_bytes());
-		buf.push(b'\n'); // for #4750
+impl Encoder for StreamCodec {
+	type Item = String;
+	type Error = io::Error;
+	
+	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
+		buf.put_slice(msg.as_bytes());
+		buf.put(b'\n'); // for #4750
 		Ok(())
 	}
 }
@@ -66,12 +72,13 @@ impl Codec for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
-	use server_utils::tokio_core::io::{Codec, EasyBuf};
+	use server_utils::tokio_io::codec::Decoder;
+	use bytes::{BytesMut, BufMut};
 
 	#[test]
 	fn simple_encode() {
-		let mut buf = EasyBuf::new();
-		buf.get_mut().extend_from_slice(b"{ test: 1 }{ test: 2 }{ test: 3 }");
+		let mut buf = BytesMut::with_capacity(2048);
+		buf.put_slice(b"{ test: 1 }{ test: 2 }{ test: 3 }");
 
 		let mut codec = StreamCodec;
 
@@ -84,8 +91,8 @@ mod tests {
 
 	#[test]
 	fn whitespace() {
-		let mut buf = EasyBuf::new();
-		buf.get_mut().extend_from_slice(b"{ test: 1 }\n\n\n\n{ test: 2 }\n\r{\n test: 3 }  ");
+		let mut buf = BytesMut::with_capacity(2048);
+		buf.put_slice(b"{ test: 1 }\n\n\n\n{ test: 2 }\n\r{\n test: 3 }  ");
 
 		let mut codec = StreamCodec;
 
@@ -113,8 +120,8 @@ mod tests {
 
 	#[test]
 	fn fragmented_encode() {
-		let mut buf = EasyBuf::new();
-		buf.get_mut().extend_from_slice(b"{ test: 1 }{ test: 2 }{ tes");
+		let mut buf = BytesMut::with_capacity(2048);
+		buf.put_slice(b"{ test: 1 }{ test: 2 }{ tes");
 
 		let mut codec = StreamCodec;
 		let request = codec.decode(&mut buf)
@@ -126,7 +133,7 @@ mod tests {
 			.expect("There should be at least one request in second fragmented test");
 		assert_eq!(String::from_utf8(buf.as_ref().to_vec()).unwrap(), "{ tes");
 
-		buf.get_mut().extend_from_slice(b"t: 3 }");
+		buf.put_slice(b"t: 3 }");
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in third fragmented test")
 			.expect("There should be at least one request in third fragmented test");
@@ -150,8 +157,8 @@ mod tests {
 			]
 		}"#;
 
-		let mut buf = EasyBuf::new();
-		buf.get_mut().extend_from_slice(request.as_bytes());
+		let mut buf = BytesMut::with_capacity(65536);
+		buf.put_slice(request.as_bytes());
 
 		let mut codec = StreamCodec;
 		let parsed_request = codec.decode(&mut buf)

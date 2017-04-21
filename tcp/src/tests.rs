@@ -6,7 +6,7 @@ use std::sync::Arc;
 use jsonrpc::{MetaIoHandler, Value, Metadata};
 use jsonrpc::futures::{Future, future};
 
-use server_utils::tokio_core::io;
+use server_utils::tokio_io::io;
 use server_utils::tokio_core::net::TcpStream;
 use server_utils::tokio_core::reactor::{Core, Timeout};
 
@@ -114,6 +114,41 @@ fn doc_test_handle() {
 		"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
 		"Response does not exactly much the expected response",
 		);
+}
+
+#[test]
+fn req_parallel() {
+	use std::thread;
+
+	::logger::init_log();
+	let addr: SocketAddr = "127.0.0.1:17782".parse().unwrap();
+	let server = casual_server();
+	let _server = server.start(&addr).expect("Server must run with no issues");
+
+	let mut handles = Vec::new();
+	for _ in 0..6 {
+		let addr = addr.clone();
+		handles.push(
+			thread::spawn(move || {
+				for _ in 0..100 {
+					let result = dummy_request_str(
+						&addr,
+						b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+						);
+
+					assert_eq!(
+						result,
+						"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+						"Response does not exactly much the expected response",
+						);					
+				}					
+			})
+		);
+	}	
+
+	for handle in handles.drain(..) {
+		handle.join().unwrap();
+	}
 }
 
 #[derive(Clone)]
