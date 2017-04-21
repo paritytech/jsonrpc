@@ -196,7 +196,7 @@ mod tests {
 	use jsonrpc::futures::{Future, future};
 	use self::tokio_uds::UnixStream;
 	use server_utils::tokio_core::reactor::Core;
-	use server_utils::tokio_core::io;
+	use server_utils::tokio_io::io;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
