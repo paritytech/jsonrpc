@@ -4,7 +4,7 @@ extern crate jsonrpc_http_server;
 
 use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
-use jsonrpc_http_server::*;
+use jsonrpc_http_server::{ServerBuilder, DomainsValidation, AccessControlAllowOrigin};
 
 fn main() {
 	let mut io = IoHandler::default();

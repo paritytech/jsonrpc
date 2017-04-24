@@ -6,7 +6,7 @@ use std::{time, thread};
 use std::sync::Arc;
 
 use jsonrpc_core::*;
-use jsonrpc_pubsub::*;
+use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, Subscriber, SubscriptionId};
 use jsonrpc_ws_server::{ServerBuilder, RequestContext};
 
 use jsonrpc_core::futures::Future;
