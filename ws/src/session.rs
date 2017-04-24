@@ -109,11 +109,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 
 	fn verify_origin(&self, origin: Option<&[u8]>) -> Option<ws::Response> {
 		if !header_is_allowed(&self.allowed_origins, origin) {
-			warn!(target: "signer", "Blocked connection to Signer API from untrusted origin: {:?}", origin);
-			Some(forbidden(
-				"URL Blocked",
-				"Connection Origin has been rejected.",
-			))
+			warn!(
+				"Blocked connection to WebSockets server from untrusted origin: {:?}",
+				origin.and_then(|s| std::str::from_utf8(s).ok()),
+			);
+			Some(forbidden("URL Blocked", "Connection Origin has been rejected."))
 		} else {
 			None
 		}
@@ -122,11 +122,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 	fn verify_host(&self, req: &ws::Request) -> Option<ws::Response> {
 		let host = req.header("host").map(|x| &x[..]);
 		if !header_is_allowed(&self.allowed_hosts, host) {
-			warn!(target: "signer", "Blocked connection to Signer API with untrusted host: {:?}", host);
-			Some(forbidden(
-				"URL Blocked",
-				"Connection Host has been rejected.",
-			))
+			warn!(
+				"Blocked connection to WebSockets server with untrusted host: {:?}",
+				host.and_then(|s| std::str::from_utf8(s).ok()),
+			);
+			Some(forbidden("URL Blocked", "Connection Host has been rejected."))
 		} else {
 			None
 		}
@@ -184,7 +184,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 				if let Some(result) = response {
 					let res = out.send(result);
 					if let Err(e) = res {
-						warn!(target: "signer", "Error while sending response: {:?}", e);
+						warn!("Error while sending response: {:?}", e);
 					}
 				}
 			});
