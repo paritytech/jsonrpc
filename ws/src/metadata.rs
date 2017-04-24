@@ -1,3 +1,5 @@
+use std::fmt;
+
 use core;
 use ws;
 
@@ -10,8 +12,20 @@ pub struct RequestContext {
 	pub session_id: session::SessionId,
 	/// Request Origin
 	pub origin: Option<Origin>,
+	/// Requested protocols
+	pub protocols: Vec<String>,
 	/// Direct channel to send messages to a client.
 	pub out: ws::Sender,
+}
+
+impl fmt::Debug for RequestContext {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		fmt.debug_struct("RequestContext")
+			.field("session_id", &self.session_id)
+			.field("origin", &self.origin)
+			.field("protocols", &self.protocols)
+			.finish()
+	}
 }
 
 /// Metadata extractor from session data.

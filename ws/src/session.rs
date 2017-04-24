@@ -34,10 +34,7 @@ impl<F> RequestMiddleware for F where
 	F: Fn(&ws::Request) -> Option<ws::Response> + Send + Sync + 'static,
 {
 	fn process(&self, req: &ws::Request) -> MiddlewareAction {
-		match (*self)(req) {
-			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true, validate_hosts: true },
-			None => MiddlewareAction::Proceed,
-		}
+		(*self)(req).into()
 	}
 }
 
@@ -72,6 +69,15 @@ impl MiddlewareAction {
 		match *self {
 			Proceed => true,
 			Respond { validate_hosts, .. } => validate_hosts,
+		}
+	}
+}
+
+impl From<Option<ws::Response>> for MiddlewareAction {
+	fn from(opt: Option<ws::Response>) -> Self {
+		match opt {
+			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true, validate_hosts: true },
+			None => MiddlewareAction::Proceed,
 		}
 	}
 }
@@ -150,10 +156,18 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		}
 
 		self.context.origin = origin.and_then(|origin| ::std::str::from_utf8(origin).ok()).map(Into::into);
+		self.context.protocols = req.protocols().ok()
+			.map(|protos| protos.into_iter().map(Into::into).collect())
+			.unwrap_or_else(Vec::new);
 		self.metadata = self.meta_extractor.extract(&self.context);
 
 		match action {
-			MiddlewareAction::Proceed => ws::Response::from_request(req),
+			MiddlewareAction::Proceed => ws::Response::from_request(req).map(|mut res| {
+				if let Some(protocol) = self.context.protocols.get(0) {
+					res.set_protocol(protocol);
+				}
+				res
+			}),
 			MiddlewareAction::Respond { response, .. } => Ok(response),
 		}
 	}
@@ -223,6 +237,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			context: metadata::RequestContext {
 				session_id: self.session_id,
 				origin: None,
+				protocols: Vec::new(),
 				out: sender,
 			},
 			handler: self.handler.clone(),
