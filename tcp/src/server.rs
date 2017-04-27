@@ -170,7 +170,7 @@ impl Server {
 
 	/// Wait for the server to finish
 	pub fn wait(mut self) {
-		self.remote.take().unwrap().close();
+		self.remote.take().unwrap().wait();
 	}
 }
 
