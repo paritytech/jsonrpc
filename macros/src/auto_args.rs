@@ -534,12 +534,14 @@ macro_rules! wrap_with_trailing {
 	}
 }
 
+wrap!(A, B, C, D, E, F);
 wrap!(A, B, C, D, E);
 wrap!(A, B, C, D);
 wrap!(A, B, C);
 wrap!(A, B);
 wrap!(A);
 
+wrap_with_trailing!(6, A, B, C, D, E, F);
 wrap_with_trailing!(5, A, B, C, D, E);
 wrap_with_trailing!(4, A, B, C, D);
 wrap_with_trailing!(3, A, B, C);
