@@ -323,4 +323,36 @@ mod tests {
 		let core = Core::new().expect("Tokio Core should be created with no errors");
 		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
 	}
+
+	#[test]
+	fn test_huge_response() {
+		let path = "/tmp/test-ipc-60000";
+
+		let mut io = MetaIoHandler::<()>::default();
+		io.add_method("say_huge_hello", |_params| {
+			let mut str_response = String::from("begin_hello");
+			str_response.push_str("begin_hello");
+			for _ in 0..8192 { str_response.push(' '); }
+			str_response.push_str("end_hello");
+			Ok(Value::String(str_response))
+		});
+		let builder = ServerBuilder::new(io);
+
+		let _server = builder.start(path).expect("Server must run with no issues");
+		thread::sleep(::std::time::Duration::from_millis(50));
+
+		let result = dummy_request_str(&path,
+			b"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}\n",
+		);
+
+		assert_eq!(
+			result,
+			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+			"Response does not exactly much the expected response",
+			);						
+
+	}
+	
+
+
 }
