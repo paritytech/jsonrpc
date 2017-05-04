@@ -269,7 +269,7 @@ mod tests {
 		assert_eq!(
 			result,
 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
-			"Response does not exactly much the expected response",
+			"Response does not exactly match the expected response",
 			);
 	}
 
@@ -295,7 +295,7 @@ mod tests {
 						assert_eq!(
 							result,
 							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
-							"Response does not exactly much the expected response",
+							"Response does not exactly match the expected response",
 							);				
 
 						::std::thread::sleep(::std::time::Duration::from_millis(10));	
@@ -357,7 +357,7 @@ mod tests {
 		assert_eq!(
 			result,
 			huge_response_test_json(),
-			"Response does not exactly much the expected response",
+			"Response does not exactly match the expected response",
 			);
 
 	}
