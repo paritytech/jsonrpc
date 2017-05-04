@@ -193,10 +193,11 @@ mod tests {
 	use std::thread;
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
-	use jsonrpc::futures::{Future, future};
+	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use self::tokio_uds::UnixStream;
 	use server_utils::tokio_core::reactor::Core;
-	use server_utils::tokio_io::io;
+	use server_utils::tokio_io::AsyncRead;
+	use stream_codec::StreamCodec;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -213,25 +214,21 @@ mod tests {
 		server
 	}
 
-	fn dummy_request(path: &str, data: &[u8]) -> Vec<u8> {
+	fn dummy_request_str(path: &str, data: &str) -> String {
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
-		let mut buffer = vec![0u8; 1024];
 
 		let stream = UnixStream::connect(path, &core.handle()).expect("Should have been connected to the server");
-		let reqrep = io::write_all(stream, data)
-			.and_then(|(stream, _)| {
-				io::read(stream, &mut buffer)
+		let (writer, reader) = stream.framed(StreamCodec).split();
+		let reply = writer
+			.send(data.to_owned())
+			.and_then(move |_| {
+				reader.into_future().map_err(|(err, _)| err)
 			})
-			.and_then(|(_, read_buf, len)| {
-				future::ok(read_buf[0..len].to_vec())
+			.and_then(|(reply, _)| {
+				future::ok(reply.expect("there should be one reply"))
 			});
-		let result = core.run(reqrep).expect("Core should run with no errors");
 
-		result
-	}
-
-	fn dummy_request_str(path: &str, data: &[u8]) -> String {
-		String::from_utf8(dummy_request(path, data)).expect("String should be utf-8")
+		core.run(reply).unwrap()
 	}
 
 	#[test]
@@ -266,13 +263,13 @@ mod tests {
 
 		let result = dummy_request_str(
 			path,
-			b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+			"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
 			);
 
 		assert_eq!(
 			result,
-			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
-			"Response does not exactly much the expected response",
+			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+			"Response does not exactly match the expected response",
 			);
 	}
 
@@ -292,13 +289,13 @@ mod tests {
 					for _ in 0..100 {
 						let result = dummy_request_str(
 							&path,
-							b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+							"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
 							);
 
 						assert_eq!(
 							result,
-							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
-							"Response does not exactly much the expected response",
+							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+							"Response does not exactly match the expected response",
 							);				
 
 						::std::thread::sleep(::std::time::Duration::from_millis(10));	
@@ -323,4 +320,48 @@ mod tests {
 		let core = Core::new().expect("Tokio Core should be created with no errors");
 		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
 	}
+
+	fn huge_response_test_str() -> String {
+		let mut result = String::from("begin_hello");
+		result.push_str("begin_hello");
+		for _ in 0..16384 { result.push(' '); }
+		result.push_str("end_hello");
+		result
+	}
+
+	fn huge_response_test_json() -> String {
+		let mut result = String::from("{\"jsonrpc\":\"2.0\",\"result\":\"");
+		result.push_str(&huge_response_test_str());
+		result.push_str("\",\"id\":1}");
+
+		result
+	}
+
+	#[test]
+	fn test_huge_response() {
+		let path = "/tmp/test-ipc-60000";
+
+		let mut io = MetaIoHandler::<()>::default();
+		io.add_method("say_huge_hello", |_params| {
+			Ok(Value::String(huge_response_test_str()))
+		});
+		let builder = ServerBuilder::new(io);
+
+		let _server = builder.start(path).expect("Server must run with no issues");
+		thread::sleep(::std::time::Duration::from_millis(50));
+
+		let result = dummy_request_str(&path,
+			"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
+		);
+
+		assert_eq!(
+			result,
+			huge_response_test_json(),
+			"Response does not exactly match the expected response",
+			);
+
+	}
+	
+
+
 }
