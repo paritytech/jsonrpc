@@ -70,9 +70,9 @@ impl Serialize for Call {
 	}
 }
 
-impl Deserialize for Call {
+impl<'a> Deserialize<'a> for Call {
 	fn deserialize<D>(deserializer: D) -> Result<Call, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Call::Notification)
 			.or_else(|_: JsonError| from_value(v.clone()).map(Call::MethodCall))
@@ -105,9 +105,9 @@ impl Serialize for Request {
 	}
 }
 
-impl Deserialize for Request {
+impl<'a> Deserialize<'a> for Request {
 	fn deserialize<D>(deserializer: D) -> Result<Request, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Request::Batch)
 			.or_else(|_| from_value(v).map(Request::Single))
