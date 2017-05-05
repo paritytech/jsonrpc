@@ -1,19 +1,45 @@
 //! Host header validation.
 
-use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use std::net::SocketAddr;
+use matcher::Matcher;
 
 const SPLIT_PROOF: &'static str = "split always returns non-empty iterator.";
+
+/// Port pattern
+#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+pub enum Port {
+	/// No port specified (default port)
+	None,
+	/// Port specified as a wildcard pattern
+	Pattern(String),
+	/// Fixed numeric port
+	Fixed(u16)
+}
+
+impl From<Option<u16>> for Port {
+	fn from(opt: Option<u16>) -> Self {
+		match opt {
+			Some(port) => Port::Fixed(port),
+			None => Port::None,
+		}
+	}
+}
+
+impl From<u16> for Port {
+	fn from(port: u16) -> Port {
+		Port::Fixed(port)
+	}
+}
 
 /// Host type
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct Host {
 	hostname: String,
-	port: Option<u16>,
+	port: Port,
 	as_string: String,
+	matcher: Matcher,
 }
-
 
 impl<T: AsRef<str>> From<T> for Host {
 	fn from(string: T) -> Self {
@@ -23,14 +49,17 @@ impl<T: AsRef<str>> From<T> for Host {
 
 impl Host {
 	/// Creates a new `Host` given hostname and port number.
-	pub fn new(hostname: &str, port: Option<u16>) -> Self {
+	pub fn new<T: Into<Port>>(hostname: &str, port: T) -> Self {
+		let port = port.into();
 		let hostname = Self::pre_process(hostname);
-		let string = Self::to_string(&hostname, port);
+		let string = Self::to_string(&hostname, &port);
+		let matcher = Matcher::new(&string);
 
 		Host {
 			hostname: hostname,
 			port: port,
 			as_string: string,
+			matcher: matcher,
 		}
 	}
 
@@ -40,9 +69,20 @@ impl Host {
 		let hostname = Self::pre_process(hostname);
 		let mut hostname = hostname.split(':');
 		let host = hostname.next().expect(SPLIT_PROOF);
-		let port = hostname.next().and_then(|port| port.parse().ok());
+		let port = match hostname.next() {
+			None => Port::None,
+			Some(port) => match port.clone().parse::<u16>().ok() {
+				Some(num) => Port::Fixed(num),
+				None => Port::Pattern(port.into()),
+			}
+		};
 
 		Host::new(host, port)
+	}
+
+	/// Checks if given string matches the pattern.
+	pub fn matches<T: AsRef<str>>(&self, other: T) -> bool {
+		self.matcher.matches(other)
 	}
 
 	fn pre_process(host: &str) -> String {
@@ -58,13 +98,14 @@ impl Host {
 		it.next().expect(SPLIT_PROOF).to_lowercase()
 	}
 
-	fn to_string(hostname: &str, port: Option<u16>) -> String {
+	fn to_string(hostname: &str, port: &Port) -> String {
 		format!(
 			"{}{}",
 			hostname,
-			match port {
-				Some(port) => format!(":{}", port),
-				None => "".into(),
+			match *port {
+				Port::Fixed(port) => format!(":{}", port),
+				Port::Pattern(ref port) => format!(":{}", port),
+				Port::None => "".into(),
 			},
 		)
 	}
@@ -112,7 +153,7 @@ pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> b
 		Some(ref allowed_hosts) => match host {
 			None => false,
 			Some(ref host) => {
-				allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(host) || *host == &**h)
+				allowed_hosts.iter().any(|h| h.matches(host))
 			}
 		}
 	}
@@ -174,6 +215,15 @@ mod tests {
 		let valid = is_host_valid(
 			Some("parity.io:443"),
 			&Some(vec!["parity.io:443".into()]),
+		);
+		assert_eq!(valid, true);
+	}
+
+	#[test]
+	fn should_support_wildcards() {
+		let valid = is_host_valid(
+			Some("parity.web3.site:8180"),
+			&Some(vec!["*.web3.site:*".into()]),
 		);
 		assert_eq!(valid, true);
 	}
