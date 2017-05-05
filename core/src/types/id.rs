@@ -26,16 +26,16 @@ impl Serialize for Id {
 	}
 }
 
-impl Deserialize for Id {
+impl<'a> Deserialize<'a> for Id {
 	fn deserialize<D>(deserializer: D) -> Result<Id, D::Error>
-	where D: Deserializer {
-		deserializer.deserialize(IdVisitor)
+	where D: Deserializer<'a> {
+		deserializer.deserialize_identifier(IdVisitor)
 	}
 }
 
 struct IdVisitor;
 
-impl Visitor for IdVisitor {
+impl<'a> Visitor<'a> for IdVisitor {
 	type Value = Id;
 
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

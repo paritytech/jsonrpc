@@ -48,9 +48,9 @@ impl ErrorCode {
 	}
 }
 
-impl Deserialize for ErrorCode {
+impl<'a> Deserialize<'a> for ErrorCode {
 	fn deserialize<D>(deserializer: D) -> Result<ErrorCode, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		match v.as_i64() {
 			Some(-32700) => Ok(ErrorCode::ParseError),
