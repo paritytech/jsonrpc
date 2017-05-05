@@ -2,8 +2,7 @@
 use std::fmt;
 
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
-use serde::de::{Visitor, SeqVisitor, MapVisitor};
-use serde::de::impls::{VecVisitor};
+use serde::de::{Visitor, SeqAccess, MapAccess, DeserializeOwned};
 use serde_json;
 use serde_json::value::from_value;
 
@@ -22,7 +21,7 @@ pub enum Params {
 
 impl Params {
 	/// Parse incoming `Params` into expected types.
-	pub fn parse<D>(self) -> Result<D, Error> where D: Deserialize {
+	pub fn parse<D>(self) -> Result<D, Error> where D: DeserializeOwned {
 		let value = match self {
 			Params::Array(vec) => Value::Array(vec),
 			Params::Map(map) => Value::Object(map),
@@ -48,33 +47,40 @@ impl Serialize for Params {
 
 struct ParamsVisitor;
 
-impl Deserialize for Params {
+impl<'a> Deserialize<'a> for Params {
 	fn deserialize<D>(deserializer: D) -> Result<Params, D::Error>
-	where D: Deserializer {
-		deserializer.deserialize(ParamsVisitor)
+	where D: Deserializer<'a> {
+		deserializer.deserialize_identifier(ParamsVisitor)
 	}
 }
 
-impl Visitor for ParamsVisitor {
+impl<'a> Visitor<'a> for ParamsVisitor {
 	type Value = Params;
 
 	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
 		formatter.write_str("a map or sequence")
 	}
 
-	fn visit_seq<V>(self, visitor: V) -> Result<Self::Value, V::Error>
-	where V: SeqVisitor {
-		VecVisitor::new().visit_seq(visitor).and_then(|vec| match vec.is_empty() {
-			true => Ok(Params::None),
-			false => Ok(Params::Array(vec))
-		})
+	fn visit_seq<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
+	where V: SeqAccess<'a> {
+		let mut values = Vec::new();
+
+		while let Some(value) = visitor.next_element()? {
+			values.push(value);
+		}
+
+		if values.is_empty() {
+			Ok(Params::None)
+		} else {
+			Ok(Params::Array(values))
+		}
 	}
 
 	fn visit_map<V>(self, mut visitor: V) -> Result<Self::Value, V::Error>
-	where V: MapVisitor {
-		let mut values = serde_json::Map::with_capacity(visitor.size_hint().0);
+	where V: MapAccess<'a> {
+		let mut values = serde_json::Map::new();
 
-		while let Some((key, value)) = visitor.visit()? {
+		while let Some((key, value)) = visitor.next_entry()? {
 			values.insert(key, value);
 		}
 
