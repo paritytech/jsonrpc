@@ -413,7 +413,7 @@ fn parse_trailing_param<T: Default + DeserializeOwned>(params: Params) -> Result
 }
 
 // special impl for no parameters other than block parameter.
-impl<'a, B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
+impl<B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
 	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + DeserializeOwned
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
@@ -423,7 +423,7 @@ impl<'a, B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
 	}
 }
 
-impl<'a, B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error>
+impl<B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error>
 	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + DeserializeOwned
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
@@ -436,7 +436,7 @@ impl<'a, B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error
 	}
 }
 
-impl<'a, B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, Error>
+impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, Error>
 	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + DeserializeOwned, M: Metadata,
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
