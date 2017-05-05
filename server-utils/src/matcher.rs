@@ -19,12 +19,10 @@ impl Matcher {
 
 	pub fn matches<T: AsRef<str>>(&self, other: T) -> bool {
 		let s = other.as_ref();
-		let res = match self.0 {
+		match self.0 {
 			Some(ref matcher) => matcher.is_match(s),
 			None => self.1.eq_ignore_ascii_case(s),
-		};
-		println!("Checking: {} vs {} = {:?}", self.1, s, res);
-		res
+		}
 	}
 }
 
