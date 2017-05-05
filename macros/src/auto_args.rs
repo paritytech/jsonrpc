@@ -255,7 +255,7 @@ macro_rules! build_rpc_trait {
 /// A wrapper type without an implementation of `Deserialize`
 /// which allows a special implementation of `Wrap` for functions
 /// that take a trailing default parameter.
-pub struct Trailing<T: DeserializeOwned>(pub T);
+pub struct Trailing<T: Default + DeserializeOwned>(pub T);
 
 /// Wrapper trait for synchronous RPC functions.
 pub trait Wrap<B> {
