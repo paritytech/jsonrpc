@@ -1,8 +1,8 @@
 //! CORS handling utility functions
 
 use std::{fmt, ops};
-use std::ascii::AsciiExt;
-use hosts::Host;
+use hosts::{Host, Port};
+use matcher::Matcher;
 
 /// Origin Protocol
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
@@ -21,6 +21,7 @@ pub struct Origin {
 	protocol: OriginProtocol,
 	host: Host,
 	as_string: String,
+	matcher: Matcher,
 }
 
 impl<T: AsRef<str>> From<T> for Origin {
@@ -32,17 +33,19 @@ impl<T: AsRef<str>> From<T> for Origin {
 impl Origin {
 	fn with_host(protocol: OriginProtocol, host: Host) -> Self {
 		let string = Self::to_string(&protocol, &host);
+		let matcher = Matcher::new(&string);
 
 		Origin {
 			protocol: protocol,
 			host: host,
 			as_string: string,
+			matcher: matcher,
 		}
 	}
 
 	/// Creates new origin given protocol, hostname and port parts.
 	/// Pre-processes input data if necessary.
-	pub fn new(protocol: OriginProtocol, host: &str, port: Option<u16>) -> Self {
+	pub fn new<T: Into<Port>>(protocol: OriginProtocol, host: &str, port: T) -> Self {
 		Self::with_host(protocol, Host::new(host, port))
 	}
 
@@ -69,6 +72,11 @@ impl Origin {
 		};
 
 		Origin::with_host(protocol, hostname)
+	}
+
+	/// Checks if given string matches the pattern.
+	pub fn matches<T: AsRef<str>>(&self, other: T) -> bool {
+		self.matcher.matches(other)
 	}
 
 	fn to_string(protocol: &OriginProtocol, host: &Host) -> String {
@@ -186,15 +194,12 @@ pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Optio
 					allowed.iter().find(|cors| {
 						match **cors {
 							AccessControlAllowOrigin::Any => true,
-							AccessControlAllowOrigin::Value(ref val) if val.eq_ignore_ascii_case(origin) => true,
+							AccessControlAllowOrigin::Value(ref val) if val.matches(origin) => true,
 							_ => false
 						}
-					}).map(|cors| {
-						match *cors {
-							AccessControlAllowOrigin::Any => AccessControlAllowOrigin::Value(Origin::parse(origin)),
-							ref cors => cors.clone(),
-						}
-					}).map(CorsHeader::Ok).unwrap_or(CorsHeader::Invalid)
+					})
+					.map(|_| AccessControlAllowOrigin::Value(Origin::parse(origin)))
+					.map(CorsHeader::Ok).unwrap_or(CorsHeader::Invalid)
 				},
 			}
 		},
@@ -389,5 +394,28 @@ mod tests {
 
 		// then
 		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+	}
+
+	#[test]
+	fn should_support_wildcards() {
+		// given
+		let origin1 = Some("http://parity.io".into());
+		let origin2 = Some("http://parity.iot".into());
+		let origin3 = Some("chrome-extension://test".into());
+		let host = None;
+		let allowed = Some(vec![
+		   AccessControlAllowOrigin::Value("http://*.io".into()),
+		   AccessControlAllowOrigin::Value("chrome-extension://*".into())
+		]);
+
+		// when
+		let res1 = get_cors_header(origin1, host, &allowed);
+		let res2 = get_cors_header(origin2, host, &allowed);
+		let res3 = get_cors_header(origin3, host, &allowed);
+
+		// then
+		assert_eq!(res1, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(res2, CorsHeader::Invalid);
+		assert_eq!(res3, CorsHeader::Ok(AccessControlAllowOrigin::Value("chrome-extension://test".into())));
 	}
 }
