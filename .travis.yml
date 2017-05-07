@@ -13,6 +13,8 @@ matrix:
   - rust: stable
   - rust: beta
   - rust: nightly
+  allow_failures:
+  - rust: nightly
 
 script:
   - cargo build $TARGETS
