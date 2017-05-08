@@ -1,6 +1,6 @@
 use std;
 use std::ascii::AsciiExt;
-use std::sync::Arc;
+use std::sync::{atomic, Arc};
 
 use core;
 use core::futures::Future;
@@ -83,6 +83,7 @@ impl From<Option<ws::Response>> for MiddlewareAction {
 }
 
 pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
+	active: Arc<atomic::AtomicBool>,
 	context: metadata::RequestContext,
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<metadata::MetaExtractor<M>>,
@@ -96,6 +97,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
+		self.active.store(false, atomic::Ordering::SeqCst);
 		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
 	}
 }
@@ -107,11 +109,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 
 	fn verify_origin(&self, origin: Option<&[u8]>) -> Option<ws::Response> {
 		if !header_is_allowed(&self.allowed_origins, origin) {
-			warn!(target: "signer", "Blocked connection to Signer API from untrusted origin: {:?}", origin);
-			Some(forbidden(
-				"URL Blocked",
-				"Connection Origin has been rejected.",
-			))
+			warn!(
+				"Blocked connection to WebSockets server from untrusted origin: {:?}",
+				origin.and_then(|s| std::str::from_utf8(s).ok()),
+			);
+			Some(forbidden("URL Blocked", "Connection Origin has been rejected."))
 		} else {
 			None
 		}
@@ -120,11 +122,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 	fn verify_host(&self, req: &ws::Request) -> Option<ws::Response> {
 		let host = req.header("host").map(|x| &x[..]);
 		if !header_is_allowed(&self.allowed_hosts, host) {
-			warn!(target: "signer", "Blocked connection to Signer API with untrusted host: {:?}", host);
-			Some(forbidden(
-				"URL Blocked",
-				"Connection Host has been rejected.",
-			))
+			warn!(
+				"Blocked connection to WebSockets server with untrusted host: {:?}",
+				host.and_then(|s| std::str::from_utf8(s).ok()),
+			);
+			Some(forbidden("URL Blocked", "Connection Host has been rejected."))
 		} else {
 			None
 		}
@@ -182,7 +184,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 				if let Some(result) = response {
 					let res = out.send(result);
 					if let Err(e) = res {
-						warn!(target: "signer", "Error while sending response: {:?}", e);
+						warn!("Error while sending response: {:?}", e);
 					}
 				}
 			});
@@ -232,13 +234,16 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 	fn connection_made(&mut self, sender: ws::Sender) -> Self::Handler {
 		self.session_id += 1;
 		self.stats.as_ref().map(|stats| stats.open_session(self.session_id));
+		let active = Arc::new(atomic::AtomicBool::new(true));
 
 		Session {
+			active: active.clone(),
 			context: metadata::RequestContext {
 				session_id: self.session_id,
 				origin: None,
 				protocols: Vec::new(),
-				out: sender,
+				out: metadata::Sender::new(sender, active),
+				remote: self.remote.clone(),
 			},
 			handler: self.handler.clone(),
 			meta_extractor: self.meta_extractor.clone(),

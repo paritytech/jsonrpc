@@ -83,7 +83,7 @@ impl Drop for Session {
 #[derive(Debug, Clone)]
 pub struct Sink {
 	notification: String,
-	transport: TransportSender
+	transport: TransportSender,
 }
 
 impl Sink {
