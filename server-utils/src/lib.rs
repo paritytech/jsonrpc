@@ -14,3 +14,5 @@ pub mod cors;
 pub mod hosts;
 pub mod reactor;
 mod matcher;
+
+pub use matcher::Pattern;
