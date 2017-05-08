@@ -3,7 +3,7 @@ extern crate jsonrpc_minihttp_server;
 
 use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
-use jsonrpc_minihttp_server::*;
+use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation, Req};
 
 #[derive(Clone, Default)]
 struct Meta(usize);

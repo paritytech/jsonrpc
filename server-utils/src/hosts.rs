@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use matcher::Matcher;
+use matcher::{Matcher, Pattern};
 
 const SPLIT_PROOF: &'static str = "split always returns non-empty iterator.";
 
@@ -80,11 +80,6 @@ impl Host {
 		Host::new(host, port)
 	}
 
-	/// Checks if given string matches the pattern.
-	pub fn matches<T: AsRef<str>>(&self, other: T) -> bool {
-		self.matcher.matches(other)
-	}
-
 	fn pre_process(host: &str) -> String {
 		// Remove possible protocol definition
 		let mut it = host.split("://");
@@ -108,6 +103,12 @@ impl Host {
 				Port::None => "".into(),
 			},
 		)
+	}
+}
+
+impl Pattern for Host {
+	fn matches<T: AsRef<str>>(&self, other: T) -> bool {
+		self.matcher.matches(other)
 	}
 }
 

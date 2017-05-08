@@ -1,13 +1,13 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_pubsub;
-extern crate jsonrpc_tcp_server;
+extern crate jsonrpc_ws_server;
 
 use std::{time, thread};
 use std::sync::Arc;
 
 use jsonrpc_core::*;
 use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, Subscriber, SubscriptionId};
-use jsonrpc_tcp_server::{ServerBuilder, RequestContext};
+use jsonrpc_ws_server::{ServerBuilder, RequestContext};
 
 use jsonrpc_core::futures::Future;
 
@@ -31,12 +31,28 @@ impl PubSubMetadata for Meta {
 	}
 }
 
-/// To test the server:
+/// Use following node.js code to test:
 ///
-/// ```bash
-/// $ netcat localhost 3030 -
-/// {"id":1,"jsonrpc":"2.0","method":"hello_subscribe","params":[10]}
+/// ```js
+/// const WebSocket = require('websocket').w3cwebsocket;
 ///
+/// const ws = new WebSocket('ws://localhost:3030');
+/// ws.addEventListener('open', () => {
+///   console.log('Sending request');
+///
+///   ws.send(JSON.stringify({
+///     jsonrpc: "2.0",
+///     id: 1,
+///     method: "subscribe_hello",
+///     params: [],
+///   }));
+/// });
+///
+/// ws.addEventListener('message', (message) => {
+///   console.log('Received: ', message.data);
+/// });
+///
+/// console.log('Starting');
 /// ```
 fn main() {
 	let mut io = PubSubHandler::new(MetaIoHandler::default());
@@ -61,7 +77,7 @@ fn main() {
 			// or drop(subscriber)
 			thread::spawn(move || {
 				loop {
-					thread::sleep(time::Duration::from_millis(100));
+					thread::sleep(time::Duration::from_millis(1000));
 					match sink.notify(Params::Array(vec![Value::Number(10.into())])).wait() {
 						Ok(_) => {},
 						Err(_) => {
@@ -81,12 +97,11 @@ fn main() {
 	let server = ServerBuilder::new(io)
 		.session_meta_extractor(|context: &RequestContext| {
 			Meta {
-				session: Some(Arc::new(Session::new(context.sender.clone()))),
+				session: Some(Arc::new(Session::new(context.sender()))),
 			}
 		})
 		.start(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
-	server.wait();
+	let _ = server.wait();
 }
-
