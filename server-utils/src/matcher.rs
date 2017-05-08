@@ -2,6 +2,12 @@ use globset::{GlobMatcher, GlobBuilder};
 use std::ascii::AsciiExt;
 use std::{fmt, hash};
 
+/// Pattern that can be matched to string.
+pub trait Pattern {
+	/// Returns true if given string matches the pattern.
+	fn matches<T: AsRef<str>>(&self, other: T) -> bool;
+}
+
 #[derive(Clone)]
 pub struct Matcher(Option<GlobMatcher>, String);
 impl Matcher {
@@ -16,8 +22,10 @@ impl Matcher {
 			string.into()
 		)
 	}
+}
 
-	pub fn matches<T: AsRef<str>>(&self, other: T) -> bool {
+impl Pattern for Matcher {
+	fn matches<T: AsRef<str>>(&self, other: T) -> bool {
 		let s = other.as_ref();
 		match self.0 {
 			Some(ref matcher) => matcher.is_match(s),

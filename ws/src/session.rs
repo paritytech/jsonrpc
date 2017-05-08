@@ -1,9 +1,9 @@
 use std;
-use std::ascii::AsciiExt;
 use std::sync::{atomic, Arc};
 
 use core;
 use core::futures::Future;
+use server_utils::Pattern;
 use server_utils::cors::Origin;
 use server_utils::hosts::Host;
 use server_utils::tokio_core::reactor::Remote;
@@ -258,7 +258,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 }
 
 fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool where
-	T: ::std::ops::Deref<Target=str>,
+	T: Pattern,
 {
 	let header = header.map(std::str::from_utf8);
 
@@ -270,7 +270,7 @@ fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool
 		// Validate Origin
 		(Some(Ok(val)), Some(values)) => {
 			for v in values {
-				if val.eq_ignore_ascii_case(&v) {
+				if v.matches(val) {
 					return true
 				}
 			}
