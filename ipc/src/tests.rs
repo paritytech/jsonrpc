@@ -35,20 +35,17 @@ pub fn dummy_io_handler() -> IoHandler {
 
 #[cfg(not(windows))]
 pub fn dummy_request(addr: &str, buf: &[u8]) -> Vec<u8> {
-	use std::time::Duration;
 	use std::io::{Read, Write};
 	use mio::*;
-	use mio::deprecated::*;
-	use mio::deprecated::unix::*;
+	use mio::unix::*;
 
 	let mut poll = Poll::new().unwrap();
 	let mut sock = UnixStream::connect(addr).unwrap();
-	let mut events = Events::with_capacity(10);
-	poll.register(&sock, Token(0), Ready::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-	poll.poll(&mut events, Some(Duration::from_millis(500))).unwrap();
+	poll.register(&sock, Token(0), EventSet::writable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
+	poll.poll(Some(500)).unwrap();
 	sock.write_all(buf).unwrap();
-	poll.reregister(&sock, Token(0), Ready::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
-	poll.poll(&mut events, Some(Duration::from_millis(500))).unwrap();
+	poll.reregister(&sock, Token(0), EventSet::readable(), PollOpt::edge() | PollOpt::oneshot()).unwrap();
+	poll.poll(Some(500)).unwrap();
 
 	let mut buf = Vec::new();
 	sock.read_to_end(&mut buf).unwrap_or_else(|_| { 0 });
