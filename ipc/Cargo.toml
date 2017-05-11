@@ -8,8 +8,8 @@ documentation = "https://ethcore.github.io/jsonrpc/json_ipc_server/index.html"
 
 [dependencies]
 jsonrpc-core = { version = "6.0", path = "../core" }
-mio = "0.5"
-slab   = "0.1.0"
+mio = "0.6"
+slab = "0.3"
 bytes  = "0.3.0"
 miow = "0.1"
 log = "0.3"

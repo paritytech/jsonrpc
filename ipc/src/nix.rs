@@ -41,11 +41,12 @@ use std::collections::VecDeque;
 use std::sync::*;
 use std::sync::atomic::*;
 
-use bytes::{ByteBuf, MutByteBuf};
+use bytes::{ByteBuf, MutByteBuf, MutBuf};
 use jsonrpc_core::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc_core::reactor::{RpcHandler, RpcEventLoop, RpcEventLoopHandle};
 use mio::*;
-use mio::unix::*;
+use mio::deprecated::{EventLoop, Handler, TryRead};
+use mio::deprecated::unix::*;
 
 use slab;
 use validator;
@@ -65,7 +66,7 @@ struct SocketConnection<M: Metadata, S: Middleware<M>> {
 	write_buf: Option<Bytes>,
 	read_buf: MutByteBuf,
 	token: Option<Token>,
-	interest: EventSet,
+	interest: Ready,
 	request: Bytes,
 }
 
@@ -79,7 +80,7 @@ impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
 			write_buf: None,
 			read_buf: ByteBuf::mut_with_capacity(REQUEST_CHUNK_SIZE),
 			token: None,
-			interest: EventSet::hup(),
+			interest: Ready::hup(),
 			request: Vec::with_capacity(REQUEST_CHUNK_SIZE),
 		}
 	}
@@ -90,7 +91,7 @@ impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
 				bytes.extend_from_slice(&data);
 				bytes
 			} else {
-				self.interest.insert(EventSet::writable());
+				self.interest.insert(Ready::writable());
 				data
 			}
 		};
@@ -103,25 +104,26 @@ impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
 		if let Some(buf) = self.write_buf.take() {
 			if buf.len() < MAX_WRITE_LENGTH {
 				try!(self.socket.write_all(&buf));
-				self.interest.remove(EventSet::writable());
-				self.interest.insert(EventSet::readable());
+				self.interest.remove(Ready::writable());
+				self.interest.insert(Ready::readable());
 			} else {
 				try!(self.socket.write_all(&buf[0..MAX_WRITE_LENGTH]));
 				self.write_buf = Some(buf[MAX_WRITE_LENGTH..].to_vec());
 			}
 		} else {
-			self.interest.remove(EventSet::writable());
+			self.interest.remove(Ready::writable());
 		}
 
 		event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
 	}
 
 	fn readable(&mut self, event_loop: &mut EventLoop<RpcServer<M, S>>) -> io::Result<()> {
-		match self.socket.try_read_buf(&mut self.read_buf) {
+		match self.socket.try_read(unsafe { &mut self.read_buf.mut_bytes() }) {
 			Ok(None) => {
 				trace!(target: "ipc", "Empty read ({:?})", self.token);
 			}
-			Ok(Some(_)) => {
+			Ok(Some(cnt)) => {
+				unsafe { self.read_buf.advance(cnt); }
 				self.request.extend(self.read_buf.bytes());
 				let (requests, last_index) = validator::extract_requests(&self.request);
 				if !requests.is_empty() {
@@ -146,17 +148,17 @@ impl<M: Metadata, S: Middleware<M>> SocketConnection<M, S> {
 					self.request = Vec::with_capacity(REQUEST_CHUNK_SIZE);
 					self.request.extend(&left_over);
 
-					self.interest.remove(EventSet::readable());
-					self.interest.insert(EventSet::writable());
+					self.interest.remove(Ready::readable());
+					self.interest.insert(Ready::writable());
 				} else {
-					self.interest.insert(EventSet::readable());
+					self.interest.insert(Ready::readable());
 					trace!(target: "ipc", "Incomplete request: {}", String::from_utf8(self.request.clone()).unwrap_or("<non-utf>".to_owned()));
 				}
 				self.read_buf.clear();
 			}
 			Err(e) => {
 				trace!(target: "ipc", "Error receiving data ({:?}): {:?}", self.token, e);
-				self.interest.remove(EventSet::readable());
+				self.interest.remove(Ready::readable());
 			}
 		};
 		event_loop.reregister(&self.socket, self.token.unwrap(), self.interest, PollOpt::edge() | PollOpt::oneshot())
@@ -172,7 +174,7 @@ struct RpcServer<M: Metadata, S: Middleware<M>> {
 
 pub struct Server<M: Metadata = (), S: Middleware<M> + Send + Sync + 'static = NoopMiddleware> {
 	rpc_server: Arc<RwLock<RpcServer<M, S>>>,
-	event_loop: Arc<RwLock<EventLoop<RpcServer<M, S>>>>,
+	event_loop: Arc<Mutex<EventLoop<RpcServer<M, S>>>>,
 	is_stopping: Arc<AtomicBool>,
 	is_stopped: Arc<AtomicBool>,
 	rpc_event_loop: Mutex<Option<RpcEventLoopHandle>>,
@@ -210,7 +212,7 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 
 		Ok(Server {
 			rpc_server: Arc::new(RwLock::new(server)),
-			event_loop: Arc::new(RwLock::new(event_loop)),
+			event_loop: Arc::new(Mutex::new(event_loop)),
 			is_stopping: Arc::new(AtomicBool::new(false)),
 			is_stopped: Arc::new(AtomicBool::new(true)),
 			rpc_event_loop: Mutex::new(None),
@@ -220,17 +222,17 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 
 	/// Run server (in current thread)
 	pub fn run(&self) {
-		let mut event_loop = self.event_loop.write().unwrap();
+		let mut event_loop = self.event_loop.lock().unwrap();
 		let mut server = self.rpc_server.write().unwrap();
 		event_loop.run(&mut server).unwrap();
 	}
 
 	/// Poll server requests (for manual async scenarios)
 	pub fn poll(&self) {
-		let mut event_loop = self.event_loop.write().unwrap();
+		let mut event_loop = self.event_loop.lock().unwrap();
 		let mut server = self.rpc_server.write().unwrap();
 
-		event_loop.run_once(&mut server, Some(100)).unwrap();
+		event_loop.run_once(&mut server, Some(::std::time::Duration::from_millis(100))).unwrap();
 	}
 
 	/// Run server (in separate thread)
@@ -245,10 +247,10 @@ impl<M: Metadata, S: Middleware<M> + Send + Sync + 'static> Server<M, S> {
 		let thread_stopping = self.is_stopping.clone();
 		let thread_stopped = self.is_stopped.clone();
 		std::thread::spawn(move || {
-			let mut event_loop = event_loop.write().unwrap();
+			let mut event_loop = event_loop.lock().unwrap();
 			let mut server = server.write().unwrap();
 			while !thread_stopping.load(Ordering::Relaxed) {
-				event_loop.run_once(&mut server, Some(100)).unwrap();
+				event_loop.run_once(&mut server, Some(::std::time::Duration::from_millis(100))).unwrap();
 			}
 			thread_stopped.store(true, Ordering::Relaxed);
 		});
@@ -287,10 +289,10 @@ impl<M: Metadata, S: Middleware<M>> RpcServer<M, S> {
 		let mut event_loop = try!(EventLoop::new());
 		::std::fs::remove_file(addr).unwrap_or_else(|_| {}); // ignore error (if no file)
 		let socket = try!(UnixListener::bind(&addr));
-		event_loop.register(&socket, SERVER, EventSet::readable(), PollOpt::edge()).unwrap();
+		event_loop.register(&socket, SERVER, Ready::readable(), PollOpt::edge()).unwrap();
 		let server = RpcServer {
 			socket: socket,
-			connections: Slab::new_starting_at(Token(1), MAX_CONCURRENT_CONNECTIONS),
+			connections: Slab::with_capacity(MAX_CONCURRENT_CONNECTIONS),
 			io_handler: io_handler.clone(),
 			tokens: VecDeque::new(),
 		};
@@ -298,9 +300,9 @@ impl<M: Metadata, S: Middleware<M>> RpcServer<M, S> {
 	}
 
 	fn accept(&mut self, event_loop: &mut EventLoop<RpcServer<M, S>>) -> io::Result<()> {
-		let new_client_socket = self.socket.accept().unwrap().unwrap();
+		let new_client_socket = self.socket.accept().unwrap();
 		let connection = SocketConnection::new(new_client_socket, self.io_handler.clone());
-		if self.connections.count() >= MAX_CONCURRENT_CONNECTIONS {
+		if self.connections.len() >= MAX_CONCURRENT_CONNECTIONS {
 			// max connections
 			return Ok(());
 		}
@@ -313,7 +315,7 @@ impl<M: Metadata, S: Middleware<M>> RpcServer<M, S> {
 		event_loop.register(
 			&self.connections[token].socket,
 			token,
-			EventSet::readable(),
+			Ready::readable(),
 			PollOpt::edge() | PollOpt::oneshot()
 		).ok().expect("fatal: could not register socket with event loop (memory issue?)");
 
@@ -361,7 +363,7 @@ impl<M: Metadata, S: Middleware<M>> Handler for RpcServer<M, S> {
 		}
 	}
 
-	fn ready(&mut self, event_loop: &mut EventLoop<RpcServer<M, S>>, token: Token, events: EventSet) {
+	fn ready(&mut self, event_loop: &mut EventLoop<RpcServer<M, S>>, token: Token, events: Ready) {
 		if events.is_readable() {
 			match token {
 				SERVER => self.accept(event_loop).unwrap(),
