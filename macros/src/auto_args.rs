@@ -449,6 +449,21 @@ impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, E
 	}
 }
 
+impl<B, M, OUT, T> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>, Trailing<T>)
+	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata, T: Default + DeserializeOwned,
+{
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
+		let id = parse_trailing_param(params);
+
+		match id {
+			Ok((id,)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), Trailing(id)),
+			Err(e) => {
+				let _ = subscriber.reject(e);
+			},
+		}
+	}
+}
+
 // similar to `wrap!`, but handles a single default trailing parameter
 // accepts an additional argument indicating the number of non-trailing parameters.
 macro_rules! wrap_with_trailing {
@@ -529,6 +544,44 @@ macro_rules! wrap_with_trailing {
 				match params {
 					Ok(($($x,)+ id)) => (self)(base, meta, $($x,)+ Trailing(id)).map(to_value).boxed(),
 					Err(e) => futures::failed(e).boxed(),
+				}
+			}
+		}
+
+		// subscribe implementation
+		impl <
+			BASE: Send + Sync + 'static,
+			META: PubSubMetadata,
+			OUT: Serialize,
+			$($x: DeserializeOwned,)+
+			TRAILING: Default + DeserializeOwned,
+		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+ Trailing<TRAILING>) {
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber) {
+				let len = match params_len(&params) {
+					Ok(len) => len,
+					Err(e) => {
+						let _ = subscriber.reject(e);
+						return;
+					},
+				};
+
+				let params = match len - $num {
+					0 => params.parse::<($($x,)+)>()
+						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
+					1 => params.parse::<($($x,)+ TRAILING)>()
+						.map(|($($x,)+ id)| ($($x,)+ id)),
+					_ => {
+						let _ = subscriber.reject(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len)));
+						return;
+					},
+				};
+
+				match params {
+					Ok(($($x,)+ id)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), $($x,)+ Trailing(id)),
+					Err(e) => {
+						let _ = subscriber.reject(e);
+						return;
+					},
 				}
 			}
 		}
