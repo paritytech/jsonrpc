@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use hyper::{self, mime, server, Method};
 use hyper::header::{self, Headers};
-use unicase::UniCase;
+use unicase::Ascii;
 
 use jsonrpc::{Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{Future, Poll, Async, BoxFuture, Stream};
@@ -298,13 +298,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				Method::Post
 			]));
 			headers.set(header::AccessControlAllowHeaders(vec![
-				UniCase("origin".to_owned()),
-				UniCase("content-type".to_owned()),
-				UniCase("accept".to_owned()),
+				Ascii::new("origin".to_owned()),
+				Ascii::new("content-type".to_owned()),
+				Ascii::new("accept".to_owned()),
 			]));
 			headers.set(cors_domain);
 			headers.set(header::Vary::Items(vec![
-				UniCase("origin".to_owned())
+				Ascii::new("origin".to_owned())
 			]));
 		}
 	}
