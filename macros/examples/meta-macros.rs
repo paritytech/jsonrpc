@@ -1,8 +1,11 @@
 extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
+extern crate jsonrpc_tcp_server;
 
-use jsonrpc_core::{IoHandler, Metadata, Error};
+use std::collections::BTreeMap;
+
+use jsonrpc_core::{MetaIoHandler, Metadata, Error, Value};
 use jsonrpc_core::futures::{self, BoxFuture, Future};
 
 #[derive(Clone, Default)]
@@ -23,7 +26,7 @@ build_rpc_trait! {
 
 		/// Performs asynchronous operation with meta
 		#[rpc(meta, name = "callAsyncMeta", alias = [ "callAsyncMetaAlias", ])]
-		fn call_meta(&self, Self::Metadata, u64) -> BoxFuture<String, Error>;
+		fn call_meta(&self, Self::Metadata, BTreeMap<String, Value>) -> BoxFuture<String, Error>;
 	}
 }
 
@@ -35,19 +38,28 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-	fn call(&self, _: u64) -> BoxFuture<String, Error> {
-		futures::finished("OK".to_owned()).boxed()
+	fn call(&self, x: u64) -> BoxFuture<String, Error> {
+		futures::finished(format!("OK: {}", x)).boxed()
 	}
 
-	fn call_meta(&self, meta: Self::Metadata, _: u64) -> BoxFuture<String, Error> {
-		futures::finished(meta.0).boxed()
+	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> BoxFuture<String, Error> {
+		futures::finished(format!("From: {}, got: {:?}", meta.0, map)).boxed()
 	}
 }
 
 
 fn main() {
-	let mut io = IoHandler::default();
+	let mut io = MetaIoHandler::default();
 	let rpc = RpcImpl;
 
-	io.extend_with(rpc.to_delegate())
+	io.extend_with(rpc.to_delegate());
+
+	let server = jsonrpc_tcp_server::ServerBuilder::new(io)
+		.session_meta_extractor(|context: &jsonrpc_tcp_server::RequestContext| {
+			Meta(format!("{}", context.peer_addr))
+		})
+		.start(&"0.0.0.0:3030".parse().unwrap())
+		.expect("Server must start with no issues");
+
+	server.wait()
 }
