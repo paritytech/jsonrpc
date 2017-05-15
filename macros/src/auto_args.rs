@@ -445,7 +445,7 @@ impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, E
 }
 
 impl<B, M, OUT, T> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>, Trailing<T>)
-	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata, T: Default + DeserializeOwned,
+	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata, T: Default + Deserialize,
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
 		let id = parse_trailing_param(params);
@@ -548,8 +548,8 @@ macro_rules! wrap_with_trailing {
 			BASE: Send + Sync + 'static,
 			META: PubSubMetadata,
 			OUT: Serialize,
-			$($x: DeserializeOwned,)+
-			TRAILING: Default + DeserializeOwned,
+			$($x: Deserialize,)+
+			TRAILING: Default + Deserialize,
 		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+ Trailing<TRAILING>) {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber) {
 				let len = match params_len(&params) {
