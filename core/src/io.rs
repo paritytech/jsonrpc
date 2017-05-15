@@ -303,8 +303,8 @@ impl<M: Metadata> DerefMut for IoHandler<M> {
 	}
 }
 
-impl<M: Metadata> From<IoHandler<M>> for MetaIoHandler<M> {
-	fn from(io: IoHandler<M>) -> Self {
+impl From<IoHandler> for MetaIoHandler<()> {
+	fn from(io: IoHandler) -> Self {
 		io.0
 	}
 }

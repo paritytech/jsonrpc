@@ -5,7 +5,7 @@ extern crate jsonrpc_tcp_server;
 
 use std::collections::BTreeMap;
 
-use jsonrpc_core::{IoHandler, Metadata, Error, Value};
+use jsonrpc_core::{MetaIoHandler, Metadata, Error, Value};
 use jsonrpc_core::futures::{self, BoxFuture, Future};
 
 #[derive(Clone, Default)]
@@ -49,7 +49,7 @@ impl Rpc for RpcImpl {
 
 
 fn main() {
-	let mut io = IoHandler::default();
+	let mut io = MetaIoHandler::default();
 	let rpc = RpcImpl;
 
 	io.extend_with(rpc.to_delegate());
