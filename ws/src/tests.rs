@@ -1,5 +1,5 @@
 use std::str::Lines;
-use std::net::TcpStream;
+use std::net::{TcpStream, Ipv4Addr};
 use std::io::{Read, Write};
 
 use core;
@@ -63,7 +63,6 @@ fn serve(port: u16) -> Server {
 		core::futures::finished(core::Value::String("world".into())).boxed()
 	});
 
-	let port = 30_000 + port;
 	ServerBuilder::new(io)
 		.allowed_origins(DomainsValidation::AllowOnly(vec!["https://parity.io".into()]))
 		.allowed_hosts(DomainsValidation::AllowOnly(vec![format!("127.0.0.1:{}", port).into()]))
@@ -83,7 +82,7 @@ fn serve(port: u16) -> Server {
 #[test]
 fn should_disallow_not_whitelisted_origins() {
 	// given
-	let server = serve(1);
+	let server = serve(30001);
 
 	// when
 	let response = request(server,
@@ -104,7 +103,7 @@ fn should_disallow_not_whitelisted_origins() {
 #[test]
 fn should_disallow_not_whitelisted_hosts() {
 	// given
-	let server = serve(2);
+	let server = serve(30002);
 
 	// when
 	let response = request(server,
@@ -124,7 +123,7 @@ fn should_disallow_not_whitelisted_hosts() {
 #[test]
 fn should_allow_whitelisted_origins() {
 	// given
-	let server = serve(3);
+	let server = serve(30003);
 
 	// when
 	let response = request(server,
@@ -145,7 +144,7 @@ fn should_allow_whitelisted_origins() {
 #[test]
 fn should_intercept_in_middleware() {
 	// given
-	let server = serve(4);
+	let server = serve(30004);
 
 	// when
 	let response = request(server,
@@ -162,4 +161,12 @@ fn should_intercept_in_middleware() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, "Hello World!\n".to_owned());
+}
+
+#[test]
+fn bind_port_zero_should_give_random_port() {
+	let server = serve(0);
+
+	assert_eq!(Ipv4Addr::new(127, 0, 0, 1), server.addr().ip());
+	assert_ne!(0, server.addr().port());
 }
