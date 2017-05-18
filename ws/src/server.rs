@@ -63,6 +63,7 @@ impl Server {
 		// Start listening...
 		let ws = ws.bind(addr)?;
 		let local_addr = ws.local_addr()?;
+		debug!("Bound to local address: {}", local_addr);
 
 		// Spawn a thread with event loop
 		let handle = thread::spawn(move || {
