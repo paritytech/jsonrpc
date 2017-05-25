@@ -62,6 +62,9 @@ impl Server {
 
 		// Start listening...
 		let ws = ws.bind(addr)?;
+		let local_addr = ws.local_addr()?;
+		debug!("Bound to local address: {}", local_addr);
+
 		// Spawn a thread with event loop
 		let handle = thread::spawn(move || {
 			match ws.run().map_err(Error::from) {
@@ -75,7 +78,7 @@ impl Server {
 
 		// Return a handle
 		Ok(Server {
-			addr: addr.to_owned(),
+			addr: local_addr,
 			handle: Some(handle),
 			remote: Some(eloop),
 			broadcaster: broadcaster,
