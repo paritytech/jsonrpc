@@ -70,7 +70,7 @@ fn serve(port: u16) -> Server {
 		.request_middleware(|req: &ws::Request| {
 			if req.resource() == "/intercepted" {
 				let mut res = ws::Response::new(200, "OK");
-				res.set_body(b"Hello World!");
+				res.set_body("Hello World!".to_owned());
 				Some(res)
 			} else {
 				None
