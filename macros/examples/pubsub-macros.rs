@@ -99,7 +99,7 @@ fn main() {
 			{
 				let subscribers = active_subscriptions.read().unwrap();
 				for sink in subscribers.values() {
-					let _ = sink.notify("Hello World!".into()).wait();
+					let _ = sink.notify(Ok("Hello World!".into())).wait();
 				}
 			}
 			thread::sleep(::std::time::Duration::from_secs(1));
