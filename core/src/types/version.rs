@@ -5,7 +5,7 @@ use serde::de::{self, Visitor};
 use std::fmt;
 
 /// Protocol Version
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy, Hash, Eq)]
 pub enum Version {
 	/// JSONRPC 2.0
 	V2
