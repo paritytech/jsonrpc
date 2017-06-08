@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
-use jsonrpc::futures::sync::oneshot;
+use jsonrpc::futures::sync::{mpsc, oneshot};
 use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
-use server_utils::reactor;
+use server_utils::{reactor, session};
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
@@ -44,6 +44,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
+	session_stats: Option<Arc<session::SessionStats>>,
 	remote: reactor::UninitializedRemote,
 }
 
@@ -55,6 +56,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		ServerBuilder {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
+			session_stats: None,
 			remote: reactor::UninitializedRemote::Unspawned,
 		}
 	}
@@ -73,12 +75,19 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Session stats
+	pub fn session_stats<T: session::SessionStats>(mut self, stats: T) -> Self {
+		self.session_stats = Some(Arc::new(stats));
+		self
+	}
+
 	/// Run server (in a separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
-		let rpc_handler = self.handler.clone();
+		let rpc_handler = self.handler;
 		let endpoint_addr = path.to_owned();
-		let meta_extractor = self.meta_extractor.clone();
+		let meta_extractor = self.meta_extractor;
+		let session_stats = self.session_stats;
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
 
@@ -90,7 +99,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				// warn about existing file and remove it
 				if ::std::fs::remove_file(&endpoint_addr).is_ok() {
 					warn!("Removed existing file '{}'.", &endpoint_addr);
-				} 
+				}
 			}
 
 			let listener = match Endpoint::new(endpoint_addr, handle) {
@@ -104,15 +113,25 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
+			let mut id = 0u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
-				trace!("Accepted incoming IPC connection");
+				id = id.wrapping_add(1);
+				let session_id = id;
+				let session_stats = session_stats.clone();
+				trace!(target: "ipc", "Accepted incoming IPC connection: {}", session_id);
+				session_stats.as_ref().map(|stats| stats.open_session(session_id));
 
-				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
+				let (sender, receiver) = mpsc::channel(16);
+				let meta = meta_extractor.extract(&RequestContext {
+					endpoint_addr: &remote_id,
+					session_id,
+					sender,
+				});
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = io_stream.framed(StreamCodec).split();
-				let responses = reader.and_then(
-					move |req| service.call(req).then(|response| match response {
+				let responses = reader.and_then(move |req| {
+					service.call(req).then(move |response| match response {
 						Err(e) => {
 							warn!(target: "ipc", "Error while processing request: {:?}", e);
 							future::ok(None)
@@ -125,12 +144,16 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 							future::ok(Some(response_data))
 						}
 					})
-				)
-				.filter_map(|x| x);
+				})
+				.filter_map(|x| x)
+				.select(receiver.map_err(|e| {
+					warn!(target: "ipc", "Notification error: {:?}", e);
+					std::io::ErrorKind::Other.into()
+				}));
 
-
-				let writer = writer.send_all(responses).then(|_| {
+				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
+					session_stats.as_ref().map(|stats| stats.close_session(session_id));
 					Ok(())
 				});
 
@@ -140,7 +163,10 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			});
 
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
-			server.select(stop).map(|_| ()).map_err(|_| ()).boxed()
+			server.select(stop)
+				.map(|_| ())
+				.map_err(|_| ())
+				.boxed()
 		});
 
 		match start_receiver.wait().expect("Message should always be sent") {
@@ -296,13 +322,13 @@ mod tests {
 							result,
 							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
 							"Response does not exactly match the expected response",
-							);				
+							);
 
-						::std::thread::sleep(::std::time::Duration::from_millis(10));	
-					}					
+						::std::thread::sleep(::std::time::Duration::from_millis(10));
+					}
 				})
 			);
-		}	
+		}
 
 		for handle in handles.drain(..) {
 			handle.join().unwrap();
@@ -361,7 +387,7 @@ mod tests {
 			);
 
 	}
-	
+
 
 
 }

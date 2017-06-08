@@ -4,9 +4,9 @@ use std::sync::{atomic, Arc};
 use core::{self, futures};
 use core::futures::sync::mpsc;
 use server_utils::tokio_core::reactor::Remote;
+use server_utils::session;
 use ws;
 
-use session;
 use Origin;
 
 /// Output of WebSocket connection. Use this to send messages to the other endpoint.

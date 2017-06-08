@@ -6,6 +6,7 @@ use core;
 use server_utils::cors::Origin;
 use server_utils::hosts::{self, Host};
 use server_utils::reactor::{UninitializedRemote, Remote};
+use server_utils::session::SessionStats;
 use ws;
 
 use metadata;
@@ -35,7 +36,7 @@ impl Server {
 		allowed_origins: Option<Vec<Origin>>,
 		allowed_hosts: Option<Vec<Host>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
-		stats: Option<Arc<session::SessionStats>>,
+		stats: Option<Arc<SessionStats>>,
 		remote: UninitializedRemote,
 	) -> Result<Server, Error> {
 		let config = {
