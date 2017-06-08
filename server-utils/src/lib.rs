@@ -12,6 +12,7 @@ pub extern crate tokio_io;
 
 pub mod cors;
 pub mod hosts;
+pub mod session;
 pub mod reactor;
 mod matcher;
 

@@ -1,9 +1,15 @@
+use jsonrpc::futures::sync::mpsc;
 use jsonrpc::Metadata;
+use server_utils::session;
 
 /// Request context
 pub struct RequestContext<'a> {
+	/// Session ID
+	pub session_id: session::SessionId,
 	/// Remote UDS endpoint
 	pub endpoint_addr: &'a ::parity_tokio_ipc::RemoteId,
+	/// Direct pipe sender
+	pub sender: mpsc::Sender<String>,
 }
 
 /// Metadata extractor (per session)
