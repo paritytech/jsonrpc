@@ -1,6 +1,9 @@
-use std::str::Lines;
-use std::net::{TcpStream, Ipv4Addr};
 use std::io::{Read, Write};
+use std::net::{TcpStream, Ipv4Addr};
+use std::str::Lines;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use core;
 use core::futures::Future;
@@ -169,4 +172,20 @@ fn bind_port_zero_should_give_random_port() {
 
 	assert_eq!(Ipv4Addr::new(127, 0, 0, 1), server.addr().ip());
 	assert_ne!(0, server.addr().port());
+}
+
+#[test]
+fn close_handle_makes_wait_return() {
+	let server = serve(0);
+	let close_handle = server.close_handle();
+
+	let (tx, rx) = mpsc::channel();
+	thread::spawn(move || {
+		tx.send(server.wait()).unwrap();
+	});
+	thread::sleep(Duration::from_secs(1));
+	close_handle.close();
+
+	let result = rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
+	assert!(result.is_ok());
 }
