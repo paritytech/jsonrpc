@@ -8,6 +8,7 @@ use server_utils;
 use server_utils::cors::Origin;
 use server_utils::hosts::{Host, DomainsValidation};
 use server_utils::reactor::UninitializedRemote;
+use server_utils::session::SessionStats;
 use ws;
 
 use metadata::{MetaExtractor, NoopExtractor};
@@ -67,7 +68,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	allowed_origins: Option<Vec<Origin>>,
 	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
-	session_stats: Option<Arc<session::SessionStats>>,
+	session_stats: Option<Arc<SessionStats>>,
 	remote: UninitializedRemote,
 }
 
@@ -112,7 +113,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Session stats
-	pub fn session_stats<T: session::SessionStats>(mut self, stats: T) -> Self {
+	pub fn session_stats<T: SessionStats>(mut self, stats: T) -> Self {
 		self.session_stats = Some(Arc::new(stats));
 		self
 	}

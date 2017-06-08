@@ -7,20 +7,10 @@ use server_utils::Pattern;
 use server_utils::cors::Origin;
 use server_utils::hosts::Host;
 use server_utils::tokio_core::reactor::Remote;
+use server_utils::session::{SessionId, SessionStats};
 use ws;
 
 use metadata;
-
-/// Session id
-pub type SessionId = usize;
-
-/// Keeps track of open sessions
-pub trait SessionStats: Send + Sync + 'static {
-	/// Executed when new session is opened.
-	fn open_session(&self, id: SessionId);
-	/// Executed when session is closed.
-	fn close_session(&self, id: SessionId);
-}
 
 /// Middleware to intercept server requests.
 /// You can either terminate the request (by returning a response)
