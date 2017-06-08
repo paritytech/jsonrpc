@@ -1,7 +1,7 @@
 //! Session statistics.
 
 /// Session id
-pub type SessionId = usize;
+pub type SessionId = u64;
 
 /// Keeps track of open sessions
 pub trait SessionStats: Send + Sync + 'static {
