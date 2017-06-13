@@ -17,6 +17,10 @@ build_rpc_trait! {
 		#[rpc(name = "add")]
 		fn add(&self, u64, u64) -> Result<u64, Error>;
 
+		/// Multiplies two numbers. Second number is optional.
+		#[rpc(name = "mul")]
+		fn mul(&self, u64, jsonrpc_macros::Trailing<u64>) -> Result<u64, Error>;
+
 		/// Performs asynchronous operation
 		#[rpc(async, name = "callAsync")]
 		fn call(&self, u64) -> BoxFuture<String, Error>;
@@ -35,8 +39,12 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-	fn call(&self, _: u64) -> BoxFuture<String, Error> {
-		futures::finished("OK".to_owned()).boxed()
+	fn call(&self, x: u64) -> BoxFuture<String, Error> {
+		futures::finished(format!("OK: {}", x)).boxed()
+	}
+
+	fn mul(&self, a: u64, b: jsonrpc_macros::Trailing<u64>) -> Result<u64, Error> {
+		Ok(a * b.unwrap_or(1))
 	}
 
 	fn call_meta(&self, meta: Self::Metadata, _: u64) -> BoxFuture<String, Error> {
