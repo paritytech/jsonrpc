@@ -288,7 +288,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				Method::Post,
 			]));
 			headers.set(header::Accept(vec![
-				header::qitem(mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, vec![]))
+				header::qitem(mime::APPLICATION_JSON)
 			]));
 		}
 
@@ -310,12 +310,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	}
 
 	fn is_json(content_type: Option<&header::ContentType>) -> bool {
-		if let Some(&header::ContentType(
-			mime::Mime(mime::TopLevel::Application, mime::SubLevel::Json, _)
-		)) = content_type {
-			true
-		} else {
-			false
+		match content_type {
+			Some(&header::ContentType(ref mime)) if *mime == mime::APPLICATION_JSON => true,
+			_ => false
 		}
 	}
 }
