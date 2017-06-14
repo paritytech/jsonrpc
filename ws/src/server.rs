@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use core;
@@ -17,7 +17,7 @@ use {Error};
 pub struct Server {
 	addr: SocketAddr,
 	handle: Option<thread::JoinHandle<Result<(), Error>>>,
-	remote: Option<Remote>,
+	remote: Arc<Mutex<Option<Remote>>>,
 	broadcaster: ws::Sender,
 }
 
@@ -81,7 +81,7 @@ impl Server {
 		Ok(Server {
 			addr: local_addr,
 			handle: Some(handle),
-			remote: Some(eloop),
+			remote: Arc::new(Mutex::new(Some(eloop))),
 			broadcaster: broadcaster,
 		})
 	}
@@ -94,16 +94,39 @@ impl Server {
 	}
 
 	/// Closes the server and waits for it to finish
-	pub fn close(mut self) {
-		let _ = self.broadcaster.shutdown();
-		self.remote.take().expect("Remote is always Some at start.").close();
+	pub fn close(self) {
+		self.close_handle().close();
+	}
+
+	/// Returns a handle to the server that can be used to close it while another thread is
+	/// blocking in `wait`.
+	pub fn close_handle(&self) -> CloseHandle {
+		CloseHandle {
+			remote: self.remote.clone(),
+			broadcaster: self.broadcaster.clone(),
+		}
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		let _ = self.broadcaster.shutdown();
-		self.remote.take().map(|remote| remote.close());
+		self.close_handle().close();
 		self.handle.take().map(|handle| handle.join());
+	}
+}
+
+
+/// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
+#[derive(Clone)]
+pub struct CloseHandle {
+	remote: Arc<Mutex<Option<Remote>>>,
+	broadcaster: ws::Sender,
+}
+
+impl CloseHandle {
+	/// Closes the `Server`.
+	pub fn close(self) {
+		let _ = self.broadcaster.shutdown();
+		self.remote.lock().unwrap().take().map(|remote| remote.close());
 	}
 }
