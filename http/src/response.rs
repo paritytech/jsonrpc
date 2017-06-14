@@ -2,9 +2,7 @@
 
 use hyper::server;
 
-pub use hyper::Method;
-pub use hyper::status::StatusCode;
-pub use hyper::header;
+pub use hyper::{header, Method, StatusCode};
 
 /// Simple server response structure
 #[derive(Debug)]
