@@ -1,8 +1,13 @@
 [package]
+description = "Server utils for jsonrpc-core crate."
 name = "jsonrpc-server-utils"
-version = "7.0.0"
+version = "7.0.1"
 authors = ["tomusdrw <tomasz@parity.io>"]
 license = "MIT"
+keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
+documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_core/index.html"
+homepage = "https://github.com/paritytech/jsonrpc"
+repository = "https://github.com/paritytech/jsonrpc"
 
 [dependencies]
 globset = "0.1"
