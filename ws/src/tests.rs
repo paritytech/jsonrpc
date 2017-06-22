@@ -133,7 +133,7 @@ fn should_disallow_not_whitelisted_origins() {
 #[test]
 fn should_disallow_not_whitelisted_hosts() {
 	// given
-	let server = serve(30002);
+	let (server, _) = serve(30002);
 
 	// when
 	let response = request(server,
@@ -198,10 +198,10 @@ fn drop_session_should_cancel() {
 	use ws::{connect, CloseCode};
 
 	// given
-	let (_server, incomplete) = serve(4);
+	let (_server, incomplete) = serve(30005);
 
 	// when
-	connect("ws://127.0.0.1:30004", |out| {
+	connect("ws://127.0.0.1:30005", |out| {
     	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 1}"#).unwrap();
 
 		let incomplete = incomplete.clone();
@@ -217,6 +217,7 @@ fn drop_session_should_cancel() {
 
 }
 
+#[test]
 fn bind_port_zero_should_give_random_port() {
 	let (server, _) = serve(0);
 

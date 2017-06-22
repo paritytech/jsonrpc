@@ -2,7 +2,12 @@ use std;
 use std::sync::{atomic, Arc};
 
 use core;
-use core::futures::Future;
+use core::futures::{task, Async, Future, Poll};
+use core::futures::sync::BiLock;
+
+use parking_lot::Mutex;
+use slab::Slab;
+
 use server_utils::Pattern;
 use server_utils::cors::Origin;
 use server_utils::hosts::Host;
@@ -72,15 +77,54 @@ impl From<Option<ws::Response>> for MiddlewareAction {
 	}
 }
 
-// stores two parts: liveness and parked tasks.
 // the slab is only inserted into when live.
-type TaskSlab = Arc<Mutex<(bool, Slab<task::Task>)>>;
+type TaskSlab = Option<Slab<task::Task>>;
+
+// owns both sides of a `BiLock`ed task slab: one side is used within
+// futures to register their task. the other side is used in synchronous
+// settings like dropping a `LivenessPoll` or the `Session`.
+struct SharedTaskSlab {
+	async: BiLock<TaskSlab>,
+	blocking: Mutex<Option<BiLock<TaskSlab>>>,
+}
+
+impl SharedTaskSlab {
+	fn new() -> Self {
+		let (side_a, side_b) = BiLock::new(Some(Slab::with_capacity(0)));
+
+		SharedTaskSlab {
+			async: side_a,
+			blocking: Mutex::new(Some(side_b))
+		}
+	}
+
+	// access the slab in a blocking manner.
+	fn with_blocking<T, F>(&self, f: F) -> T where F: FnOnce(&mut TaskSlab) -> T {
+		// get handle to half of the BiLock and acquire it synchronously.
+		let mut lock = self.blocking.lock();
+		let mut slab_handle = lock.take().expect("ownership always restored after locking; qed")
+			.lock()
+			.wait()
+			.expect("BiLockAcquire always resolves `Ok`; qed");
+
+		// call the closure and release the lock.
+		let res = f(&mut *slab_handle);
+		*lock = Some(slab_handle.unlock());
+
+		res
+	}
+
+	// get access to the async side of the BiLock.
+	fn async(&self) -> &BiLock<TaskSlab> {
+		&self.async
+	}
+}
 
 // future for checking session liveness.
 // this returns `NotReady` until the inner flag is `false`, and then
 // returns Ready(()).
 struct LivenessPoll {
-	task_slab: TaskSlab,
+	task_slab: Arc<SharedTaskSlab>,
 	slab_handle: Option<usize>,
 }
 
@@ -91,44 +135,45 @@ impl Future for LivenessPoll {
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		const INITIAL_SIZE: usize = 4;
 
-		let mut task_slab = self.task_slab.lock();
-		match task_slab.0 {
-			true => {
-				let task_slab = &mut task_slab.1;
-				if let Some(&slab_handle) = self.slab_handle.as_ref() {
-					let mut entry = task_slab.entry(slab_handle)
-						.expect("slab handles are not altered by anything but the creator; qed");
+		let mut task_slab = match self.task_slab.async().poll_lock() {
+			Async::Ready(locked) => locked,
+			Async::NotReady => return Ok(Async::NotReady),
+		};
 
-					entry.replace(task::park());
-				} else {
-					if !task_slab.has_available() {
-						// grow the size if necessary.
-						// we don't expect this to get so big as to overflow.
-						let reserve = ::std::cmp::max(task_slab.capacity(), INITIAL_SIZE);
-						task_slab.reserve_exact(reserve);
-					}
+		match (task_slab.as_mut(), self.slab_handle.clone()) {
+			(None, _) => Ok(Async::Ready(())), // not live means we need to resolve this future.
+			(Some(task_slab), Some(slab_handle)) => {
+				let mut entry = task_slab.entry(slab_handle)
+					.expect("slab handles are not altered by anything but the creator; qed");
 
-					self.slab_handle = Some(task_slab.insert(task::park())
-						.expect("just grew slab; qed"));
-				}
-
+				entry.replace(task::current());
 				Ok(Async::NotReady)
 			}
-			false => {
-				if let Some(slab_handle) = self.slab_handle {
-					task_slab.1.remove(slab_handle);
+			(Some(task_slab), None) => {
+				if !task_slab.has_available() {
+					// grow the size if necessary.
+					// we don't expect this to get so big as to overflow.
+					let reserve = ::std::cmp::max(task_slab.capacity(), INITIAL_SIZE);
+					task_slab.reserve_exact(reserve);
 				}
 
-				Ok(Async::Ready(()))
-			},
+				self.slab_handle = Some(task_slab.insert(task::current())
+					.expect("just grew slab; qed"));
+				Ok(Async::NotReady)
+			}
 		}
 	}
 }
 
 impl Drop for LivenessPoll {
 	fn drop(&mut self) {
+		// remove the entry from the slab if it hasn't been destroyed yet.
 		if let Some(slab_handle) = self.slab_handle {
-			self.task_slab.lock().1.remove(slab_handle);
+			self.task_slab.with_blocking(|task_slab| {
+				if let Some(slab) = task_slab.as_mut() {
+					slab.remove(slab_handle);
+				}
+			})
 		}
 	}
 }
@@ -144,7 +189,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
 	remote: Remote,
-	task_slab: TaskSlab,
+	task_slab: Arc<SharedTaskSlab>,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
@@ -152,13 +197,14 @@ impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 		self.active.store(false, atomic::Ordering::SeqCst);
 		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
 
-		// set the liveness flag to false.
-		// and then unpark all tasks.
-		let mut task_slab = self.task_slab.lock();
-		task_slab.0 = false;
+		// destroy the shared handle and unpark all tasks.
+		let tasks_to_unpark = self.task_slab.with_blocking(|task_slab| {
+			task_slab.take()
+				.expect("only set to `None` in this destructor. destructors are never called twice; qed")
+		});
 
-		for task in task_slab.1.iter() {
-			task.unpark()
+		for task in tasks_to_unpark.iter() {
+			task.notify();
 		}
 	}
 }
@@ -323,7 +369,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			request_middleware: self.request_middleware.clone(),
 			metadata: Default::default(),
 			remote: self.remote.clone(),
-			task_slab: Arc::new(Mutex::new((true, Slab::with_capacity(0)))),
+			task_slab: Arc::new(SharedTaskSlab::new()),
 		}
 	}
 }
