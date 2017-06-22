@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::env;
 use log::LogLevelFilter;
 use env_logger::LogBuilder;

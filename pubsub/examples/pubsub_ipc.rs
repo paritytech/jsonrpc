@@ -1,13 +1,13 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_pubsub;
-extern crate jsonrpc_tcp_server;
+extern crate jsonrpc_ipc_server;
 
 use std::{time, thread};
 use std::sync::Arc;
 
 use jsonrpc_core::*;
 use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, Subscriber, SubscriptionId};
-use jsonrpc_tcp_server::{ServerBuilder, RequestContext};
+use jsonrpc_ipc_server::{ServerBuilder, RequestContext, SessionStats, SessionId};
 
 use jsonrpc_core::futures::Future;
 
@@ -79,14 +79,26 @@ fn main() {
 	);
 
 	let server = ServerBuilder::new(io)
-		.session_meta_extractor(|context: &RequestContext| {
+		.session_metadata_extractor(|context: &RequestContext| {
 			Meta {
 				session: Some(Arc::new(Session::new(context.sender.clone()))),
 			}
 		})
-		.start(&"127.0.0.1:3030".parse().unwrap())
+		.session_stats(Stats)
+		.start("./test.ipc")
 		.expect("Unable to start RPC server");
 
 	server.wait();
+}
+
+struct Stats;
+impl SessionStats for Stats {
+	fn open_session(&self, id: SessionId) {
+		println!("Opening new session: {}", id);
+	}
+
+	fn close_session(&self, id: SessionId) {
+		println!("Closing session: {}", id);
+	}
 }
 

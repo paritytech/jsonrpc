@@ -4,15 +4,15 @@ homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-http-server"
-version = "7.0.0"
+version = "7.0.1"
 authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_http_server/index.html"
 
 [dependencies]
 log = "0.3"
-parking_lot = "0.4"
+net2 = "0.2"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
-hyper = { default-features = false, git = "https://github.com/paritytech/hyper" }
-unicase = "1.3"
+hyper = "0.11"
+unicase = "2.0"

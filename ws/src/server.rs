@@ -1,21 +1,23 @@
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use core;
 use server_utils::cors::Origin;
+use server_utils::hosts::{self, Host};
 use server_utils::reactor::{UninitializedRemote, Remote};
+use server_utils::session::SessionStats;
 use ws;
 
 use metadata;
 use session;
-use {ServerError};
+use {Error};
 
 /// `WebSockets` server implementation.
 pub struct Server {
 	addr: SocketAddr,
-	handle: Option<thread::JoinHandle<Result<(), ServerError>>>,
-	remote: Option<Remote>,
+	handle: Option<thread::JoinHandle<Result<(), Error>>>,
+	remote: Arc<Mutex<Option<Remote>>>,
 	broadcaster: ws::Sender,
 }
 
@@ -32,10 +34,11 @@ impl Server {
 		handler: Arc<core::MetaIoHandler<M, S>>,
 		meta_extractor: Arc<metadata::MetaExtractor<M>>,
 		allowed_origins: Option<Vec<Origin>>,
+		allowed_hosts: Option<Vec<Host>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
-		stats: Option<Arc<session::SessionStats>>,
+		stats: Option<Arc<SessionStats>>,
 		remote: UninitializedRemote,
-	) -> Result<Server, ServerError> {
+	) -> Result<Server, Error> {
 		let config = {
 			let mut config = ws::Settings::default();
 			// accept only handshakes beginning with GET
@@ -45,22 +48,27 @@ impl Server {
 			config
 		};
 
+		// Update allowed_hosts
+		let allowed_hosts = hosts::update(allowed_hosts, addr);
 
 		// Spawn event loop (if necessary)
 		let eloop = remote.initialize()?;
 		let remote = eloop.remote();
 
 		// Create WebSocket
-		let ws = ws::Builder::new().with_settings(config).build(
-			session::Factory::new(handler, meta_extractor, allowed_origins, request_middleware, stats, remote)
-		)?;
+		let ws = ws::Builder::new().with_settings(config).build(session::Factory::new(
+			handler, meta_extractor, allowed_origins, allowed_hosts, request_middleware, stats, remote
+		))?;
 		let broadcaster = ws.broadcaster();
 
 		// Start listening...
 		let ws = ws.bind(addr)?;
+		let local_addr = ws.local_addr()?;
+		debug!("Bound to local address: {}", local_addr);
+
 		// Spawn a thread with event loop
 		let handle = thread::spawn(move || {
-			match ws.run().map_err(ServerError::from) {
+			match ws.run().map_err(Error::from) {
 				Err(error) => {
 					error!("Error while running websockets server. Details: {:?}", error);
 					Err(error)
@@ -71,9 +79,9 @@ impl Server {
 
 		// Return a handle
 		Ok(Server {
-			addr: addr.to_owned(),
+			addr: local_addr,
 			handle: Some(handle),
-			remote: Some(eloop),
+			remote: Arc::new(Mutex::new(Some(eloop))),
 			broadcaster: broadcaster,
 		})
 	}
@@ -81,21 +89,44 @@ impl Server {
 
 impl Server {
 	/// Consumes the server and waits for completion
-	pub fn wait(mut self) -> Result<(), ServerError> {
+	pub fn wait(mut self) -> Result<(), Error> {
 		self.handle.take().expect("Handle is always Some at start.").join().expect("Non-panic exit")
 	}
 
 	/// Closes the server and waits for it to finish
-	pub fn close(mut self) {
-		let _ = self.broadcaster.shutdown();
-		self.remote.take().expect("Remote is always Some at start.").close();
+	pub fn close(self) {
+		self.close_handle().close();
+	}
+
+	/// Returns a handle to the server that can be used to close it while another thread is
+	/// blocking in `wait`.
+	pub fn close_handle(&self) -> CloseHandle {
+		CloseHandle {
+			remote: self.remote.clone(),
+			broadcaster: self.broadcaster.clone(),
+		}
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		let _ = self.broadcaster.shutdown();
-		self.remote.take().map(|remote| remote.close());
+		self.close_handle().close();
 		self.handle.take().map(|handle| handle.join());
+	}
+}
+
+
+/// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
+#[derive(Clone)]
+pub struct CloseHandle {
+	remote: Arc<Mutex<Option<Remote>>>,
+	broadcaster: ws::Sender,
+}
+
+impl CloseHandle {
+	/// Closes the `Server`.
+	pub fn close(self) {
+		let _ = self.broadcaster.shutdown();
+		self.remote.lock().unwrap().take().map(|remote| remote.close());
 	}
 }

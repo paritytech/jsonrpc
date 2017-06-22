@@ -1,10 +1,9 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_minihttp_server;
 
-use std::sync::Arc;
 use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
-use jsonrpc_minihttp_server::*;
+use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation, Req};
 
 #[derive(Clone, Default)]
 struct Meta(usize);
@@ -17,9 +16,9 @@ fn main() {
 	});
 
 	let server = ServerBuilder::new(io)
-		.meta_extractor(Arc::new(|req: &Req| {
+		.meta_extractor(|req: &Req| {
 			Meta(req.header("Origin").map(|v| v.len()).unwrap_or_default())
-		}))
+		})
 		.cors(DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Null]))
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");

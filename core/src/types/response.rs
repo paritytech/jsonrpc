@@ -5,7 +5,7 @@ use serde_json::value::from_value;
 use super::{Id, Value, Error, ErrorCode, Version};
 
 /// Successful response
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Success {
 	/// Protocol version
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -17,7 +17,7 @@ pub struct Success {
 }
 
 /// Unsuccessful response
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct Failure {
 	/// Protocol Version
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,7 +29,7 @@ pub struct Failure {
 }
 
 /// Represents output - failure or success
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Output {
 	/// Success
 	Success(Success),
@@ -64,9 +64,9 @@ impl Output {
 	}
 }
 
-impl Deserialize for Output {
+impl<'a> Deserialize<'a> for Output {
 	fn deserialize<D>(deserializer: D) -> Result<Output, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Output::Failure)
 			.or_else(|_| from_value(v).map(Output::Success))
@@ -93,9 +93,9 @@ pub enum Response {
 	Batch(Vec<Output>)
 }
 
-impl Deserialize for Response {
+impl<'a> Deserialize<'a> for Response {
 	fn deserialize<D>(deserializer: D) -> Result<Response, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Response::Batch)
 			.or_else(|_| from_value(v).map(Response::Single))

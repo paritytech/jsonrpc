@@ -47,6 +47,18 @@ pub enum Call {
 
 }
 
+impl From<MethodCall> for Call {
+	fn from(mc: MethodCall) -> Self {
+		Call::MethodCall(mc)
+	}
+}
+
+impl From<Notification> for Call {
+	fn from(n: Notification) -> Self {
+		Call::Notification(n)
+	}
+}
+
 impl Serialize for Call {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
@@ -58,9 +70,9 @@ impl Serialize for Call {
 	}
 }
 
-impl Deserialize for Call {
+impl<'a> Deserialize<'a> for Call {
 	fn deserialize<D>(deserializer: D) -> Result<Call, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Call::Notification)
 			.or_else(|_: JsonError| from_value(v.clone()).map(Call::MethodCall))
@@ -93,9 +105,9 @@ impl Serialize for Request {
 	}
 }
 
-impl Deserialize for Request {
+impl<'a> Deserialize<'a> for Request {
 	fn deserialize<D>(deserializer: D) -> Result<Request, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Request::Batch)
 			.or_else(|_| from_value(v).map(Request::Single))

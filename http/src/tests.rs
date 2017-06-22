@@ -95,11 +95,7 @@ fn read_block(lines: &mut Lines) -> String {
 }
 
 fn request(server: Server, request: &str) -> Response {
-	request_timeout(&server, request, None).unwrap()
-}
-
-fn request_timeout(server: &Server, request: &str, timeout: Option<Duration>) -> Option<Response> {
-	let mut req = TcpStream::connect(server.addrs()[0]).unwrap();
+	let mut req = TcpStream::connect(server.address()).unwrap();
 	req.write_all(request.as_bytes()).unwrap();
 
 	let mut response = String::new();
@@ -461,7 +457,7 @@ fn should_allow_if_host_is_valid() {
 fn should_always_allow_the_bind_address() {
 	// given
 	let server = serve_hosts(vec!["parity.io".into()]);
-	let addr = server.addrs()[0].clone();
+	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -486,7 +482,7 @@ fn should_always_allow_the_bind_address() {
 fn should_always_allow_the_bind_address_as_localhost() {
 	// given
 	let server = serve_hosts(vec![]);
-	let addr = server.addrs()[0].clone();
+	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -510,8 +506,8 @@ fn should_always_allow_the_bind_address_as_localhost() {
 #[test]
 fn should_handle_sync_requests_correctly() {
 	// given
-	let (server, _) = serve();
-	let addr = server.addrs()[0].clone();
+	let server = serve();
+	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
@@ -535,8 +531,8 @@ fn should_handle_sync_requests_correctly() {
 #[test]
 fn should_handle_async_requests_with_immediate_response_correctly() {
 	// given
-	let (server, _) = serve();
-	let addr = server.addrs()[0].clone();
+	let server = serve();
+	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#;
@@ -560,8 +556,8 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 #[test]
 fn should_handle_async_requests_correctly() {
 	// given
-	let (server, _) = serve();
-	let addr = server.addrs()[0].clone();
+	let server = serve();
+	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#;
@@ -585,8 +581,8 @@ fn should_handle_async_requests_correctly() {
 #[test]
 fn should_handle_sync_batch_requests_correctly() {
 	// given
-	let (server, _) = serve();
-	let addr = server.addrs()[0].clone();
+	let server = serve();
+	let addr = server.address().clone();
 
 	// when
 	let req = r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#;

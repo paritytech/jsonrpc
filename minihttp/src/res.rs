@@ -33,6 +33,16 @@ pub fn invalid_host() -> Response {
 	response
 }
 
+pub fn internal_error() -> Response {
+	let mut response = Response::new();
+	response
+		.status_code(500, "Internal Error")
+		.server(SERVER)
+		.header("Content-Type", "text/plain")
+		.body("Interal Server Error has occured.");
+	response
+}
+
 pub fn invalid_cors() -> Response {
 	let mut response = Response::new();
 	response

@@ -1,8 +1,10 @@
-use std::str::Lines;
-use std::net::TcpStream;
 use std::io::{Read, Write};
-use std::sync::Arc;
+use std::net::{TcpStream, Ipv4Addr};
+use std::str::Lines;
+use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
+use std::time::Duration;
 
 use core;
 use core::futures::Future;
@@ -91,16 +93,17 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 
 	let server = ServerBuilder::new(io)
 		.allowed_origins(DomainsValidation::AllowOnly(vec!["https://parity.io".into()]))
+		.allowed_hosts(DomainsValidation::AllowOnly(vec![format!("127.0.0.1:{}", port).into()]))
 		.request_middleware(|req: &ws::Request| {
 			if req.resource() == "/intercepted" {
 				let mut res = ws::Response::new(200, "OK");
-				res.set_body(b"Hello World!");
+				res.set_body("Hello World!".to_owned());
 				Some(res)
 			} else {
 				None
 			}
 		})
-		.start(&format!("127.0.0.1:{}", 30000 + port).parse().unwrap())
+		.start(&format!("127.0.0.1:{}", port).parse().unwrap())
 		.unwrap();
 
 	(server, pending)
@@ -109,14 +112,34 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 #[test]
 fn should_disallow_not_whitelisted_origins() {
 	// given
-	let (server, _) = serve(1);
+	let (server, _) = serve(30001);
 
 	// when
 	let response = request(server,
 		"\
 			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
+			Host: 127.0.0.1:30001\r\n\
 			Origin: http://test.io\r\n\
+			Connection: close\r\n\
+			\r\n\
+			I shouldn't be read.\r\n\
+		"
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+}
+
+#[test]
+fn should_disallow_not_whitelisted_hosts() {
+	// given
+	let server = serve(30002);
+
+	// when
+	let response = request(server,
+		"\
+			GET / HTTP/1.1\r\n\
+			Host: myhost:30002\r\n\
 			Connection: close\r\n\
 			\r\n\
 			I shouldn't be read.\r\n\
@@ -130,13 +153,13 @@ fn should_disallow_not_whitelisted_origins() {
 #[test]
 fn should_allow_whitelisted_origins() {
 	// given
-	let (server, _) = serve(2);
+	let (server, _) = serve(30003);
 
 	// when
 	let response = request(server,
 		"\
 			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
+			Host: 127.0.0.1:30003\r\n\
 			Origin: https://parity.io\r\n\
 			Connection: close\r\n\
 			\r\n\
@@ -151,13 +174,13 @@ fn should_allow_whitelisted_origins() {
 #[test]
 fn should_intercept_in_middleware() {
 	// given
-	let (server, _) = serve(3);
+	let (server, _) = serve(30004);
 
 	// when
 	let response = request(server,
 		"\
 			GET /intercepted HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
+			Host: 127.0.0.1:30004\r\n\
 			Origin: https://parity.io\r\n\
 			Connection: close\r\n\
 			\r\n\
@@ -191,4 +214,28 @@ fn drop_session_should_cancel() {
 
 	// then
 	assert_eq!(incomplete.load(Ordering::SeqCst), 1);
+
+}
+
+fn bind_port_zero_should_give_random_port() {
+	let (server, _) = serve(0);
+
+	assert_eq!(Ipv4Addr::new(127, 0, 0, 1), server.addr().ip());
+	assert_ne!(0, server.addr().port());
+}
+
+#[test]
+fn close_handle_makes_wait_return() {
+	let (server, _) = serve(0);
+	let close_handle = server.close_handle();
+
+	let (tx, rx) = mpsc::channel();
+	thread::spawn(move || {
+		tx.send(server.wait()).unwrap();
+	});
+	thread::sleep(Duration::from_secs(1));
+	close_handle.close();
+
+	let result = rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
+	assert!(result.is_ok());
 }

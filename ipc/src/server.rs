@@ -3,12 +3,13 @@ use std::sync::Arc;
 
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
-use jsonrpc::futures::sync::oneshot;
+use jsonrpc::futures::sync::{mpsc, oneshot};
 use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 use jsonrpc::futures::BoxFuture;
-use server_utils::tokio_core::io::Io;
+
 use server_utils::tokio_core::reactor::Remote;
-use server_utils::reactor;
+use server_utils::tokio_io::AsyncRead;
+use server_utils::{reactor, session};
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
@@ -46,6 +47,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
+	session_stats: Option<Arc<session::SessionStats>>,
 	remote: reactor::UninitializedRemote,
 }
 
@@ -57,6 +59,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		ServerBuilder {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
+			session_stats: None,
 			remote: reactor::UninitializedRemote::Unspawned,
 		}
 	}
@@ -75,12 +78,19 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Session stats
+	pub fn session_stats<T: session::SessionStats>(mut self, stats: T) -> Self {
+		self.session_stats = Some(Arc::new(stats));
+		self
+	}
+
 	/// Run server (in a separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
-		let rpc_handler = self.handler.clone();
+		let rpc_handler = self.handler;
 		let endpoint_addr = path.to_owned();
-		let meta_extractor = self.meta_extractor.clone();
+		let meta_extractor = self.meta_extractor;
+		let session_stats = self.session_stats;
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
 
@@ -98,23 +108,33 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let listener = match Endpoint::new(endpoint_addr, handle) {
 				Ok(l) => l,
 				Err(e) => {
-					start_signal.complete(Err(e));
+					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
 					return future::ok(()).boxed();
 				}
 			};
 
-			start_signal.complete(Ok(()));
+			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
+			let mut id = 0u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
-				trace!("Accepted incoming IPC connection");
+				id = id.wrapping_add(1);
+				let session_id = id;
+				let session_stats = session_stats.clone();
+				trace!(target: "ipc", "Accepted incoming IPC connection: {}", session_id);
+				session_stats.as_ref().map(|stats| stats.open_session(session_id));
 
-				let meta = meta_extractor.extract(&RequestContext { endpoint_addr: &remote_id });
+				let (sender, receiver) = mpsc::channel(16);
+				let meta = meta_extractor.extract(&RequestContext {
+					endpoint_addr: &remote_id,
+					session_id,
+					sender,
+				});
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = io_stream.framed(StreamCodec).split();
-				let responses = reader.and_then(
-					move |req| service.call(req).then(|response| match response {
+				let responses = reader.and_then(move |req| {
+					service.call(req).then(move |response| match response {
 						Err(e) => {
 							warn!(target: "ipc", "Error while processing request: {:?}", e);
 							future::ok(None)
@@ -127,12 +147,16 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 							future::ok(Some(response_data))
 						}
 					})
-				)
-				.filter_map(|x| x);
-
+				})
+				.filter_map(|x| x)
+				.select(receiver.map_err(|e| {
+					warn!(target: "ipc", "Notification error: {:?}", e);
+					std::io::ErrorKind::Other.into()
+				}));
 
 				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
+					session_stats.as_ref().map(|stats| stats.close_session(session_id));
 					Ok(())
 				});
 
@@ -142,7 +166,10 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			});
 
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
-			server.select(stop).map(|_| ()).map_err(|_| ()).boxed()
+			server.select(stop)
+				.map(|_| ())
+				.map_err(|_| ())
+				.boxed()
 		});
 
 		match start_receiver.wait().expect("Message should always be sent") {
@@ -163,7 +190,7 @@ pub struct Server {
 impl Server {
 	/// Closes the server (waits for finish)
 	pub fn close(mut self) {
-		self.stop.take().unwrap().complete(());
+		self.stop.take().map(|stop| stop.send(()));
 		self.remote.take().unwrap().close();
 		self.clear_file();
 	}
@@ -175,13 +202,13 @@ impl Server {
 
 	/// Remove socket file
 	fn clear_file(&self) {
-		::std::fs::remove_file(&self.path).unwrap_or_else(|_| {}); // ignore error, file could have been gone somewhere
+		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.stop.take().map(|stop| stop.complete(()));
+		let _ = self.stop.take().map(|stop| stop.send(()));
 		self.remote.take().map(|remote| remote.close());
 		self.clear_file();
 	}
@@ -195,10 +222,11 @@ mod tests {
 	use std::thread;
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
-	use jsonrpc::futures::{Future, future};
+	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use self::tokio_uds::UnixStream;
 	use server_utils::tokio_core::reactor::Core;
-	use server_utils::tokio_core::io;
+	use server_utils::tokio_io::AsyncRead;
+	use stream_codec::StreamCodec;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -215,25 +243,21 @@ mod tests {
 		server
 	}
 
-	fn dummy_request(path: &str, data: &[u8]) -> Vec<u8> {
+	fn dummy_request_str(path: &str, data: &str) -> String {
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
-		let mut buffer = vec![0u8; 1024];
 
 		let stream = UnixStream::connect(path, &core.handle()).expect("Should have been connected to the server");
-		let reqrep = io::write_all(stream, data)
-			.and_then(|(stream, _)| {
-				io::read(stream, &mut buffer)
+		let (writer, reader) = stream.framed(StreamCodec).split();
+		let reply = writer
+			.send(data.to_owned())
+			.and_then(move |_| {
+				reader.into_future().map_err(|(err, _)| err)
 			})
-			.and_then(|(_, read_buf, len)| {
-				future::ok(read_buf[0..len].to_vec())
+			.and_then(|(reply, _)| {
+				future::ok(reply.expect("there should be one reply"))
 			});
-		let result = core.run(reqrep).expect("Core should run with no errors");
 
-		result
-	}
-
-	fn dummy_request_str(path: &str, data: &[u8]) -> String {
-		String::from_utf8(dummy_request(path, data)).expect("String should be utf-8")
+		core.run(reply).unwrap()
 	}
 
 	#[test]
@@ -268,14 +292,50 @@ mod tests {
 
 		let result = dummy_request_str(
 			path,
-			b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n",
+			"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
 			);
 
 		assert_eq!(
 			result,
-			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
-			"Response does not exactly much the expected response",
+			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+			"Response does not exactly match the expected response",
 			);
+	}
+
+	#[test]
+	fn req_parallel() {
+		use std::thread;
+
+		::logger::init_log();
+		let path = "/tmp/test-ipc-45000";
+		let _server = run(path);
+
+		let mut handles = Vec::new();
+		for _ in 0..4 {
+			let path = path.clone();
+			handles.push(
+				thread::spawn(move || {
+					for _ in 0..100 {
+						let result = dummy_request_str(
+							&path,
+							"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
+							);
+
+						assert_eq!(
+							result,
+							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+							"Response does not exactly match the expected response",
+							);
+
+						::std::thread::sleep(::std::time::Duration::from_millis(10));
+					}
+				})
+			);
+		}
+
+		for handle in handles.drain(..) {
+			handle.join().unwrap();
+		}
 	}
 
 	#[test]
@@ -289,4 +349,48 @@ mod tests {
 		let core = Core::new().expect("Tokio Core should be created with no errors");
 		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
 	}
+
+	fn huge_response_test_str() -> String {
+		let mut result = String::from("begin_hello");
+		result.push_str("begin_hello");
+		for _ in 0..16384 { result.push(' '); }
+		result.push_str("end_hello");
+		result
+	}
+
+	fn huge_response_test_json() -> String {
+		let mut result = String::from("{\"jsonrpc\":\"2.0\",\"result\":\"");
+		result.push_str(&huge_response_test_str());
+		result.push_str("\",\"id\":1}");
+
+		result
+	}
+
+	#[test]
+	fn test_huge_response() {
+		let path = "/tmp/test-ipc-60000";
+
+		let mut io = MetaIoHandler::<()>::default();
+		io.add_method("say_huge_hello", |_params| {
+			Ok(Value::String(huge_response_test_str()))
+		});
+		let builder = ServerBuilder::new(io);
+
+		let _server = builder.start(path).expect("Server must run with no issues");
+		thread::sleep(::std::time::Duration::from_millis(50));
+
+		let result = dummy_request_str(&path,
+			"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
+		);
+
+		assert_eq!(
+			result,
+			huge_response_test_json(),
+			"Response does not exactly match the expected response",
+			);
+
+	}
+
+
+
 }

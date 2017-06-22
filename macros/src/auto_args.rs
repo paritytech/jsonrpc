@@ -8,7 +8,8 @@ use jsonrpc_core::{Error, Params, Value, Metadata};
 use jsonrpc_core::futures::{self, BoxFuture, Future};
 use jsonrpc_pubsub::{PubSubMetadata, Subscriber};
 use pubsub;
-use serde::{Serialize, Deserialize};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use util::{invalid_params, expect_no_params, to_value};
 
 /// Auto-generates an RPC trait from trait definition.
@@ -181,7 +182,7 @@ macro_rules! build_rpc_trait {
 		});
 		$(
 			$(
-				$del.add_alias($name, $alias);
+				$del.add_alias($alias, $name);
 			)+
 		)*
 	};
@@ -195,7 +196,7 @@ macro_rules! build_rpc_trait {
 		});
 		$(
 			$(
-				$del.add_alias($name, $alias);
+				$del.add_alias($alias, $name);
 			)+
 		)*
 	};
@@ -209,7 +210,7 @@ macro_rules! build_rpc_trait {
 		});
 		$(
 			$(
-				$del.add_alias($name, $alias);
+				$del.add_alias($alias, $name);
 			)+
 		)*
 	};
@@ -233,18 +234,19 @@ macro_rules! build_rpc_trait {
 				)
 			}),
 			($unsubscribe, move |base, id| {
+				use $crate::jsonrpc_core::futures::Future;
 				Self::$unsub_method(base, id).map($crate::to_value).boxed()
 			}),
 		);
 
 		$(
 			$(
-				$del.add_alias($subscribe, $sub_alias);
+				$del.add_alias($sub_alias, $subscribe);
 			)*
 		)*
 		$(
 			$(
-				$del.add_alias($unsubscribe, $unsub_alias);
+				$del.add_alias($unsub_alias, $unsubscribe);
 			)*
 		)*
 	};
@@ -253,25 +255,54 @@ macro_rules! build_rpc_trait {
 /// A wrapper type without an implementation of `Deserialize`
 /// which allows a special implementation of `Wrap` for functions
 /// that take a trailing default parameter.
-pub struct Trailing<T: Default + Deserialize>(pub T);
+pub struct Trailing<T>(Option<T>);
+
+impl<T> Into<Option<T>> for Trailing<T> {
+	fn into(self) -> Option<T> {
+		self.0
+	}
+}
+
+impl<T: DeserializeOwned> Trailing<T> {
+	/// Returns a underlying value if present or provided value.
+	pub fn unwrap_or(self, other: T) -> T {
+		self.0.unwrap_or(other)
+	}
+
+	/// Returns an underlying value or computes it if not present.
+	pub fn unwrap_or_else<F: FnOnce() -> T>(self, f: F) -> T {
+		self.0.unwrap_or_else(f)
+	}
+}
+
+impl<T: Default + DeserializeOwned> Trailing<T> {
+	/// Returns an underlying value or the default value.
+	pub fn unwrap_or_default(self) -> T {
+		self.0.unwrap_or_default()
+	}
+}
 
 /// Wrapper trait for synchronous RPC functions.
 pub trait Wrap<B> {
+	/// Invokes RPC method.
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error>;
 }
 
 /// Wrapper trait for asynchronous RPC functions.
 pub trait WrapAsync<B> {
+	/// Invokes asynchronous RPC method.
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error>;
 }
 
 /// Wrapper trait for meta RPC functions.
 pub trait WrapMeta<B, M> {
+	/// Invokes asynchronous RPC method with Metadata.
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error>;
 }
 
 /// Wrapper trait for subscribe RPC functions.
 pub trait WrapSubscribe<B, M> {
+	/// Invokes subscription.
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber);
 }
 
@@ -330,7 +361,7 @@ macro_rules! wrap {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-			$($x: Deserialize,)+
+			$($x: DeserializeOwned,)+
 		> Wrap<BASE> for fn(&BASE, $($x,)+) -> Result<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
 				params.parse::<($($x,)+)>().and_then(|($($x,)+)| {
@@ -343,7 +374,7 @@ macro_rules! wrap {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-			$($x: Deserialize,)+
+			$($x: DeserializeOwned,)+
 		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
@@ -358,7 +389,7 @@ macro_rules! wrap {
 			BASE: Send + Sync + 'static,
 			META: Metadata,
 			OUT: Serialize + 'static,
-			$($x: Deserialize,)+
+			$($x: DeserializeOwned,)+
 		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
@@ -373,7 +404,7 @@ macro_rules! wrap {
 			BASE: Send + Sync + 'static,
 			META: PubSubMetadata,
 			OUT: Serialize,
-			$($x: Deserialize,)+
+			$($x: DeserializeOwned,)+
 		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+) {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber){
 				match params.parse::<($($x,)+)>() {
@@ -395,11 +426,11 @@ fn params_len(params: &Params) -> Result<usize, Error> {
 	}
 }
 
-fn parse_trailing_param<T: Default + Deserialize>(params: Params) -> Result<(T, ), Error> {
+fn parse_trailing_param<T: DeserializeOwned>(params: Params) -> Result<(Option<T>, ), Error> {
 	let len = try!(params_len(&params));
 	let id = match len {
-		0 => Ok((T::default(),)),
-		1 => params.parse::<(T,)>(),
+		0 => Ok((None,)),
+		1 => params.parse::<(T,)>().map(|(x, )| (Some(x), )),
 		_ => Err(invalid_params("Expecting only one optional parameter.", "")),
 	};
 
@@ -408,7 +439,7 @@ fn parse_trailing_param<T: Default + Deserialize>(params: Params) -> Result<(T, 
 
 // special impl for no parameters other than block parameter.
 impl<B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + Deserialize
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
 		let id = try!(parse_trailing_param(params)).0;
@@ -418,7 +449,7 @@ impl<B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
 }
 
 impl<B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + Deserialize
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
 		let id = parse_trailing_param(params);
@@ -431,7 +462,7 @@ impl<B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error>
 }
 
 impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: Default + Deserialize, M: Metadata,
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, M: Metadata,
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		let id = parse_trailing_param(params);
@@ -439,6 +470,21 @@ impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, E
 		match id {
 			Ok((id,)) => (self)(base, meta, Trailing(id)).map(to_value).boxed(),
 			Err(e) => futures::failed(e).boxed(),
+		}
+	}
+}
+
+impl<B, M, OUT, T> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>, Trailing<T>)
+	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata, T: DeserializeOwned,
+{
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
+		let id = parse_trailing_param(params);
+
+		match id {
+			Ok((id,)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), Trailing(id)),
+			Err(e) => {
+				let _ = subscriber.reject(e);
+			},
 		}
 	}
 }
@@ -451,17 +497,17 @@ macro_rules! wrap_with_trailing {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-			$($x: Deserialize,)+
-			TRAILING: Default + Deserialize,
+			$($x: DeserializeOwned,)+
+			TRAILING: DeserializeOwned,
 		> Wrap<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Result<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
 				let len = try!(params_len(&params));
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
+						.map(|($($x,)+)| ($($x,)+ None)),
 					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ id)),
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
 					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
@@ -474,8 +520,8 @@ macro_rules! wrap_with_trailing {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-			$($x: Deserialize,)+
-			TRAILING: Default + Deserialize,
+			$($x: DeserializeOwned,)+
+			TRAILING: DeserializeOwned,
 		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				let len = match params_len(&params) {
@@ -485,9 +531,9 @@ macro_rules! wrap_with_trailing {
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
+						.map(|($($x,)+)| ($($x,)+ None)),
 					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ id)),
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
 					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
@@ -503,8 +549,8 @@ macro_rules! wrap_with_trailing {
 			BASE: Send + Sync + 'static,
 			META: Metadata,
 			OUT: Serialize + 'static,
-			$($x: Deserialize,)+
-			TRAILING: Default + Deserialize,
+			$($x: DeserializeOwned,)+
+			TRAILING: DeserializeOwned,
 		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				let len = match params_len(&params) {
@@ -514,9 +560,9 @@ macro_rules! wrap_with_trailing {
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ TRAILING::default())),
+						.map(|($($x,)+)| ($($x,)+ None)),
 					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ id)),
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
 					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
@@ -526,15 +572,55 @@ macro_rules! wrap_with_trailing {
 				}
 			}
 		}
+
+		// subscribe implementation
+		impl <
+			BASE: Send + Sync + 'static,
+			META: PubSubMetadata,
+			OUT: Serialize,
+			$($x: DeserializeOwned,)+
+			TRAILING: DeserializeOwned,
+		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+ Trailing<TRAILING>) {
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber) {
+				let len = match params_len(&params) {
+					Ok(len) => len,
+					Err(e) => {
+						let _ = subscriber.reject(e);
+						return;
+					},
+				};
+
+				let params = match len - $num {
+					0 => params.parse::<($($x,)+)>()
+						.map(|($($x,)+)| ($($x,)+ None)),
+					1 => params.parse::<($($x,)+ TRAILING)>()
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
+					_ => {
+						let _ = subscriber.reject(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len)));
+						return;
+					},
+				};
+
+				match params {
+					Ok(($($x,)+ id)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), $($x,)+ Trailing(id)),
+					Err(e) => {
+						let _ = subscriber.reject(e);
+						return;
+					},
+				}
+			}
+		}
 	}
 }
 
+wrap!(A, B, C, D, E, F);
 wrap!(A, B, C, D, E);
 wrap!(A, B, C, D);
 wrap!(A, B, C);
 wrap!(A, B);
 wrap!(A);
 
+wrap_with_trailing!(6, A, B, C, D, E, F);
 wrap_with_trailing!(5, A, B, C, D, E);
 wrap_with_trailing!(4, A, B, C, D);
 wrap_with_trailing!(3, A, B, C);

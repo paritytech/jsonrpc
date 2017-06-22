@@ -4,13 +4,13 @@ homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-macros"
-version = "7.0.0"
+version = "7.0.1"
 authors = ["rphmeier <robert@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_macros/index.html"
 
 [dependencies]
-serde = "0.9"
+serde = "1.0"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-pubsub = { version = "7.0", path = "../pubsub" }
 

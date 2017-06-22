@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -5,8 +6,9 @@ use std::sync::Arc;
 use core;
 use server_utils;
 use server_utils::cors::Origin;
-use server_utils::hosts::DomainsValidation;
+use server_utils::hosts::{Host, DomainsValidation};
 use server_utils::reactor::UninitializedRemote;
+use server_utils::session::SessionStats;
 use ws;
 
 use metadata::{MetaExtractor, NoopExtractor};
@@ -15,26 +17,48 @@ use session;
 
 /// Signer startup error
 #[derive(Debug)]
-pub enum ServerError {
+pub enum Error {
 	/// Wrapped `std::io::Error`
-	IoError(io::Error),
+	Io(io::Error),
 	/// Other `ws-rs` error
 	WebSocket(ws::Error)
 }
 
-impl From<ws::Error> for ServerError {
+impl From<ws::Error> for Error {
 	fn from(err: ws::Error) -> Self {
 		match err.kind {
-			ws::ErrorKind::Io(e) => ServerError::IoError(e),
-			_ => ServerError::WebSocket(err),
+			ws::ErrorKind::Io(e) => Error::Io(e),
+			_ => Error::WebSocket(err),
 		}
 	}
 }
 
-impl From<io::Error> for ServerError {
+impl From<io::Error> for Error {
 	fn from(err: io::Error) -> Self {
-		ServerError::IoError(err)
+		Error::Io(err)
 	}
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            Error::Io(ref e) => e.fmt(f),
+            Error::WebSocket(ref e) => e.fmt(f),
+        }
+    }
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        "Starting the JSON-RPC WebSocket server failed"
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        Some(match *self {
+            Error::Io(ref e) => e,
+            Error::WebSocket(ref e) => e,
+        })
+    }
 }
 
 /// Builder for `WebSockets` server
@@ -42,8 +66,9 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	allowed_origins: Option<Vec<Origin>>,
+	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
-	session_stats: Option<Arc<session::SessionStats>>,
+	session_stats: Option<Arc<SessionStats>>,
 	remote: UninitializedRemote,
 }
 
@@ -56,6 +81,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
 			allowed_origins: None,
+			allowed_hosts: None,
 			request_middleware: None,
 			session_stats: None,
 			remote: UninitializedRemote::Unspawned,
@@ -80,8 +106,14 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Allowed hosts.
+	pub fn allowed_hosts(mut self, allowed_hosts: DomainsValidation<Host>) -> Self {
+		self.allowed_hosts = allowed_hosts.into();
+		self
+	}
+
 	/// Session stats
-	pub fn session_stats<T: session::SessionStats>(mut self, stats: T) -> Self {
+	pub fn session_stats<T: SessionStats>(mut self, stats: T) -> Self {
 		self.session_stats = Some(Arc::new(stats));
 		self
 	}
@@ -95,12 +127,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
-	pub fn start(self, addr: &SocketAddr) -> Result<Server, ServerError> {
+	pub fn start(self, addr: &SocketAddr) -> Result<Server, Error> {
 		Server::start(
 			addr,
 			self.handler,
 			self.meta_extractor,
 			self.allowed_origins,
+			self.allowed_hosts,
 			self.request_middleware,
 			self.session_stats,
 			self.remote,
