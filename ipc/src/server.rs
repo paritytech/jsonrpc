@@ -22,10 +22,7 @@ pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	/// Create new IPC server session with given handler and metadata.
 	pub fn new(handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
-		Service {
-			handler: handler,
-			meta: meta,
-		}
+		Service { handler: handler, meta: meta }
 	}
 }
 

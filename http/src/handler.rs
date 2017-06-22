@@ -78,15 +78,6 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 			cors_header: cors::CorsHeader::NotRequired,
 		})
 	}
-
-	/// This event occurs when the handler is removed (usually upon error.)
-	fn on_remove(self, transport: HttpStream) {
-		match self.handler {
-			Handler::Rpc(handler) => handler.on_remove(transport),
-			Handler::Error(response) => response.on_remove(transport),
-			Handler::Middleware(_) => {} // middleware not Sized.
-		}
-	}
 }
 
 pub enum Handler<M: Metadata, S: Middleware<M>> {

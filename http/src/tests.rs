@@ -3,9 +3,6 @@ extern crate jsonrpc_core;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 use self::jsonrpc_core::{IoHandler, Params, Value, Error};
 
 use self::jsonrpc_core::futures::{self, Future};
@@ -19,20 +16,9 @@ fn serve_hosts(hosts: Vec<Host>) -> Server {
 		.unwrap()
 }
 
-// helper for seeing if the future is actually removed from the pool.
-struct Guard(bool, Arc<AtomicUsize>);
-impl Drop for Guard {
-	fn drop(&mut self) {
-		if self.0 { self.1.fetch_add(1, Ordering::SeqCst); }
-	}
-}
-
-fn serve() -> (Server, Arc<AtomicUsize>) {
+fn serve() -> Server {
 	use std::thread;
 	let mut io = IoHandler::default();
-	let counter = Arc::new(AtomicUsize::new(0));
-
-	let counter_handle = counter.clone();
 	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
 	io.add_async_method("hello_async", |_params: Params| {
 		futures::finished(Value::String("world".into())).boxed()
@@ -45,32 +31,14 @@ fn serve() -> (Server, Arc<AtomicUsize>) {
 		});
 		p.map_err(|_| Error::invalid_request()).boxed()
 	});
-	io.add_async_method("hello_async3", move |_params: Params| {
-		let (c, p) = futures::oneshot();
-		let mut guard = Guard(true, counter_handle.clone());
 
-		thread::spawn(move || {
-			thread::sleep(Duration::from_millis(500));
-
-			let _  = c.send(());
-		});
-
-		p.then(move |_| {
-			// defuse guard since the future was polled to completion.
-			guard.0 = false;
-			Ok(Value::String("world".into()))
-		}).boxed()
-	});
-
-	let server = ServerBuilder::new(io)
+	ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![
 			AccessControlAllowOrigin::Value("parity.io".into()),
 			AccessControlAllowOrigin::Null,
 		]))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
-		.unwrap();
-
-	(server, counter)
+		.unwrap()
 }
 
 struct Response {
@@ -99,29 +67,24 @@ fn request(server: Server, request: &str) -> Response {
 	req.write_all(request.as_bytes()).unwrap();
 
 	let mut response = String::new();
-	if let Some(timeout) = timeout {
-		::std::thread::sleep(timeout);
-		drop(req);
-		return None;
-	}
-
 	req.read_to_string(&mut response).unwrap();
+
 	let mut lines = response.lines();
 	let status = lines.next().unwrap().to_owned();
 	let headers =	read_block(&mut lines);
 	let body = read_block(&mut lines);
 
-	Some(Response {
+	Response {
 		status: status,
 		headers: headers,
 		body: body,
-	})
+	}
 }
 
 #[test]
 fn should_return_method_not_allowed_for_get() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let response = request(server,
@@ -142,7 +105,7 @@ fn should_return_method_not_allowed_for_get() {
 #[test]
 fn should_return_unsupported_media_type_if_not_json() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let response = request(server,
@@ -163,7 +126,7 @@ fn should_return_unsupported_media_type_if_not_json() {
 #[test]
 fn should_return_error_for_malformed_request() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"3.0","method":"x"}"#;
@@ -187,7 +150,7 @@ fn should_return_error_for_malformed_request() {
 #[test]
 fn should_return_error_for_malformed_request2() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","metho1d":""}"#;
@@ -211,7 +174,7 @@ fn should_return_error_for_malformed_request2() {
 #[test]
 fn should_return_empty_response_for_notification() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","method":"x"}"#;
@@ -236,7 +199,7 @@ fn should_return_empty_response_for_notification() {
 #[test]
 fn should_return_method_not_found() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -260,7 +223,7 @@ fn should_return_method_not_found() {
 #[test]
 fn should_add_cors_headers() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -286,7 +249,7 @@ fn should_add_cors_headers() {
 #[test]
 fn should_not_add_cors_headers() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -311,7 +274,7 @@ fn should_not_add_cors_headers() {
 #[test]
 fn should_not_process_the_request_in_case_of_invalid_cors() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
@@ -337,7 +300,7 @@ fn should_not_process_the_request_in_case_of_invalid_cors() {
 #[test]
 fn should_return_proper_headers_on_options() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let response = request(server,
@@ -360,7 +323,7 @@ fn should_return_proper_headers_on_options() {
 #[test]
 fn should_add_cors_header_for_null_origin() {
 	// given
-	let (server, _) = serve();
+	let server = serve();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
@@ -601,49 +564,6 @@ fn should_handle_sync_batch_requests_correctly() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
-}
-
-#[test]
-fn should_cancel_on_timeout() {
-	// given
-	let (server, counter) = serve();
-	let addr = server.addrs()[0].clone();
-
-	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async3"}"#;
-	let response1 = request_timeout(
-		&server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req),
-		Some(Duration::from_millis(50)),
-	);
-	::std::thread::sleep(Duration::from_millis(500));
-	let counter_mid = counter.load(Ordering::SeqCst);
-
-	let _ = request(
-		server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req),
-	);
-
-	// then
-	assert!(response1.is_none());
-	assert_eq!(counter_mid, 1);
-	assert_eq!(counter.load(Ordering::SeqCst), 1);
 }
 
 fn invalid_host() -> String {
