@@ -3,7 +3,7 @@
 use hyper::server;
 
 pub use hyper::Method;
-pub use hyper::status::StatusCode;
+pub use hyper::StatusCode;
 pub use hyper::header;
 
 /// Simple server response structure
