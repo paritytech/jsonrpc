@@ -11,13 +11,23 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 [Documentation](http://paritytech.github.io/jsonrpc/jsonrpc/index.html)
 
 ## Sub-projects
-- [jsonrpc-core](./core)
-- [jsonrpc-http-server](./http)
+- [jsonrpc-core](./core) [![crates.io][core-image]][core-url]
+- [jsonrpc-http-server](./http) [![crates.io][http-server-image]][http-server-url]
 - [jsonrpc-minihttp-server](./minihttp)
 - [jsonrpc-ipc-server](./ipc)
-- [jsonrpc-tcp-server](./tcp)
+- [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
 - [jsonrpc-ws-server](./ws)
 - [jsonrpc-macros](./macros)
+- [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
+
+[core-image]: https://img.shields.io/crates/v/jsonrpc-core.svg
+[core-url]: https://crates.io/crates/jsonrpc-core
+[http-server-image]: https://img.shields.io/crates/v/jsonrpc-http-server.svg
+[http-server-url]: https://crates.io/crates/jsonrpc-http-server
+[tcp-server-image]: https://img.shields.io/crates/v/jsonrpc-tcp-server.svg
+[tcp-server-url]: https://crates.io/crates/jsonrpc-tcp-server
+[server-utils-image]: https://img.shields.io/crates/v/jsonrpc-server-utils.svg
+[server-utils-url]: https://crates.io/crates/jsonrpc-server-utils
 
 ## Examples
 

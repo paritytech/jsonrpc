@@ -16,8 +16,8 @@ mod session;
 mod tests;
 
 pub use self::metadata::{RequestContext, MetaExtractor, NoopExtractor};
-pub use self::server::Server;
 pub use self::session::{RequestMiddleware, MiddlewareAction};
+pub use self::server::{CloseHandle, Server};
 pub use self::server_builder::{ServerBuilder, Error};
 pub use self::server_utils::cors::Origin;
 pub use self::server_utils::hosts::{Host, DomainsValidation};
