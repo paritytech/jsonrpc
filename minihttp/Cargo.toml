@@ -10,6 +10,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_minihttp_server/index.html"
 
 [dependencies]
+bytes = "0.4"
 log = "0.3"
 parking_lot = "0.4"
 tokio-service = "0.1"
