@@ -20,6 +20,7 @@
 #![warn(missing_docs)]
 
 #[macro_use] extern crate log;
+extern crate bytes;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
 extern crate parking_lot;
