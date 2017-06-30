@@ -2,7 +2,7 @@
 
 use std::ascii::AsciiExt;
 use tokio_minihttp;
-use jsonrpc_server_utils::tokio_core::io::EasyBuf;
+use bytes::Bytes;
 
 /// HTTP Method used
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,7 +18,7 @@ pub enum Method {
 /// Request
 pub struct Req {
 	request: tokio_minihttp::Request,
-	body: EasyBuf,
+	body: Bytes,
 }
 
 impl Req {
@@ -51,6 +51,6 @@ impl Req {
 
 	/// Returns body of the request as a string
 	pub fn body(&self) -> &str {
-		::std::str::from_utf8(self.body.as_slice()).unwrap_or("")
+		::std::str::from_utf8(&self.body).unwrap_or("")
 	}
 }
