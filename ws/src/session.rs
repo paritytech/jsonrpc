@@ -2,7 +2,12 @@ use std;
 use std::sync::{atomic, Arc};
 
 use core;
-use core::futures::Future;
+use core::futures::{Async, Future, Poll};
+use core::futures::sync::oneshot;
+
+use parking_lot::Mutex;
+use slab::Slab;
+
 use server_utils::Pattern;
 use server_utils::cors::Origin;
 use server_utils::hosts::Host;
@@ -72,6 +77,61 @@ impl From<Option<ws::Response>> for MiddlewareAction {
 	}
 }
 
+// the slab is only inserted into when live.
+type TaskSlab = Mutex<Slab<Option<oneshot::Sender<()>>>>;
+
+// future for checking session liveness.
+// this returns `NotReady` until the session it corresponds to is dropped.
+struct LivenessPoll {
+	task_slab: Arc<TaskSlab>,
+	slab_handle: usize,
+	rx: oneshot::Receiver<()>,
+}
+
+impl LivenessPoll {
+	fn create(task_slab: Arc<TaskSlab>) -> Self {
+		const INITIAL_SIZE: usize = 4;
+
+		let (index, rx) = {
+			let mut task_slab = task_slab.lock();
+			if !task_slab.has_available() {
+				// grow the size if necessary.
+				// we don't expect this to get so big as to overflow.
+				let reserve = ::std::cmp::max(task_slab.capacity(), INITIAL_SIZE);
+				task_slab.reserve_exact(reserve);
+			}
+
+			let (tx, rx) = oneshot::channel();
+			let index = task_slab.insert(Some(tx)).expect("just checked slab capacity or grew; qed");
+			(index, rx)
+		};
+
+		LivenessPoll { task_slab: task_slab, slab_handle: index, rx: rx }
+	}
+}
+
+impl Future for LivenessPoll {
+	type Item = ();
+	type Error = ();
+
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		// if the future resolves ok then we've been signalled to return.
+		// it should never be cancelled, but if it was the session definitely
+		// isn't live.
+		match self.rx.poll() {
+			Ok(Async::Ready(_)) | Err(_) => Ok(Async::Ready(())),
+			Ok(Async::NotReady) => Ok(Async::NotReady),
+		}
+	}
+}
+
+impl Drop for LivenessPoll {
+	fn drop(&mut self) {
+		// remove the entry from the slab if it hasn't been destroyed yet.
+		self.task_slab.lock().remove(self.slab_handle);
+	}
+}
+
 pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	active: Arc<atomic::AtomicBool>,
 	context: metadata::RequestContext,
@@ -83,12 +143,20 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	stats: Option<Arc<SessionStats>>,
 	metadata: M,
 	remote: Remote,
+	task_slab: Arc<TaskSlab>,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
 		self.active.store(false, atomic::Ordering::SeqCst);
 		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
+
+		// signal to all still-live tasks that the session has been dropped.
+		for task in self.task_slab.lock().iter_mut() {
+			if let Some(task) = task.take() {
+				let _ = task.send(());
+			}
+		}
 	}
 }
 
@@ -169,6 +237,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone();
 
+		// TODO: creation requires allocating a `oneshot` channel and acquiring a
+		// mutex. we could alternatively do this lazily upon first poll if
+		// it becomes a bottleneck.
+		let poll_liveness = LivenessPoll::create(self.task_slab.clone());
+
 		let future = self.handler.handle_request(req, metadata)
 			.map(move |response| {
 				if let Some(result) = response {
@@ -177,7 +250,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 						warn!("Error while sending response: {:?}", e);
 					}
 				}
-			});
+			})
+			.select(poll_liveness)
+			.map(|_| ())
+			.map_err(|_| ());
+
 		self.remote.spawn(|_| future);
 
 		Ok(())
@@ -243,6 +320,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			request_middleware: self.request_middleware.clone(),
 			metadata: Default::default(),
 			remote: self.remote.clone(),
+			task_slab: Arc::new(Mutex::new(Slab::with_capacity(0))),
 		}
 	}
 }

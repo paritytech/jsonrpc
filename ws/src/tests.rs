@@ -1,7 +1,8 @@
 use std::io::{Read, Write};
 use std::net::{TcpStream, Ipv4Addr};
 use std::str::Lines;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -59,14 +60,38 @@ fn request(server: Server, request: &str) -> Response {
 	Response::parse(response)
 }
 
-fn serve(port: u16) -> Server {
+fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
+	use std::time::Duration;
+	use core::futures::sync::oneshot;
+
+	let pending = Arc::new(AtomicUsize::new(0));
+
+	let counter = pending.clone();
+
 	let mut io = core::IoHandler::default();
 	io.add_method("hello", |_params: core::Params| Ok(core::Value::String("world".into())));
 	io.add_async_method("hello_async", |_params: core::Params| {
 		core::futures::finished(core::Value::String("world".into())).boxed()
 	});
+	io.add_async_method("record_pending", move |_params: core::Params| {
+		counter.fetch_add(1, Ordering::SeqCst);
+		let (send, recv) = oneshot::channel();
+		::std::thread::spawn(move || {
+			::std::thread::sleep(Duration::from_millis(500));
 
-	ServerBuilder::new(io)
+			let _ = send.send(());
+		});
+
+		let counter = counter.clone();
+		recv.then(move |res| {
+			if res.is_ok() {
+				counter.fetch_sub(1, Ordering::SeqCst);
+			}
+			Ok(core::Value::String("complete".into()))
+		}).boxed()
+	});
+
+	let server = ServerBuilder::new(io)
 		.allowed_origins(DomainsValidation::AllowOnly(vec!["https://parity.io".into()]))
 		.allowed_hosts(DomainsValidation::AllowOnly(vec![format!("127.0.0.1:{}", port).into()]))
 		.request_middleware(|req: &ws::Request| {
@@ -79,13 +104,15 @@ fn serve(port: u16) -> Server {
 			}
 		})
 		.start(&format!("127.0.0.1:{}", port).parse().unwrap())
-		.unwrap()
+		.unwrap();
+
+	(server, pending)
 }
 
 #[test]
 fn should_disallow_not_whitelisted_origins() {
 	// given
-	let server = serve(30001);
+	let (server, _) = serve(30001);
 
 	// when
 	let response = request(server,
@@ -106,7 +133,7 @@ fn should_disallow_not_whitelisted_origins() {
 #[test]
 fn should_disallow_not_whitelisted_hosts() {
 	// given
-	let server = serve(30002);
+	let (server, _) = serve(30002);
 
 	// when
 	let response = request(server,
@@ -126,7 +153,7 @@ fn should_disallow_not_whitelisted_hosts() {
 #[test]
 fn should_allow_whitelisted_origins() {
 	// given
-	let server = serve(30003);
+	let (server, _) = serve(30003);
 
 	// when
 	let response = request(server,
@@ -147,7 +174,7 @@ fn should_allow_whitelisted_origins() {
 #[test]
 fn should_intercept_in_middleware() {
 	// given
-	let server = serve(30004);
+	let (server, _) = serve(30004);
 
 	// when
 	let response = request(server,
@@ -167,8 +194,32 @@ fn should_intercept_in_middleware() {
 }
 
 #[test]
+fn drop_session_should_cancel() {
+	use ws::{connect, CloseCode};
+
+	// given
+	let (_server, incomplete) = serve(30005);
+
+	// when
+	connect("ws://127.0.0.1:30005", |out| {
+    	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 1}"#).unwrap();
+
+		let incomplete = incomplete.clone();
+    	move |_| {
+			assert_eq!(incomplete.load(Ordering::SeqCst), 0);
+	    	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 2}"#).unwrap();
+			out.close(CloseCode::Normal)
+		}
+	}).unwrap();
+
+	// then
+	assert_eq!(incomplete.load(Ordering::SeqCst), 1);
+
+}
+
+#[test]
 fn bind_port_zero_should_give_random_port() {
-	let server = serve(0);
+	let (server, _) = serve(0);
 
 	assert_eq!(Ipv4Addr::new(127, 0, 0, 1), server.addr().ip());
 	assert_ne!(0, server.addr().port());
@@ -176,7 +227,7 @@ fn bind_port_zero_should_give_random_port() {
 
 #[test]
 fn close_handle_makes_wait_return() {
-	let server = serve(0);
+	let (server, _) = serve(0);
 	let close_handle = server.close_handle();
 
 	let (tx, rx) = mpsc::channel();

@@ -13,3 +13,5 @@ log = "0.3"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-server-utils = { version = "7.0", path = "../server-utils" }
 ws = { git = "https://github.com/tomusdrw/ws-rs" }
+parking_lot = "0.4"
+slab = "0.3"
