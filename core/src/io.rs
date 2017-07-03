@@ -117,7 +117,11 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	pub fn add_async_method<F>(&mut self, name: &str, method: F) where
 		F: RpcMethodSimple,
 	{
-		self.add_method_with_meta(name, move |params, _meta| method.call(params))
+		let method = Arc::new(method);
+		self.add_method_with_meta(name, move |params, _meta| {
+			let method = method.clone();
+			futures::lazy(move || method.call(params)).boxed()
+		})
 	}
 
 	/// Adds new supported notification

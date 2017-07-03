@@ -12,7 +12,7 @@ type AsyncData = BoxFuture<Value, Error>;
 
 struct DelegateMethod<T, F> {
 	delegate: Arc<T>,
-	closure: F,
+	closure: Arc<F>,
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
@@ -22,14 +22,15 @@ impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
 	M: Metadata,
 {
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
-		let closure = &self.closure;
-		futures::done(closure(&self.delegate, params)).boxed()
+		let delegate = self.delegate.clone();
+		let closure = self.closure.clone();
+		futures::lazy(move || closure(&delegate, params)).boxed()
 	}
 }
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
-	closure: F,
+	closure: Arc<F>,
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
@@ -39,14 +40,15 @@ impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
 	M: Metadata,
 {
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
-		let closure = &self.closure;
-		closure(&self.delegate, params)
+		let delegate = self.delegate.clone();
+		let closure = self.closure.clone();
+		futures::lazy(move || closure(&delegate, params)).boxed()
 	}
 }
 
 struct DelegateMethodWithMeta<T, F> {
 	delegate: Arc<T>,
-	closure: F,
+	closure: Arc<F>,
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
@@ -55,8 +57,9 @@ impl<T, M, F> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
 	F: Fn(&T, Params, M) -> AsyncData + Send + Sync + 'static,
 {
 	fn call(&self, params: Params, meta: M) -> AsyncData {
-		let closure = &self.closure;
-		closure(&self.delegate, params, meta)
+		let delegate = self.delegate.clone();
+		let closure = self.closure.clone();
+		futures::lazy(move || closure(&delegate, params, meta)).boxed()
 	}
 }
 
@@ -143,7 +146,7 @@ impl<T, M> IoDelegate<T, M> where
 		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
 			DelegateMethod {
 				delegate: self.delegate.clone(),
-				closure: method,
+				closure: Arc::new(method),
 			}
 		)));
 	}
@@ -156,7 +159,7 @@ impl<T, M> IoDelegate<T, M> where
 		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
 			DelegateAsyncMethod {
 				delegate: self.delegate.clone(),
-				closure: method,
+				closure: Arc::new(method),
 			}
 		)));
 	}
@@ -169,7 +172,7 @@ impl<T, M> IoDelegate<T, M> where
 		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
 			DelegateMethodWithMeta {
 				delegate: self.delegate.clone(),
-				closure: method,
+				closure: Arc::new(method),
 			}
 		)));
 	}
