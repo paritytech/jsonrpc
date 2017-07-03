@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
@@ -105,8 +106,10 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: RpcMethodSync,
 	{
+		let method = Arc::new(method);
 		self.add_method_with_meta(name, move |params, _meta| {
-			futures::done(method.call(params)).boxed()
+			let method = method.clone();
+			futures::lazy(move || method.call(params)).boxed()
 		})
 	}
 
