@@ -28,7 +28,7 @@ impl Encoder for LineCodec {
 	type Error = io::Error;
 
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
-		buf.put_slice(msg.as_bytes());
+		buf.extend_from_slice(msg.as_bytes());
 		buf.put(b'\n');
 		Ok(())
 	}
