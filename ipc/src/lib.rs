@@ -14,7 +14,6 @@ extern crate bytes;
 #[cfg(test)] extern crate env_logger;
 #[cfg(test)] mod logger;
 
-mod stream_codec;
 mod server;
 mod meta;
 pub use meta::{MetaExtractor, RequestContext};

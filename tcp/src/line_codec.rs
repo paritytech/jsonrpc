@@ -2,7 +2,9 @@ use std::{io, str};
 use server_utils::tokio_io::codec::{Decoder, Encoder};
 use bytes::BytesMut;
 
-pub struct LineCodec;
+pub struct LineCodec {
+	separator: Separator,
+}
 
 impl Decoder for LineCodec {
 	type Item = String;
@@ -43,21 +45,5 @@ mod tests {
 	use server_utils::tokio_io::codec::Decoder;
 	use bytes::{BytesMut, BufMut};
 
-	#[test]
-	fn simple_encode() {
-		let mut buf = BytesMut::with_capacity(2048);
-		buf.put_slice(b"{ test: 1 }\n{ test: 2 }\n{ test: 3 }");
 
-		let mut codec = LineCodec;
-
-		let request = codec.decode(&mut buf)
-			.expect("There should be no error in simple test")
-			.expect("There should be at least one request in simple test");
-		let request2 = codec.decode(&mut buf)
-			.expect("There should be no error in simple test")
-			.expect("There should be at least one request in simple test");
-
-		assert_eq!(request, "{ test: 1 }");
-		assert_eq!(request2, "{ test: 2 }");
-	}
 }
