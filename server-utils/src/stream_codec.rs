@@ -1,8 +1,39 @@
-use std::io;
-use server_utils::tokio_io::codec::{Decoder, Encoder};
+use std::{io, str};
+use tokio_io::codec::{Decoder, Encoder};
 use bytes::BytesMut;
 
-pub struct StreamCodec;
+/// Separator for enveloping messages in streaming codecs
+pub enum Separator {
+	/// No envelope is expected between messages. Decoder will try to figure out
+	/// message boundaries by accumulating incoming bytes until valid JSON is formed.
+	/// Encoder will send messages without any boundaries between requests.
+	Empty,
+	/// Byte is used as an sentitel between messages
+	Byte(u8),
+}
+
+impl Default for Separator {
+	fn default() -> Self {
+		Separator::Byte(b'\n')
+	}
+}
+
+/// Stream codec for streaming protocols (ipc, tcp)
+#[derive(Default)]
+pub struct StreamCodec {
+	incoming_separator: Separator,
+	outgoing_separator: Separator,
+}
+
+impl StreamCodec {
+	/// Default codec with streaming input data. Input can be both enveloped and not.
+	pub fn stream_incoming() -> Self {
+		StreamCodec {
+			incoming_separator: Separator::Empty,
+			outgoing_separator: Default::default(),
+		}
+	}
+}
 
 fn is_whitespace(byte: u8) -> bool {
 	match byte {
@@ -16,44 +47,57 @@ impl Decoder for StreamCodec {
 	type Error = io::Error;
 
 	fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
-		let mut depth = 0;
-		let mut in_str = false;
-		let mut is_escaped = false;
-		let mut start_idx = 0;
-		let mut whitespaces = 0;
+		if let Separator::Byte(separator) = self.incoming_separator {
+			if let Some(i) = buf.as_ref().iter().position(|&b| b == separator) {
+				let line = buf.split_to(i);
+				buf.split_to(1);
 
-		for idx in 0..buf.as_ref().len() {
-			let byte = buf.as_ref()[idx];
-
-			if (byte == b'{' || byte == b'[') && !in_str {
-				if depth == 0 {
-					start_idx = idx;
+				match str::from_utf8(&line.as_ref()) {
+					Ok(s) => Ok(Some(s.to_string())),
+					Err(_) => Err(io::Error::new(io::ErrorKind::Other, "invalid UTF-8")),
 				}
-				depth += 1;
-			}
-			else if (byte == b'}' || byte == b']') && !in_str {
-				depth -= 1;
-			}
-			else if byte == b'"' && !is_escaped {
-				in_str = !in_str;
-			}
-			else if byte == b'\\' && is_escaped && !in_str {
-				is_escaped = !is_escaped;
-			}
-			else if is_whitespace(byte) {
-				whitespaces += 1;
-			}
+			} else {
+				Ok(None)
+			}			
+		} else {
+			let mut depth = 0;
+			let mut in_str = false;
+			let mut is_escaped = false;
+			let mut start_idx = 0;
+			let mut whitespaces = 0;
 
-			if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
-				let bts = buf.split_to(idx + 1);
-				match String::from_utf8(bts.as_ref().to_vec()) {
-					Ok(val) => { return Ok(Some(val)) },
-					Err(_) => { return Ok(None); } // skip non-utf requests (TODO: log error?)
-				};
+			for idx in 0..buf.as_ref().len() {
+				let byte = buf.as_ref()[idx];
+
+				if (byte == b'{' || byte == b'[') && !in_str {
+					if depth == 0 {
+						start_idx = idx;
+					}
+					depth += 1;
+				}
+				else if (byte == b'}' || byte == b']') && !in_str {
+					depth -= 1;
+				}
+				else if byte == b'"' && !is_escaped {
+					in_str = !in_str;
+				}
+				else if byte == b'\\' && is_escaped && !in_str {
+					is_escaped = !is_escaped;
+				}
+				else if is_whitespace(byte) {
+					whitespaces += 1;
+				}
+
+				if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
+					let bts = buf.split_to(idx + 1);
+					match String::from_utf8(bts.as_ref().to_vec()) {
+						Ok(val) => { return Ok(Some(val)) },
+						Err(_) => { return Ok(None); } // skip non-utf requests (TODO: log error?)
+					};
+				}
 			}
+			Ok(None)
 		}
-
-		Ok(None)
 	}
 }
 
@@ -63,7 +107,9 @@ impl Encoder for StreamCodec {
 	
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
 		let mut payload = msg.into_bytes();
-		payload.push(b'\n');
+		if let Separator::Byte(separator) = self.outgoing_separator {
+			payload.push(separator);
+		}
 		buf.extend_from_slice(&payload);
 		Ok(())
 	}
@@ -73,7 +119,7 @@ impl Encoder for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
-	use server_utils::tokio_io::codec::Decoder;
+	use tokio_io::codec::Decoder;
 	use bytes::{BytesMut, BufMut};
 
 	#[test]
@@ -81,7 +127,7 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }{ test: 2 }{ test: 3 }");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in simple test")
@@ -95,7 +141,7 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }\n\n\n\n{ test: 2 }\n\r{\n test: 3 }  ");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in first whitespace test")
@@ -124,7 +170,8 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }{ test: 2 }{ tes");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
+
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in first fragmented test")
 			.expect("There should be at least one request in first fragmented test");
@@ -161,10 +208,29 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(65536);
 		buf.put_slice(request.as_bytes());
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
+
 		let parsed_request = codec.decode(&mut buf)
 			.expect("There should be no error in huge test")
 			.expect("There should be at least one request huge test");
 		assert_eq!(request, parsed_request);
 	}
+
+	#[test]
+	fn simple_line_codec() {
+		let mut buf = BytesMut::with_capacity(2048);
+		buf.put_slice(b"{ test: 1 }\n{ test: 2 }\n{ test: 3 }");
+
+		let mut codec = StreamCodec::default();
+
+		let request = codec.decode(&mut buf)
+			.expect("There should be no error in simple test")
+			.expect("There should be at least one request in simple test");
+		let request2 = codec.decode(&mut buf)
+			.expect("There should be no error in simple test")
+			.expect("There should be at least one request in simple test");
+
+		assert_eq!(request, "{ test: 1 }");
+		assert_eq!(request2, "{ test: 2 }");
+	}	
 }

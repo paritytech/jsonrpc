@@ -7,11 +7,10 @@ use tokio_service::Service as TokioService;
 use jsonrpc::{MetaIoHandler, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use server_utils::{reactor, tokio_core};
+use server_utils::{reactor, tokio_core, codecs};
 use server_utils::tokio_io::AsyncRead;
 
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
-use line_codec::LineCodec;
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
 use service::Service;
 
@@ -75,7 +74,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 					let meta = meta_extractor.extract(&context);
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
-					let (writer, reader) = socket.framed(LineCodec).split();
+					let (writer, reader) = socket.framed(codecs::StreamCodec::default()).split();
 
 					let responses = reader.and_then(
 						move |req| service.call(req).then(|response| match response {
