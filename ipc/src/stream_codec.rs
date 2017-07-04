@@ -1,6 +1,6 @@
 use std::io;
 use server_utils::tokio_io::codec::{Decoder, Encoder};
-use bytes::{BytesMut, BufMut};
+use bytes::BytesMut;
 
 pub struct StreamCodec;
 
@@ -62,12 +62,9 @@ impl Encoder for StreamCodec {
 	type Error = io::Error;
 	
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
-		let total_length = msg.as_bytes().len() + 1;
-		if buf.remaining_mut() < total_length {
-			buf.reserve(total_length);
-		}
-		buf.put_slice(msg.as_bytes());
-		buf.put(b'\n');
+		let mut payload = msg.into_bytes();
+		payload.push(b'\n');
+		buf.extend_from_slice(&payload);
 		Ok(())
 	}
 }
