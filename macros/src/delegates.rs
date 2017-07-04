@@ -12,7 +12,7 @@ type AsyncData = BoxFuture<Value, Error>;
 
 struct DelegateMethod<T, F> {
 	delegate: Arc<T>,
-	closure: Arc<F>,
+	closure: F,
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
@@ -22,15 +22,14 @@ impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
 	M: Metadata,
 {
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
-		let delegate = self.delegate.clone();
-		let closure = self.closure.clone();
-		futures::lazy(move || closure(&delegate, params)).boxed()
+		let closure = &self.closure;
+		futures::done(closure(&self.delegate, params)).boxed()
 	}
 }
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
-	closure: Arc<F>,
+	closure: F,
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
@@ -40,15 +39,14 @@ impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
 	M: Metadata,
 {
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
-		let delegate = self.delegate.clone();
-		let closure = self.closure.clone();
-		futures::lazy(move || closure(&delegate, params)).boxed()
+		let closure = &self.closure;
+		closure(&self.delegate, params)
 	}
 }
 
 struct DelegateMethodWithMeta<T, F> {
 	delegate: Arc<T>,
-	closure: Arc<F>,
+	closure: F,
 }
 
 impl<T, M, F> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
@@ -57,9 +55,8 @@ impl<T, M, F> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
 	F: Fn(&T, Params, M) -> AsyncData + Send + Sync + 'static,
 {
 	fn call(&self, params: Params, meta: M) -> AsyncData {
-		let delegate = self.delegate.clone();
-		let closure = self.closure.clone();
-		futures::lazy(move || closure(&delegate, params, meta)).boxed()
+		let closure = &self.closure;
+		closure(&self.delegate, params, meta)
 	}
 }
 
@@ -143,10 +140,10 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params) -> Data,
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateMethod {
 				delegate: self.delegate.clone(),
-				closure: Arc::new(method),
+				closure: method,
 			}
 		)));
 	}
@@ -156,10 +153,10 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params) -> AsyncData,
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateAsyncMethod {
 				delegate: self.delegate.clone(),
-				closure: Arc::new(method),
+				closure: method,
 			}
 		)));
 	}
@@ -169,10 +166,10 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params, M) -> AsyncData,
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateMethodWithMeta {
 				delegate: self.delegate.clone(),
-				closure: Arc::new(method),
+				closure: method,
 			}
 		)));
 	}
@@ -182,7 +179,7 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params),
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Notification(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Notification(Arc::new(
 			DelegateNotification {
 				delegate: self.delegate.clone(),
 				closure: notification,

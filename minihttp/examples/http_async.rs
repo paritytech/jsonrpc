@@ -3,13 +3,12 @@ extern crate jsonrpc_minihttp_server;
 
 
 use jsonrpc_core::*;
-use jsonrpc_core::futures::Future;
 use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation};
 
 fn main() {
 	let mut io = IoHandler::default();
 	io.add_async_method("say_hello", |_params| {
-		futures::finished(Value::String("hello".to_owned())).boxed()
+		futures::finished(Value::String("hello".to_owned()))
 	});
 
 	let server = ServerBuilder::new(io)
