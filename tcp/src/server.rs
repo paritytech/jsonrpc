@@ -74,7 +74,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 					let meta = meta_extractor.extract(&context);
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
-					let (writer, reader) = socket.framed(codecs::StreamCodec::line()).split();
+					let (writer, reader) = socket.framed(codecs::StreamCodec::default()).split();
 
 					let responses = reader.and_then(
 						move |req| service.call(req).then(|response| match response {

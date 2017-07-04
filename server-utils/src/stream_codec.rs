@@ -3,51 +3,34 @@ use tokio_io::codec::{Decoder, Encoder};
 use bytes::BytesMut;
 
 /// Separator for enveloping messages in streaming codecs
-pub struct Separator(Option<u8>);
+pub enum Separator {
+	/// No envelope is expected between messages. Decoder will try to figure out
+	/// message boundaries by accumulating incoming bytes until valid JSON is formed.
+	/// Encoder will send messages without any boundaries between requests.
+	Empty,
+	/// Byte is used as an sentitel between messages
+	Byte(u8),
+}
 
 impl Default for Separator {
 	fn default() -> Self {
-		Separator(Some(b'\n'))
-	}
-}
-
-impl Separator {
-	/// New separator with some character set
-	pub fn new(character: u8) -> Self {
-		Separator(Some(character))
-	}
-
-	/// Without separator
-	pub fn empty() -> Self {
-		Separator(None)
-	}
-
-	/// Value of the separator
-	pub fn value(&self) -> Option<u8> {
-		self.0
+		Separator::Byte(b'\n')
 	}
 }
 
 /// Stream codec for streaming protocols (ipc, tcp)
+#[derive(Default)]
 pub struct StreamCodec {
 	incoming_separator: Separator,
 	outgoing_separator: Separator,
 }
 
 impl StreamCodec {
-	/// Default codec with new-line separated messages (\n)
-	pub fn line() -> Self {
-		StreamCodec {
-			incoming_separator: Separator::new(b'\n'),
-			outgoing_separator: Separator::new(b'\n'),
-		}
-	}
-
 	/// Default codec with streaming input data. Input can be both enveloped and not.
 	pub fn stream_incoming() -> Self {
 		StreamCodec {
-			incoming_separator: Separator::empty(),
-			outgoing_separator: Separator::new(b'\n'),
+			incoming_separator: Separator::Empty,
+			outgoing_separator: Default::default(),
 		}
 	}
 }
@@ -64,7 +47,7 @@ impl Decoder for StreamCodec {
 	type Error = io::Error;
 
 	fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
-		if let Some(separator) = self.incoming_separator.value() {
+		if let Separator::Byte(separator) = self.incoming_separator {
 			if let Some(i) = buf.as_ref().iter().position(|&b| b == separator) {
 				let line = buf.split_to(i);
 				buf.split_to(1);
@@ -124,7 +107,7 @@ impl Encoder for StreamCodec {
 	
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
 		let mut payload = msg.into_bytes();
-		if let Some(separator) = self.outgoing_separator.value() {
+		if let Separator::Byte(separator) = self.outgoing_separator {
 			payload.push(separator);
 		}
 		buf.extend_from_slice(&payload);
