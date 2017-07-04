@@ -169,11 +169,13 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 	/// Handle given request asynchronously.
 	pub fn handle_request(&self, request: &str, meta: T) -> BoxFuture<Option<String>, ()> {
+		use self::future::Either::{A, B};
+
 		trace!(target: "rpc", "Request: {}.", request);
 		let request = read_request(request);
 		let result = match request {
-			Err(error) => futures::finished(Some(Response::from(error, self.compatibility.default_version()))).boxed(),
-			Ok(request) => self.handle_rpc_request(request, meta),
+			Err(error) => A(futures::finished(Some(Response::from(error, self.compatibility.default_version())))),
+			Ok(request) => B(self.handle_rpc_request(request, meta)),
 		};
 
 		result.map(|response| {
@@ -184,7 +186,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Handle deserialized RPC request.
-	pub fn handle_rpc_request(&self, request: Request, meta: T) -> FutureResponse {
+	pub fn handle_rpc_request(&self, request: Request, meta: T) -> S::Future {
 		use self::future::Either::{A, B};
 
 		self.middleware.on_request(request, meta, |request, meta| match request {
@@ -338,7 +340,7 @@ fn write_response(response: Response) -> String {
 
 #[cfg(test)]
 mod tests {
-	use futures::{self, Future};
+	use futures;
 	use types::{Value};
 	use super::{IoHandler, Compatibility};
 

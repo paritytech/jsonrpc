@@ -12,6 +12,8 @@ impl Metadata for Meta {}
 #[derive(Default)]
 struct MyMiddleware(AtomicUsize);
 impl Middleware<Meta> for MyMiddleware {
+	type Future = FutureResponse;
+
 	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> FutureResponse where
 		F: FnOnce(Request, Meta) -> X + Send,
 		X: Future<Item=Option<Response>, Error=()> + Send + 'static,
