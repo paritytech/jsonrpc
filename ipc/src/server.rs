@@ -128,7 +128,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					sender,
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = io_stream.framed(codecs::StreamCodec).split();
+				let (writer, reader) = io_stream.framed(codecs::StreamCodec::stream_incoming()).split();
 				let responses = reader.and_then(move |req| {
 					service.call(req).then(move |response| match response {
 						Err(e) => {
@@ -243,7 +243,7 @@ mod tests {
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
 
 		let stream = UnixStream::connect(path, &core.handle()).expect("Should have been connected to the server");
-		let (writer, reader) = stream.framed(codecs::StreamCodec).split();
+		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
 		let reply = writer
 			.send(data.to_owned())
 			.and_then(move |_| {

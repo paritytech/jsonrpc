@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, str};
 use tokio_io::codec::{Decoder, Encoder};
 use bytes::BytesMut;
 
@@ -13,7 +13,7 @@ impl Default for Separator {
 
 impl Separator {
 	/// New separator with some character set
-	pub fn new(character: char) -> Self {
+	pub fn new(character: u8) -> Self {
 		Separator(Some(character))
 	}
 
@@ -32,6 +32,24 @@ impl Separator {
 pub struct StreamCodec {
 	incoming_separator: Separator,
 	outgoing_separator: Separator,
+}
+
+impl StreamCodec {
+	/// Default codec with new-line separated messages (\n)
+	pub fn line() -> Self {
+		StreamCodec {
+			incoming_separator: Separator::new(b'\n'),
+			outgoing_separator: Separator::new(b'\n'),
+		}
+	}
+
+	/// Default codec with streaming input data. Input can be both enveloped and not.
+	pub fn stream_incoming() -> Self {
+		StreamCodec {
+			incoming_separator: Separator::empty(),
+			outgoing_separator: Separator::new(b'\n'),
+		}
+	}
 }
 
 fn is_whitespace(byte: u8) -> bool {
@@ -106,10 +124,10 @@ impl Encoder for StreamCodec {
 	
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
 		let mut payload = msg.into_bytes();
-		buf.extend_from_slice(&payload);
-		if let Some(separator) == self.outgoing_separator.value() {
-			payload.push(b'\n');
+		if let Some(separator) = self.outgoing_separator.value() {
+			payload.push(separator);
 		}
+		buf.extend_from_slice(&payload);
 		Ok(())
 	}
 }
@@ -126,7 +144,7 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }{ test: 2 }{ test: 3 }");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in simple test")
@@ -140,7 +158,7 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }\n\n\n\n{ test: 2 }\n\r{\n test: 3 }  ");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in first whitespace test")
@@ -169,7 +187,8 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }{ test: 2 }{ tes");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
+
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in first fragmented test")
 			.expect("There should be at least one request in first fragmented test");
@@ -206,7 +225,8 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(65536);
 		buf.put_slice(request.as_bytes());
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::stream_incoming();
+
 		let parsed_request = codec.decode(&mut buf)
 			.expect("There should be no error in huge test")
 			.expect("There should be at least one request huge test");
@@ -218,7 +238,7 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }\n{ test: 2 }\n{ test: 3 }");
 
-		let mut codec = StreamCodec;
+		let mut codec = StreamCodec::line();
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in simple test")
