@@ -1,6 +1,6 @@
 use std::{io, str};
 use server_utils::tokio_io::codec::{Decoder, Encoder};
-use bytes::{BytesMut, BufMut};
+use bytes::BytesMut;
 
 pub struct LineCodec;
 
@@ -28,8 +28,9 @@ impl Encoder for LineCodec {
 	type Error = io::Error;
 
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
-		buf.put_slice(msg.as_bytes());
-		buf.put(b'\n');
+		let mut payload = msg.into_bytes();
+		payload.push(b'\n');
+		buf.extend_from_slice(&payload);
 		Ok(())
 	}
 }
