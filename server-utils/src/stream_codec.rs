@@ -221,7 +221,7 @@ mod tests {
 		let mut buf = BytesMut::with_capacity(2048);
 		buf.put_slice(b"{ test: 1 }\n{ test: 2 }\n{ test: 3 }");
 
-		let mut codec = StreamCodec::line();
+		let mut codec = StreamCodec::default();
 
 		let request = codec.decode(&mut buf)
 			.expect("There should be no error in simple test")
