@@ -10,7 +10,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_macros/index.html"
 
 [dependencies]
-serde = "0.9"
+serde = "1.0"
 jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-pubsub = { version = "7.0", path = "../pubsub" }
 

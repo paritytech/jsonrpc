@@ -64,9 +64,9 @@ impl Output {
 	}
 }
 
-impl Deserialize for Output {
+impl<'a> Deserialize<'a> for Output {
 	fn deserialize<D>(deserializer: D) -> Result<Output, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Output::Failure)
 			.or_else(|_| from_value(v).map(Output::Success))
@@ -93,9 +93,9 @@ pub enum Response {
 	Batch(Vec<Output>)
 }
 
-impl Deserialize for Response {
+impl<'a> Deserialize<'a> for Response {
 	fn deserialize<D>(deserializer: D) -> Result<Response, D::Error>
-	where D: Deserializer {
+	where D: Deserializer<'a> {
 		let v: Value = try!(Deserialize::deserialize(deserializer));
 		from_value(v.clone()).map(Response::Batch)
 			.or_else(|_| from_value(v).map(Response::Single))
