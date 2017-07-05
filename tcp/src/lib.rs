@@ -35,7 +35,6 @@ extern crate bytes;
 #[cfg(test)] extern crate env_logger;
 
 mod dispatch;
-mod line_codec;
 mod meta;
 mod server;
 mod service;

@@ -140,7 +140,7 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params) -> Data,
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateMethod {
 				delegate: self.delegate.clone(),
 				closure: method,
@@ -153,7 +153,7 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params) -> AsyncData,
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateAsyncMethod {
 				delegate: self.delegate.clone(),
 				closure: method,
@@ -166,7 +166,7 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params, M) -> AsyncData,
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateMethodWithMeta {
 				delegate: self.delegate.clone(),
 				closure: method,
@@ -179,7 +179,7 @@ impl<T, M> IoDelegate<T, M> where
 		F: Fn(&T, Params),
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Notification(Box::new(
+		self.methods.insert(name.into(), RemoteProcedure::Notification(Arc::new(
 			DelegateNotification {
 				delegate: self.delegate.clone(),
 				closure: notification,

@@ -9,7 +9,7 @@ use jsonrpc::futures::BoxFuture;
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
-use server_utils::{reactor, session};
+use server_utils::{reactor, session, codecs};
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 
@@ -93,7 +93,6 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 		remote.remote().spawn(move |handle| {
 			use parity_tokio_ipc::Endpoint;
-			use stream_codec::StreamCodec;
 
 			if cfg!(unix) {
 				// warn about existing file and remove it
@@ -129,7 +128,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					sender,
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = io_stream.framed(StreamCodec).split();
+				let (writer, reader) = io_stream.framed(codecs::StreamCodec::stream_incoming()).split();
 				let responses = reader.and_then(move |req| {
 					service.call(req).then(move |response| match response {
 						Err(e) => {
@@ -223,7 +222,7 @@ mod tests {
 	use self::tokio_uds::UnixStream;
 	use server_utils::tokio_core::reactor::Core;
 	use server_utils::tokio_io::AsyncRead;
-	use stream_codec::StreamCodec;
+	use server_utils::codecs;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -244,7 +243,7 @@ mod tests {
 		let mut core = Core::new().expect("Tokio Core should be created with no errors");
 
 		let stream = UnixStream::connect(path, &core.handle()).expect("Should have been connected to the server");
-		let (writer, reader) = stream.framed(StreamCodec).split();
+		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
 		let reply = writer
 			.send(data.to_owned())
 			.and_then(move |_| {

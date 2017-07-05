@@ -2,7 +2,6 @@ extern crate jsonrpc_core;
 extern crate jsonrpc_minihttp_server;
 
 use jsonrpc_core::*;
-use jsonrpc_core::futures::Future;
 use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation, Req};
 
 #[derive(Clone, Default)]
@@ -12,7 +11,7 @@ impl Metadata for Meta {}
 fn main() {
 	let mut io = MetaIoHandler::default();
 	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
-		futures::finished(Value::String(format!("hello: {}", meta.0))).boxed()
+		futures::finished(Value::String(format!("hello: {}", meta.0)))
 	});
 
 	let server = ServerBuilder::new(io)

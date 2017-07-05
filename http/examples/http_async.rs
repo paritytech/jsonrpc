@@ -3,13 +3,12 @@ extern crate jsonrpc_http_server;
 
 
 use jsonrpc_core::*;
-use jsonrpc_core::futures::Future;
 use jsonrpc_http_server::{ServerBuilder, DomainsValidation, AccessControlAllowOrigin};
 
 fn main() {
 	let mut io = IoHandler::default();
 	io.add_async_method("say_hello", |_params| {
-		futures::finished(Value::String("hello".to_owned())).boxed()
+		futures::finished(Value::String("hello".to_owned()))
 	});
 
 	let server = ServerBuilder::new(io)
