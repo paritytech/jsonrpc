@@ -46,6 +46,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	meta_extractor: Arc<MetaExtractor<M>>,
 	session_stats: Option<Arc<session::SessionStats>>,
 	remote: reactor::UninitializedRemote,
+	incoming_separator: codecs::Separator, 
+	outgoing_separator: codecs::Separator,	
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
@@ -58,6 +60,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(NoopExtractor),
 			session_stats: None,
 			remote: reactor::UninitializedRemote::Unspawned,
+			incoming_separator: codecs::Separator::Empty, 
+			outgoing_separator: codecs::Separator::default(),				
 		}
 	}
 
@@ -81,6 +85,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Sets the incoming and outgoing requests separator
+	pub fn request_separators(mut self, incoming: codecs::Separator, outgoing: codecs::Separator) -> Self {
+		self.incoming_separator = incoming;
+		self.outgoing_separator = outgoing;
+		self
+	}	
+
 	/// Run server (in a separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
@@ -88,6 +99,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor;
 		let session_stats = self.session_stats;
+		let incoming_separator = self.incoming_separator;
+		let outgoing_separator = self.outgoing_separator;
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
 
@@ -128,7 +141,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					sender,
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = io_stream.framed(codecs::StreamCodec::stream_incoming()).split();
+				let (writer, reader) = io_stream.framed(
+					codecs::StreamCodec::new(
+						incoming_separator.clone(),
+						outgoing_separator.clone(),
+					)
+				).split();
 				let responses = reader.and_then(move |req| {
 					service.call(req).then(move |response| match response {
 						Err(e) => {

@@ -3,6 +3,7 @@ use tokio_io::codec::{Decoder, Encoder};
 use bytes::BytesMut;
 
 /// Separator for enveloping messages in streaming codecs
+#[derive(Clone)]
 pub enum Separator {
 	/// No envelope is expected between messages. Decoder will try to figure out
 	/// message boundaries by accumulating incoming bytes until valid JSON is formed.
@@ -28,9 +29,14 @@ pub struct StreamCodec {
 impl StreamCodec {
 	/// Default codec with streaming input data. Input can be both enveloped and not.
 	pub fn stream_incoming() -> Self {
+		StreamCodec::new(Separator::Empty, Default::default())
+	}
+
+	/// New custom stream codec
+	pub fn new(incoming_separator: Separator, outgoing_separator: Separator) -> Self {
 		StreamCodec {
-			incoming_separator: Separator::Empty,
-			outgoing_separator: Default::default(),
+			incoming_separator: incoming_separator,
+			outgoing_separator: outgoing_separator,
 		}
 	}
 }

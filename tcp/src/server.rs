@@ -20,6 +20,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	channels: Arc<SenderChannels>,
+	incoming_separator: codecs::Separator, 
+	outgoing_separator: codecs::Separator,
 }
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
@@ -32,6 +34,8 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(NoopExtractor),
 			channels: Default::default(),
+			incoming_separator: Default::default(),
+			outgoing_separator: Default::default(),
 		}
 	}
 
@@ -47,11 +51,20 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Sets the incoming and outgoing requests separator
+	pub fn request_separators(mut self, incoming: codecs::Separator, outgoing: codecs::Separator) -> Self {
+		self.incoming_separator = incoming;
+		self.outgoing_separator = outgoing;
+		self
+	}
+
 	/// Starts a new server
 	pub fn start(self, addr: &SocketAddr) -> std::io::Result<Server> {
 		let meta_extractor = self.meta_extractor.clone();
 		let rpc_handler = self.handler.clone();
 		let channels = self.channels.clone();
+		let incoming_separator = self.incoming_separator;
+		let outgoing_separator = self.outgoing_separator;
 		let address = addr.to_owned();
 		let (tx, rx) = std::sync::mpsc::channel();
 		let (signal, stop) = oneshot::channel();
@@ -74,7 +87,12 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 					let meta = meta_extractor.extract(&context);
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
-					let (writer, reader) = socket.framed(codecs::StreamCodec::default()).split();
+					let (writer, reader) = socket.framed(
+						codecs::StreamCodec::new(
+							incoming_separator.clone(),
+							outgoing_separator.clone(),
+						)
+					).split();
 
 					let responses = reader.and_then(
 						move |req| service.call(req).then(|response| match response {
