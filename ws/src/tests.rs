@@ -1,3 +1,4 @@
+use std::{time, thread};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::str::Lines;
@@ -206,6 +207,7 @@ fn drop_session_should_cancel() {
     	move |_| {
 			assert_eq!(incomplete.load(Ordering::SeqCst), 0);
 	    	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 2}"#).unwrap();
+			thread::sleep(time::Duration::from_millis(100));
 			out.close(CloseCode::Normal)
 		}
 	}).unwrap();
