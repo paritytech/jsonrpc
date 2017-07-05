@@ -7,7 +7,7 @@ fn main() {
 	let mut io = IoHandler::new();
 
 	io.add_async_method("say_hello", |_: Params| {
-		futures::finished(Value::String("Hello World!".to_owned())).boxed()
+		futures::finished(Value::String("Hello World!".to_owned()))
 	});
 
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
