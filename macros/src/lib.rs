@@ -1,6 +1,6 @@
 //! High level, typed wrapper for `jsonrpc_core`.
 //!
-//! Enables creation of "Service" objects groupping a set of RPC methods together in a typed manner.
+//! Enables creation of "Service" objects grouping a set of RPC methods together in a typed manner.
 //!
 //! Example
 //!
