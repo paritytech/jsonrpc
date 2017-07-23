@@ -233,10 +233,6 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 	}
 
 	fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
-		if !self.active.load(atomic::Ordering::SeqCst) {
-			return Err(ws::Error::new(ws::ErrorKind::Internal, "Attempting to send a message to closed/closing connection."))
-		}
-
 		let req = msg.as_text()?;
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone();
@@ -249,6 +245,9 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let active_lock = self.active.clone();
 		let future = self.handler.handle_request(req, metadata)
 			.map(move |response| {
+				if !active_lock.load(atomic::Ordering::SeqCst) {
+					return;
+				}
 				if let Some(result) = response {
 					let res = out.send(result);
 					match res {
