@@ -21,7 +21,9 @@ pub enum Error {
 	/// Wrapped `std::io::Error`
 	Io(io::Error),
 	/// Other `ws-rs` error
-	WebSocket(ws::Error)
+	WebSocket(ws::Error),
+	/// Attempted an action on closed connection
+	ConnectionClosed,
 }
 
 impl From<ws::Error> for Error {
@@ -40,12 +42,13 @@ impl From<io::Error> for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Io(ref e) => e.fmt(f),
-            Error::WebSocket(ref e) => e.fmt(f),
-        }
-    }
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			Error::Io(ref e) => e.fmt(f),
+			Error::WebSocket(ref e) => e.fmt(f),
+			Error::ConnectionClosed => write!(f, "Attempted an action on closed connection"),
+		}
+	}
 }
 
 impl ::std::error::Error for Error {
@@ -54,10 +57,11 @@ impl ::std::error::Error for Error {
     }
 
     fn cause(&self) -> Option<&::std::error::Error> {
-        Some(match *self {
-            Error::Io(ref e) => e,
-            Error::WebSocket(ref e) => e,
-        })
+        match *self {
+            Error::Io(ref e) => Some(e),
+            Error::WebSocket(ref e) => Some(e),
+			Error::ConnectionClosed => None,
+        }
     }
 }
 

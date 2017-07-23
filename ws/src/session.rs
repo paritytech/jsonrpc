@@ -15,7 +15,7 @@ use server_utils::tokio_core::reactor::Remote;
 use server_utils::session::{SessionId, SessionStats};
 use ws;
 
-use metadata;
+use {metadata, Error};
 
 /// Middleware to intercept server requests.
 /// You can either terminate the request (by returning a response)
@@ -233,6 +233,10 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 	}
 
 	fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
+		if !self.active.load(atomic::Ordering::SeqCst) {
+			return Err(ws::Error::new(ws::ErrorKind::Internal, "Attempting to send a message to closed/closing connection."))
+		}
+
 		let req = msg.as_text()?;
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone();
@@ -242,12 +246,19 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		// it becomes a bottleneck.
 		let poll_liveness = LivenessPoll::create(self.task_slab.clone());
 
+		let active_lock = self.active.clone();
 		let future = self.handler.handle_request(req, metadata)
 			.map(move |response| {
 				if let Some(result) = response {
 					let res = out.send(result);
-					if let Err(e) = res {
-						warn!("Error while sending response: {:?}", e);
+					match res {
+						Err(Error::ConnectionClosed) => {
+							active_lock.store(false, atomic::Ordering::SeqCst);
+						},
+						Err(e) => {
+							warn!("Error while sending response: {:?}", e);
+						},
+						_ => {},
 					}
 				}
 			})
