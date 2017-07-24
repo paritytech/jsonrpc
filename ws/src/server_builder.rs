@@ -52,17 +52,17 @@ impl fmt::Display for Error {
 }
 
 impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        "Starting the JSON-RPC WebSocket server failed"
-    }
+	fn description(&self) -> &str {
+		"Starting the JSON-RPC WebSocket server failed"
+	}
 
-    fn cause(&self) -> Option<&::std::error::Error> {
-        match *self {
-            Error::Io(ref e) => Some(e),
-            Error::WebSocket(ref e) => Some(e),
+	fn cause(&self) -> Option<&::std::error::Error> {
+		match *self {
+			Error::Io(ref e) => Some(e),
+			Error::WebSocket(ref e) => Some(e),
 			Error::ConnectionClosed => None,
-        }
-    }
+		}
+	}
 }
 
 /// Builder for `WebSockets` server
