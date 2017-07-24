@@ -78,25 +78,25 @@ impl From<hyper::error::Error> for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            Error::Io(ref e) => e.fmt(f),
-            Error::Other(ref e) => e.fmt(f),
-        }
-    }
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			Error::Io(ref e) => e.fmt(f),
+			Error::Other(ref e) => e.fmt(f),
+		}
+	}
 }
 
 impl ::std::error::Error for Error {
-    fn description(&self) -> &str {
-        "Starting the JSON-RPC HTTP server failed"
-    }
+	fn description(&self) -> &str {
+		"Starting the JSON-RPC HTTP server failed"
+	}
 
-    fn cause(&self) -> Option<&::std::error::Error> {
-        Some(match *self {
-            Error::Io(ref e) => e,
-            Error::Other(ref e) => e,
-        })
-    }
+	fn cause(&self) -> Option<&::std::error::Error> {
+		Some(match *self {
+			Error::Io(ref e) => e,
+			Error::Other(ref e) => e,
+		})
+	}
 }
 
 /// Action undertaken by a middleware.
@@ -432,13 +432,13 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 
 #[cfg(unix)]
 fn configure_port(reuse: bool, tcp: &net2::TcpBuilder) -> io::Result<()> {
-    use net2::unix::*;
+	use net2::unix::*;
 
-    if reuse {
-        try!(tcp.reuse_port(true));
-    }
+	if reuse {
+		try!(tcp.reuse_port(true));
+	}
 
-    Ok(())
+	Ok(())
 }
 
 #[cfg(not(unix))]
