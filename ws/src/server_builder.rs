@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, fmt};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -20,7 +20,9 @@ pub enum Error {
 	/// Wrapped `std::io::Error`
 	Io(io::Error),
 	/// Other `ws-rs` error
-	WebSocket(ws::Error)
+	WebSocket(ws::Error),
+	/// Attempted an action on closed connection
+	ConnectionClosed,
 }
 
 impl From<ws::Error> for Error {
@@ -36,6 +38,30 @@ impl From<io::Error> for Error {
 	fn from(err: io::Error) -> Self {
 		Error::Io(err)
 	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			Error::Io(ref e) => e.fmt(f),
+			Error::WebSocket(ref e) => e.fmt(f),
+			Error::ConnectionClosed => write!(f, "Attempted an action on closed connection"),
+		}
+	}
+}
+
+impl ::std::error::Error for Error {
+    fn description(&self) -> &str {
+        "Starting the JSON-RPC WebSocket server failed"
+    }
+
+    fn cause(&self) -> Option<&::std::error::Error> {
+        match *self {
+            Error::Io(ref e) => Some(e),
+            Error::WebSocket(ref e) => Some(e),
+			Error::ConnectionClosed => None,
+        }
+    }
 }
 
 /// Builder for `WebSockets` server
