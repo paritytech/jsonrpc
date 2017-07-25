@@ -310,8 +310,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			handler: self.handler,
 			extractor: self.meta_extractor,
 		};
-		let reuse_port = self.threads > 1;
 		let keep_alive = self.keep_alive;
+		let reuse_port = self.threads > 1;
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = oneshot::channel();
@@ -324,8 +324,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware.clone(),
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
-			reuse_port,
 			keep_alive,
+			reuse_port,
 		);
 		let handles = (0..self.threads - 1).map(|i| {
 			let (local_addr_tx, local_addr_rx) = mpsc::channel();
@@ -339,8 +339,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				request_middleware.clone(),
 				allowed_hosts.clone(),
 				jsonrpc_handler.clone(),
-				reuse_port,
 				keep_alive,
+				reuse_port,
 			);
 			Ok((eloop, close, local_addr_rx))
 		}).collect::<io::Result<Vec<_>>>()?;
@@ -377,8 +377,8 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	request_middleware: Arc<RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
-	reuse_port: bool,
 	keep_alive: bool,
+	reuse_port: bool,
 ) {
 	let (shutdown_signal, local_addr_tx) = signals;
 	remote.spawn(move |handle| {
