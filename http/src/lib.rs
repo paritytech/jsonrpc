@@ -211,6 +211,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: CorsDomains,
 	allowed_hosts: AllowedHosts,
+	keep_alive: bool,
 	threads: usize,
 }
 
@@ -235,6 +236,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			allowed_hosts: None,
+			keep_alive: true,
 			threads: 1,
 		}
 	}
@@ -243,6 +245,13 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Applies only to 1 of the threads. Other threads will spawn their own Event Loops.
 	pub fn event_loop_remote(mut self, remote: tokio_core::reactor::Remote) -> Self {
 		self.remote = UninitializedRemote::Shared(remote);
+		self
+	}
+
+    /// Sets Enables or disables HTTP keep-alive.
+    /// Default is true.	
+	pub fn keep_alive(mut self, val: bool) -> Self {
+		self.keep_alive  = val;
 		self
 	}
 
@@ -302,6 +311,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			extractor: self.meta_extractor,
 		};
 		let reuse_port = self.threads > 1;
+		let keep_alive = self.keep_alive;
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = oneshot::channel();
@@ -315,6 +325,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
 			reuse_port,
+			keep_alive,
 		);
 		let handles = (0..self.threads - 1).map(|i| {
 			let (local_addr_tx, local_addr_rx) = mpsc::channel();
@@ -329,6 +340,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				allowed_hosts.clone(),
 				jsonrpc_handler.clone(),
 				reuse_port,
+				keep_alive,
 			);
 			Ok((eloop, close, local_addr_rx))
 		}).collect::<io::Result<Vec<_>>>()?;
@@ -366,6 +378,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
 	reuse_port: bool,
+	keep_alive: bool,
 ) {
 	let (shutdown_signal, local_addr_tx) = signals;
 	remote.spawn(move |handle| {
@@ -407,7 +420,11 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		bind_result.and_then(move |(listener, local_addr)| {
 			let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-			let http = server::Http::new();
+			let http = {
+				let mut http = server::Http::new();
+				http.keep_alive(keep_alive);
+				http
+			};
 			listener.incoming()
 				.for_each(move |(socket, addr)| {
 					http.bind_connection(&handle, socket, addr, ServerHandler::new(
