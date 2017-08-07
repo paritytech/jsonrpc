@@ -16,5 +16,3 @@ jsonrpc-core = { version = "7.0", path = "../core" }
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "7.0", path = "../tcp" }
-jsonrpc-ws-server = { version = "7.0", path = "../ws" }
-jsonrpc-ipc-server = { version = "7.0", path = "../ipc" }

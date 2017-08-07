@@ -1,0 +1,14 @@
+[package]
+name = "jsonrpc-pubsub-examples"
+description = "Examples of Publish-Subscribe extension for jsonrpc."
+homepage = "https://github.com/paritytech/jsonrpc"
+repository = "https://github.com/paritytech/jsonrpc"
+version = "7.0.1"
+authors = ["tomusdrw <tomasz@parity.io>"]
+license = "MIT"
+
+[dependencies]
+jsonrpc-core = { version = "7.0", path = "../../core" }
+jsonrpc-pubsub = { version = "7.0", path = "../" }
+jsonrpc-ws-server = { version = "7.0", path = "../../ws" }
+jsonrpc-ipc-server = { version = "7.0", path = "../../ipc" }
