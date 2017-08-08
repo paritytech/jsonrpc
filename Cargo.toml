@@ -18,4 +18,5 @@ jsonrpc-tcp-server = { path = "tcp" }
 jsonrpc-ws-server = { path = "ws" }
 jsonrpc-macros = { path = "macros" }
 jsonrpc-pubsub = { path = "pubsub" }
+jsonrpc-pubsub-examples = { path = "pubsub/more-examples" }
 jsonrpc-server-utils = { path = "server-utils" }
