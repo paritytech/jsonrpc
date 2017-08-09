@@ -17,8 +17,9 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 - [jsonrpc-ipc-server](./ipc)
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
 - [jsonrpc-ws-server](./ws)
-- [jsonrpc-macros](./macros)
+- [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url]
 - [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
+- [jsonrpc-pubsub](./pubsub) [![crates.io][pubsub-image]][pubsub-url]
 
 [core-image]: https://img.shields.io/crates/v/jsonrpc-core.svg
 [core-url]: https://crates.io/crates/jsonrpc-core
@@ -26,13 +27,18 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 [http-server-url]: https://crates.io/crates/jsonrpc-http-server
 [tcp-server-image]: https://img.shields.io/crates/v/jsonrpc-tcp-server.svg
 [tcp-server-url]: https://crates.io/crates/jsonrpc-tcp-server
+[macros-image]: https://img.shields.io/crates/v/jsonrpc-macros.svg
+[macros-url]: https://crates.io/crates/jsonrpc-macros
 [server-utils-image]: https://img.shields.io/crates/v/jsonrpc-server-utils.svg
 [server-utils-url]: https://crates.io/crates/jsonrpc-server-utils
+[pubsub-image]: https://img.shields.io/crates/v/jsonrpc-pubsub.svg
+[pubsub-url]: https://crates.io/crates/jsonrpc-pubsub
 
 ## Examples
 
-- [Core](./core/examples)
-- [Macros](./macros/examples)
+- [core](./core/examples)
+- [macros](./macros/examples)
+- [pubsub](./pubsub/examples)
 
 ### Basic Usage (with HTTP transport)
 

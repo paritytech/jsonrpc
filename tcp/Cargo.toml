@@ -20,3 +20,6 @@ bytes = "0.4"
 [dev-dependencies]
 lazy_static = "0.2"
 env_logger = "0.4"
+
+[badges]
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

@@ -1,22 +1,12 @@
-[package]
-version = "7.0.2"
-description = "JSON-RPC 2.0 implementation"
-name = "jsonrpc"
-license = "MIT"
-
-[lib]
-path = "lib.rs"
-
 [workspace]
-
-[dependencies]
-jsonrpc-core = { path = "core" }
-jsonrpc-http-server = { path = "http" }
-jsonrpc-minihttp-server = { path = "minihttp" }
-jsonrpc-ipc-server = { path = "ipc" }
-jsonrpc-tcp-server = { path = "tcp" }
-jsonrpc-ws-server = { path = "ws" }
-jsonrpc-macros = { path = "macros" }
-jsonrpc-pubsub = { path = "pubsub" }
-jsonrpc-pubsub-examples = { path = "pubsub/more-examples" }
-jsonrpc-server-utils = { path = "server-utils" }
+members = [
+	"core",
+	"http",
+	"ipc",
+	"macros",
+	"minihttp",
+	"pubsub",
+	"server-utils",
+	"tcp",
+	"ws"
+]

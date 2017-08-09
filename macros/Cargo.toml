@@ -16,3 +16,6 @@ jsonrpc-pubsub = { version = "7.0", path = "../pubsub" }
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "7.0", path = "../tcp" }
+
+[badges]
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
