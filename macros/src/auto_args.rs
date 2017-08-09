@@ -429,7 +429,7 @@ fn params_len(params: &Params) -> Result<usize, Error> {
 fn require_len(params: &Params, required: usize) -> Result<usize, Error> {
 	let len = params_len(params)?;
 	if len < required {
-		return Err(invalid_params("`params` should have at least {} arguments", required));
+		return Err(invalid_params(&format!("`params` should have at least {} argument(s)", required), ""));
 	}
 	Ok(len)
 }

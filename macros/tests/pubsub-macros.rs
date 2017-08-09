@@ -1,3 +1,4 @@
+extern crate serde_json;
 extern crate jsonrpc_core;
 extern crate jsonrpc_pubsub;
 #[macro_use]
@@ -60,5 +61,18 @@ fn test_invalid_trailing_pubsub_params() {
 	// when
 	let meta = Metadata;
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_subscribe","params":[]}"#;
-	let _res = io.handle_request_sync(req, meta);
+	let res = io.handle_request_sync(req, meta);
+	let expected = r#"{
+		"jsonrpc": "2.0",
+		"error": {
+			"code": -32602,
+			"message": "Couldn't parse parameters: `params` should have at least 1 argument(s)",
+			"data": "\"\""
+		},
+		"id": 1
+	}"#;
+
+	let expected: jsonrpc_core::Response = serde_json::from_str(expected).unwrap();
+	let result: jsonrpc_core::Response = serde_json::from_str(&res.unwrap()).unwrap();
+	assert_eq!(expected, result);
 }
