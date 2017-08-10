@@ -44,7 +44,6 @@ pub enum Call {
 	Notification(Notification),
 	/// Invalid call
 	Invalid(Id),
-
 }
 
 impl From<MethodCall> for Call {

@@ -426,6 +426,14 @@ fn params_len(params: &Params) -> Result<usize, Error> {
 	}
 }
 
+fn require_len(params: &Params, required: usize) -> Result<usize, Error> {
+	let len = params_len(params)?;
+	if len < required {
+		return Err(invalid_params(&format!("`params` should have at least {} argument(s)", required), ""));
+	}
+	Ok(len)
+}
+
 fn parse_trailing_param<T: DeserializeOwned>(params: Params) -> Result<(Option<T>, ), Error> {
 	let len = try!(params_len(&params));
 	let id = match len {
@@ -501,7 +509,7 @@ macro_rules! wrap_with_trailing {
 			TRAILING: DeserializeOwned,
 		> Wrap<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Result<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
-				let len = try!(params_len(&params));
+				let len = require_len(&params, $num)?;
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
@@ -524,7 +532,7 @@ macro_rules! wrap_with_trailing {
 			TRAILING: DeserializeOwned,
 		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
-				let len = match params_len(&params) {
+				let len = match require_len(&params, $num) {
 					Ok(len) => len,
 					Err(e) => return futures::failed(e).boxed(),
 				};
@@ -553,7 +561,7 @@ macro_rules! wrap_with_trailing {
 			TRAILING: DeserializeOwned,
 		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
-				let len = match params_len(&params) {
+				let len = match require_len(&params, $num) {
 					Ok(len) => len,
 					Err(e) => return futures::failed(e).boxed(),
 				};
@@ -582,7 +590,7 @@ macro_rules! wrap_with_trailing {
 			TRAILING: DeserializeOwned,
 		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+ Trailing<TRAILING>) {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber) {
-				let len = match params_len(&params) {
+				let len = match require_len(&params, $num) {
 					Ok(len) => len,
 					Err(e) => {
 						let _ = subscriber.reject(e);

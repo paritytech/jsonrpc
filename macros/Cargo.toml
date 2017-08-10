@@ -15,6 +15,7 @@ jsonrpc-core = { version = "7.0", path = "../core" }
 jsonrpc-pubsub = { version = "7.0", path = "../pubsub" }
 
 [dev-dependencies]
+serde_json = "1.0"
 jsonrpc-tcp-server = { version = "7.0", path = "../tcp" }
 
 [badges]
