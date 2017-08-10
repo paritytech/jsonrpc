@@ -9,10 +9,20 @@ authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_core/index.html"
 
+categories = [
+	"asynchronous",
+	"network-programming",
+	"web-programming::http-client",
+	"web-programming::http-server",
+	"web-programming::websocket",
+]
+
 [dependencies]
 log = "0.3"
 futures = "0.1.6"
-# always carefully check serde versions before an update
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
+
+[badges]
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

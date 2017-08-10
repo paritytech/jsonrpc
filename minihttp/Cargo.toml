@@ -22,3 +22,6 @@ tokio-minihttp = { git = "https://github.com/tomusdrw/tokio-minihttp" }
 [dev-dependencies]
 env_logger = "0.4"
 reqwest = "0.6"
+
+[badges]
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

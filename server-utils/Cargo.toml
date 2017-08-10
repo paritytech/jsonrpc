@@ -16,3 +16,6 @@ jsonrpc-core = { version = "7.0", path = "../core" }
 tokio-core = { version = "0.1" }
 tokio-io = { version = "0.1" }
 bytes = "0.4"
+
+[badges]
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
