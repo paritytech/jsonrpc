@@ -322,7 +322,7 @@ impl<B, OUT> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, Error>
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
-			Ok(()) => (self)(base).map(to_value).map_err(|e| e.into()).boxed(),
+			Ok(()) => (self)(base).map(to_value).map_err(Into::into).boxed(),
 			Err(e) => futures::failed(e).boxed(),
 		}
 	}
@@ -333,7 +333,7 @@ impl<B, M, OUT> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, Error>
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
-			Ok(()) => (self)(base, meta).map(to_value).map_err(|e| e.into()).boxed(),
+			Ok(()) => (self)(base, meta).map(to_value).map_err(Into::into).boxed(),
 			Err(e) => futures::failed(e.into()).boxed(),
 		}
 	}
@@ -366,7 +366,7 @@ macro_rules! wrap {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
 				params.parse::<($($x,)+)>().and_then(|($($x,)+)| {
 					(self)(base, $($x,)+)
-				}).map(to_value).map_err(|e| e.into())
+				}).map(to_value).map_err(Into::into)
 			}
 		}
 
