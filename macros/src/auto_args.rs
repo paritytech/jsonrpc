@@ -79,7 +79,7 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, Error>;
+				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, $error: ty>;
 			)*
 		}
 	) => {
@@ -87,7 +87,7 @@ macro_rules! build_rpc_trait {
 		pub trait $name: Sized + Send + Sync + 'static {
 			$(
 				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result<$out, Error> ;
+				fn $m_name ( $($p)* ) -> $result<$out, $error> ;
 			)*
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
@@ -97,7 +97,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out, Error>
+						fn $m_name ( $($p)* ) -> $result <$out, $error>
 					);
 				)*
 				del
@@ -114,7 +114,7 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[ doc=$m_doc:expr ] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, Error>;
+				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty, $error_std: ty>;
 			)*
 
 			$(
@@ -124,7 +124,7 @@ macro_rules! build_rpc_trait {
 					fn $sub_name: ident ( $($sub_p: tt)* );
 					$( #[ doc= $unsub_doc:expr ] )*
 					#[ rpc( $($unsub_t:tt)* ) ]
-					fn $unsub_name: ident ( $($unsub_p: tt)* ) -> $sub_result: tt <$sub_out: ty, Error>;
+					fn $unsub_name: ident ( $($unsub_p: tt)* ) -> $sub_result: tt <$sub_out: ty, $error_unsub: ty>;
 				}
 			)*
 
@@ -139,14 +139,14 @@ macro_rules! build_rpc_trait {
 
 			$(
 				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result <$out, Error>;
+				fn $m_name ( $($p)* ) -> $result <$out, $error_std>;
 			)*
 
 			$(
 				$(#[doc=$sub_doc])*
 				fn $sub_name ( $($sub_p)* );
 				$(#[doc=$unsub_doc])*
-				fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out, Error>;
+				fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out, $error_unsub>;
 			)*
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
@@ -156,7 +156,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out, Error>
+						fn $m_name ( $($p)* ) -> $result <$out, $error_std>
 					);
 				)*
 				$(
@@ -165,7 +165,7 @@ macro_rules! build_rpc_trait {
 						subscribe: ( $($sub_t)* )
 						fn $sub_name ( $($sub_p)* );
 						unsubscribe: ( $($unsub_t)* )
-						fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out, Error>;
+						fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out, $error_unsub>;
 					);
 				)*
 				del
@@ -175,10 +175,10 @@ macro_rules! build_rpc_trait {
 
 	( WRAP $del: expr =>
 		(name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, Error>
+		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, $error: ty>
 	) => {
 		$del.add_method($name, move |base, params| {
-			$crate::Wrap::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, Error>), base, params)
+			$crate::Wrap::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, $error>), base, params)
 		});
 		$(
 			$(
@@ -189,10 +189,10 @@ macro_rules! build_rpc_trait {
 
 	( WRAP $del: expr =>
 		(async, name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, Error>
+		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, $error: ty>
 	) => {
 		$del.add_async_method($name, move |base, params| {
-			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, Error>), base, params)
+			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, $error>), base, params)
 		});
 		$(
 			$(
@@ -203,7 +203,7 @@ macro_rules! build_rpc_trait {
 
 	( WRAP $del: expr =>
 		(meta, name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self, Self::Metadata $(, $param: ty)*) -> $result: tt <$out: ty, Error>
+		fn $method: ident (&self, Self::Metadata $(, $param: ty)*) -> $result: tt <$out: ty, $error: ty>
 	) => {
 		$del.add_method_with_meta($name, move |base, params, meta| {
 			$crate::WrapMeta::wrap_rpc(&(Self::$method as fn(&_, Self::Metadata $(, $param)*) -> $result <$out, Error>), base, params, meta)
@@ -220,7 +220,7 @@ macro_rules! build_rpc_trait {
 		subscribe: (name = $subscribe: expr $(, alias = [ $( $sub_alias: expr, )+ ])*)
 		fn $sub_method: ident (&self, Self::Metadata $(, $sub_p: ty)+);
 		unsubscribe: (name = $unsubscribe: expr $(, alias = [ $( $unsub_alias: expr, )+ ])*)
-		fn $unsub_method: ident (&self $(, $unsub_p: ty)+) -> $result: tt <$out: ty, Error>;
+		fn $unsub_method: ident (&self $(, $unsub_p: ty)+) -> $result: tt <$out: ty, $error_unsub: ty>;
 	) => {
 		$del.add_subscription(
 			$name,
@@ -322,7 +322,7 @@ impl<B, OUT> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, Error>
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
-			Ok(()) => (self)(base).map(to_value).boxed(),
+			Ok(()) => (self)(base).map(to_value).map_err(|e| e.into()).boxed(),
 			Err(e) => futures::failed(e).boxed(),
 		}
 	}
@@ -333,8 +333,8 @@ impl<B, M, OUT> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, Error>
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
-			Ok(()) => (self)(base, meta).map(to_value).boxed(),
-			Err(e) => futures::failed(e).boxed(),
+			Ok(()) => (self)(base, meta).map(to_value).map_err(|e| e.into()).boxed(),
+			Err(e) => futures::failed(e.into()).boxed(),
 		}
 	}
 }
@@ -366,7 +366,7 @@ macro_rules! wrap {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
 				params.parse::<($($x,)+)>().and_then(|($($x,)+)| {
 					(self)(base, $($x,)+)
-				}).map(to_value)
+				}).map(to_value).map_err(|e| e.into())
 			}
 		}
 
