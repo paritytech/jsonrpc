@@ -307,18 +307,19 @@ pub trait WrapSubscribe<B, M> {
 }
 
 // special impl for no parameters.
-impl<B, OUT> Wrap<B> for fn(&B) -> Result<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static
+impl<B, OUT, E> Wrap<B> for fn(&B) -> Result<OUT, E>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, E: Into<Error> + 'static
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
-		expect_no_params(params)
-			.and_then(|()| (self)(base))
-			.map(to_value)
+        match expect_no_params(params) {
+            Ok(()) => (self)(base).map(to_value).map_err(Into::into),
+            Err(e) => Err(e),
+        }
 	}
 }
 
-impl<B, OUT> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static
+impl<B, OUT, E> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, E>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, E: Into<Error> + 'static
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
@@ -328,8 +329,8 @@ impl<B, OUT> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, Error>
 	}
 }
 
-impl<B, M, OUT> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, M: Metadata
+impl<B, M, OUT, E> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, E>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, M: Metadata, E: Into<Error> + 'static
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
@@ -446,37 +447,37 @@ fn parse_trailing_param<T: DeserializeOwned>(params: Params) -> Result<(Option<T
 }
 
 // special impl for no parameters other than block parameter.
-impl<B, OUT, T> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned
+impl<B, OUT, T, E> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, E>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, E: Into<Error> + 'static
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
 		let id = try!(parse_trailing_param(params)).0;
 
-		(self)(base, Trailing(id)).map(to_value)
+		(self)(base, Trailing(id)).map(to_value).map_err(Into::into)
 	}
 }
 
-impl<B, OUT, T> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned
+impl<B, OUT, T, E> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, E>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, E: Into<Error> + 'static
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
 		let id = parse_trailing_param(params);
 
 		match id {
-			Ok((id,)) => (self)(base, Trailing(id)).map(to_value).boxed(),
+			Ok((id,)) => (self)(base, Trailing(id)).map(to_value).map_err(Into::into).boxed(),
 			Err(e) => futures::failed(e).boxed(),
 		}
 	}
 }
 
-impl<B, M, OUT, T> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, Error>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, M: Metadata,
+impl<B, M, OUT, T, E> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, E>
+	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, M: Metadata, E: Into<Error> + 'static
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		let id = parse_trailing_param(params);
 
 		match id {
-			Ok((id,)) => (self)(base, meta, Trailing(id)).map(to_value).boxed(),
+			Ok((id,)) => (self)(base, meta, Trailing(id)).map(to_value).map_err(Into::into).boxed(),
 			Err(e) => futures::failed(e).boxed(),
 		}
 	}
