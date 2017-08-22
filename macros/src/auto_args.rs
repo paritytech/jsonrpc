@@ -362,8 +362,8 @@ macro_rules! wrap {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-		    $($x: DeserializeOwned,)+
-            ERR: Into<Error> + 'static,
+			$($x: DeserializeOwned,)+
+			ERR: Into<Error> + 'static,
 		> Wrap<BASE> for fn(&BASE, $($x,)+) -> Result<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
                 match params.parse::<($($x,)+)>() {
@@ -377,8 +377,8 @@ macro_rules! wrap {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-		    $($x: DeserializeOwned,)+
-            ERR: Into<Error> + 'static
+			$($x: DeserializeOwned,)+
+			ERR: Into<Error> + 'static
 		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
@@ -393,8 +393,8 @@ macro_rules! wrap {
 			BASE: Send + Sync + 'static,
 			META: Metadata,
 			OUT: Serialize + 'static,
-		    $($x: DeserializeOwned,)+
-            ERR: Into<Error> + 'static
+			$($x: DeserializeOwned,)+
+			ERR: Into<Error> + 'static
 		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
