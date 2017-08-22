@@ -362,12 +362,14 @@ macro_rules! wrap {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-			$($x: DeserializeOwned,)+
-		> Wrap<BASE> for fn(&BASE, $($x,)+) -> Result<OUT, Error> {
+		    $($x: DeserializeOwned,)+
+            ERR: Into<Error> + 'static,
+		> Wrap<BASE> for fn(&BASE, $($x,)+) -> Result<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
-				params.parse::<($($x,)+)>().and_then(|($($x,)+)| {
-					(self)(base, $($x,)+)
-				}).map(to_value).map_err(Into::into)
+                match params.parse::<($($x,)+)>() {
+                    Ok(($($x,)+)) => (self)(base, $($x,)+).map(to_value).map_err(Into::into),
+                    Err(e) => Err(e)
+                }
 			}
 		}
 
@@ -375,11 +377,12 @@ macro_rules! wrap {
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
-			$($x: DeserializeOwned,)+
-		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> BoxFuture<OUT, Error> {
+		    $($x: DeserializeOwned,)+
+            ERR: Into<Error> + 'static
+		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => (self)(base, $($x,)+).map(to_value).boxed(),
+					Ok(($($x,)+)) => (self)(base, $($x,)+).map(to_value).map_err(Into::into).boxed(),
 					Err(e) => futures::failed(e).boxed(),
 				}
 			}
@@ -390,11 +393,12 @@ macro_rules! wrap {
 			BASE: Send + Sync + 'static,
 			META: Metadata,
 			OUT: Serialize + 'static,
-			$($x: DeserializeOwned,)+
-		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, Error> {
+		    $($x: DeserializeOwned,)+
+            ERR: Into<Error> + 'static
+		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => (self)(base, meta, $($x,)+).map(to_value).boxed(),
+					Ok(($($x,)+)) => (self)(base, meta, $($x,)+).map(to_value).map_err(Into::into).boxed(),
 					Err(e) => futures::failed(e).boxed(),
 				}
 			}
@@ -508,20 +512,21 @@ macro_rules! wrap_with_trailing {
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
 			TRAILING: DeserializeOwned,
-		> Wrap<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Result<OUT, Error> {
+            ERR: Into<Error> + 'static
+		> Wrap<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Result<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
 				let len = require_len(&params, $num)?;
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ None)),
+						.map(|($($x,)+)| ($($x,)+ None)).map_err(Into::into),
 					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))).map_err(Into::into),
 					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
 				let ($($x,)+ id) = try!(params);
-				(self)(base, $($x,)+ Trailing(id)).map(to_value)
+				(self)(base, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into)
 			}
 		}
 
@@ -531,7 +536,8 @@ macro_rules! wrap_with_trailing {
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
 			TRAILING: DeserializeOwned,
-		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
+            ERR: Into<Error> + 'static
+		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				let len = match require_len(&params, $num) {
 					Ok(len) => len,
@@ -540,14 +546,14 @@ macro_rules! wrap_with_trailing {
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ None)),
+						.map(|($($x,)+)| ($($x,)+ None)).map_err(Into::into),
 					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))).map_err(Into::into),
 					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
 				match params {
-					Ok(($($x,)+ id)) => (self)(base, $($x,)+ Trailing(id)).map(to_value).boxed(),
+					Ok(($($x,)+ id)) => (self)(base, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into).boxed(),
 					Err(e) => futures::failed(e).boxed(),
 				}
 			}
@@ -560,7 +566,8 @@ macro_rules! wrap_with_trailing {
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
 			TRAILING: DeserializeOwned,
-		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, Error> {
+            ERR: Into<Error> + 'static
+		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				let len = match require_len(&params, $num) {
 					Ok(len) => len,
@@ -569,14 +576,14 @@ macro_rules! wrap_with_trailing {
 
 				let params = match len - $num {
 					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ None)),
+						.map(|($($x,)+)| ($($x,)+ None)).map_err(Into::into),
 					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ Some(id))),
+						.map(|($($x,)+ id)| ($($x,)+ Some(id))).map_err(Into::into),
 					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
 				};
 
 				match params {
-					Ok(($($x,)+ id)) => (self)(base, meta, $($x,)+ Trailing(id)).map(to_value).boxed(),
+					Ok(($($x,)+ id)) => (self)(base, meta, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into).boxed(),
 					Err(e) => futures::failed(e).boxed(),
 				}
 			}
