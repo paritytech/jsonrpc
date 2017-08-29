@@ -227,7 +227,7 @@ impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
 #[test]
 fn message() {
 
-	/// MASSIVE SETUP
+	// MASSIVE SETUP
 	::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
@@ -250,7 +250,7 @@ fn message() {
 	let executed_dispatch = RefCell::new(false);
 	let executed_request = RefCell::new(false);
 
-	/// CLIENT RUN
+	// CLIENT RUN
 	let stream = TcpStream::connect(&addr, &core.handle())
 		.and_then(|stream| {
 			future::ok(stream).join(timeout)

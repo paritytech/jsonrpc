@@ -366,7 +366,7 @@ fn forbidden(title: &str, message: &str) -> ws::Response {
 		format!("{}\n{}\n", title, message).as_bytes()
 	);
 	{
-		let mut headers = forbidden.headers_mut();
+		let headers = forbidden.headers_mut();
 		headers.push(("Connection".to_owned(), "close".as_bytes().to_vec()));
 	}
 	forbidden
