@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -19,6 +20,16 @@ pub struct Server {
 	handle: Option<thread::JoinHandle<Result<(), Error>>>,
 	remote: Arc<Mutex<Option<Remote>>>,
 	broadcaster: ws::Sender,
+}
+
+impl fmt::Debug for Server {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("Server")
+			.field("addr", &self.addr)
+			.field("handle", &self.handle)
+			.field("remote", &self.remote)
+			.finish()
+    }
 }
 
 impl Server {

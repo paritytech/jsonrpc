@@ -34,6 +34,7 @@ impl<F> RequestMiddleware for F where
 }
 
 /// Request middleware action
+#[derive(Debug)]
 pub enum MiddlewareAction {
 	/// Proceed with standard JSON-RPC behaviour.
 	Proceed,
@@ -82,6 +83,7 @@ type TaskSlab = Mutex<Slab<Option<oneshot::Sender<()>>>>;
 
 // future for checking session liveness.
 // this returns `NotReady` until the session it corresponds to is dropped.
+#[derive(Debug)]
 struct LivenessPoll {
 	task_slab: Arc<TaskSlab>,
 	slab_handle: usize,

@@ -8,6 +8,7 @@ use tokio_core;
 use core::futures::{self, Future};
 
 /// Possibly uninitialized event loop remote.
+#[derive(Debug)]
 pub enum UninitializedRemote {
 	/// Shared instance of remote.
 	Shared(tokio_core::reactor::Remote),
@@ -35,6 +36,7 @@ impl UninitializedRemote {
 }
 
 /// Initialized Remote
+#[derive(Debug)]
 pub enum Remote {
 	/// Shared instance
 	Shared(tokio_core::reactor::Remote),
@@ -67,6 +69,7 @@ impl Remote {
 }
 
 /// A handle to running event loop. Dropping the handle will cause event loop to finish.
+#[derive(Debug)]
 pub struct RpcEventLoop {
 	remote: tokio_core::reactor::Remote,
 	close: Option<futures::Complete<()>>,

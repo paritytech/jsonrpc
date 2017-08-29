@@ -115,7 +115,7 @@ impl<M, F> MetaExtractor<M> for F where
 }
 
 /// Dummy metadata extractor
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct NoopExtractor;
 impl<M: core::Metadata> MetaExtractor<M> for NoopExtractor {}
 
