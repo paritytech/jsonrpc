@@ -1,5 +1,4 @@
-use core;
-use core::futures::BoxFuture;
+use core::{self, BoxFuture};
 
 use types::{PubSubMetadata, SubscriptionId};
 use subscription::{Subscriber, new_subscription};
@@ -95,8 +94,8 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
 
-	use core;
-	use core::futures::{future, Future};
+	use core::{self, BoxFuture};
+	use core::futures::future;
 	use core::futures::sync::mpsc;
 	use subscription::{Session, Subscriber};
 	use types::{PubSubMetadata, SubscriptionId};
@@ -129,7 +128,7 @@ mod tests {
 				// Should be called because session is dropped.
 				called2.store(true, Ordering::SeqCst);
 				assert_eq!(id, SubscriptionId::Number(5));
-				future::ok(core::Value::Bool(true)).boxed()
+				Box::new(future::ok(core::Value::Bool(true))) as BoxFuture<_, _>
 			}),
 		);
 

@@ -11,11 +11,9 @@ documentation = "https://paritytech.github.io/jsonrpc/json_tcp_server/index.html
 [dependencies]
 log = "0.3"
 parking_lot = "0.4"
-serde_json = "1.0"
 tokio-service = "0.1"
 jsonrpc-core = { version = "7.1", path = "../core" }
 jsonrpc-server-utils = { version = "7.1", path = "../server-utils" }
-bytes = "0.4"
 
 [dev-dependencies]
 lazy_static = "0.2"

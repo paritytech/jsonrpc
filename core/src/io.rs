@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
 use serde_json;
-use futures::{self, future, Future, BoxFuture};
+use futures::{self, future, Future};
 
 use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
+use BoxFuture;
 
 /// A type representing middleware or RPC response before serialization.
 pub type FutureResponse = BoxFuture<Option<Response>, ()>;
@@ -178,11 +179,11 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			Ok(request) => B(self.handle_rpc_request(request, meta)),
 		};
 
-		result.map(|response| {
+		Box::new(result.map(|response| {
 			let res = response.map(write_response);
 			debug!(target: "rpc", "Response: {:?}.", res);
 			res
-		}).boxed()
+		}))
 	}
 
 	/// Handle deserialized RPC request.
@@ -234,9 +235,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				};
 
 				match result {
-					Ok(result) => A(result
+					Ok(result) => A(Box::new(result
 						.then(move |result| futures::finished(Some(Output::from(result, id, jsonrpc))))
-						.boxed()),
+						)),
 					Err(err) => B(futures::finished(Some(Output::from(Err(err), id, jsonrpc)))),
 				}
 			},

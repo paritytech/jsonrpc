@@ -3,8 +3,7 @@ use std::net::SocketAddr;
 
 use tokio_service;
 
-use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use jsonrpc::futures::BoxFuture;
+use jsonrpc::{BoxFuture, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,

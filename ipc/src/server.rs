@@ -4,8 +4,7 @@ use std::sync::Arc;
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use jsonrpc::futures::BoxFuture;
+use jsonrpc::{BoxFuture, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
@@ -118,7 +117,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				Ok(l) => l,
 				Err(e) => {
 					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
-					return future::ok(()).boxed();
+					return Box::new(future::ok(())) as BoxFuture<_, _>;
 				}
 			};
 
@@ -180,10 +179,11 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			});
 
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
-			server.select(stop)
-				.map(|_| ())
-				.map_err(|_| ())
-				.boxed()
+			Box::new(
+				server.select(stop)
+					.map(|_| ())
+					.map_err(|_| ())
+			)
 		});
 
 		match start_receiver.wait().expect("Message should always be sent") {

@@ -2,8 +2,7 @@ extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
 
-use jsonrpc_core::{IoHandler, Error};
-use jsonrpc_core::futures::{self, BoxFuture, Future};
+use jsonrpc_core::{futures, BoxFuture, IoHandler, Error};
 
 build_rpc_trait! {
 	pub trait Rpc {
@@ -33,7 +32,7 @@ impl Rpc for RpcImpl {
 	}
 
 	fn call(&self, _: u64) -> BoxFuture<String, Error> {
-		futures::finished("OK".to_owned()).boxed()
+		Box::new(futures::finished("OK".to_owned()))
 	}
 }
 

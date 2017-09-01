@@ -2,8 +2,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use jsonrpc_core::{Params, Value, Error};
-use jsonrpc_core::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use jsonrpc_core::futures::{self, BoxFuture, Future};
+use jsonrpc_core::{futures, BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 
 use jsonrpc_pubsub::{self, SubscriptionId, Subscriber, PubSubMetadata};
 
@@ -23,7 +22,7 @@ impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
 {
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
 		let closure = &self.closure;
-		futures::done(closure(&self.delegate, params)).boxed()
+		Box::new(futures::done(closure(&self.delegate, params)))
 	}
 }
 

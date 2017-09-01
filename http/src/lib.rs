@@ -38,8 +38,8 @@ use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
 
 use hyper::server;
-use jsonrpc::MetaIoHandler;
-use jsonrpc::futures::{self, Future, IntoFuture, BoxFuture, Stream};
+use jsonrpc::{BoxFuture, MetaIoHandler};
+use jsonrpc::futures::{self, Future, IntoFuture, Stream};
 use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
 
@@ -132,7 +132,7 @@ impl<T> From<Option<T>> for RequestMiddlewareAction where
 			},
 			Some(handler) => RequestMiddlewareAction::Respond {
 				should_validate_hosts: true,
-				handler: handler.into_future().boxed(),
+				handler: Box::new(handler.into_future()),
 			},
 		}
 	}

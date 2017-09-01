@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use types::{Params, Value, Error};
-use futures::{BoxFuture, Future};
+use futures::Future;
+use BoxFuture;
 
 /// Metadata trait
 pub trait Metadata: Default + Clone + Send + 'static {}
@@ -60,7 +61,7 @@ impl<F: Send + Sync + 'static, X: Send + 'static> RpcMethodSimple for F where
 	X: Future<Item=Value, Error=Error>,
 {
 	fn call(&self, params: Params) -> BoxFuture<Value, Error> {
-		self(params).boxed()
+		Box::new(self(params))
 	}
 }
 
@@ -78,7 +79,7 @@ impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethod<T> for F where
 	X: Future<Item=Value, Error=Error>,
 {
 	fn call(&self, params: Params, meta: T) -> BoxFuture<Value, Error> {
-		self(params, meta).boxed()
+		Box::new(self(params, meta))
 	}
 }
 

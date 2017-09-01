@@ -25,9 +25,7 @@
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate parking_lot;
-extern crate serde_json;
 extern crate tokio_service;
-extern crate bytes;
 
 #[macro_use] extern crate log;
 

@@ -8,8 +8,8 @@ use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
-use jsonrpc_core::{Metadata, Error, ErrorCode};
-use jsonrpc_core::futures::{BoxFuture, Future, future};
+use jsonrpc_core::{BoxFuture, Metadata, Error, ErrorCode};
+use jsonrpc_core::futures::{future, Future};
 use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;
@@ -76,15 +76,15 @@ impl Rpc for RpcImpl {
 
 	fn unsubscribe(&self, id: SubscriptionId) -> BoxFuture<bool, Error> {
 		let removed = self.active.write().unwrap().remove(&id);
-		if removed.is_some() {
-			future::ok(true).boxed()
+		Box::new(if removed.is_some() {
+			future::ok(true)
 		} else {
 			future::err(Error {
 				code: ErrorCode::InvalidParams,
 				message: "Invalid subscription.".into(),
 				data: None,
-			}).boxed()
-		}
+			})
+		})
 	}
 }
 

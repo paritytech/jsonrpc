@@ -2,7 +2,8 @@
 
 use calls::Metadata;
 use types::{Request, Response};
-use futures::{Future, BoxFuture};
+use futures::Future;
+use BoxFuture;
 
 /// RPC middleware
 pub trait Middleware<M: Metadata>: Send + Sync + 'static {
@@ -27,7 +28,7 @@ impl<M: Metadata> Middleware<M> for Noop {
 		F: FnOnce(Request, M) -> X + Send,
 		X: Future<Item=Option<Response>, Error=()> + Send + 'static,
 	{
-		process(request, meta).boxed()
+		Box::new(process(request, meta))
 	}
 }
 

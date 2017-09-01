@@ -5,9 +5,9 @@ extern crate jsonrpc_pubsub;
 extern crate jsonrpc_macros;
 
 use std::sync::Arc;
-use jsonrpc_core::futures::{future, BoxFuture, Future};
+use jsonrpc_core::futures::future;
 use jsonrpc_core::futures::sync::mpsc;
-use jsonrpc_core::Error;
+use jsonrpc_core::{BoxFuture, Error};
 use jsonrpc_pubsub::{PubSubHandler, SubscriptionId, Session, PubSubMetadata};
 use jsonrpc_macros::{pubsub, Trailing};
 
@@ -38,7 +38,7 @@ impl Rpc for RpcImpl {
 	}
 
 	fn unsubscribe(&self, _id: SubscriptionId) -> BoxFuture<bool, Error> {
-		future::ok(true).boxed()
+		Box::new(future::ok(true))
 	}
 }
 

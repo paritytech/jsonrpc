@@ -4,8 +4,8 @@
 
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
-use jsonrpc_core::{Error, Params, Value, Metadata};
-use jsonrpc_core::futures::{self, BoxFuture, Future};
+use jsonrpc_core::{BoxFuture, Error, Params, Value, Metadata};
+use jsonrpc_core::futures::{self, Future};
 use jsonrpc_pubsub::{PubSubMetadata, Subscriber};
 use pubsub;
 use serde::Serialize;
@@ -235,7 +235,7 @@ macro_rules! build_rpc_trait {
 			}),
 			($unsubscribe, move |base, id| {
 				use $crate::jsonrpc_core::futures::Future;
-				Self::$unsub_method(base, id).map($crate::to_value).boxed()
+				Box::new(Self::$unsub_method(base, id).map($crate::to_value))
 			}),
 		);
 
@@ -323,8 +323,8 @@ impl<B, OUT, E> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, E>
 {
 	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
-			Ok(()) => (self)(base).map(to_value).map_err(Into::into).boxed(),
-			Err(e) => futures::failed(e).boxed(),
+			Ok(()) => Box::new((self)(base).map(to_value).map_err(Into::into)),
+			Err(e) => Box::new(futures::failed(e)),
 		}
 	}
 }
@@ -334,8 +334,8 @@ impl<B, M, OUT, E> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, E>
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		match expect_no_params(params) {
-			Ok(()) => (self)(base, meta).map(to_value).map_err(Into::into).boxed(),
-			Err(e) => futures::failed(e.into()).boxed(),
+			Ok(()) => Box::new((self)(base, meta).map(to_value).map_err(Into::into)),
+			Err(e) => Box::new(futures::failed(e.into())),
 		}
 	}
 }
@@ -382,8 +382,8 @@ macro_rules! wrap {
 		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => (self)(base, $($x,)+).map(to_value).map_err(Into::into).boxed(),
-					Err(e) => futures::failed(e).boxed(),
+					Ok(($($x,)+)) => Box::new((self)(base, $($x,)+).map(to_value).map_err(Into::into)),
+					Err(e) => Box::new(futures::failed(e)),
 				}
 			}
 		}
@@ -398,8 +398,8 @@ macro_rules! wrap {
 		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, ERR> {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => (self)(base, meta, $($x,)+).map(to_value).map_err(Into::into).boxed(),
-					Err(e) => futures::failed(e).boxed(),
+					Ok(($($x,)+)) => Box::new((self)(base, meta, $($x,)+).map(to_value).map_err(Into::into)),
+					Err(e) => Box::new(futures::failed(e)),
 				}
 			}
 		}
@@ -468,8 +468,8 @@ impl<B, OUT, T, E> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, E>
 		let id = parse_trailing_param(params);
 
 		match id {
-			Ok((id,)) => (self)(base, Trailing(id)).map(to_value).map_err(Into::into).boxed(),
-			Err(e) => futures::failed(e).boxed(),
+			Ok((id,)) => Box::new((self)(base, Trailing(id)).map(to_value).map_err(Into::into)),
+			Err(e) => Box::new(futures::failed(e)),
 		}
 	}
 }
@@ -481,8 +481,8 @@ impl<B, M, OUT, T, E> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT
 		let id = parse_trailing_param(params);
 
 		match id {
-			Ok((id,)) => (self)(base, meta, Trailing(id)).map(to_value).map_err(Into::into).boxed(),
-			Err(e) => futures::failed(e).boxed(),
+			Ok((id,)) => Box::new((self)(base, meta, Trailing(id)).map(to_value).map_err(Into::into)),
+			Err(e) => Box::new(futures::failed(e)),
 		}
 	}
 }
@@ -541,7 +541,7 @@ macro_rules! wrap_with_trailing {
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
 				let len = match require_len(&params, $num) {
 					Ok(len) => len,
-					Err(e) => return futures::failed(e).boxed(),
+					Err(e) => return Box::new(futures::failed(e)),
 				};
 
 				let params = match len - $num {
@@ -553,8 +553,8 @@ macro_rules! wrap_with_trailing {
 				};
 
 				match params {
-					Ok(($($x,)+ id)) => (self)(base, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into).boxed(),
-					Err(e) => futures::failed(e).boxed(),
+					Ok(($($x,)+ id)) => Box::new((self)(base, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into)),
+					Err(e) => Box::new(futures::failed(e)),
 				}
 			}
 		}
@@ -571,7 +571,7 @@ macro_rules! wrap_with_trailing {
 			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
 				let len = match require_len(&params, $num) {
 					Ok(len) => len,
-					Err(e) => return futures::failed(e).boxed(),
+					Err(e) => return Box::new(futures::failed(e)),
 				};
 
 				let params = match len - $num {
@@ -583,8 +583,8 @@ macro_rules! wrap_with_trailing {
 				};
 
 				match params {
-					Ok(($($x,)+ id)) => (self)(base, meta, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into).boxed(),
-					Err(e) => futures::failed(e).boxed(),
+					Ok(($($x,)+ id)) => Box::new((self)(base, meta, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into)),
+					Err(e) => Box::new(futures::failed(e)),
 				}
 			}
 		}
