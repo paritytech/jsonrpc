@@ -187,7 +187,7 @@ impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
 fn meta_server() -> ServerBuilder<SocketMetadata> {
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
 	io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
-		future::ok(Value::String(format!("hello, {}", meta.addr()))).boxed()
+		Box::new(future::ok(Value::String(format!("hello, {}", meta.addr()))))
 	});
 	ServerBuilder::new(io).session_meta_extractor(PeerMetaExtractor)
 }
@@ -232,7 +232,7 @@ fn message() {
 	let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
 	io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {
-		future::ok(Value::String("hello".to_owned())).boxed()
+		Box::new(future::ok(Value::String("hello".to_owned())))
 	});
 	let extractor = PeerListMetaExtractor::default();
 	let peer_list = extractor.peers.clone();
