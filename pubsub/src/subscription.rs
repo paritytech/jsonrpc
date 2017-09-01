@@ -221,7 +221,7 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 
 				let unsub = self.unsubscribe.clone();
 				let notification = self.notification.clone();
-				rx
+				let subscribe_future = rx
 					.map_err(|_| subscription_rejected())
 					.and_then(move |result| {
 						futures::done(match result {
@@ -233,10 +233,10 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 							},
 							Err(e) => Err(e),
 						})
-					})
-					.boxed()
+					});
+				Box::new(subscribe_future)
 			},
-			None => future::err(subscriptions_unavailable()).boxed(),
+			None => Box::new(future::err(subscriptions_unavailable())),
 		}
 	}
 }
@@ -263,8 +263,8 @@ impl<M, G> core::RpcMethod<M> for Unsubscribe<G> where
 				session.remove_subscription(&self.notification, &id);
 				self.unsubscribe.call(id)
 			},
-			(Some(_), None) => future::err(core::Error::invalid_params("Expected subscription id.")).boxed(),
-			_ => future::err(subscriptions_unavailable()).boxed(),
+			(Some(_), None) => Box::new(future::err(core::Error::invalid_params("Expected subscription id."))),
+			_ => Box::new(future::err(subscriptions_unavailable())),
 		}
 	}
 }
@@ -428,7 +428,7 @@ mod tests {
 		let (subscribe, _) = new_subscription("test".into(), move |params, _meta, _subscriber| {
 			assert_eq!(params, core::Params::None);
 			called2.store(true, Ordering::SeqCst);
-		}, |_id| future::ok(core::Value::Bool(true)).boxed());
+		}, |_id| Box::new(future::ok(core::Value::Bool(true))) as BoxFuture<_, _>);
 		let meta = Metadata;
 
 		// when

@@ -128,7 +128,7 @@ mod tests {
 				// Should be called because session is dropped.
 				called2.store(true, Ordering::SeqCst);
 				assert_eq!(id, SubscriptionId::Number(5));
-				future::ok(core::Value::Bool(true)).boxed()
+				Box::new(future::ok(core::Value::Bool(true))) as BoxFuture<_, _>
 			}),
 		);
 
