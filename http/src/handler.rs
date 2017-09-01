@@ -7,8 +7,8 @@ use hyper::{self, mime, server, Method};
 use hyper::header::{self, Headers};
 use unicase::Ascii;
 
-use jsonrpc::{Metadata, Middleware, NoopMiddleware};
-use jsonrpc::futures::{Future, Poll, Async, BoxFuture, Stream};
+use jsonrpc::{BoxFuture, Metadata, Middleware, NoopMiddleware};
+use jsonrpc::futures::{Future, Poll, Async, Stream};
 use response::Response;
 use server_utils::cors;
 

@@ -38,8 +38,8 @@ use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
 
 use hyper::server;
-use jsonrpc::MetaIoHandler;
-use jsonrpc::futures::{self, Future, IntoFuture, BoxFuture, Stream};
+use jsonrpc::{BoxFuture, MetaIoHandler};
+use jsonrpc::futures::{self, Future, IntoFuture, Stream};
 use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
 

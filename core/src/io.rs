@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 
 use serde_json;
-use futures::{self, future, Future, BoxFuture};
+use futures::{self, future, Future};
 
 use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
+use BoxFuture;
 
 /// A type representing middleware or RPC response before serialization.
 pub type FutureResponse = BoxFuture<Option<Response>, ()>;

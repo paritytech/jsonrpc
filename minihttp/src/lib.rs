@@ -40,8 +40,8 @@ use std::sync::{Arc, mpsc};
 use std::net::SocketAddr;
 use std::thread;
 use parking_lot::RwLock;
-use jsonrpc::futures::{self, future, Future, BoxFuture};
-use jsonrpc::MetaIoHandler;
+use jsonrpc::futures::{self, future, Future};
+use jsonrpc::{BoxFuture, MetaIoHandler};
 use jsonrpc_server_utils::hosts;
 
 pub use jsonrpc_server_utils::cors;

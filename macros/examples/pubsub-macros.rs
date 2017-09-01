@@ -8,8 +8,8 @@ use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
-use jsonrpc_core::{Metadata, Error, ErrorCode};
-use jsonrpc_core::futures::{BoxFuture, Future, future};
+use jsonrpc_core::{BoxFuture, Metadata, Error, ErrorCode};
+use jsonrpc_core::futures::{Future, future};
 use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;

@@ -1,5 +1,4 @@
-use core;
-use core::futures::BoxFuture;
+use core::{self, BoxFuture};
 
 use types::{PubSubMetadata, SubscriptionId};
 use subscription::{Subscriber, new_subscription};

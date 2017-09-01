@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::Mutex;
 
-use core;
-use core::futures::{self, future, Sink as FuturesSink, Future, BoxFuture};
+use core::{self, BoxFuture};
+use core::futures::{self, future, Sink as FuturesSink, Future};
 use core::futures::sync::oneshot;
 
 use handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};

@@ -4,8 +4,7 @@ use std::sync::Arc;
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-use jsonrpc::futures::BoxFuture;
+use jsonrpc::{BoxFuture, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;

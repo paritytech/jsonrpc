@@ -2,7 +2,8 @@
 
 use calls::Metadata;
 use types::{Request, Response};
-use futures::{Future, BoxFuture};
+use futures::Future;
+use BoxFuture;
 
 /// RPC middleware
 pub trait Middleware<M: Metadata>: Send + Sync + 'static {

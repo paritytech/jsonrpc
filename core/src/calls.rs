@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use types::{Params, Value, Error};
-use futures::{BoxFuture, Future};
+use futures::Future;
+use BoxFuture;
 
 /// Metadata trait
 pub trait Metadata: Default + Clone + Send + 'static {}
