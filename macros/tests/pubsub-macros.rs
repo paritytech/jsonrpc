@@ -38,7 +38,7 @@ impl Rpc for RpcImpl {
 	}
 
 	fn unsubscribe(&self, _id: SubscriptionId) -> BoxFuture<bool, Error> {
-		future::ok(true).boxed()
+		Box::new(future::ok(true))
 	}
 }
 

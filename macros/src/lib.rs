@@ -35,7 +35,7 @@
 //! 	}
 //!
 //! 	fn call(&self, _: u64) -> BoxFuture<String, Error> {
-//! 		futures::finished("OK".to_owned()).boxed()
+//! 		Box::new(futures::finished("OK".to_owned()))
 //! 	}
 //! }
 //!

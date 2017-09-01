@@ -23,7 +23,7 @@ impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
 {
 	fn call(&self, params: Params, _meta: M) -> AsyncData {
 		let closure = &self.closure;
-		futures::done(closure(&self.delegate, params)).boxed()
+		Box::new(futures::done(closure(&self.delegate, params)))
 	}
 }
 

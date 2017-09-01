@@ -47,11 +47,11 @@ impl Rpc for RpcImpl {
 	}
 
 	fn call(&self, x: u64) -> BoxFuture<String, Error> {
-		futures::finished(format!("OK: {}", x)).boxed()
+		Box::new(futures::finished(format!("OK: {}", x)))
 	}
 
 	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> BoxFuture<String, Error> {
-		futures::finished(format!("From: {}, got: {:?}", meta.0, map)).boxed()
+		Box::new(futures::finished(format!("From: {}, got: {:?}", meta.0, map)))
 	}
 }
 
