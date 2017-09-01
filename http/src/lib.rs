@@ -132,7 +132,7 @@ impl<T> From<Option<T>> for RequestMiddlewareAction where
 			},
 			Some(handler) => RequestMiddlewareAction::Respond {
 				should_validate_hosts: true,
-				handler: handler.into_future().boxed(),
+				handler: Box::new(handler.into_future()),
 			},
 		}
 	}
