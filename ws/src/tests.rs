@@ -71,7 +71,7 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 	let mut io = core::IoHandler::default();
 	io.add_method("hello", |_params: core::Params| Ok(core::Value::String("world".into())));
 	io.add_async_method("hello_async", |_params: core::Params| {
-		core::futures::finished(core::Value::String("world".into())).boxed()
+		Box::new(core::futures::finished(core::Value::String("world".into())))
 	});
 	io.add_async_method("record_pending", move |_params: core::Params| {
 		counter.fetch_add(1, Ordering::SeqCst);
@@ -83,12 +83,14 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 		});
 
 		let counter = counter.clone();
-		recv.then(move |res| {
-			if res.is_ok() {
-				counter.fetch_sub(1, Ordering::SeqCst);
-			}
-			Ok(core::Value::String("complete".into()))
-		}).boxed()
+		Box::new(
+			recv.then(move |res| {
+				if res.is_ok() {
+					counter.fetch_sub(1, Ordering::SeqCst);
+				}
+				Ok(core::Value::String("complete".into()))
+			})
+		)
 	});
 
 	let server = ServerBuilder::new(io)
