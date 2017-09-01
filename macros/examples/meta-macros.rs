@@ -5,8 +5,7 @@ extern crate jsonrpc_tcp_server;
 
 use std::collections::BTreeMap;
 
-use jsonrpc_core::{BoxFuture, MetaIoHandler, Metadata, Error, Value};
-use jsonrpc_core::futures::{self, Future};
+use jsonrpc_core::{futures, BoxFuture, MetaIoHandler, Metadata, Error, Value};
 
 #[derive(Clone, Default)]
 struct Meta(String);

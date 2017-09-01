@@ -2,8 +2,7 @@ extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
 
-use jsonrpc_core::{BoxFuture, IoHandler, Error};
-use jsonrpc_core::futures::{self, Future};
+use jsonrpc_core::{futures, BoxFuture, IoHandler, Error};
 
 build_rpc_trait! {
 	pub trait Rpc {

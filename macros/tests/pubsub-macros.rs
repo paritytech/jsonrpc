@@ -5,7 +5,7 @@ extern crate jsonrpc_pubsub;
 extern crate jsonrpc_macros;
 
 use std::sync::Arc;
-use jsonrpc_core::futures::{future, Future};
+use jsonrpc_core::futures::future;
 use jsonrpc_core::futures::sync::mpsc;
 use jsonrpc_core::{BoxFuture, Error};
 use jsonrpc_pubsub::{PubSubHandler, SubscriptionId, Session, PubSubMetadata};

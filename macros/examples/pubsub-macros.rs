@@ -9,7 +9,7 @@ use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
 use jsonrpc_core::{BoxFuture, Metadata, Error, ErrorCode};
-use jsonrpc_core::futures::{Future, future};
+use jsonrpc_core::futures::{future, Future};
 use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;

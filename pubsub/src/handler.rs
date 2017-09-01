@@ -94,8 +94,8 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
 
-	use core;
-	use core::futures::{future, Future};
+	use core::{self, BoxFuture};
+	use core::futures::future;
 	use core::futures::sync::mpsc;
 	use subscription::{Session, Subscriber};
 	use types::{PubSubMetadata, SubscriptionId};

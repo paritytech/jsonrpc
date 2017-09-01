@@ -2,8 +2,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use jsonrpc_core::{Params, Value, Error};
-use jsonrpc_core::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use jsonrpc_core::futures::{self, Future};
+use jsonrpc_core::{futures, BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 
 use jsonrpc_pubsub::{self, SubscriptionId, Subscriber, PubSubMetadata};
 

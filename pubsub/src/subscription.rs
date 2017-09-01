@@ -274,7 +274,7 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
 	use core;
-	use core::RpcMethod;
+	use core::{BoxFuture, RpcMethod};
 	use core::futures::{future, Async, Future, Stream};
 	use core::futures::sync::{mpsc, oneshot};
 	use types::{SubscriptionId, PubSubMetadata};
