@@ -22,10 +22,10 @@ impl Middleware<Meta> for MyMiddleware {
 		let request_number = self.0.fetch_add(1, atomic::Ordering::SeqCst);
 		println!("Processing request {}: {:?}, {:?}", request_number, request, meta);
 
-		next(request, meta).map(move |res| {
+		Box::new(next(request, meta).map(move |res| {
 			println!("Processing took: {:?}", start.elapsed());
 			res
-		}).boxed()
+		}))
 	}
 }
 
