@@ -418,7 +418,7 @@ fn should_allow_if_host_is_valid() {
 
 #[test]
 fn should_allow_application_json_utf8() {
-    // given
+	// given
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
