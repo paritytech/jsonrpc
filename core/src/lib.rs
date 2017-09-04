@@ -40,6 +40,6 @@ pub mod types;
 pub type BoxFuture<T, E> = Box<futures::Future<Item = T, Error = E> + Send>;
 
 pub use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
-pub use io::{Compatibility, IoHandler, MetaIoHandler, FutureResponse};
+pub use io::{Compatibility, IoHandler, MetaIoHandler, FutureResponse, FutureResult};
 pub use middleware::{Middleware, Noop as NoopMiddleware};
 pub use types::*;
