@@ -2,7 +2,8 @@ extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
 
-use jsonrpc_core::{futures, BoxFuture, IoHandler, Error};
+use jsonrpc_core::{IoHandler, Error};
+use jsonrpc_core::futures::future::{self, FutureResult};
 
 build_rpc_trait! {
 	pub trait Rpc {
@@ -15,8 +16,8 @@ build_rpc_trait! {
 		fn add(&self, u64, u64) -> Result<u64, Error>;
 
 		/// Performs asynchronous operation
-		#[rpc(async, name = "callAsync")]
-		fn call(&self, u64) -> BoxFuture<String, Error>;
+		#[rpc(name = "callAsync")]
+		fn call(&self, u64) -> FutureResult<String, Error>;
 	}
 }
 
@@ -31,8 +32,8 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-	fn call(&self, _: u64) -> BoxFuture<String, Error> {
-		Box::new(futures::finished("OK".to_owned()))
+	fn call(&self, _: u64) -> FutureResult<String, Error> {
+		future::ok("OK".to_owned())
 	}
 }
 

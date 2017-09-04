@@ -70,10 +70,10 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 
 	let mut io = core::IoHandler::default();
 	io.add_method("hello", |_params: core::Params| Ok(core::Value::String("world".into())));
-	io.add_async_method("hello_async", |_params: core::Params| {
-		Box::new(core::futures::finished(core::Value::String("world".into())))
+	io.add_method("hello_async", |_params: core::Params| {
+		core::futures::finished(core::Value::String("world".into()))
 	});
-	io.add_async_method("record_pending", move |_params: core::Params| {
+	io.add_method("record_pending", move |_params: core::Params| {
 		counter.fetch_add(1, Ordering::SeqCst);
 		let (send, recv) = oneshot::channel();
 		::std::thread::spawn(move || {
@@ -83,14 +83,12 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 		});
 
 		let counter = counter.clone();
-		Box::new(
-			recv.then(move |res| {
-				if res.is_ok() {
-					counter.fetch_sub(1, Ordering::SeqCst);
-				}
-				Ok(core::Value::String("complete".into()))
-			})
-		)
+		recv.then(move |res| {
+			if res.is_ok() {
+				counter.fetch_sub(1, Ordering::SeqCst);
+			}
+			Ok(core::Value::String("complete".into()))
+		})
 	});
 
 	let server = ServerBuilder::new(io)

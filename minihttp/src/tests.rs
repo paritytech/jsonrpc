@@ -25,16 +25,16 @@ fn serve() -> Server {
 	let _ = env_logger::init();
 	let mut io = IoHandler::default();
 	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
-	io.add_async_method("hello_async", |_params: Params| {
-		Box::new(futures::finished(Value::String("world".into())))
+	io.add_method("hello_async", |_params: Params| {
+		futures::finished(Value::String("world".into()))
 	});
-	io.add_async_method("hello_async2", |_params: Params| {
+	io.add_method("hello_async2", |_params: Params| {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
 			thread::sleep(::std::time::Duration::from_millis(10));
 			c.send(Value::String("world".into())).unwrap();
 		});
-		Box::new(p.map_err(|_| Error::invalid_request()))
+		p.map_err(|_| Error::invalid_request())
 	});
 
 	ServerBuilder::new(io)

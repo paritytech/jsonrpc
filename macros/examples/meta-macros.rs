@@ -5,7 +5,8 @@ extern crate jsonrpc_tcp_server;
 
 use std::collections::BTreeMap;
 
-use jsonrpc_core::{futures, BoxFuture, MetaIoHandler, Metadata, Error, Value};
+use jsonrpc_core::{futures, MetaIoHandler, Metadata, Error, Value};
+use jsonrpc_core::futures::future::FutureResult;
 
 #[derive(Clone, Default)]
 struct Meta(String);
@@ -24,12 +25,12 @@ build_rpc_trait! {
 		fn mul(&self, u64, jsonrpc_macros::Trailing<u64>) -> Result<u64, Error>;
 
 		/// Performs asynchronous operation
-		#[rpc(async, name = "callAsync")]
-		fn call(&self, u64) -> BoxFuture<String, Error>;
+		#[rpc(name = "callAsync")]
+		fn call(&self, u64) -> FutureResult<String, Error>;
 
 		/// Performs asynchronous operation with meta
 		#[rpc(meta, name = "callAsyncMeta", alias = [ "callAsyncMetaAlias", ])]
-		fn call_meta(&self, Self::Metadata, BTreeMap<String, Value>) -> BoxFuture<String, Error>;
+		fn call_meta(&self, Self::Metadata, BTreeMap<String, Value>) -> FutureResult<String, Error>;
 	}
 }
 
@@ -45,12 +46,12 @@ impl Rpc for RpcImpl {
 		Ok(a * b.unwrap_or(1))
 	}
 
-	fn call(&self, x: u64) -> BoxFuture<String, Error> {
-		Box::new(futures::finished(format!("OK: {}", x)))
+	fn call(&self, x: u64) -> FutureResult<String, Error> {
+		futures::finished(format!("OK: {}", x))
 	}
 
-	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> BoxFuture<String, Error> {
-		Box::new(futures::finished(format!("From: {}, got: {:?}", meta.0, map)))
+	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> FutureResult<String, Error> {
+		futures::finished(format!("From: {}, got: {:?}", meta.0, map))
 	}
 }
 

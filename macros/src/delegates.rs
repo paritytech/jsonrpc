@@ -2,29 +2,11 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use jsonrpc_core::{Params, Value, Error};
-use jsonrpc_core::{futures, BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use jsonrpc_core::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 
 use jsonrpc_pubsub::{self, SubscriptionId, Subscriber, PubSubMetadata};
 
-type Data = Result<Value, Error>;
 type AsyncData = BoxFuture<Value, Error>;
-
-struct DelegateMethod<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
-	F: Fn(&T, Params) -> Data + 'static,
-	F: Send + Sync + 'static,
-	T: Send + Sync + 'static,
-	M: Metadata,
-{
-	fn call(&self, params: Params, _meta: M) -> AsyncData {
-		let closure = &self.closure;
-		Box::new(futures::done(closure(&self.delegate, params)))
-	}
-}
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
@@ -134,21 +116,8 @@ impl<T, M> IoDelegate<T, M> where
 		self.methods.insert(from.into(), RemoteProcedure::Alias(to.into()));
 	}
 
-	/// Adds sync method to the delegate.
-	pub fn add_method<F>(&mut self, name: &str, method: F) where
-		F: Fn(&T, Params) -> Data,
-		F: Send + Sync + 'static,
-	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
-			DelegateMethod {
-				delegate: self.delegate.clone(),
-				closure: method,
-			}
-		)));
-	}
-
 	/// Adds async method to the delegate.
-	pub fn add_async_method<F>(&mut self, name: &str, method: F) where
+	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: Fn(&T, Params) -> AsyncData,
 		F: Send + Sync + 'static,
 	{

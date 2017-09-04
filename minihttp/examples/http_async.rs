@@ -7,7 +7,7 @@ use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation};
 
 fn main() {
 	let mut io = IoHandler::default();
-	io.add_async_method("say_hello", |_params| {
+	io.add_method("say_hello", |_params| {
 		futures::finished(Value::String("hello".to_owned()))
 	});
 

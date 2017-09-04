@@ -8,7 +8,7 @@ use jsonrpc_http_server::{hyper, ServerBuilder, DomainsValidation, AccessControl
 
 fn main() {
 	let mut io = IoHandler::default();
-	io.add_async_method("say_hello", |_params| {
+	io.add_method("say_hello", |_params| {
 		futures::finished(Value::String("hello".to_owned()))
 	});
 

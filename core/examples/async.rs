@@ -6,7 +6,7 @@ use jsonrpc_core::futures::Future;
 fn main() {
 	let mut io = IoHandler::new();
 
-	io.add_async_method("say_hello", |_: Params| {
+	io.add_method("say_hello", |_: Params| {
 		futures::finished(Value::String("Hello World!".to_owned()))
 	});
 

@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use serde_json;
 use futures::{self, future, Future};
 
-use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
+use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
@@ -109,17 +109,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		);
 	}
 
-	/// Adds new supported synchronous method
-	pub fn add_method<F>(&mut self, name: &str, method: F) where
-		F: RpcMethodSync,
-	{
-		self.add_method_with_meta(name, move |params, _meta| {
-			futures::done(method.call(params))
-		})
-	}
-
 	/// Adds new supported asynchronous method
-	pub fn add_async_method<F>(&mut self, name: &str, method: F) where
+	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: RpcMethodSimple,
 	{
 		self.add_method_with_meta(name, move |params, _meta| {
@@ -179,6 +170,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			Ok(request) => B(self.handle_rpc_request(request, meta)),
 		};
 
+		// TODO [ToDr] Get rid of boxing easily
 		Box::new(result.map(|response| {
 			let res = response.map(write_response);
 			debug!(target: "rpc", "Response: {:?}.", res);
@@ -235,9 +227,10 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				};
 
 				match result {
-					Ok(result) => A(Box::new(result
-						.then(move |result| futures::finished(Some(Output::from(result, id, jsonrpc))))
-						)),
+					// TODO [ToDr] Get rid of boxing easily
+					Ok(result) => A(Box::new(
+						result.then(move |result| futures::finished(Some(Output::from(result, id, jsonrpc))))
+					)),
 					Err(err) => B(futures::finished(Some(Output::from(Err(err), id, jsonrpc)))),
 				}
 			},
@@ -377,7 +370,7 @@ mod tests {
 	fn test_async_io_handler() {
 		let mut io = IoHandler::new();
 
-		io.add_async_method("say_hello", |_| {
+		io.add_method("say_hello", |_| {
 			futures::finished(Value::String("hello".to_string()))
 		});
 
