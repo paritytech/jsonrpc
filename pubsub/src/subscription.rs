@@ -51,8 +51,10 @@ impl Session {
 	}
 
 	/// Adds new active subscription
-	fn add_subscription(&self, name: &str, id: &SubscriptionId, remove: Box<Fn(SubscriptionId) + Send + 'static>) {
-		let ret = self.active_subscriptions.lock().insert((id.clone(), name.into()), remove);
+	fn add_subscription<F>(&self, name: &str, id: &SubscriptionId, remove: F) where
+		F: Fn(SubscriptionId) + Send + 'static,
+	{
+		let ret = self.active_subscriptions.lock().insert((id.clone(), name.into()), Box::new(remove));
 		if let Some(remove) = ret {
 			warn!("SubscriptionId collision. Unsubscribing previous client.");
 			remove(id.clone());
@@ -226,9 +228,9 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 					.and_then(move |result| {
 						futures::done(match result {
 							Ok(id) => {
-								session.add_subscription(&notification, &id, Box::new(move |id| {
+								session.add_subscription(&notification, &id, move |id| {
 									let _ = unsub.call(id).wait();
-								}));
+								});
 								Ok(id.into())
 							},
 							Err(e) => Err(e),
@@ -261,7 +263,7 @@ impl<M, G> core::RpcMethod<M> for Unsubscribe<G> where
 		match (meta.session(), id) {
 			(Some(session), Some(id)) => {
 				session.remove_subscription(&self.notification, &id);
-				self.unsubscribe.call(id)
+				Box::new(self.unsubscribe.call(id))
 			},
 			(Some(_), None) => Box::new(future::err(core::Error::invalid_params("Expected subscription id."))),
 			_ => Box::new(future::err(subscriptions_unavailable())),
@@ -274,8 +276,8 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
 	use core;
-	use core::{BoxFuture, RpcMethod};
-	use core::futures::{future, Async, Future, Stream};
+	use core::RpcMethod;
+	use core::futures::{Async, Future, Stream};
 	use core::futures::sync::{mpsc, oneshot};
 	use types::{SubscriptionId, PubSubMetadata};
 
@@ -293,10 +295,10 @@ mod tests {
 		let called = Arc::new(AtomicBool::new(false));
 		let called2 = called.clone();
 		let session = session().0;
-		session.add_subscription("test", &id, Box::new(move |id| {
+		session.add_subscription("test", &id, move |id| {
 			assert_eq!(id, SubscriptionId::Number(1));
 			called2.store(true, Ordering::SeqCst);
-		}));
+		});
 
 		// when
 		drop(session);
@@ -312,10 +314,10 @@ mod tests {
 		let called = Arc::new(AtomicBool::new(false));
 		let called2 = called.clone();
 		let session = session().0;
-		session.add_subscription("test", &id, Box::new(move |id| {
+		session.add_subscription("test", &id, move |id| {
 			assert_eq!(id, SubscriptionId::Number(1));
 			called2.store(true, Ordering::SeqCst);
-		}));
+		});
 
 		// when
 		session.remove_subscription("test", &id);
@@ -332,13 +334,13 @@ mod tests {
 		let called = Arc::new(AtomicBool::new(false));
 		let called2 = called.clone();
 		let session = session().0;
-		session.add_subscription("test", &id, Box::new(move |id| {
+		session.add_subscription("test", &id, move |id| {
 			assert_eq!(id, SubscriptionId::Number(1));
 			called2.store(true, Ordering::SeqCst);
-		}));
+		});
 
 		// when
-		session.add_subscription("test", &id, Box::new(|_| {}));
+		session.add_subscription("test", &id, |_| {});
 
 		// then
 		assert_eq!(called.load(Ordering::SeqCst), true);
@@ -425,10 +427,14 @@ mod tests {
 		// given
 		let called = Arc::new(AtomicBool::new(false));
 		let called2 = called.clone();
-		let (subscribe, _) = new_subscription("test".into(), move |params, _meta, _subscriber| {
-			assert_eq!(params, core::Params::None);
-			called2.store(true, Ordering::SeqCst);
-		}, |_id| Box::new(future::ok(core::Value::Bool(true))) as BoxFuture<_, _>);
+		let (subscribe, _) = new_subscription(
+			"test".into(),
+			move |params, _meta, _subscriber| {
+				assert_eq!(params, core::Params::None);
+				called2.store(true, Ordering::SeqCst);
+			},
+			|_id| Ok(core::Value::Bool(true)),
+		);
 		let meta = Metadata;
 
 		// when

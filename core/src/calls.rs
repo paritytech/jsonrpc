@@ -9,8 +9,10 @@ impl Metadata for () {}
 
 /// Asynchronous Method
 pub trait RpcMethodSimple: Send + Sync + 'static {
+	/// Output future
+	type Out: Future<Item = Value, Error = Error> + Send;
 	/// Call method
-	fn call(&self, params: Params) -> BoxFuture<Value, Error>;
+	fn call(&self, params: Params) -> Self::Out;
 }
 
 /// Asynchronous Method with Metadata
@@ -47,8 +49,9 @@ impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F where
 	X: Future<Item = Value, Error = Error>,
 	I: IntoFuture<Item = Value, Error = Error, Future = X>,
 {
-	fn call(&self, params: Params) -> BoxFuture<Value, Error> {
-		Box::new(self(params).into_future())
+	type Out = X;
+	fn call(&self, params: Params) -> Self::Out {
+		self(params).into_future()
 	}
 }
 

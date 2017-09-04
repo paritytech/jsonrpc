@@ -248,8 +248,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-    /// Sets Enables or disables HTTP keep-alive.
-    /// Default is true.	
+	/// Sets Enables or disables HTTP keep-alive.
+	/// Default is true.
 	pub fn keep_alive(mut self, val: bool) -> Self {
 		self.keep_alive  = val;
 		self
