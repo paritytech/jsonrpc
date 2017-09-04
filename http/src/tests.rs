@@ -417,6 +417,30 @@ fn should_allow_if_host_is_valid() {
 }
 
 #[test]
+fn should_allow_application_json_utf8() {
+	// given
+	let server = serve_hosts(vec!["parity.io".into()]);
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: parity.io\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json; charset=utf-8\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, method_not_found());
+}
+
+#[test]
 fn should_always_allow_the_bind_address() {
 	// given
 	let server = serve_hosts(vec!["parity.io".into()]);
