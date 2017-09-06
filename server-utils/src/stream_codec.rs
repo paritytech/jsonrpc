@@ -147,15 +147,30 @@ mod tests {
 	#[test]
 	fn escape() {
 		let mut buf = BytesMut::with_capacity(2048);
-		buf.put_slice(br#"{ test: "\"\\" }"#);
+		buf.put_slice(br#"{ test: "\"\\" }{ test: "\ " }{ test: "\}" }[ test: "\]" ]"#);
 
 		let mut codec = StreamCodec::stream_incoming();
 
 		let request = codec.decode(&mut buf)
-			.expect("There should be no error in escape test")
-			.expect("There should be a request in escape test");
+			.expect("There should be no error in first escape test")
+			.expect("There should be a request in first escape test");
 
 		assert_eq!(request, r#"{ test: "\"\\" }"#);
+
+		let request2 = codec.decode(&mut buf)
+			.expect("There should be no error in 2nd escape test")
+			.expect("There should be a request in 2nd escape test");
+		assert_eq!(request2, r#"{ test: "\ " }"#);
+
+		let request3 = codec.decode(&mut buf)
+			.expect("There should be no error in 3rd escape test")
+			.expect("There should be a request in 3rd escape test");
+		assert_eq!(request3, r#"{ test: "\}" }"#);
+
+		let request4 = codec.decode(&mut buf)
+			.expect("There should be no error in 4th escape test")
+			.expect("There should be a request in 4th escape test");
+		assert_eq!(request4, r#"[ test: "\]" ]"#);
 	}
 
 	#[test]
