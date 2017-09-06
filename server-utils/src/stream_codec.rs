@@ -87,11 +87,13 @@ impl Decoder for StreamCodec {
 				else if byte == b'"' && !is_escaped {
 					in_str = !in_str;
 				}
-				else if byte == b'\\' && is_escaped && !in_str {
-					is_escaped = !is_escaped;
-				}
 				else if is_whitespace(byte) {
 					whitespaces += 1;
+				}
+				if byte == b'\\' && !is_escaped && in_str {
+					is_escaped = true;
+				} else {
+					is_escaped = false;
 				}
 
 				if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
@@ -140,6 +142,20 @@ mod tests {
 			.expect("There should be at least one request in simple test");
 
 		assert_eq!(request, "{ test: 1 }");
+	}
+
+	#[test]
+	fn escape() {
+		let mut buf = BytesMut::with_capacity(2048);
+		buf.put_slice(br#"{ test: "\"\\" }"#);
+
+		let mut codec = StreamCodec::stream_incoming();
+
+		let request = codec.decode(&mut buf)
+			.expect("There should be no error in escape test")
+			.expect("There should be a request in escape test");
+
+		assert_eq!(request, r#"{ test: "\"\\" }"#);
 	}
 
 	#[test]
