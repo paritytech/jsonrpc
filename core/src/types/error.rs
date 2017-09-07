@@ -48,20 +48,24 @@ impl ErrorCode {
 	}
 }
 
+impl From<i64> for ErrorCode {
+	fn from(code: i64) -> Self {
+		match code {
+			-32700 => ErrorCode::ParseError,
+			-32600 => ErrorCode::InvalidRequest,
+			-32601 => ErrorCode::MethodNotFound,
+			-32602 => ErrorCode::InvalidParams,
+			-32603 => ErrorCode::InternalError,
+			code => ErrorCode::ServerError(code),
+		}
+	}
+}
+
 impl<'a> Deserialize<'a> for ErrorCode {
 	fn deserialize<D>(deserializer: D) -> Result<ErrorCode, D::Error>
 	where D: Deserializer<'a> {
-		let v: Value = try!(Deserialize::deserialize(deserializer));
-		match v.as_i64() {
-			Some(-32700) => Ok(ErrorCode::ParseError),
-			Some(-32600) => Ok(ErrorCode::InvalidRequest),
-			Some(-32601) => Ok(ErrorCode::MethodNotFound),
-			Some(-32602) => Ok(ErrorCode::InvalidParams),
-			Some(-32603) => Ok(ErrorCode::InternalError),
-			Some(code) => Ok(ErrorCode::ServerError(code)),
-			_ => unreachable!()
-		}
-
+		let code: i64 = try!(Deserialize::deserialize(deserializer));
+		Ok(ErrorCode::from(code))
 	}
 }
 
