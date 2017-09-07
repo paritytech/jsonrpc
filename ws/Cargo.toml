@@ -1,7 +1,7 @@
 [package]
 name = "jsonrpc-ws-server"
 description = "WebSockets server for JSON-RPC"
-version = "7.1.0"
+version = "7.1.1"
 authors = ["tomusdrw <tomasz@parity.io>"]
 license = "MIT"
 homepage = "https://github.com/paritytech/jsonrpc"
