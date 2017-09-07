@@ -14,12 +14,12 @@ fn main() {
 
 	let server = ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
-		.request_middleware(|request: &hyper::server::Request| {
+		.request_middleware(|request: hyper::server::Request| {
 			if request.path() == "/status" {
-				Some(Response::ok("Server running OK."))
+				Response::ok("Server running OK.").into()
 			} else {
-				None
-			}.into()
+				request.into()
+			}
 		})
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");

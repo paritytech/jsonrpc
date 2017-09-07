@@ -46,37 +46,44 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 	type Future = Handler<M, S>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
-		let action = self.middleware.on_request(&request);
+		enum MiddlewareResponse {
+			Some(BoxFuture<server::Response, hyper::Error>),
+			None(server::Request),
+		}
 
-		let (should_validate_hosts, should_continue_on_invalid_cors, handler) = match action {
-			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors }=> (
-				true, should_continue_on_invalid_cors, None
+		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
+		let action = self.middleware.on_request(request);
+
+		let (should_validate_hosts, should_continue_on_invalid_cors, response) = match action {
+			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors, request }=> (
+				true, should_continue_on_invalid_cors, MiddlewareResponse::None(request)
 			),
-			RequestMiddlewareAction::Respond { should_validate_hosts, handler } => (
-				should_validate_hosts, false, Some(handler)
+			RequestMiddlewareAction::Respond { should_validate_hosts, response } => (
+				should_validate_hosts, false, MiddlewareResponse::Some(response)
 			),
 		};
 
 		// Validate host
-		if should_validate_hosts && !utils::is_host_allowed(&request, &self.allowed_hosts) {
+		if should_validate_hosts && !is_host_allowed {
 			return Handler::Error(Some(Response::host_not_allowed()));
 		}
 
-		// Replace handler with the one returned by middleware.
-		if let Some(handler) = handler {
-			return Handler::Middleware(handler);
+		// Replace response with the one returned by middleware.
+		match response {
+			MiddlewareResponse::Some(response) => Handler::Middleware(response),
+			MiddlewareResponse::None(request) => {
+				Handler::Rpc(RpcHandler {
+					jsonrpc_handler: self.jsonrpc_handler.clone(),
+					state: RpcHandlerState::ReadingHeaders {
+						request: request,
+						cors_domains: self.cors_domains.clone(),
+						continue_on_invalid_cors: should_continue_on_invalid_cors,
+					},
+					is_options: false,
+					cors_header: cors::CorsHeader::NotRequired,
+				})
+			}
 		}
-
-		Handler::Rpc(RpcHandler {
-			jsonrpc_handler: self.jsonrpc_handler.clone(),
-			state: RpcHandlerState::ReadingHeaders {
-				request: request,
-				cors_domains: self.cors_domains.clone(),
-				continue_on_invalid_cors: should_continue_on_invalid_cors,
-			},
-			is_options: false,
-			cors_header: cors::CorsHeader::NotRequired,
-		})
 	}
 }
 
