@@ -46,20 +46,15 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 	type Future = Handler<M, S>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
-		enum MiddlewareResponse {
-			Some(BoxFuture<server::Response, hyper::Error>),
-			None(server::Request),
-		}
-
 		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
 		let action = self.middleware.on_request(request);
 
 		let (should_validate_hosts, should_continue_on_invalid_cors, response) = match action {
 			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors, request }=> (
-				true, should_continue_on_invalid_cors, MiddlewareResponse::None(request)
+				true, should_continue_on_invalid_cors, Err(request)
 			),
 			RequestMiddlewareAction::Respond { should_validate_hosts, response } => (
-				should_validate_hosts, false, MiddlewareResponse::Some(response)
+				should_validate_hosts, false, Ok(response)
 			),
 		};
 
@@ -70,8 +65,8 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 
 		// Replace response with the one returned by middleware.
 		match response {
-			MiddlewareResponse::Some(response) => Handler::Middleware(response),
-			MiddlewareResponse::None(request) => {
+			Ok(response) => Handler::Middleware(response),
+			Err(request) => {
 				Handler::Rpc(RpcHandler {
 					jsonrpc_handler: self.jsonrpc_handler.clone(),
 					state: RpcHandlerState::ReadingHeaders {
