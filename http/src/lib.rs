@@ -438,7 +438,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					warn!("Incoming streams error, closing sever: {:?}", e);
 				})
 				.select(shutdown_signal.map_err(|e| {
-					warn!("Shutdown signaller dropped, closing server: {:?}", e);
+					debug!("Shutdown signaller dropped, closing server: {:?}", e);
 				}))
 				.map(|_| ())
 				.map_err(|_| ())
