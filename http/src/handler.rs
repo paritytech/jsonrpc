@@ -7,7 +7,7 @@ use hyper::{self, mime, server, Method};
 use hyper::header::{self, Headers};
 use unicase::Ascii;
 
-use jsonrpc::{BoxFuture, Metadata, Middleware, NoopMiddleware};
+use jsonrpc::{self as core, FutureResult, BoxFuture, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{Future, Poll, Async, Stream};
 use response::Response;
 use server_utils::cors;
@@ -46,37 +46,39 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 	type Future = Handler<M, S>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
-		let action = self.middleware.on_request(&request);
+		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
+		let action = self.middleware.on_request(request);
 
-		let (should_validate_hosts, should_continue_on_invalid_cors, handler) = match action {
-			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors }=> (
-				true, should_continue_on_invalid_cors, None
+		let (should_validate_hosts, should_continue_on_invalid_cors, response) = match action {
+			RequestMiddlewareAction::Proceed { should_continue_on_invalid_cors, request }=> (
+				true, should_continue_on_invalid_cors, Err(request)
 			),
-			RequestMiddlewareAction::Respond { should_validate_hosts, handler } => (
-				should_validate_hosts, false, Some(handler)
+			RequestMiddlewareAction::Respond { should_validate_hosts, response } => (
+				should_validate_hosts, false, Ok(response)
 			),
 		};
 
 		// Validate host
-		if should_validate_hosts && !utils::is_host_allowed(&request, &self.allowed_hosts) {
+		if should_validate_hosts && !is_host_allowed {
 			return Handler::Error(Some(Response::host_not_allowed()));
 		}
 
-		// Replace handler with the one returned by middleware.
-		if let Some(handler) = handler {
-			return Handler::Middleware(handler);
+		// Replace response with the one returned by middleware.
+		match response {
+			Ok(response) => Handler::Middleware(response),
+			Err(request) => {
+				Handler::Rpc(RpcHandler {
+					jsonrpc_handler: self.jsonrpc_handler.clone(),
+					state: RpcHandlerState::ReadingHeaders {
+						request: request,
+						cors_domains: self.cors_domains.clone(),
+						continue_on_invalid_cors: should_continue_on_invalid_cors,
+					},
+					is_options: false,
+					cors_header: cors::CorsHeader::NotRequired,
+				})
+			}
 		}
-
-		Handler::Rpc(RpcHandler {
-			jsonrpc_handler: self.jsonrpc_handler.clone(),
-			state: RpcHandlerState::ReadingHeaders {
-				request: request,
-				cors_domains: self.cors_domains.clone(),
-				continue_on_invalid_cors: should_continue_on_invalid_cors,
-			},
-			is_options: false,
-			cors_header: cors::CorsHeader::NotRequired,
-		})
 	}
 }
 
@@ -101,13 +103,17 @@ impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
 	}
 }
 
-enum RpcPollState<M> {
-	Ready(RpcHandlerState<M>),
-	NotReady(RpcHandlerState<M>),
+enum RpcPollState<M, F> where
+	F: Future<Item = Option<core::Response>, Error = ()>,
+{
+	Ready(RpcHandlerState<M, F>),
+	NotReady(RpcHandlerState<M, F>),
 }
 
-impl<M> RpcPollState<M> {
-	fn decompose(self) -> (RpcHandlerState<M>, bool) {
+impl<M, F> RpcPollState<M, F> where
+	F: Future<Item = Option<core::Response>, Error = ()>,
+{
+	fn decompose(self) -> (RpcHandlerState<M, F>, bool) {
 		use self::RpcPollState::*;
 		match self {
 			Ready(handler) => (handler, true),
@@ -116,7 +122,9 @@ impl<M> RpcPollState<M> {
 	}
 }
 
-enum RpcHandlerState<M> {
+enum RpcHandlerState<M, F> where
+	F: Future<Item = Option<core::Response>, Error = ()>,
+{
 	ReadingHeaders {
 		request: server::Request,
 		cors_domains: CorsDomains,
@@ -128,11 +136,13 @@ enum RpcHandlerState<M> {
 		metadata: M,
 	},
 	Writing(Response),
-	Waiting(BoxFuture<Option<String>, ()>),
+	Waiting(FutureResult<F>),
 	Done,
 }
 
-impl<M> fmt::Debug for RpcHandlerState<M> {
+impl<M, F> fmt::Debug for RpcHandlerState<M, F> where
+	F: Future<Item = Option<core::Response>, Error = ()>,
+{
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		use self::RpcHandlerState::*;
 
@@ -148,7 +158,7 @@ impl<M> fmt::Debug for RpcHandlerState<M> {
 
 pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	jsonrpc_handler: Rpc<M, S>,
-	state: RpcHandlerState<M>,
+	state: RpcHandlerState<M, S::Future>,
 	is_options: bool,
 	cors_header: cors::CorsHeader<header::AccessControlAllowOrigin>,
 }
@@ -211,7 +221,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		&self,
 		request: server::Request,
 		continue_on_invalid_cors: bool,
-	) -> RpcHandlerState<M> {
+	) -> RpcHandlerState<M, S::Future> {
 		if self.cors_header == cors::CorsHeader::Invalid && !continue_on_invalid_cors {
 			return RpcHandlerState::Writing(Response::invalid_cors());
 		}
@@ -249,7 +259,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		mut body: hyper::Body,
 		mut request: Vec<u8>,
 		metadata: M,
-	) -> Result<RpcPollState<M>, hyper::Error> {
+	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
 		loop {
 			match body.poll()? {
 				// TODO [ToDr] reject too large requests?

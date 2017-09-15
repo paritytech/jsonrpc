@@ -39,7 +39,7 @@ use std::net::SocketAddr;
 
 use hyper::server;
 use jsonrpc::{BoxFuture, MetaIoHandler};
-use jsonrpc::futures::{self, Future, IntoFuture, Stream};
+use jsonrpc::futures::{self, Future, Stream};
 use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
 
@@ -106,34 +106,32 @@ pub enum RequestMiddlewareAction {
 		/// Should the request be processed even if invalid CORS headers are detected?
 		/// This allows for side effects to take place.
 		should_continue_on_invalid_cors: bool,
+		/// The request object returned
+		request: server::Request,
 	},
 	/// Intercept the request and respond differently.
 	Respond {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
-		/// hyper handler used to process the request
-		handler: BoxFuture<server::Response, hyper::Error>,
+		/// a future for server response
+		response: BoxFuture<server::Response, hyper::Error>,
 	}
 }
 
-impl From<Option<Response>> for RequestMiddlewareAction {
-	fn from(o: Option<Response>) -> Self {
-		o.map(Into::<server::Response>::into).map(futures::future::ok).into()
+impl From<Response> for RequestMiddlewareAction {
+	fn from(o: Response) -> Self {
+		RequestMiddlewareAction::Respond {
+			should_validate_hosts: true,
+			response: Box::new(futures::future::ok(o.into())),
+		}
 	}
 }
-impl<T> From<Option<T>> for RequestMiddlewareAction where
-	T: IntoFuture<Item=server::Response, Error=hyper::Error>,
-	T::Future: Send + 'static,
-{
-	fn from(o: Option<T>) -> Self {
-		match o {
-			None => RequestMiddlewareAction::Proceed {
-				should_continue_on_invalid_cors: false,
-			},
-			Some(handler) => RequestMiddlewareAction::Respond {
-				should_validate_hosts: true,
-				handler: Box::new(handler.into_future()),
-			},
+
+impl From<server::Request> for RequestMiddlewareAction {
+	fn from(request: server::Request) -> Self {
+		RequestMiddlewareAction::Proceed {
+			should_continue_on_invalid_cors: false,
+			request,
 		}
 	}
 }
@@ -141,13 +139,13 @@ impl<T> From<Option<T>> for RequestMiddlewareAction where
 /// Allows to intercept request and handle it differently.
 pub trait RequestMiddleware: Send + Sync + 'static {
 	/// Takes a request and decides how to proceed with it.
-	fn on_request(&self, request: &server::Request) -> RequestMiddlewareAction;
+	fn on_request(&self, request: server::Request) -> RequestMiddlewareAction;
 }
 
 impl<F> RequestMiddleware for F where
-	F: Fn(&server::Request) -> RequestMiddlewareAction + Sync + Send + 'static,
+	F: Fn(server::Request) -> RequestMiddlewareAction + Sync + Send + 'static,
 {
-	fn on_request(&self, request: &server::Request) -> RequestMiddlewareAction {
+	fn on_request(&self, request: server::Request) -> RequestMiddlewareAction {
 		(*self)(request)
 	}
 }
@@ -155,9 +153,10 @@ impl<F> RequestMiddleware for F where
 #[derive(Default)]
 struct NoopRequestMiddleware;
 impl RequestMiddleware for NoopRequestMiddleware {
-	fn on_request(&self, _request: &server::Request) -> RequestMiddlewareAction {
+	fn on_request(&self, request: server::Request) -> RequestMiddlewareAction {
 		RequestMiddlewareAction::Proceed {
 			should_continue_on_invalid_cors: false,
+			request,
 		}
 	}
 }
@@ -248,8 +247,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-    /// Sets Enables or disables HTTP keep-alive.
-    /// Default is true.	
+	/// Sets Enables or disables HTTP keep-alive.
+	/// Default is true.
 	pub fn keep_alive(mut self, val: bool) -> Self {
 		self.keep_alive  = val;
 		self
@@ -439,7 +438,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					warn!("Incoming streams error, closing sever: {:?}", e);
 				})
 				.select(shutdown_signal.map_err(|e| {
-					warn!("Shutdown signaller dropped, closing server: {:?}", e);
+					debug!("Shutdown signaller dropped, closing server: {:?}", e);
 				}))
 				.map(|_| ())
 				.map_err(|_| ())

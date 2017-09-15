@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 
 use tokio_service;
 
-use jsonrpc::{BoxFuture, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::{FutureResult, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
@@ -26,7 +26,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 	type Error = ();
 
 	// The future for computing the response; box it for simplicity.
-	type Future = BoxFuture<Self::Response, Self::Error>;
+	type Future = FutureResult<S::Future>;
 
 	// Produce a future for computing a response from a request.
 	fn call(&self, req: Self::Request) -> Self::Future {

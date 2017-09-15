@@ -41,7 +41,7 @@ use std::net::SocketAddr;
 use std::thread;
 use parking_lot::RwLock;
 use jsonrpc::futures::{self, future, Future};
-use jsonrpc::{BoxFuture, MetaIoHandler};
+use jsonrpc::{FutureResult, MetaIoHandler, Response};
 use jsonrpc_server_utils::hosts;
 
 pub use jsonrpc_server_utils::cors;
@@ -255,7 +255,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 	type Error = io::Error;
 	type Future = future::Either<
 		future::FutureResult<tokio_minihttp::Response, io::Error>,
-		RpcResponse,
+		RpcResponse<S::Future>,
 	>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
@@ -318,12 +318,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 }
 
 /// RPC response wrapper
-pub struct RpcResponse {
-	future: BoxFuture<Option<String>, ()>,
+pub struct RpcResponse<F: Future<Item = Option<Response>, Error = ()>> {
+	future: FutureResult<F>,
 	cors: Option<cors::AccessControlAllowOrigin>,
 }
 
-impl Future for RpcResponse {
+impl<F: Future<Item = Option<Response>, Error = ()>> Future for RpcResponse<F> {
 	type Item = tokio_minihttp::Response;
 	type Error = io::Error;
 

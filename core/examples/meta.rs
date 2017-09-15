@@ -11,7 +11,7 @@ pub fn main() {
 	let mut io = MetaIoHandler::default();
 
 	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
-		futures::finished(Value::String(format!("Hello World: {}", meta.0)))
+		Ok(Value::String(format!("Hello World: {}", meta.0)))
 	});
 
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;

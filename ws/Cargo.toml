@@ -1,7 +1,7 @@
 [package]
 name = "jsonrpc-ws-server"
 description = "WebSockets server for JSON-RPC"
-version = "7.1.1"
+version = "8.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 license = "MIT"
 homepage = "https://github.com/paritytech/jsonrpc"
@@ -10,8 +10,8 @@ documentation = "https://paritytech.github.io/jsonrpc/json_ws_server/index.html"
 
 [dependencies]
 log = "0.3"
-jsonrpc-core = { version = "7.1", path = "../core" }
-jsonrpc-server-utils = { version = "7.1", path = "../server-utils" }
+jsonrpc-core = { version = "8.0", path = "../core" }
+jsonrpc-server-utils = { version = "8.0", path = "../server-utils" }
 ws = { git = "https://github.com/tomusdrw/ws-rs" }
 parking_lot = "0.4"
 slab = "0.3"

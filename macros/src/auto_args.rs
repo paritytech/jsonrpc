@@ -4,8 +4,9 @@
 
 ///! Automatically serialize and deserialize parameters around a strongly-typed function.
 
-use jsonrpc_core::{BoxFuture, Error, Params, Value, Metadata};
-use jsonrpc_core::futures::{self, Future};
+use jsonrpc_core::{Error, Params, Value, Metadata};
+use jsonrpc_core::futures::{self, Future, IntoFuture};
+use jsonrpc_core::futures::future::{self, Either};
 use jsonrpc_pubsub::{PubSubMetadata, Subscriber};
 use pubsub;
 use serde::Serialize;
@@ -25,8 +26,7 @@ use util::{invalid_params, expect_no_params, to_value};
 /// ## The #[rpc] attribute
 ///
 /// Valid forms:
-///  - `#[rpc(name = "name_here")]` (a synchronous rpc function which should be bound to the given name)
-///  - `#[rpc(async, name = "name_here")]` (an async rpc function which should be bound to the given name)
+///  - `#[rpc(name = "name_here")]` (an async rpc function which should be bound to the given name)
 ///  - `#[rpc(meta, name = "name_here")]` (an async rpc function with metadata which should be bound to the given name)
 ///
 /// Synchronous function format:
@@ -48,7 +48,7 @@ use util::{invalid_params, expect_no_params, to_value};
 ///	  #[rpc(name = "hello_subscribe")]
 ///	  fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
 ///	  #[rpc(name = "hello_unsubscribe")]
-///	  fn unsubscribe(&self, SubscriptionId) -> BoxFuture<bool, Error>;
+///	  fn unsubscribe(&self, SubscriptionId) -> Result<bool, Error>;
 ///	}
 ///	```
 ///
@@ -178,20 +178,6 @@ macro_rules! build_rpc_trait {
 		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, $error: ty>
 	) => {
 		$del.add_method($name, move |base, params| {
-			$crate::Wrap::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, $error>), base, params)
-		});
-		$(
-			$(
-				$del.add_alias($alias, $name);
-			)+
-		)*
-	};
-
-	( WRAP $del: expr =>
-		(async, name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty, $error: ty>
-	) => {
-		$del.add_async_method($name, move |base, params| {
 			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out, $error>), base, params)
 		});
 		$(
@@ -234,8 +220,8 @@ macro_rules! build_rpc_trait {
 				)
 			}),
 			($unsubscribe, move |base, id| {
-				use $crate::jsonrpc_core::futures::Future;
-				Box::new(Self::$unsub_method(base, id).map($crate::to_value))
+				use $crate::jsonrpc_core::futures::{IntoFuture, Future};
+				Self::$unsub_method(base, id).into_future().map($crate::to_value)
 			}),
 		);
 
@@ -282,22 +268,41 @@ impl<T: Default + DeserializeOwned> Trailing<T> {
 	}
 }
 
-/// Wrapper trait for synchronous RPC functions.
-pub trait Wrap<B> {
-	/// Invokes RPC method.
-	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error>;
+type WrappedFuture<F, OUT, E> = future::MapErr<
+	future::Map<F, fn(OUT) -> Value>,
+	fn(E) -> Error
+>;
+type WrapResult<F, OUT, E> = Either<
+	WrappedFuture<F, OUT, E>,
+	future::FutureResult<Value, Error>,
+>;
+
+fn as_future<F, OUT, E, I>(el: I) -> WrappedFuture<F, OUT, E> where
+	OUT: Serialize,
+	E: Into<Error>,
+	F: Future<Item = OUT, Error = E>,
+	I: IntoFuture<Item = OUT, Error = E, Future = F>
+{
+	el.into_future()
+		.map(to_value as fn(OUT) -> Value)
+		.map_err(Into::into as fn(E) -> Error)
 }
 
 /// Wrapper trait for asynchronous RPC functions.
 pub trait WrapAsync<B> {
+	/// Output type.
+	type Out: IntoFuture<Item = Value, Error = Error>;
+
 	/// Invokes asynchronous RPC method.
-	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error>;
+	fn wrap_rpc(&self, base: &B, params: Params) -> Self::Out;
 }
 
 /// Wrapper trait for meta RPC functions.
 pub trait WrapMeta<B, M> {
+	/// Output type.
+	type Out: IntoFuture<Item = Value, Error = Error>;
 	/// Invokes asynchronous RPC method with Metadata.
-	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error>;
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> Self::Out;
 }
 
 /// Wrapper trait for subscribe RPC functions.
@@ -307,41 +312,45 @@ pub trait WrapSubscribe<B, M> {
 }
 
 // special impl for no parameters.
-impl<B, OUT, E> Wrap<B> for fn(&B) -> Result<OUT, E>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, E: Into<Error> + 'static
+impl<B, OUT, E, F, I> WrapAsync<B> for fn(&B) -> I where
+	B: Send + Sync + 'static,
+	OUT: Serialize + 'static,
+	E: Into<Error> + 'static,
+	F: Future<Item = OUT, Error = E> + Send + 'static,
+	I: IntoFuture<Item = OUT, Error = E, Future = F>,
 {
-	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
-        match expect_no_params(params) {
-            Ok(()) => (self)(base).map(to_value).map_err(Into::into),
-            Err(e) => Err(e),
-        }
-	}
-}
+	type Out = WrapResult<F, OUT, E>;
 
-impl<B, OUT, E> WrapAsync<B> for fn(&B) -> BoxFuture<OUT, E>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, E: Into<Error> + 'static
-{
-	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
+	fn wrap_rpc(&self, base: &B, params: Params) -> Self::Out {
 		match expect_no_params(params) {
-			Ok(()) => Box::new((self)(base).map(to_value).map_err(Into::into)),
-			Err(e) => Box::new(futures::failed(e)),
+			Ok(()) => Either::A(as_future((self)(base))),
+			Err(e) => Either::B(futures::failed(e)),
 		}
 	}
 }
 
-impl<B, M, OUT, E> WrapMeta<B, M> for fn(&B, M) -> BoxFuture<OUT, E>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, M: Metadata, E: Into<Error> + 'static
+impl<M, B, OUT, E, F, I> WrapMeta<B, M> for fn(&B, M) -> I where
+	M: Metadata,
+	B: Send + Sync + 'static,
+	OUT: Serialize + 'static,
+	E: Into<Error> + 'static,
+	F: Future<Item = OUT, Error = E> + Send + 'static,
+	I: IntoFuture<Item = OUT, Error = E, Future = F>,
 {
-	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
+	type Out = WrapResult<F, OUT, E>;
+
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> Self::Out {
 		match expect_no_params(params) {
-			Ok(()) => Box::new((self)(base, meta).map(to_value).map_err(Into::into)),
-			Err(e) => Box::new(futures::failed(e.into())),
+			Ok(()) => Either::A(as_future((self)(base, meta))),
+			Err(e) => Either::B(futures::failed(e)),
 		}
 	}
 }
 
-impl<B, M, OUT> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>)
-	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata
+impl<M, B, OUT> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>) where
+	M: PubSubMetadata,
+	B: Send + Sync + 'static,
+	OUT: Serialize,
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
 		match expect_no_params(params) {
@@ -358,32 +367,20 @@ impl<B, M, OUT> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>)
 macro_rules! wrap {
 	($($x: ident),+) => {
 
-		// synchronous implementation
-		impl <
-			BASE: Send + Sync + 'static,
-			OUT: Serialize + 'static,
-			$($x: DeserializeOwned,)+
-			ERR: Into<Error> + 'static,
-		> Wrap<BASE> for fn(&BASE, $($x,)+) -> Result<OUT, ERR> {
-			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
-				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => (self)(base, $($x,)+).map(to_value).map_err(Into::into),
-					Err(e) => Err(e)
-				}
-			}
-		}
-
 		// asynchronous implementation
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
-			ERR: Into<Error> + 'static
-		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> BoxFuture<OUT, ERR> {
-			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
+			ERR: Into<Error> + 'static,
+			X: Future<Item = OUT, Error = ERR> + Send + 'static,
+			Z: IntoFuture<Item = OUT, Error = ERR, Future = X>,
+		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> Z {
+			type Out = WrapResult<X, OUT, ERR>;
+			fn wrap_rpc(&self, base: &BASE, params: Params) -> Self::Out {
 				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => Box::new((self)(base, $($x,)+).map(to_value).map_err(Into::into)),
-					Err(e) => Box::new(futures::failed(e)),
+					Ok(($($x,)+)) => Either::A(as_future((self)(base, $($x,)+))),
+					Err(e) => Either::B(futures::failed(e)),
 				}
 			}
 		}
@@ -394,12 +391,15 @@ macro_rules! wrap {
 			META: Metadata,
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
-			ERR: Into<Error> + 'static
-		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> BoxFuture<OUT, ERR> {
-			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
+			ERR: Into<Error> + 'static,
+			X: Future<Item = OUT, Error = ERR> + Send + 'static,
+			Z: IntoFuture<Item = OUT, Error = ERR, Future = X>,
+		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+) -> Z {
+			type Out = WrapResult<X, OUT, ERR>;
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> Self::Out {
 				match params.parse::<($($x,)+)>() {
-					Ok(($($x,)+)) => Box::new((self)(base, meta, $($x,)+).map(to_value).map_err(Into::into)),
-					Err(e) => Box::new(futures::failed(e)),
+					Ok(($($x,)+)) => Either::A(as_future((self)(base, meta, $($x,)+))),
+					Err(e) => Either::B(futures::failed(e)),
 				}
 			}
 		}
@@ -411,7 +411,7 @@ macro_rules! wrap {
 			OUT: Serialize,
 			$($x: DeserializeOwned,)+
 		> WrapSubscribe<BASE, META> for fn(&BASE, META, pubsub::Subscriber<OUT>, $($x,)+) {
-			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber){
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META, subscriber: Subscriber) {
 				match params.parse::<($($x,)+)>() {
 					Ok(($($x,)+)) => (self)(base, meta, pubsub::Subscriber::new(subscriber), $($x,)+),
 					Err(e) => {
@@ -451,44 +451,50 @@ fn parse_trailing_param<T: DeserializeOwned>(params: Params) -> Result<(Option<T
 }
 
 // special impl for no parameters other than block parameter.
-impl<B, OUT, T, E> Wrap<B> for fn(&B, Trailing<T>) -> Result<OUT, E>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, E: Into<Error> + 'static
+impl<B, OUT, T, E, F, I> WrapAsync<B> for fn(&B, Trailing<T>) -> I where
+	B: Send + Sync + 'static,
+	OUT: Serialize + 'static,
+	T: DeserializeOwned,
+	E: Into<Error> + 'static,
+	F: Future<Item = OUT, Error = E> + Send + 'static,
+	I: IntoFuture<Item = OUT, Error = E, Future = F>,
 {
-	fn wrap_rpc(&self, base: &B, params: Params) -> Result<Value, Error> {
-		let id = try!(parse_trailing_param(params)).0;
-
-		(self)(base, Trailing(id)).map(to_value).map_err(Into::into)
-	}
-}
-
-impl<B, OUT, T, E> WrapAsync<B> for fn(&B, Trailing<T>) -> BoxFuture<OUT, E>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, E: Into<Error> + 'static
-{
-	fn wrap_rpc(&self, base: &B, params: Params) -> BoxFuture<Value, Error> {
+	type Out = WrapResult<F, OUT, E>;
+	fn wrap_rpc(&self, base: &B, params: Params) -> Self::Out {
 		let id = parse_trailing_param(params);
 
 		match id {
-			Ok((id,)) => Box::new((self)(base, Trailing(id)).map(to_value).map_err(Into::into)),
-			Err(e) => Box::new(futures::failed(e)),
+			Ok((id,)) => Either::A(as_future((self)(base, Trailing(id)))),
+			Err(e) => Either::B(futures::failed(e)),
 		}
 	}
 }
 
-impl<B, M, OUT, T, E> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> BoxFuture<OUT, E>
-	where B: Send + Sync + 'static, OUT: Serialize + 'static, T: DeserializeOwned, M: Metadata, E: Into<Error> + 'static
+impl<M, B, OUT, T, E, F, I> WrapMeta<B, M> for fn(&B, M, Trailing<T>) -> I where
+	M: Metadata,
+	B: Send + Sync + 'static,
+	OUT: Serialize + 'static,
+	T: DeserializeOwned,
+	E: Into<Error> + 'static,
+	F: Future<Item = OUT, Error = E> + Send + 'static,
+	I: IntoFuture<Item = OUT, Error = E, Future = F>,
 {
-	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> BoxFuture<Value, Error> {
+	type Out = WrapResult<F, OUT, E>;
+	fn wrap_rpc(&self, base: &B, params: Params, meta: M) -> Self::Out {
 		let id = parse_trailing_param(params);
 
 		match id {
-			Ok((id,)) => Box::new((self)(base, meta, Trailing(id)).map(to_value).map_err(Into::into)),
-			Err(e) => Box::new(futures::failed(e)),
+			Ok((id,)) => Either::A(as_future((self)(base, meta, Trailing(id)))),
+			Err(e) => Either::B(futures::failed(e)),
 		}
 	}
 }
 
-impl<B, M, OUT, T> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>, Trailing<T>)
-	where B: Send + Sync + 'static, OUT: Serialize, M: PubSubMetadata, T: DeserializeOwned,
+impl<M, B, OUT, T> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>, Trailing<T>) where
+	M: PubSubMetadata,
+	B: Send + Sync + 'static,
+	OUT: Serialize,
+	T: DeserializeOwned,
 {
 	fn wrap_rpc(&self, base: &B, params: Params, meta: M, subscriber: Subscriber) {
 		let id = parse_trailing_param(params);
@@ -506,42 +512,21 @@ impl<B, M, OUT, T> WrapSubscribe<B, M> for fn(&B, M, pubsub::Subscriber<OUT>, Tr
 // accepts an additional argument indicating the number of non-trailing parameters.
 macro_rules! wrap_with_trailing {
 	($num: expr, $($x: ident),+) => {
-		// synchronous implementation
-		impl <
-			BASE: Send + Sync + 'static,
-			OUT: Serialize + 'static,
-			$($x: DeserializeOwned,)+
-			TRAILING: DeserializeOwned,
-			ERR: Into<Error> + 'static
-		> Wrap<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Result<OUT, ERR> {
-			fn wrap_rpc(&self, base: &BASE, params: Params) -> Result<Value, Error> {
-				let len = require_len(&params, $num)?;
-
-				let params = match len - $num {
-					0 => params.parse::<($($x,)+)>()
-						.map(|($($x,)+)| ($($x,)+ None)).map_err(Into::into),
-					1 => params.parse::<($($x,)+ TRAILING)>()
-						.map(|($($x,)+ id)| ($($x,)+ Some(id))).map_err(Into::into),
-					_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
-				};
-
-				let ($($x,)+ id) = try!(params);
-				(self)(base, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into)
-			}
-		}
-
 		// asynchronous implementation
 		impl <
 			BASE: Send + Sync + 'static,
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
 			TRAILING: DeserializeOwned,
-			ERR: Into<Error> + 'static
-		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, ERR> {
-			fn wrap_rpc(&self, base: &BASE, params: Params) -> BoxFuture<Value, Error> {
+			ERR: Into<Error> + 'static,
+			X: Future<Item = OUT, Error = ERR> + Send + 'static,
+			Z: IntoFuture<Item = OUT, Error = ERR, Future = X>,
+		> WrapAsync<BASE> for fn(&BASE, $($x,)+ Trailing<TRAILING>) -> Z {
+			type Out = WrapResult<X, OUT, ERR>;
+			fn wrap_rpc(&self, base: &BASE, params: Params) -> Self::Out {
 				let len = match require_len(&params, $num) {
 					Ok(len) => len,
-					Err(e) => return Box::new(futures::failed(e)),
+					Err(e) => return Either::B(futures::failed(e)),
 				};
 
 				let params = match len - $num {
@@ -553,8 +538,8 @@ macro_rules! wrap_with_trailing {
 				};
 
 				match params {
-					Ok(($($x,)+ id)) => Box::new((self)(base, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into)),
-					Err(e) => Box::new(futures::failed(e)),
+					Ok(($($x,)+ id)) => Either::A(as_future((self)(base, $($x,)+ Trailing(id)))),
+					Err(e) => Either::B(futures::failed(e)),
 				}
 			}
 		}
@@ -566,12 +551,15 @@ macro_rules! wrap_with_trailing {
 			OUT: Serialize + 'static,
 			$($x: DeserializeOwned,)+
 			TRAILING: DeserializeOwned,
-			ERR: Into<Error> + 'static
-		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> BoxFuture<OUT, ERR> {
-			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> BoxFuture<Value, Error> {
+			ERR: Into<Error> + 'static,
+			X: Future<Item = OUT, Error = ERR> + Send + 'static,
+			Z: IntoFuture<Item = OUT, Error = ERR, Future = X>,
+		> WrapMeta<BASE, META> for fn(&BASE, META, $($x,)+ Trailing<TRAILING>) -> Z {
+			type Out = WrapResult<X, OUT, ERR>;
+			fn wrap_rpc(&self, base: &BASE, params: Params, meta: META) -> Self::Out {
 				let len = match require_len(&params, $num) {
 					Ok(len) => len,
-					Err(e) => return Box::new(futures::failed(e)),
+					Err(e) => return Either::B(futures::failed(e)),
 				};
 
 				let params = match len - $num {
@@ -583,8 +571,8 @@ macro_rules! wrap_with_trailing {
 				};
 
 				match params {
-					Ok(($($x,)+ id)) => Box::new((self)(base, meta, $($x,)+ Trailing(id)).map(to_value).map_err(Into::into)),
-					Err(e) => Box::new(futures::failed(e)),
+					Ok(($($x,)+ id)) => Either::A(as_future((self)(base, meta, $($x,)+ Trailing(id)))),
+					Err(e) => Either::B(futures::failed(e)),
 				}
 			}
 		}

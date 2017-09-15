@@ -1,4 +1,5 @@
-use core::{self, BoxFuture};
+use core;
+use core::futures::{Future, IntoFuture};
 
 use types::{PubSubMetadata, SubscriptionId};
 use subscription::{Subscriber, new_subscription};
@@ -20,15 +21,20 @@ impl<M, F> SubscribeRpcMethod<M> for F where
 
 /// Unsubscribe handler
 pub trait UnsubscribeRpcMethod: Send + Sync + 'static {
+	/// Output type
+	type Out: Future<Item = core::Value, Error = core::Error> + Send + 'static;
 	/// Called when client is requesting to cancel existing subscription.
-	fn call(&self, id: SubscriptionId) -> BoxFuture<core::Value, core::Error>;
+	fn call(&self, id: SubscriptionId) -> Self::Out;
 }
 
-impl<F> UnsubscribeRpcMethod for F where
-	F: Fn(SubscriptionId) -> BoxFuture<core::Value, core::Error> + Send + Sync + 'static,
+impl<F, I> UnsubscribeRpcMethod for F where
+	F: Fn(SubscriptionId) -> I + Send + Sync + 'static,
+	I: IntoFuture<Item = core::Value, Error = core::Error>,
+	I::Future: Send + 'static,
 {
-	fn call(&self, id: SubscriptionId) -> BoxFuture<core::Value, core::Error> {
-		(*self)(id)
+	type Out = I::Future;
+	fn call(&self, id: SubscriptionId) -> Self::Out {
+		(*self)(id).into_future()
 	}
 }
 
@@ -94,7 +100,7 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
 
-	use core::{self, BoxFuture};
+	use core;
 	use core::futures::future;
 	use core::futures::sync::mpsc;
 	use subscription::{Session, Subscriber};
@@ -128,7 +134,7 @@ mod tests {
 				// Should be called because session is dropped.
 				called2.store(true, Ordering::SeqCst);
 				assert_eq!(id, SubscriptionId::Number(5));
-				Box::new(future::ok(core::Value::Bool(true))) as BoxFuture<_, _>
+				future::ok(core::Value::Bool(true))
 			}),
 		);
 

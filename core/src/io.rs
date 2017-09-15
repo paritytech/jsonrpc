@@ -5,7 +5,7 @@ use std::ops::{Deref, DerefMut};
 use serde_json;
 use futures::{self, future, Future};
 
-use calls::{RemoteProcedure, Metadata, RpcMethodSync, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
+use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
@@ -13,6 +13,12 @@ use BoxFuture;
 
 /// A type representing middleware or RPC response before serialization.
 pub type FutureResponse = BoxFuture<Option<Response>, ()>;
+
+/// A type representing future string response.
+pub type FutureResult<F> = future::Map<
+	future::Either<future::FutureResult<Option<Response>, ()>, F>,
+	fn(Option<Response>) -> Option<String>,
+>;
 
 /// A type representing a result of a single method call.
 pub type FutureOutput = future::Either<
@@ -109,17 +115,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		);
 	}
 
-	/// Adds new supported synchronous method
-	pub fn add_method<F>(&mut self, name: &str, method: F) where
-		F: RpcMethodSync,
-	{
-		self.add_method_with_meta(name, move |params, _meta| {
-			futures::done(method.call(params))
-		})
-	}
-
 	/// Adds new supported asynchronous method
-	pub fn add_async_method<F>(&mut self, name: &str, method: F) where
+	pub fn add_method<F>(&mut self, name: &str, method: F) where
 		F: RpcMethodSimple,
 	{
 		self.add_method_with_meta(name, move |params, _meta| {
@@ -169,8 +166,16 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Handle given request asynchronously.
-	pub fn handle_request(&self, request: &str, meta: T) -> BoxFuture<Option<String>, ()> {
+	pub fn handle_request(&self, request: &str, meta: T) -> FutureResult<S::Future> {
 		use self::future::Either::{A, B};
+		fn as_string(response: Option<Response>) -> Option<String> {
+			let res = response.map(write_response);
+			debug!(target: "rpc", "Response: {}.", match res {
+				Some(ref res) => res,
+				None => "None",
+			});
+			res
+		}
 
 		trace!(target: "rpc", "Request: {}.", request);
 		let request = read_request(request);
@@ -179,11 +184,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			Ok(request) => B(self.handle_rpc_request(request, meta)),
 		};
 
-		Box::new(result.map(|response| {
-			let res = response.map(write_response);
-			debug!(target: "rpc", "Response: {:?}.", res);
-			res
-		}))
+		result.map(as_string)
 	}
 
 	/// Handle deserialized RPC request.
@@ -235,9 +236,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				};
 
 				match result {
-					Ok(result) => A(Box::new(result
-						.then(move |result| futures::finished(Some(Output::from(result, id, jsonrpc))))
-						)),
+					Ok(result) => A(Box::new(
+						result.then(move |result| futures::finished(Some(Output::from(result, id, jsonrpc))))
+					)),
 					Err(err) => B(futures::finished(Some(Output::from(Err(err), id, jsonrpc)))),
 				}
 			},
@@ -288,7 +289,7 @@ impl IoHandler {
 
 impl<M: Metadata> IoHandler<M> {
 	/// Handle given string request asynchronously.
-	pub fn handle_request(&self, request: &str) -> BoxFuture<Option<String>, ()> {
+	pub fn handle_request(&self, request: &str) -> FutureResult<FutureResponse> {
 		self.0.handle_request(request, M::default())
 	}
 
@@ -377,7 +378,7 @@ mod tests {
 	fn test_async_io_handler() {
 		let mut io = IoHandler::new();
 
-		io.add_async_method("say_hello", |_| {
+		io.add_method("say_hello", |_| {
 			futures::finished(Value::String("hello".to_string()))
 		});
 

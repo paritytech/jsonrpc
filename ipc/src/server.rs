@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{BoxFuture, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::{FutureResult, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
@@ -31,7 +31,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 
 	type Error = ();
 
-	type Future = BoxFuture<Self::Response, Self::Error>;
+	type Future = FutureResult<S::Future>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
 		trace!(target: "ipc", "Received request: {}", req);
@@ -45,8 +45,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	meta_extractor: Arc<MetaExtractor<M>>,
 	session_stats: Option<Arc<session::SessionStats>>,
 	remote: reactor::UninitializedRemote,
-	incoming_separator: codecs::Separator, 
-	outgoing_separator: codecs::Separator,	
+	incoming_separator: codecs::Separator,
+	outgoing_separator: codecs::Separator,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
@@ -59,8 +59,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(NoopExtractor),
 			session_stats: None,
 			remote: reactor::UninitializedRemote::Unspawned,
-			incoming_separator: codecs::Separator::Empty, 
-			outgoing_separator: codecs::Separator::default(),				
+			incoming_separator: codecs::Separator::Empty,
+			outgoing_separator: codecs::Separator::default(),
 		}
 	}
 
@@ -89,7 +89,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self.incoming_separator = incoming;
 		self.outgoing_separator = outgoing;
 		self
-	}	
+	}
 
 	/// Run server (in a separate thread)
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
@@ -117,7 +117,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				Ok(l) => l,
 				Err(e) => {
 					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
-					return Box::new(future::ok(())) as BoxFuture<_, _>;
+					return future::Either::A(future::ok(()));
 				}
 			};
 
@@ -179,7 +179,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			});
 
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
-			Box::new(
+			future::Either::B(
 				server.select(stop)
 					.map(|_| ())
 					.map_err(|_| ())

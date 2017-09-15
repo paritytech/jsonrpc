@@ -49,7 +49,7 @@ use jsonrpc_core::futures::Future;
 fn main() {
 	let io = IoHandler::new();
 	io.add_async_method("say_hello", |_params: Params| {
-		Box::new(futures::finished(Value::String("hello".into())))
+		futures::finished(Value::String("hello".into()))
 	});
 
 	let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;

@@ -1,22 +1,18 @@
 use std::sync::Arc;
 use types::{Params, Value, Error};
-use futures::Future;
+use futures::{Future, IntoFuture};
 use BoxFuture;
 
 /// Metadata trait
 pub trait Metadata: Default + Clone + Send + 'static {}
 impl Metadata for () {}
 
-/// Synchronous Method
-pub trait RpcMethodSync: Send + Sync + 'static {
-	/// Call method
-	fn call(&self, params: Params) -> Result<Value, Error>;
-}
-
 /// Asynchronous Method
 pub trait RpcMethodSimple: Send + Sync + 'static {
+	/// Output future
+	type Out: Future<Item = Value, Error = Error> + Send;
 	/// Call method
-	fn call(&self, params: Params) -> BoxFuture<Value, Error>;
+	fn call(&self, params: Params) -> Self::Out;
 }
 
 /// Asynchronous Method with Metadata
@@ -48,20 +44,14 @@ pub enum RemoteProcedure<T: Metadata> {
 	Alias(String),
 }
 
-impl<F: Send + Sync + 'static> RpcMethodSync for F where
-	F: Fn(Params) -> Result<Value, Error>,
+impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F where
+	F: Fn(Params) -> I,
+	X: Future<Item = Value, Error = Error>,
+	I: IntoFuture<Item = Value, Error = Error, Future = X>,
 {
-	fn call(&self, params: Params) -> Result<Value, Error> {
-		self(params)
-	}
-}
-
-impl<F: Send + Sync + 'static, X: Send + 'static> RpcMethodSimple for F where
-	F: Fn(Params) -> X,
-	X: Future<Item=Value, Error=Error>,
-{
-	fn call(&self, params: Params) -> BoxFuture<Value, Error> {
-		Box::new(self(params))
+	type Out = X;
+	fn call(&self, params: Params) -> Self::Out {
+		self(params).into_future()
 	}
 }
 
@@ -73,13 +63,14 @@ impl<F: Send + Sync + 'static> RpcNotificationSimple for F where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethod<T> for F where
+impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F where
 	T: Metadata,
-	F: Fn(Params, T) -> X,
-	X: Future<Item=Value, Error=Error>,
+	F: Fn(Params, T) -> I,
+	I: IntoFuture<Item = Value, Error = Error, Future = X>,
+	X: Future<Item = Value, Error = Error>,
 {
 	fn call(&self, params: Params, meta: T) -> BoxFuture<Value, Error> {
-		Box::new(self(params, meta))
+		Box::new(self(params, meta).into_future())
 	}
 }
 

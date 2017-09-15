@@ -2,44 +2,27 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use jsonrpc_core::{Params, Value, Error};
-use jsonrpc_core::{futures, BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use jsonrpc_core::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use jsonrpc_core::futures::IntoFuture;
 
 use jsonrpc_pubsub::{self, SubscriptionId, Subscriber, PubSubMetadata};
-
-type Data = Result<Value, Error>;
-type AsyncData = BoxFuture<Value, Error>;
-
-struct DelegateMethod<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-impl<T, M, F> RpcMethod<M> for DelegateMethod<T, F> where
-	F: Fn(&T, Params) -> Data + 'static,
-	F: Send + Sync + 'static,
-	T: Send + Sync + 'static,
-	M: Metadata,
-{
-	fn call(&self, params: Params, _meta: M) -> AsyncData {
-		let closure = &self.closure;
-		Box::new(futures::done(closure(&self.delegate, params)))
-	}
-}
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
 	closure: F,
 }
 
-impl<T, M, F> RpcMethod<M> for DelegateAsyncMethod<T, F> where
-	F: Fn(&T, Params) -> AsyncData,
-	F: Send + Sync + 'static,
-	T: Send + Sync + 'static,
+impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F> where
 	M: Metadata,
+	F: Fn(&T, Params) -> I,
+	I: IntoFuture<Item = Value, Error = Error>,
+	T: Send + Sync + 'static,
+	F: Send + Sync + 'static,
+	I::Future: Send + 'static,
 {
-	fn call(&self, params: Params, _meta: M) -> AsyncData {
+	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value, Error> {
 		let closure = &self.closure;
-		closure(&self.delegate, params)
+		Box::new(closure(&self.delegate, params).into_future())
 	}
 }
 
@@ -48,14 +31,17 @@ struct DelegateMethodWithMeta<T, F> {
 	closure: F,
 }
 
-impl<T, M, F> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
-	T: Send + Sync + 'static,
+impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
 	M: Metadata,
-	F: Fn(&T, Params, M) -> AsyncData + Send + Sync + 'static,
+	F: Fn(&T, Params, M) -> I,
+	I: IntoFuture<Item = Value, Error = Error>,
+	T: Send + Sync + 'static,
+	F: Send + Sync + 'static,
+	I::Future: Send + 'static,
 {
-	fn call(&self, params: Params, meta: M) -> AsyncData {
+	fn call(&self, params: Params, meta: M) -> BoxFuture<Value, Error> {
 		let closure = &self.closure;
-		closure(&self.delegate, params, meta)
+		Box::new(closure(&self.delegate, params, meta).into_future())
 	}
 }
 
@@ -82,9 +68,10 @@ struct DelegateSubscribe<T, F> {
 }
 
 impl<T, M, F> jsonrpc_pubsub::SubscribeRpcMethod<M> for DelegateSubscribe<T, F> where
-	T: Send + Sync + 'static,
 	M: PubSubMetadata,
-	F: Fn(&T, Params, M, Subscriber) + Send + Sync + 'static,
+	F: Fn(&T, Params, M, Subscriber),
+	T: Send + Sync + 'static,
+	F: Send + Sync + 'static,
 {
 	fn call(&self, params: Params, meta: M, subscriber: Subscriber) {
 		let closure = &self.closure;
@@ -97,13 +84,17 @@ struct DelegateUnsubscribe<T, F> {
 	closure: F,
 }
 
-impl<T, F> jsonrpc_pubsub::UnsubscribeRpcMethod for DelegateUnsubscribe<T, F> where
+impl<T, F, I> jsonrpc_pubsub::UnsubscribeRpcMethod for DelegateUnsubscribe<T, F> where
+	F: Fn(&T, SubscriptionId) -> I,
+	I: IntoFuture<Item = Value, Error = Error>,
 	T: Send + Sync + 'static,
-	F: Fn(&T, SubscriptionId) -> AsyncData + Send + Sync + 'static,
+	F: Send + Sync + 'static,
+	I::Future: Send + 'static,
 {
-	fn call(&self, id: SubscriptionId) -> AsyncData {
+	type Out = I::Future;
+	fn call(&self, id: SubscriptionId) -> Self::Out {
 		let closure = &self.closure;
-		closure(&self.delegate, id)
+		closure(&self.delegate, id).into_future()
 	}
 }
 
@@ -134,23 +125,12 @@ impl<T, M> IoDelegate<T, M> where
 		self.methods.insert(from.into(), RemoteProcedure::Alias(to.into()));
 	}
 
-	/// Adds sync method to the delegate.
-	pub fn add_method<F>(&mut self, name: &str, method: F) where
-		F: Fn(&T, Params) -> Data,
-		F: Send + Sync + 'static,
-	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
-			DelegateMethod {
-				delegate: self.delegate.clone(),
-				closure: method,
-			}
-		)));
-	}
-
 	/// Adds async method to the delegate.
-	pub fn add_async_method<F>(&mut self, name: &str, method: F) where
-		F: Fn(&T, Params) -> AsyncData,
+	pub fn add_method<F, I>(&mut self, name: &str, method: F) where
+		F: Fn(&T, Params) -> I,
+		I: IntoFuture<Item = Value, Error = Error>,
 		F: Send + Sync + 'static,
+		I::Future: Send + 'static,
 	{
 		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateAsyncMethod {
@@ -161,9 +141,11 @@ impl<T, M> IoDelegate<T, M> where
 	}
 
 	/// Adds async method with metadata to the delegate.
-	pub fn add_method_with_meta<F>(&mut self, name: &str, method: F) where
-		F: Fn(&T, Params, M) -> AsyncData,
+	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F) where
+		F: Fn(&T, Params, M) -> I,
+		I: IntoFuture<Item = Value, Error = Error>,
 		F: Send + Sync + 'static,
+		I::Future: Send + 'static,
 	{
 		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
 			DelegateMethodWithMeta {
@@ -192,7 +174,7 @@ impl<T, M> IoDelegate<T, M> where
 	M: PubSubMetadata,
 {
 	/// Adds subscription to the delegate.
-	pub fn add_subscription<Sub, Unsub>(
+	pub fn add_subscription<Sub, Unsub, I>(
 		&mut self,
 		name: &str,
 		subscribe: (&str, Sub),
@@ -200,8 +182,10 @@ impl<T, M> IoDelegate<T, M> where
 	) where
 		Sub: Fn(&T, Params, M, Subscriber),
 		Sub: Send + Sync + 'static,
-		Unsub: Fn(&T, SubscriptionId) -> AsyncData,
+		Unsub: Fn(&T, SubscriptionId) -> I,
+		I: IntoFuture<Item = Value, Error = Error>,
 		Unsub: Send + Sync + 'static,
+		I::Future: Send + 'static,
 	{
 		let (sub, unsub) = jsonrpc_pubsub::new_subscription(
 			name,

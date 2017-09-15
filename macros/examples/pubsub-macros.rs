@@ -8,8 +8,8 @@ use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
-use jsonrpc_core::{BoxFuture, Metadata, Error, ErrorCode};
-use jsonrpc_core::futures::{future, Future};
+use jsonrpc_core::{Metadata, Error, ErrorCode};
+use jsonrpc_core::futures::Future;
 use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;
@@ -41,7 +41,7 @@ build_rpc_trait! {
 
 			/// Unsubscribe from hello subscription.
 			#[rpc(name = "hello_unsubscribe")]
-			fn unsubscribe(&self, SubscriptionId) -> BoxFuture<bool, Error>;
+			fn unsubscribe(&self, SubscriptionId) -> Result<bool, Error>;
 		}
 	}
 }
@@ -74,17 +74,17 @@ impl Rpc for RpcImpl {
 		self.active.write().unwrap().insert(sub_id, sink);
 	}
 
-	fn unsubscribe(&self, id: SubscriptionId) -> BoxFuture<bool, Error> {
+	fn unsubscribe(&self, id: SubscriptionId) -> Result<bool, Error> {
 		let removed = self.active.write().unwrap().remove(&id);
-		Box::new(if removed.is_some() {
-			future::ok(true)
+		if removed.is_some() {
+			Ok(true)
 		} else {
-			future::err(Error {
+			Err(Error {
 				code: ErrorCode::InvalidParams,
 				message: "Invalid subscription.".into(),
 				data: None,
 			})
-		})
+		}
 	}
 }
 
