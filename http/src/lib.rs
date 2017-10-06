@@ -49,6 +49,7 @@ pub use server_utils::tokio_core;
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_header, CorsHeader};
 pub use response::Response;
+pub use hyper::server::Request;
 
 /// Result of starting the Server.
 pub type ServerResult = Result<Server, Error>;
@@ -107,7 +108,7 @@ pub enum RequestMiddlewareAction {
 		/// This allows for side effects to take place.
 		should_continue_on_invalid_cors: bool,
 		/// The request object returned
-		request: server::Request,
+		request: Request,
 	},
 	/// Intercept the request and respond differently.
 	Respond {
@@ -127,8 +128,8 @@ impl From<Response> for RequestMiddlewareAction {
 	}
 }
 
-impl From<server::Request> for RequestMiddlewareAction {
-	fn from(request: server::Request) -> Self {
+impl From<Request> for RequestMiddlewareAction {
+	fn from(request: Request) -> Self {
 		RequestMiddlewareAction::Proceed {
 			should_continue_on_invalid_cors: false,
 			request,
@@ -139,13 +140,13 @@ impl From<server::Request> for RequestMiddlewareAction {
 /// Allows to intercept request and handle it differently.
 pub trait RequestMiddleware: Send + Sync + 'static {
 	/// Takes a request and decides how to proceed with it.
-	fn on_request(&self, request: server::Request) -> RequestMiddlewareAction;
+	fn on_request(&self, request: Request) -> RequestMiddlewareAction;
 }
 
 impl<F> RequestMiddleware for F where
-	F: Fn(server::Request) -> RequestMiddlewareAction + Sync + Send + 'static,
+	F: Fn(Request) -> RequestMiddlewareAction + Sync + Send + 'static,
 {
-	fn on_request(&self, request: server::Request) -> RequestMiddlewareAction {
+	fn on_request(&self, request: Request) -> RequestMiddlewareAction {
 		(*self)(request)
 	}
 }
@@ -153,7 +154,7 @@ impl<F> RequestMiddleware for F where
 #[derive(Default)]
 struct NoopRequestMiddleware;
 impl RequestMiddleware for NoopRequestMiddleware {
-	fn on_request(&self, request: server::Request) -> RequestMiddlewareAction {
+	fn on_request(&self, request: Request) -> RequestMiddlewareAction {
 		RequestMiddlewareAction::Proceed {
 			should_continue_on_invalid_cors: false,
 			request,
@@ -164,16 +165,16 @@ impl RequestMiddleware for NoopRequestMiddleware {
 /// Extracts metadata from the HTTP request.
 pub trait MetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
-	fn read_metadata(&self, _: &server::Request) -> M {
+	fn read_metadata(&self, _: &Request) -> M {
 		Default::default()
 	}
 }
 
 impl<M, F> MetaExtractor<M> for F where
 	M: jsonrpc::Metadata,
-	F: Fn(&server::Request) -> M + Sync + Send + 'static,
+	F: Fn(&Request) -> M + Sync + Send + 'static,
 {
-	fn read_metadata(&self, req: &server::Request) -> M {
+	fn read_metadata(&self, req: &Request) -> M {
 		(*self)(req)
 	}
 }
