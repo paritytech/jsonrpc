@@ -8,7 +8,7 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 [travis-image]: https://travis-ci.org/paritytech/jsonrpc.svg?branch=master
 [travis-url]: https://travis-ci.org/paritytech/jsonrpc
 
-[Documentation](http://paritytech.github.io/jsonrpc/jsonrpc/index.html)
+[Documentation](http://paritytech.github.io/jsonrpc/)
 
 ## Sub-projects
 - [jsonrpc-core](./core) [![crates.io][core-image]][core-url]
