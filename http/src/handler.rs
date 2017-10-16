@@ -8,11 +8,12 @@ use hyper::header::{self, Headers};
 use unicase::Ascii;
 
 use jsonrpc::{self as core, FutureResult, BoxFuture, Metadata, Middleware, NoopMiddleware};
-use jsonrpc::futures::{Future, Poll, Async, Stream};
+use jsonrpc::futures::{Future, Poll, Async, Stream, future};
+use jsonrpc::serde_json;
 use response::Response;
 use server_utils::cors;
 
-use {utils, RequestMiddleware, RequestMiddlewareAction, CorsDomains, AllowedHosts};
+use {utils, RequestMiddleware, RequestMiddlewareAction, CorsDomains, AllowedHosts, RestApi};
 
 /// jsonrpc http request handler.
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -20,6 +21,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	allowed_hosts: AllowedHosts,
 	cors_domains: CorsDomains,
 	middleware: Arc<RequestMiddleware>,
+	rest_api: RestApi,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
@@ -29,12 +31,14 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		cors_domains: CorsDomains,
 		allowed_hosts: AllowedHosts,
 		middleware: Arc<RequestMiddleware>,
+		rest_api: RestApi,
 	) -> Self {
 		ServerHandler {
-			jsonrpc_handler: jsonrpc_handler,
-			allowed_hosts: allowed_hosts,
-			cors_domains: cors_domains,
-			middleware: middleware,
+			jsonrpc_handler,
+			allowed_hosts,
+			cors_domains,
+			middleware,
+			rest_api,
 		}
 	}
 }
@@ -76,6 +80,7 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 					},
 					is_options: false,
 					cors_header: cors::CorsHeader::NotRequired,
+					rest_api: self.rest_api,
 				})
 			}
 		}
@@ -132,7 +137,12 @@ enum RpcHandlerState<M, F> where
 	},
 	ReadingBody {
 		body: hyper::Body,
+		uri: Option<hyper::Uri>,
 		request: Vec<u8>,
+		metadata: M,
+	},
+	ProcessRest {
+		uri: hyper::Uri,
 		metadata: M,
 	},
 	Writing(Response),
@@ -149,6 +159,7 @@ impl<M, F> fmt::Debug for RpcHandlerState<M, F> where
 		match *self {
 			ReadingHeaders {..} => write!(fmt, "ReadingHeaders"),
 			ReadingBody {..} => write!(fmt, "ReadingBody"),
+			ProcessRest {..} => write!(fmt, "ProcessRest"),
 			Writing(ref res) => write!(fmt, "Writing({:?})", res),
 			Waiting(_) => write!(fmt, "Waiting"),
 			Done => write!(fmt, "Done"),
@@ -161,6 +172,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	state: RpcHandlerState<M, S::Future>,
 	is_options: bool,
 	cors_header: cors::CorsHeader<header::AccessControlAllowOrigin>,
+	rest_api: RestApi,
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
@@ -176,8 +188,11 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				// Read other headers
 				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
 			},
-			RpcHandlerState::ReadingBody { body, request, metadata, } => {
-				self.process_body(body, request, metadata)?
+			RpcHandlerState::ReadingBody { body, request, metadata, uri, } => {
+				self.process_body(body, request, uri, metadata)?
+			},
+			RpcHandlerState::ProcessRest { uri, metadata } => {
+				self.process_rest(uri, metadata)?
 			},
 			RpcHandlerState::Waiting(mut waiting) => {
 				match waiting.poll() {
@@ -233,10 +248,18 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			// Validate the ContentType header
 			// to prevent Cross-Origin XHRs with text/plain
 			Method::Post if Self::is_json(request.headers().get::<header::ContentType>()) => {
+				let uri = if self.rest_api != RestApi::Disabled { Some(request.uri().clone()) } else { None };
 				RpcHandlerState::ReadingBody {
-					metadata: metadata,
+					metadata,
 					request: Default::default(),
+					uri,
 					body: request.body(),
+				}
+			},
+			Method::Post if self.rest_api == RestApi::Unsecure => {
+				RpcHandlerState::ProcessRest {
+					metadata,
+					uri: request.uri().clone(),
 				}
 			},
 			// Just return error for unsupported content type
@@ -254,10 +277,47 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 	}
 
+	fn process_rest(
+		&self,
+		uri: hyper::Uri,
+		metadata: M,
+	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
+		use self::core::types::{Call, MethodCall, Version, Params, Request, Id, Value};
+
+		// skip the initial /
+		let mut it = uri.path().split('/').skip(1);
+
+		// parse method & params
+		let method = it.next().unwrap_or("");
+		let mut params = Vec::new();
+		for param in it {
+			let v = serde_json::from_str(param)
+				.or_else(|_| serde_json::from_str(&format!("\"{}\"", param)))
+				.unwrap_or(Value::Null);
+			params.push(v)
+		}
+
+		// Parse request
+		let call = Request::Single(Call::MethodCall(MethodCall {
+			jsonrpc: Some(Version::V2),
+			method: method.into(),
+			params: Some(Params::Array(params)),
+			id: Id::Num(1),
+		}));
+
+		return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
+			future::Either::B(self.jsonrpc_handler.handler.handle_rpc_request(call, metadata))
+				.map(|res| res.map(|x| serde_json::to_string(&x)
+					.expect("Serialization of response is infallible;qed")
+				))
+		)));
+	}
+
 	fn process_body(
 		&self,
 		mut body: hyper::Body,
 		mut request: Vec<u8>,
+		uri: Option<hyper::Uri>,
 		metadata: M,
 	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
 		loop {
@@ -267,6 +327,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 					request.extend_from_slice(&*chunk)
 				},
 				Async::Ready(None) => {
+					if let (Some(uri), true) = (uri, request.is_empty()) {
+						return Ok(RpcPollState::Ready(RpcHandlerState::ProcessRest {
+							uri,
+							metadata,
+						}));
+					}
+
 					let content = match ::std::str::from_utf8(&request) {
 						Ok(content) => content,
 						Err(err) => {
@@ -282,9 +349,10 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				},
 				Async::NotReady => {
 					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {
-						body: body,
-						request: request,
-						metadata: metadata
+						body,
+						request,
+						metadata,
+						uri,
 					}));
 				},
 			}
