@@ -28,6 +28,8 @@
 extern crate serde;
 
 pub extern crate futures;
+
+#[doc(hidden)]
 pub extern crate serde_json;
 
 mod calls;
