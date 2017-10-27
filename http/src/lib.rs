@@ -127,6 +127,15 @@ impl From<Response> for RequestMiddlewareAction {
 	}
 }
 
+impl From<server::Response> for RequestMiddlewareAction {
+	fn from(response: server::Response) -> Self {
+		RequestMiddlewareAction::Respond {
+			should_validate_hosts: true,
+			response: Box::new(futures::future::ok(response)),
+		}
+	}
+}
+
 impl From<server::Request> for RequestMiddlewareAction {
 	fn from(request: server::Request) -> Self {
 		RequestMiddlewareAction::Proceed {
