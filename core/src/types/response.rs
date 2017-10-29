@@ -78,10 +78,12 @@ impl Output {
 			Output::Failure(ref f) => &f.id,
 		}
 	}
+}
 
+impl From<Output> for Result<Value, Error> {
 	/// Convert into a result. Will be `Ok` if it is a `Success` and `Err` if `Failure`.
-	pub fn into_result(self) -> Result<Value, Error> {
-		match self {
+	fn from(output: Output) -> Result<Value, Error> {
+		match output {
 			Output::Success(s) => Ok(s.result),
 			Output::Failure(f) => Err(f.error),
 		}
