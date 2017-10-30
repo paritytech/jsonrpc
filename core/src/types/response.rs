@@ -62,6 +62,32 @@ impl Output {
 			error: Error::new(ErrorCode::InvalidRequest),
 		})
 	}
+
+	/// Get the jsonrpc protocol version.
+	pub fn version(&self) -> Option<Version> {
+		match *self {
+			Output::Success(ref s) => s.jsonrpc,
+			Output::Failure(ref f) => f.jsonrpc,
+		}
+	}
+
+	/// Get the correlation id.
+	pub fn id(&self) -> &Id {
+		match *self {
+			Output::Success(ref s) => &s.id,
+			Output::Failure(ref f) => &f.id,
+		}
+	}
+}
+
+impl From<Output> for Result<Value, Error> {
+	/// Convert into a result. Will be `Ok` if it is a `Success` and `Err` if `Failure`.
+	fn from(output: Output) -> Result<Value, Error> {
+		match output {
+			Output::Success(s) => Ok(s.result),
+			Output::Failure(f) => Err(f.error),
+		}
+	}
 }
 
 impl<'a> Deserialize<'a> for Output {
