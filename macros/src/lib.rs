@@ -50,7 +50,7 @@
 #![warn(missing_docs)]
 
 pub extern crate jsonrpc_core;
-extern crate jsonrpc_pubsub;
+pub extern crate jsonrpc_pubsub;
 extern crate serde;
 
 mod auto_args;
