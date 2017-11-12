@@ -16,12 +16,10 @@ error_chain! {
 			display("Action on closed connection."),
 		}
 
-		/// WebSockets error.
-		///
-		/// NOTE: not using `foreign_links` due to custom `From` implementation.
-		WebSocket(t: ws::Error) {
-			description("WebSockets error"),
-			display("WebSocket: {}", t),
+		/// Generic WebSockets error.
+		Message(t: String) {
+			description("generic message"),
+			display("{}", t),
 		}
 	}
 }
@@ -30,8 +28,7 @@ impl From<ws::Error> for Error {
 	fn from(err: ws::Error) -> Self {
 		match err.kind {
 			ws::ErrorKind::Io(e) => e.into(),
-			_ => ErrorKind::WebSocket(err).into(),
+			_ => Error::with_chain(err, "WebSockets Error"),
 		}
 	}
 }
-

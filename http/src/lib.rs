@@ -28,10 +28,7 @@ pub extern crate hyper;
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate error_chain;
 
-mod error;
 mod handler;
 mod response;
 mod utils;
@@ -48,7 +45,6 @@ use jsonrpc::futures::{self, Future, Stream};
 use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
 
-pub use error::{Error, ErrorKind, Result};
 pub use server_utils::hosts::{Host, DomainsValidation};
 pub use server_utils::cors::{AccessControlAllowOrigin, Origin};
 pub use server_utils::tokio_core;
@@ -295,7 +291,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
-	pub fn start_http(self, addr: &SocketAddr) -> Result<Server> {
+	pub fn start_http(self, addr: &SocketAddr) -> io::Result<Server> {
 		let cors_domains = self.cors_domains;
 		let request_middleware = self.request_middleware;
 		let allowed_hosts = self.allowed_hosts;
