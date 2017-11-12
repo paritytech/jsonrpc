@@ -39,6 +39,18 @@ impl SubscriptionId {
 	}
 }
 
+impl From<String> for SubscriptionId {
+	fn from(other: String) -> Self {
+		SubscriptionId::String(other)
+	}
+}
+
+impl From<u64> for SubscriptionId {
+	fn from(other: u64) -> Self {
+		SubscriptionId::Number(other)
+	}
+}
+
 impl From<SubscriptionId> for core::Value {
 	fn from(sub: SubscriptionId) -> Self {
 		match sub {
