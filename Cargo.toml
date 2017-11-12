@@ -9,5 +9,6 @@ members = [
 	"pubsub/more-examples",
 	"server-utils",
 	"tcp",
-	"ws"
+	"test",
+	"ws",
 ]

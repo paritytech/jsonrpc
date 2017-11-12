@@ -26,7 +26,7 @@ pub type FutureOutput = future::Either<
 >;
 
 /// `IoHandler` json-rpc protocol compatibility
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum Compatibility {
 	/// Compatible only with JSON-RPC 1.x
 	V1,
@@ -63,6 +63,7 @@ impl Compatibility {
 /// Request handler
 ///
 /// By default compatible only with jsonrpc v2
+#[derive(Debug)]
 pub struct MetaIoHandler<T: Metadata, S: Middleware<T> = middleware::Noop> {
 	middleware: S,
 	compatibility: Compatibility,
@@ -270,7 +271,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 }
 
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
 
 // Type inference helper
