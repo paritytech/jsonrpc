@@ -72,9 +72,9 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| -> futures::BoxFuture<Value, Error> {
+		("remove_hello", |_id: SubscriptionId| -> Result<Value, Error> {
 			println!("Closing subscription");
-			futures::future::ok(Value::Bool(true)).boxed()
+			Ok(Value::Bool(true))
 		}),
 	);
 
