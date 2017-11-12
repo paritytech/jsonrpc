@@ -2,7 +2,7 @@ extern crate jsonrpc_core;
 extern crate jsonrpc_http_server;
 
 use jsonrpc_core::*;
-use jsonrpc_http_server::{ServerBuilder, DomainsValidation, AccessControlAllowOrigin};
+use jsonrpc_http_server::{ServerBuilder, DomainsValidation, AccessControlAllowOrigin, RestApi};
 
 fn main() {
 	let mut io = IoHandler::default();
@@ -12,6 +12,7 @@ fn main() {
 
 	let server = ServerBuilder::new(io)
 		.threads(3)
+		.rest_api(RestApi::Unsecure)
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Any]))
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");

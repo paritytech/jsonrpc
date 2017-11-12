@@ -211,6 +211,24 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 type AllowedHosts = Option<Vec<Host>>;
 type CorsDomains = Option<Vec<AccessControlAllowOrigin>>;
 
+/// REST -> RPC converter state.
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum RestApi {
+	/// The REST -> RPC converter is enabled
+	/// and requires `Content-Type: application/json` header
+	/// (even though the body should be empty).
+	/// This protects from submitting an RPC call
+	/// from unwanted origins.
+	Secure,
+	/// The REST -> RPC converter is enabled
+	/// and does not require any `Content-Type` headers.
+	/// NOTE: This allows sending RPCs via HTTP forms
+	/// from any website.
+	Unsecure,
+	/// The REST -> RPC converter is disabled.
+	Disabled,
+}
+
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
@@ -219,6 +237,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: CorsDomains,
 	allowed_hosts: AllowedHosts,
+	rest_api: RestApi,
 	keep_alive: bool,
 	threads: usize,
 }
@@ -244,6 +263,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			allowed_hosts: None,
+			rest_api: RestApi::Disabled,
 			keep_alive: true,
 			threads: 1,
 		}
@@ -253,6 +273,14 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Applies only to 1 of the threads. Other threads will spawn their own Event Loops.
 	pub fn event_loop_remote(mut self, remote: tokio_core::reactor::Remote) -> Self {
 		self.remote = UninitializedRemote::Shared(remote);
+		self
+	}
+
+	/// Enable the REST -> RPC converter. Allows you to invoke RPCs
+	/// by sending `POST /<method>/<param1>/<param2>` requests
+	/// (with no body). Disabled by default.
+	pub fn rest_api(mut self, rest_api: RestApi) -> Self {
+		self.rest_api = rest_api;
 		self
 	}
 
@@ -318,6 +346,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			handler: self.handler,
 			extractor: self.meta_extractor,
 		};
+		let rest_api = self.rest_api;
 		let keep_alive = self.keep_alive;
 		let reuse_port = self.threads > 1;
 
@@ -332,6 +361,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware.clone(),
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
+			rest_api,
 			keep_alive,
 			reuse_port,
 		);
@@ -347,6 +377,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				request_middleware.clone(),
 				allowed_hosts.clone(),
 				jsonrpc_handler.clone(),
+				rest_api,
 				keep_alive,
 				reuse_port,
 			);
@@ -385,6 +416,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	request_middleware: Arc<RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
+	rest_api: RestApi,
 	keep_alive: bool,
 	reuse_port: bool,
 ) {
@@ -440,6 +472,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						cors_domains.clone(),
 						allowed_hosts.clone(),
 						request_middleware.clone(),
+						rest_api,
 					));
 					Ok(())
 				})
