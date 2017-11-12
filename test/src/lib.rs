@@ -1,6 +1,5 @@
 //! An utility package to test jsonrpc-core based projects.
 //!
-//!
 //! ```
 //! #[macro_use]
 //! extern crate jsonrpc_macros;
@@ -45,7 +44,6 @@
 //!   "message": "Internal error"
 //! }"#);
 //! }
-//!
 //! ```
 
 #[warn(missing_docs)]
@@ -56,6 +54,7 @@ extern crate serde_json;
 
 use std::collections::HashMap;
 
+/// Test RPC options.
 #[derive(Default, Debug)]
 pub struct Options {
 	/// Disable printing requests and responses.
