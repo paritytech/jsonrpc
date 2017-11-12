@@ -6,6 +6,7 @@ members = [
 	"macros",
 	"minihttp",
 	"pubsub",
+	"pubsub/more-examples",
 	"server-utils",
 	"tcp",
 	"ws"
