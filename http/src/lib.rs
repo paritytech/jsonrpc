@@ -19,7 +19,6 @@
 
 #![warn(missing_docs)]
 
-#[macro_use] extern crate log;
 extern crate unicase;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
@@ -27,18 +26,21 @@ extern crate net2;
 
 pub extern crate hyper;
 
-mod response;
+#[macro_use]
+extern crate log;
+
 mod handler;
+mod response;
 mod utils;
 #[cfg(test)]
 mod tests;
 
-use std::{fmt, io};
+use std::io;
 use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
 
 use hyper::server;
-use jsonrpc::{BoxFuture, MetaIoHandler};
+use jsonrpc::MetaIoHandler;
 use jsonrpc::futures::{self, Future, Stream};
 use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
@@ -49,55 +51,6 @@ pub use server_utils::tokio_core;
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_header, CorsHeader};
 pub use response::Response;
-
-/// Result of starting the Server.
-pub type ServerResult = Result<Server, Error>;
-
-/// RPC Server startup error.
-#[derive(Debug)]
-pub enum Error {
-	/// IO Error
-	Io(std::io::Error),
-	/// Other Error (hyper)
-	Other(hyper::error::Error),
-}
-
-impl From<std::io::Error> for Error {
-	fn from(err: std::io::Error) -> Self {
-		Error::Io(err)
-	}
-}
-
-impl From<hyper::error::Error> for Error {
-	fn from(err: hyper::error::Error) -> Self {
-		match err {
-			hyper::error::Error::Io(e) => Error::Io(e),
-			e => Error::Other(e)
-		}
-	}
-}
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			Error::Io(ref e) => e.fmt(f),
-			Error::Other(ref e) => e.fmt(f),
-		}
-	}
-}
-
-impl ::std::error::Error for Error {
-	fn description(&self) -> &str {
-		"Starting the JSON-RPC HTTP server failed"
-	}
-
-	fn cause(&self) -> Option<&::std::error::Error> {
-		Some(match *self {
-			Error::Io(ref e) => e,
-			Error::Other(ref e) => e,
-		})
-	}
-}
 
 /// Action undertaken by a middleware.
 pub enum RequestMiddlewareAction {
@@ -114,7 +67,7 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// a future for server response
-		response: BoxFuture<server::Response, hyper::Error>,
+		response: Box<Future<Item=server::Response, Error=hyper::Error> + Send>,
 	}
 }
 
@@ -338,7 +291,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
-	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
+	pub fn start_http(self, addr: &SocketAddr) -> io::Result<Server> {
 		let cors_domains = self.cors_domains;
 		let request_middleware = self.request_middleware;
 		let allowed_hosts = self.allowed_hosts;

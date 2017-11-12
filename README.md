@@ -71,19 +71,19 @@ extern crate jsonrpc_core;
 #[macro_use]
 extern crate jsonrpc_macros;
 
-use jsonrpc_core::Error;
+use jsonrpc_core::Result;
 
 build_rpc_trait! {
 	pub trait Rpc {
 		/// Adds two numbers and returns a result
 		#[rpc(name = "add")]
-		fn add(&self, u64, u64) -> Result<u64, Error>;
+		fn add(&self, u64, u64) -> Result<u64>;
 	}
 }
 
 pub struct RpcImpl;
 impl Rpc for RpcImpl {
-	fn add(&self, a: u64, b: u64) -> Result<u64, Error> {
+	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
 	}
 }

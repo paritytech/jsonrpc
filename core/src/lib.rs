@@ -39,7 +39,10 @@ mod middleware;
 pub mod types;
 
 /// A `Future` trait object.
-pub type BoxFuture<T, E> = Box<futures::Future<Item = T, Error = E> + Send>;
+pub type BoxFuture<T> = Box<futures::Future<Item = T, Error = Error> + Send>;
+
+/// A Result type.
+pub type Result<T> = ::std::result::Result<T, Error>;
 
 pub use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 pub use io::{Compatibility, IoHandler, MetaIoHandler, FutureResponse, FutureResult};

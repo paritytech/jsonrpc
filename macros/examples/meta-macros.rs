@@ -5,7 +5,7 @@ extern crate jsonrpc_tcp_server;
 
 use std::collections::BTreeMap;
 
-use jsonrpc_core::{futures, MetaIoHandler, Metadata, Error, Value};
+use jsonrpc_core::{futures, MetaIoHandler, Metadata, Error, Value, Result};
 use jsonrpc_core::futures::future::FutureResult;
 
 #[derive(Clone, Default)]
@@ -18,11 +18,11 @@ build_rpc_trait! {
 
 		/// Adds two numbers and returns a result
 		#[rpc(name = "add")]
-		fn add(&self, u64, u64) -> Result<u64, Error>;
+		fn add(&self, u64, u64) -> Result<u64>;
 
 		/// Multiplies two numbers. Second number is optional.
 		#[rpc(name = "mul")]
-		fn mul(&self, u64, jsonrpc_macros::Trailing<u64>) -> Result<u64, Error>;
+		fn mul(&self, u64, jsonrpc_macros::Trailing<u64>) -> Result<u64>;
 
 		/// Performs asynchronous operation
 		#[rpc(name = "callAsync")]
@@ -38,11 +38,11 @@ struct RpcImpl;
 impl Rpc for RpcImpl {
 	type Metadata = Meta;
 
-	fn add(&self, a: u64, b: u64) -> Result<u64, Error> {
+	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
 	}
 
-	fn mul(&self, a: u64, b: jsonrpc_macros::Trailing<u64>) -> Result<u64, Error> {
+	fn mul(&self, a: u64, b: jsonrpc_macros::Trailing<u64>) -> Result<u64> {
 		Ok(a * b.unwrap_or(1))
 	}
 

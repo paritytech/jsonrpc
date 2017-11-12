@@ -9,12 +9,13 @@ repository = "https://github.com/paritytech/jsonrpc"
 documentation = "https://paritytech.github.io/jsonrpc/json_ws_server/index.html"
 
 [dependencies]
-log = "0.3"
+error-chain = "0.11"
 jsonrpc-core = { version = "8.0", path = "../core" }
 jsonrpc-server-utils = { version = "8.0", path = "../server-utils" }
-ws = { git = "https://github.com/tomusdrw/ws-rs" }
+log = "0.3"
 parking_lot = "0.4"
 slab = "0.3"
+ws = { git = "https://github.com/tomusdrw/ws-rs" }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

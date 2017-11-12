@@ -72,7 +72,7 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| -> Result<Value, Error> {
+		("remove_hello", |_id: SubscriptionId| -> Result<Value> {
 			println!("Closing subscription");
 			Ok(Value::Bool(true))
 		}),

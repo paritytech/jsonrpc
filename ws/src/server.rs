@@ -10,14 +10,14 @@ use server_utils::reactor::{UninitializedRemote, Remote};
 use server_utils::session::SessionStats;
 use ws;
 
+use error::{Error, Result};
 use metadata;
 use session;
-use {Error};
 
 /// `WebSockets` server implementation.
 pub struct Server {
 	addr: SocketAddr,
-	handle: Option<thread::JoinHandle<Result<(), Error>>>,
+	handle: Option<thread::JoinHandle<Result<()>>>,
 	remote: Arc<Mutex<Option<Remote>>>,
 	broadcaster: ws::Sender,
 }
@@ -49,7 +49,7 @@ impl Server {
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
 		remote: UninitializedRemote,
-	) -> Result<Server, Error> {
+	) -> Result<Server> {
 		let config = {
 			let mut config = ws::Settings::default();
 			// accept only handshakes beginning with GET
@@ -100,7 +100,7 @@ impl Server {
 
 impl Server {
 	/// Consumes the server and waits for completion
-	pub fn wait(mut self) -> Result<(), Error> {
+	pub fn wait(mut self) -> Result<()> {
 		self.handle.take().expect("Handle is always Some at start.").join().expect("Non-panic exit")
 	}
 

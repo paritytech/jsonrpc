@@ -9,10 +9,9 @@ use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificati
 use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
-use BoxFuture;
 
 /// A type representing middleware or RPC response before serialization.
-pub type FutureResponse = BoxFuture<Option<Response>, ()>;
+pub type FutureResponse = Box<Future<Item=Option<Response>, Error=()> + Send>;
 
 /// A type representing future string response.
 pub type FutureResult<F> = future::Map<
@@ -22,7 +21,7 @@ pub type FutureResult<F> = future::Map<
 
 /// A type representing a result of a single method call.
 pub type FutureOutput = future::Either<
-	BoxFuture<Option<Output>, ()>,
+	Box<Future<Item=Option<Output>, Error=()> + Send>,
 	future::FutureResult<Option<Output>, ()>,
 >;
 

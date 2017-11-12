@@ -7,7 +7,8 @@ use server_utils::tokio_core::reactor::Remote;
 use server_utils::session;
 use ws;
 
-use {Origin, Error};
+use error;
+use {Origin};
 
 /// Output of WebSocket connection. Use this to send messages to the other endpoint.
 #[derive(Clone)]
@@ -25,17 +26,17 @@ impl Sender {
 		}
 	}
 
-	fn check_active(&self) -> Result<(), Error> {
+	fn check_active(&self) -> error::Result<()> {
 		if self.active.load(atomic::Ordering::SeqCst) {
 			Ok(())
 		} else {
-			Err(Error::ConnectionClosed)
+			bail!(error::ErrorKind::ConnectionClosed)
 		}
 	}
 
 	/// Sends a message over the connection.
 	/// Will return error if the connection is not active any more.
-	pub fn send<M>(&self, msg: M) -> Result<(), Error>
+	pub fn send<M>(&self, msg: M) -> error::Result<()>
 		where M: Into<ws::Message>
 	{
 		self.check_active()?;
@@ -45,7 +46,7 @@ impl Sender {
 
 	/// Sends a message over the endpoints of all connections.
 	/// Will return error if the connection is not active any more.
-	pub fn broadcast<M>(&self, msg: M) -> Result<(), Error> where
+	pub fn broadcast<M>(&self, msg: M) -> error::Result<()> where
 		M: Into<ws::Message>
 	{
 		self.check_active()?;
@@ -55,7 +56,7 @@ impl Sender {
 
 	/// Sends a close code to the other endpoint.
 	/// Will return error if the connection is not active any more.
-	pub fn close(&self, code: ws::CloseCode) -> Result<(), Error> {
+	pub fn close(&self, code: ws::CloseCode) -> error::Result<()> {
 		self.check_active()?;
 		self.out.close(code)?;
 		Ok(())

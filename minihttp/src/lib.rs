@@ -19,7 +19,6 @@
 
 #![warn(missing_docs)]
 
-#[macro_use] extern crate log;
 extern crate bytes;
 extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
@@ -28,12 +27,14 @@ extern crate tokio_proto;
 extern crate tokio_service;
 extern crate tokio_minihttp;
 
+#[macro_use]
+extern crate log;
+
 mod req;
 mod res;
 #[cfg(test)]
 mod tests;
 
-use std::fmt;
 use std::io;
 use std::ascii::AsciiExt;
 use std::sync::{Arc, mpsc};
@@ -47,42 +48,6 @@ use jsonrpc_server_utils::hosts;
 pub use jsonrpc_server_utils::cors;
 pub use jsonrpc_server_utils::hosts::{Host, DomainsValidation};
 pub use req::Req;
-
-/// Result of starting the Server.
-pub type ServerResult = Result<Server, Error>;
-
-/// RPC Server startup error.
-#[derive(Debug)]
-pub enum Error {
-	/// IO Error
-	Io(io::Error),
-}
-
-impl From<io::Error> for Error {
-	fn from(err: io::Error) -> Self {
-		Error::Io(err)
-	}
-}
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			Error::Io(ref e) => e.fmt(f),
-		}
-	}
-}
-
-impl ::std::error::Error for Error {
-	fn description(&self) -> &str {
-		"Starting the JSON-RPC HTTP server failed"
-	}
-
-	fn cause(&self) -> Option<&::std::error::Error> {
-		Some(match *self {
-			Error::Io(ref e) => e,
-		})
-	}
-}
 
 /// Extracts metadata from the HTTP request.
 pub trait MetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
@@ -167,7 +132,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
-	pub fn start_http(self, addr: &SocketAddr) -> ServerResult {
+	pub fn start_http(self, addr: &SocketAddr) -> io::Result<Server> {
 		let cors_domains = self.cors_domains;
 		let allowed_hosts = self.allowed_hosts;
 		let handler = self.jsonrpc_handler;
@@ -220,7 +185,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 		// Wait for server initialization
 		let local_addr: io::Result<SocketAddr> = local_addr_rx.recv().map_err(|_| {
-			Error::Io(io::Error::new(io::ErrorKind::Interrupted, ""))
+			io::Error::new(io::ErrorKind::Interrupted, "")
 		})?;
 
 		Ok(Server {

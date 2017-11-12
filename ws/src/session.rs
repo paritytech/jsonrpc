@@ -15,7 +15,8 @@ use server_utils::tokio_core::reactor::Remote;
 use server_utils::session::{SessionId, SessionStats};
 use ws;
 
-use {metadata, Error};
+use error;
+use metadata;
 
 /// Middleware to intercept server requests.
 /// You can either terminate the request (by returning a response)
@@ -253,7 +254,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 				if let Some(result) = response {
 					let res = out.send(result);
 					match res {
-						Err(Error::ConnectionClosed) => {
+						Err(error::Error(error::ErrorKind::ConnectionClosed, _)) => {
 							active_lock.store(false, atomic::Ordering::SeqCst);
 						},
 						Err(e) => {
