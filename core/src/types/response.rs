@@ -3,6 +3,7 @@ use serde::de::{Deserialize, Deserializer, Error as DeError};
 use serde::ser::{Serialize, Serializer};
 use serde_json::value::from_value;
 use super::{Id, Value, Error, ErrorCode, Version};
+use {Result as CoreResult};
 
 /// Successful response
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
@@ -39,7 +40,7 @@ pub enum Output {
 
 impl Output {
 	/// Creates new output given `Result`, `Id` and `Version`.
-	pub fn from(result: Result<Value, Error>, id: Id, jsonrpc: Option<Version>) -> Self {
+	pub fn from(result: CoreResult<Value>, id: Id, jsonrpc: Option<Version>) -> Self {
 		match result {
 			Ok(result) => Output::Success(Success {
 				id: id,
@@ -80,9 +81,9 @@ impl Output {
 	}
 }
 
-impl From<Output> for Result<Value, Error> {
+impl From<Output> for CoreResult<Value> {
 	/// Convert into a result. Will be `Ok` if it is a `Success` and `Err` if `Failure`.
-	fn from(output: Output) -> Result<Value, Error> {
+	fn from(output: Output) -> CoreResult<Value> {
 		match output {
 			Output::Success(s) => Ok(s.result),
 			Output::Failure(f) => Err(f.error),

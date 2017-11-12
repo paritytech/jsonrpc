@@ -6,7 +6,7 @@ extern crate jsonrpc_macros;
 
 use std::sync::Arc;
 use jsonrpc_core::futures::sync::mpsc;
-use jsonrpc_core::Error;
+use jsonrpc_core::Result;
 use jsonrpc_pubsub::{PubSubHandler, SubscriptionId, Session, PubSubMetadata};
 use jsonrpc_macros::{pubsub, Trailing};
 
@@ -21,7 +21,7 @@ build_rpc_trait! {
 
 			/// Unsubscribe from hello subscription.
 			#[rpc(name = "hello_unsubscribe")]
-			fn unsubscribe(&self, SubscriptionId) -> Result<bool, Error>;
+			fn unsubscribe(&self, SubscriptionId) -> Result<bool>;
 		}
 	}
 }
@@ -36,7 +36,7 @@ impl Rpc for RpcImpl {
 		let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 	}
 
-	fn unsubscribe(&self, _id: SubscriptionId) -> Result<bool, Error> {
+	fn unsubscribe(&self, _id: SubscriptionId) -> Result<bool> {
 		Ok(true)
 	}
 }

@@ -208,7 +208,7 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 	F: SubscribeRpcMethod<M>,
 	G: UnsubscribeRpcMethod,
 {
-	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value, core::Error> {
+	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value> {
 		match meta.session() {
 			Some(session) => {
 				let (tx, rx) = oneshot::channel();
@@ -253,7 +253,7 @@ impl<M, G> core::RpcMethod<M> for Unsubscribe<G> where
 	M: PubSubMetadata,
 	G: UnsubscribeRpcMethod,
 {
-	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value, core::Error> {
+	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value> {
 		let id = match params {
 			core::Params::Array(ref vec) if vec.len() == 1 => {
 				SubscriptionId::parse_value(&vec[0])

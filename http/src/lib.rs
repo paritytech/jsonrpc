@@ -43,7 +43,7 @@ use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
 
 use hyper::server;
-use jsonrpc::{BoxFuture, MetaIoHandler};
+use jsonrpc::MetaIoHandler;
 use jsonrpc::futures::{self, Future, Stream};
 use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
@@ -71,7 +71,7 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// a future for server response
-		response: BoxFuture<server::Response, hyper::Error>,
+		response: Box<Future<Item=server::Response, Error=hyper::Error> + Send>,
 	}
 }
 

@@ -20,7 +20,7 @@ impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F> where
 	F: Send + Sync + 'static,
 	I::Future: Send + 'static,
 {
-	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value, Error> {
+	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value> {
 		let closure = &self.closure;
 		Box::new(closure(&self.delegate, params).into_future())
 	}
@@ -39,7 +39,7 @@ impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
 	F: Send + Sync + 'static,
 	I::Future: Send + 'static,
 {
-	fn call(&self, params: Params, meta: M) -> BoxFuture<Value, Error> {
+	fn call(&self, params: Params, meta: M) -> BoxFuture<Value> {
 		let closure = &self.closure;
 		Box::new(closure(&self.delegate, params, meta).into_future())
 	}

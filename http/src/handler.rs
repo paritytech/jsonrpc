@@ -7,7 +7,7 @@ use hyper::{self, mime, server, Method};
 use hyper::header::{self, Headers};
 use unicase::Ascii;
 
-use jsonrpc::{self as core, FutureResult, BoxFuture, Metadata, Middleware, NoopMiddleware};
+use jsonrpc::{self as core, FutureResult, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{Future, Poll, Async, Stream, future};
 use jsonrpc::serde_json;
 use response::Response;
@@ -90,7 +90,7 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Rpc(RpcHandler<M, S>),
 	Error(Option<Response>),
-	Middleware(BoxFuture<server::Response, hyper::Error>),
+	Middleware(Box<Future<Item=server::Response, Error=hyper::Error> + Send>),
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {

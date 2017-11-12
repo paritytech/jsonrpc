@@ -8,7 +8,7 @@ use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
-use jsonrpc_core::{Metadata, Error, ErrorCode};
+use jsonrpc_core::{Metadata, Error, ErrorCode, Result};
 use jsonrpc_core::futures::Future;
 use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
 
@@ -32,7 +32,7 @@ build_rpc_trait! {
 
 		/// Adds two numbers and returns a result
 		#[rpc(name = "add")]
-		fn add(&self, u64, u64) -> Result<u64, Error>;
+		fn add(&self, u64, u64) -> Result<u64>;
 
 		#[pubsub(name = "hello")] {
 			/// Hello subscription
@@ -41,7 +41,7 @@ build_rpc_trait! {
 
 			/// Unsubscribe from hello subscription.
 			#[rpc(name = "hello_unsubscribe")]
-			fn unsubscribe(&self, SubscriptionId) -> Result<bool, Error>;
+			fn unsubscribe(&self, SubscriptionId) -> Result<bool>;
 		}
 	}
 }
@@ -54,7 +54,7 @@ struct RpcImpl {
 impl Rpc for RpcImpl {
 	type Metadata = Meta;
 
-	fn add(&self, a: u64, b: u64) -> Result<u64, Error> {
+	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
 	}
 
@@ -74,7 +74,7 @@ impl Rpc for RpcImpl {
 		self.active.write().unwrap().insert(sub_id, sink);
 	}
 
-	fn unsubscribe(&self, id: SubscriptionId) -> Result<bool, Error> {
+	fn unsubscribe(&self, id: SubscriptionId) -> Result<bool> {
 		let removed = self.active.write().unwrap().remove(&id);
 		if removed.is_some() {
 			Ok(true)
