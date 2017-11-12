@@ -15,12 +15,6 @@ error_chain! {
 			description("connection is closed"),
 			display("Action on closed connection."),
 		}
-
-		/// Generic WebSockets error.
-		Message(t: String) {
-			description("generic message"),
-			display("{}", t),
-		}
 	}
 }
 
