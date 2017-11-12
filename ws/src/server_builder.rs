@@ -1,5 +1,3 @@
-use std::fmt;
-use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -9,61 +7,11 @@ use server_utils::cors::Origin;
 use server_utils::hosts::{Host, DomainsValidation};
 use server_utils::reactor::UninitializedRemote;
 use server_utils::session::SessionStats;
-use ws;
 
+use error::Result;
 use metadata::{MetaExtractor, NoopExtractor};
 use server::Server;
 use session;
-
-/// Signer startup error
-#[derive(Debug)]
-pub enum Error {
-	/// Wrapped `std::io::Error`
-	Io(io::Error),
-	/// Other `ws-rs` error
-	WebSocket(ws::Error),
-	/// Attempted an action on closed connection
-	ConnectionClosed,
-}
-
-impl From<ws::Error> for Error {
-	fn from(err: ws::Error) -> Self {
-		match err.kind {
-			ws::ErrorKind::Io(e) => Error::Io(e),
-			_ => Error::WebSocket(err),
-		}
-	}
-}
-
-impl From<io::Error> for Error {
-	fn from(err: io::Error) -> Self {
-		Error::Io(err)
-	}
-}
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			Error::Io(ref e) => e.fmt(f),
-			Error::WebSocket(ref e) => e.fmt(f),
-			Error::ConnectionClosed => write!(f, "Attempted an action on closed connection"),
-		}
-	}
-}
-
-impl ::std::error::Error for Error {
-	fn description(&self) -> &str {
-		"Starting the JSON-RPC WebSocket server failed"
-	}
-
-	fn cause(&self) -> Option<&::std::error::Error> {
-		match *self {
-			Error::Io(ref e) => Some(e),
-			Error::WebSocket(ref e) => Some(e),
-			Error::ConnectionClosed => None,
-		}
-	}
-}
 
 /// Builder for `WebSockets` server
 pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
@@ -131,7 +79,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
-	pub fn start(self, addr: &SocketAddr) -> Result<Server, Error> {
+	pub fn start(self, addr: &SocketAddr) -> Result<Server> {
 		Server::start(
 			addr,
 			self.handler,
