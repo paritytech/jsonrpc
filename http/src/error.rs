@@ -11,6 +11,8 @@ error_chain! {
 
 	errors {
 		/// Hyper error
+		///
+		/// NOTE: not using `foreign_links` due to custom `From` implementation.
 		Hyper(e: hyper::Error) {
 			description("hyper error"),
 			display("Hyper: {}", e),

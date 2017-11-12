@@ -17,6 +17,8 @@ error_chain! {
 		}
 
 		/// WebSockets error.
+		///
+		/// NOTE: not using `foreign_links` due to custom `From` implementation.
 		WebSocket(t: ws::Error) {
 			description("WebSockets error"),
 			display("WebSocket: {}", t),
@@ -24,7 +26,6 @@ error_chain! {
 	}
 }
 
-/// Custom `From<ws::Error>` implementation to unpack `io::Error`.
 impl From<ws::Error> for Error {
 	fn from(err: ws::Error) -> Self {
 		match err.kind {
