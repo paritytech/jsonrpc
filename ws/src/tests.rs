@@ -213,6 +213,11 @@ fn drop_session_should_cancel() {
 	}).unwrap();
 
 	// then
+	let mut i = 0;
+	while incomplete.load(Ordering::SeqCst) != 1 && i < 10 {
+		thread::sleep(Duration::from_millis(50));
+		i += 1;
+	}
 	assert_eq!(incomplete.load(Ordering::SeqCst), 1);
 
 }
