@@ -60,13 +60,13 @@ use util::{invalid_params, expect_no_params, to_value};
 macro_rules! metadata {
 	() => {
 		/// Requests metadata
-		type Metadata: ::jsonrpc_core::Metadata;
+		type Metadata: $crate::jsonrpc_core::Metadata;
 	};
 	(
 		$( $sub_name: ident )+
 	) => {
 		/// Requests metadata
-		type Metadata: ::jsonrpc_pubsub::PubSubMetadata;
+		type Metadata: $crate::jsonrpc_pubsub::PubSubMetadata;
 	};
 }
 
@@ -92,7 +92,7 @@ macro_rules! build_rpc_trait {
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
-			fn to_delegate<M: ::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M> {
+			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M> {
 				let mut del = $crate::IoDelegate::new(self.into());
 				$(
 					build_rpc_trait!(WRAP del =>
