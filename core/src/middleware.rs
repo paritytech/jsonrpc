@@ -18,7 +18,7 @@ pub trait Middleware<M: Metadata>: Send + Sync + 'static {
 }
 
 /// No-op middleware implementation
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct Noop;
 impl<M: Metadata> Middleware<M> for Noop {
 	type Future = Box<Future<Item=Option<Response>, Error=()> + Send>;

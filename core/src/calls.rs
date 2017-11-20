@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Arc;
 use types::{Params, Value, Error};
 use futures::{Future, IntoFuture};
@@ -42,6 +43,17 @@ pub enum RemoteProcedure<T: Metadata> {
 	Notification(Arc<RpcNotification<T>>),
 	/// An alias to other method,
 	Alias(String),
+}
+
+impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+		use self::RemoteProcedure::*;
+		match *self {
+			Method(..) => write!(fmt, "<method>"),
+			Notification(..) => write!(fmt, "<notification>"),
+			Alias(ref alias) => write!(fmt, "alias => {:?}", alias)
+		}
+	}
 }
 
 impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F where

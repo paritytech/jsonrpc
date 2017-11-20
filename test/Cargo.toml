@@ -1,0 +1,12 @@
+[package]
+name = "jsonrpc-test"
+version = "8.0.0"
+authors = ["Tomasz Drwięga <tomasz@parity.io>"]
+
+[dependencies]
+jsonrpc-core = { path = "../core", version = "8.0" }
+serde = "1.0"
+serde_json = "1.0"
+
+[dev-dependencies]
+jsonrpc-macros = { path = "../macros", version = "8.0" }
