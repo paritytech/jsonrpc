@@ -1,7 +1,12 @@
 [package]
 name = "jsonrpc-test"
+description = "Simple test framework for JSON-RPC."
 version = "8.0.0"
 authors = ["Tomasz Drwięga <tomasz@parity.io>"]
+license = "MIT"
+homepage = "https://github.com/paritytech/jsonrpc"
+repository = "https://github.com/paritytech/jsonrpc"
+documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_test/index.html"
 
 [dependencies]
 jsonrpc-core = { path = "../core", version = "8.0" }
