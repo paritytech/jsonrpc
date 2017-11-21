@@ -6,7 +6,7 @@ authors = ["NikVolf <nikvolf@gmail.com>"]
 license = "MIT"
 homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
-documentation = "https://paritytech.github.io/jsonrpc/json_tcp_server/index.html"
+documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_tcp_server/index.html"
 
 [dependencies]
 log = "0.3"
