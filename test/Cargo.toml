@@ -1,5 +1,6 @@
 [package]
 name = "jsonrpc-test"
+description = "Simple test framework for JSON-RPC."
 version = "8.0.0"
 authors = ["Tomasz Drwięga <tomasz@parity.io>"]
 license = "MIT"
