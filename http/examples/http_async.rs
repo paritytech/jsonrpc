@@ -1,7 +1,6 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_http_server;
 
-
 use jsonrpc_core::*;
 use jsonrpc_http_server::{ServerBuilder, DomainsValidation, AccessControlAllowOrigin};
 
