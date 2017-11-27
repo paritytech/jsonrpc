@@ -287,7 +287,7 @@ impl IoHandler {
 	}
 }
 
-impl<M: Metadata> IoHandler<M> {
+impl<M: Metadata + Default> IoHandler<M> {
 	/// Handle given string request asynchronously.
 	pub fn handle_request(&self, request: &str) -> FutureResult<FutureResponse> {
 		self.0.handle_request(request, M::default())

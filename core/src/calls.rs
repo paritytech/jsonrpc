@@ -5,7 +5,7 @@ use futures::{Future, IntoFuture};
 use BoxFuture;
 
 /// Metadata trait
-pub trait Metadata: Default + Clone + Send + 'static {}
+pub trait Metadata: Clone + Send + 'static {}
 impl Metadata for () {}
 
 /// Asynchronous Method
