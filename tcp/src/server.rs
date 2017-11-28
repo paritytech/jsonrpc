@@ -20,19 +20,29 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	channels: Arc<SenderChannels>,
-	incoming_separator: codecs::Separator, 
+	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
+}
+
+impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
+	/// Creates new `SeverBuilder` wih given `IoHandler`
+	pub fn new<T>(handler: T) -> Self where
+		T: Into<MetaIoHandler<M, S>>,
+	{
+		Self::with_meta_extractor(handler, NoopExtractor)
+	}
 }
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 	/// Creates new `SeverBuilder` wih given `IoHandler`
-	pub fn new<T>(handler: T) -> Self where
-		T: Into<MetaIoHandler<M, S>>
+	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
+		T: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M> + 'static,
 	{
 		ServerBuilder {
 			remote: reactor::UninitializedRemote::Unspawned,
 			handler: Arc::new(handler.into()),
-			meta_extractor: Arc::new(NoopExtractor),
+			meta_extractor: Arc::new(extractor),
 			channels: Default::default(),
 			incoming_separator: Default::default(),
 			outgoing_separator: Default::default(),

@@ -14,15 +14,15 @@ use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct Meta {
-	session: Option<Arc<Session>>,
+	session: Arc<Session>,
 }
 
 impl Metadata for Meta {}
 impl PubSubMetadata for Meta {
 	fn session(&self) -> Option<Arc<Session>> {
-		self.session.clone()
+		Some(self.session.clone())
 	}
 }
 
@@ -108,10 +108,10 @@ fn main() {
 
 	io.extend_with(rpc.to_delegate());
 
-	let server = jsonrpc_tcp_server::ServerBuilder::new(io)
-		.session_meta_extractor(|context: &jsonrpc_tcp_server::RequestContext| {
+	let server = jsonrpc_tcp_server::ServerBuilder
+		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| {
 			Meta {
-				session: Some(Arc::new(Session::new(context.sender.clone()))),
+				session: Arc::new(Session::new(context.sender.clone())),
 			}
 		})
 		.start(&"0.0.0.0:3030".parse().unwrap())

@@ -13,21 +13,13 @@ use jsonrpc_core::futures::Future;
 
 #[derive(Clone)]
 struct Meta {
-	session: Option<Arc<Session>>,
-}
-
-impl Default for Meta {
-	fn default() -> Self {
-		Meta {
-			session: None,
-		}
-	}
+	session: Arc<Session>,
 }
 
 impl Metadata for Meta {}
 impl PubSubMetadata for Meta {
 	fn session(&self) -> Option<Arc<Session>> {
-		self.session.clone()
+		Some(self.session.clone())
 	}
 }
 
@@ -94,10 +86,9 @@ fn main() {
 		}),
 	);
 
-	let server = ServerBuilder::new(io)
-		.session_meta_extractor(|context: &RequestContext| {
+	let server = ServerBuilder::with_meta_extractor(io, |context: &RequestContext| {
 			Meta {
-				session: Some(Arc::new(Session::new(context.sender()))),
+				session: Arc::new(Session::new(context.sender())),
 			}
 		})
 		.start(&"127.0.0.1:3030".parse().unwrap())

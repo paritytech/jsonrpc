@@ -28,6 +28,6 @@ impl<M, F> MetaExtractor<M> for F where
 
 /// Noop-extractor
 pub struct NoopExtractor;
-impl<M: Metadata> MetaExtractor<M> for NoopExtractor {
+impl<M: Metadata + Default> MetaExtractor<M> for NoopExtractor {
 	fn extract(&self, _context: &RequestContext) -> M { M::default() }
 }
