@@ -1,7 +1,6 @@
 extern crate jsonrpc_core;
 extern crate jsonrpc_http_server;
 
-
 use jsonrpc_core::{IoHandler, Value};
 use jsonrpc_core::futures;
 use jsonrpc_http_server::{
