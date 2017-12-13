@@ -50,7 +50,7 @@ struct ParamsVisitor;
 impl<'a> Deserialize<'a> for Params {
 	fn deserialize<D>(deserializer: D) -> Result<Params, D::Error>
 	where D: Deserializer<'a> {
-		deserializer.deserialize_identifier(ParamsVisitor)
+		deserializer.deserialize_any(ParamsVisitor)
 	}
 }
 

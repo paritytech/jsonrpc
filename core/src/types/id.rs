@@ -29,7 +29,7 @@ impl Serialize for Id {
 impl<'a> Deserialize<'a> for Id {
 	fn deserialize<D>(deserializer: D) -> Result<Id, D::Error>
 	where D: Deserializer<'a> {
-		deserializer.deserialize_identifier(IdVisitor)
+		deserializer.deserialize_any(IdVisitor)
 	}
 }
 
