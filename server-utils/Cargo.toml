@@ -10,7 +10,7 @@ homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
 
 [dependencies]
-globset = "0.1"
+globset = "0.2"
 log = "0.3"
 jsonrpc-core = { version = "8.0", path = "../core" }
 tokio-core = { version = "0.1" }
