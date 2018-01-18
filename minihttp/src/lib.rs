@@ -52,9 +52,7 @@ pub use req::Req;
 /// Extracts metadata from the HTTP request.
 pub trait MetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
-	fn read_metadata(&self, _: &req::Req) -> M {
-		Default::default()
-	}
+	fn read_metadata(&self, _: &req::Req) -> M;
 }
 
 impl<M, F> MetaExtractor<M> for F where
@@ -68,7 +66,11 @@ impl<M, F> MetaExtractor<M> for F where
 
 #[derive(Default)]
 struct NoopExtractor;
-impl<M: jsonrpc::Metadata> MetaExtractor<M> for NoopExtractor {}
+impl<M: jsonrpc::Metadata + Default> MetaExtractor<M> for NoopExtractor {
+	fn read_metadata(&self, _: &req::Req) -> M {
+		M::default()
+	}
+}
 
 /// Convenient JSON-RPC HTTP Server builder.
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
@@ -81,18 +83,30 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 
 const SENDER_PROOF: &'static str = "Server initialization awaits local address.";
 
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
+impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
 	/// 2. Server is validating `Host` header.
-	pub fn new<T>(handler: T) -> Self where
-		T: Into<MetaIoHandler<M, S>>
+	pub fn new<T>(handler: T) -> Self where T: Into<MetaIoHandler<M, S>> {
+		Self::with_meta_extractor(handler, NoopExtractor)
+	}
+}
+
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
+	/// Creates new `ServerBuilder` for given `IoHandler` and meta extractor.
+	///
+	/// By default:
+	/// 1. Server is not sending any CORS headers.
+	/// 2. Server is validating `Host` header.
+	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
+		T: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
 	{
 		ServerBuilder {
 			jsonrpc_handler: Arc::new(handler.into()),
-			meta_extractor: Arc::new(NoopExtractor::default()),
+			meta_extractor: Arc::new(extractor),
 			cors_domains: None,
 			allowed_hosts: None,
 			threads: 1,

@@ -126,9 +126,7 @@ impl RequestMiddleware for NoopRequestMiddleware {
 /// Extracts metadata from the HTTP request.
 pub trait MetaExtractor<M: jsonrpc::Metadata>: Sync + Send + 'static {
 	/// Read the metadata from the request
-	fn read_metadata(&self, _: &server::Request) -> M {
-		Default::default()
-	}
+	fn read_metadata(&self, _: &server::Request) -> M;
 }
 
 impl<M, F> MetaExtractor<M> for F where
@@ -142,8 +140,12 @@ impl<M, F> MetaExtractor<M> for F where
 
 #[derive(Default)]
 struct NoopExtractor;
-impl<M: jsonrpc::Metadata> MetaExtractor<M> for NoopExtractor {}
-
+impl<M: jsonrpc::Metadata + Default> MetaExtractor<M> for NoopExtractor {
+	fn read_metadata(&self, _: &server::Request) -> M {
+		M::default()
+	}
+}
+//
 /// RPC Handler bundled with metadata extractor.
 pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
 	/// RPC Handler
@@ -197,11 +199,8 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 
 const SENDER_PROOF: &'static str = "Server initialization awaits local address.";
 
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
+impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
-	///
-	/// If you want to re-use the same handler in couple places
-	/// see `with_remote` function.
 	///
 	/// By default:
 	/// 1. Server is not sending any CORS headers.
@@ -209,10 +208,24 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	pub fn new<T>(handler: T) -> Self where
 		T: Into<MetaIoHandler<M, S>>
 	{
+		Self::with_meta_extractor(handler, NoopExtractor)
+	}
+}
+
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
+	/// Creates new `ServerBuilder` for given `IoHandler`.
+	///
+	/// By default:
+	/// 1. Server is not sending any CORS headers.
+	/// 2. Server is validating `Host` header.
+	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
+		T: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
+	{
 		ServerBuilder {
 			handler: Arc::new(handler.into()),
 			remote: UninitializedRemote::Unspawned,
-			meta_extractor: Arc::new(NoopExtractor::default()),
+			meta_extractor: Arc::new(extractor),
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			allowed_hosts: None,

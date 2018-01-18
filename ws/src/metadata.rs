@@ -101,9 +101,7 @@ impl fmt::Debug for RequestContext {
 /// Metadata extractor from session data.
 pub trait MetaExtractor<M: core::Metadata>: Send + Sync + 'static {
 	/// Extract metadata for given session
-	fn extract(&self, _context: &RequestContext) -> M {
-		Default::default()
-	}
+	fn extract(&self, _context: &RequestContext) -> M;
 }
 
 impl<M, F> MetaExtractor<M> for F where
@@ -118,7 +116,9 @@ impl<M, F> MetaExtractor<M> for F where
 /// Dummy metadata extractor
 #[derive(Debug, Clone)]
 pub struct NoopExtractor;
-impl<M: core::Metadata> MetaExtractor<M> for NoopExtractor {}
+impl<M: core::Metadata + Default> MetaExtractor<M> for NoopExtractor {
+	fn extract(&self, _context: &RequestContext) -> M { M::default() }
+}
 
 struct SenderFuture(Sender, mpsc::Receiver<String>);
 impl futures::Future for SenderFuture {

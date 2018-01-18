@@ -5,7 +5,7 @@ use std::sync::atomic::{self, AtomicUsize};
 use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Debug)]
 struct Meta(usize);
 impl Metadata for Meta {}
 

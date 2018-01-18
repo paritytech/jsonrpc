@@ -24,14 +24,24 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	remote: UninitializedRemote,
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
+impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder`
 	pub fn new<T>(handler: T) -> Self where
 		T: Into<core::MetaIoHandler<M, S>>,
 	{
+		Self::with_meta_extractor(handler, NoopExtractor)
+	}
+}
+
+impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
+	/// Creates new `ServerBuilder`
+	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
+		T: Into<core::MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
+	{
 		ServerBuilder {
 			handler: Arc::new(handler.into()),
-			meta_extractor: Arc::new(NoopExtractor),
+			meta_extractor: Arc::new(extractor),
 			allowed_origins: None,
 			allowed_hosts: None,
 			request_middleware: None,

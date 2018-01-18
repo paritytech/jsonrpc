@@ -49,14 +49,24 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	outgoing_separator: codecs::Separator,
 }
 
-impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
-	///
+impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
+	/// Creates new IPC server build given the `IoHandler`.
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
 		T: Into<MetaIoHandler<M, S>>,
 	{
+		Self::with_meta_extractor(io_handler, NoopExtractor)
+	}
+}
+
+impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
+	/// Creates new IPC server build given the `IoHandler` and metadata extractor.
+	pub fn with_meta_extractor<T, E>(io_handler: T, extractor: E) -> ServerBuilder<M, S> where
+		T: Into<MetaIoHandler<M, S>>,
+		E: MetaExtractor<M>,
+	{
 		ServerBuilder {
 			handler: Arc::new(io_handler.into()),
-			meta_extractor: Arc::new(NoopExtractor),
+			meta_extractor: Arc::new(extractor),
 			session_stats: None,
 			remote: reactor::UninitializedRemote::Unspawned,
 			incoming_separator: codecs::Separator::Empty,

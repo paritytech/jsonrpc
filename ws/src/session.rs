@@ -144,7 +144,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
-	metadata: M,
+	metadata: Option<M>,
 	remote: Remote,
 	task_slab: Arc<TaskSlab>,
 }
@@ -222,7 +222,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		self.context.protocols = req.protocols().ok()
 			.map(|protos| protos.into_iter().map(Into::into).collect())
 			.unwrap_or_else(Vec::new);
-		self.metadata = self.meta_extractor.extract(&self.context);
+		self.metadata = Some(self.meta_extractor.extract(&self.context));
 
 		match action {
 			MiddlewareAction::Proceed => ws::Response::from_request(req).map(|mut res| {
@@ -238,7 +238,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 	fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
 		let req = msg.as_text()?;
 		let out = self.context.out.clone();
-		let metadata = self.metadata.clone();
+		let metadata = self.metadata.clone().expect("Metadata is always set in on_request; qed");
 
 		// TODO: creation requires allocating a `oneshot` channel and acquiring a
 		// mutex. we could alternatively do this lazily upon first poll if
@@ -331,7 +331,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			allowed_hosts: self.allowed_hosts.clone(),
 			stats: self.stats.clone(),
 			request_middleware: self.request_middleware.clone(),
-			metadata: Default::default(),
+			metadata: None,
 			remote: self.remote.clone(),
 			task_slab: Arc::new(Mutex::new(Slab::with_capacity(0))),
 		}
