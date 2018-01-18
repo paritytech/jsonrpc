@@ -1,6 +1,5 @@
 //! Convenient Request wrapper used internally.
 
-use std::ascii::AsciiExt;
 use tokio_minihttp;
 use bytes::Bytes;
 
