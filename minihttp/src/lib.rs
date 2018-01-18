@@ -36,7 +36,6 @@ mod res;
 mod tests;
 
 use std::io;
-use std::ascii::AsciiExt;
 use std::sync::{Arc, mpsc};
 use std::net::SocketAddr;
 use std::thread;
