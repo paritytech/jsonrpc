@@ -46,6 +46,7 @@ impl From<mpsc::SendError<String>> for PushMessageError {
 }
 
 /// Peer-messages dispatcher.
+#[derive(Clone)]
 pub struct Dispatcher {
 	channels: Arc<SenderChannels>,
 }
