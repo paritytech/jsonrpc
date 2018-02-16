@@ -1,4 +1,5 @@
 use globset::{GlobMatcher, GlobBuilder};
+use std::ascii::AsciiExt;
 use std::{fmt, hash};
 
 /// Pattern that can be matched to string.
