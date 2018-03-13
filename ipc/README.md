@@ -9,18 +9,16 @@ IPC server (Windows & Linux) for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-core = "6.0"
-jsonrpc-ipc-server = "6.0"
+jsonrpc-ipc-server = { git = "https://github.com/paritytech/jsonrpc" }
 ```
 
 `main.rs`
 
 ```rust
-extern crate jsonrpc_core;
 extern crate jsonrpc_ipc_server;
 
-use jsonrpc_core::*;
 use jsonrpc_ipc_server::Server;
+use jsonrpc_ipc_server::jsonrpc_core::*;
 
 fn main() {
 	let mut io = IoHandler::new();
