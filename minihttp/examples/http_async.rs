@@ -1,9 +1,7 @@
-extern crate jsonrpc_core;
 extern crate jsonrpc_minihttp_server;
 
-
-use jsonrpc_core::*;
 use jsonrpc_minihttp_server::{cors, ServerBuilder, DomainsValidation};
+use jsonrpc_minihttp_server::jsonrpc_core::*;
 
 fn main() {
 	let mut io = IoHandler::default();

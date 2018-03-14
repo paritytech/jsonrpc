@@ -9,18 +9,16 @@ Blazing fast HTTP server for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-core = { git = "https://github.com/paritytech/jsonrpc" }
 jsonrpc-minihttp-server = { git = "https://github.com/paritytech/jsonrpc" }
 ```
 
 `main.rs`
 
 ```rust
-extern crate jsonrpc_core;
 extern crate jsonrpc_minihttp_server;
 
-use jsonrpc_core::*;
 use jsonrpc_minihttp_server::*;
+use jsonrpc_minihttp_server::jsonrpc_core::*;
 
 fn main() {
     let mut io = IoHandler::default();
@@ -29,9 +27,9 @@ fn main() {
 	});
 
     let server = ServerBuilder::new(io)
-			.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
-			.start_http(&"127.0.0.1:3030".parse().unwrap())
-			.expect("Unable to start RPC server");
+		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
+		.start_http(&"127.0.0.1:3030".parse().unwrap())
+		.expect("Unable to start RPC server");
 
 	server.wait().unwrap();
 }
