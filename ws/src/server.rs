@@ -52,8 +52,14 @@ impl Server {
 	) -> Result<Server> {
 		let config = {
 			let mut config = ws::Settings::default();
+			// don't grow non-final fragments (to prevent DOS)
+			config.fragments_grow = false;
+			// don't accept super large requests
+			config.max_in_buffer = 5 * 1024 * 1024; // 5MB
 			// accept only handshakes beginning with GET
 			config.method_strict = true;
+			// require masking
+			config.masking_strict = true;
 			// Was shutting down server when suspending on linux:
 			config.shutdown_on_interrupt = false;
 			config
