@@ -20,10 +20,10 @@
 #![warn(missing_docs)]
 
 extern crate unicase;
-extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate net2;
 
+pub extern crate jsonrpc_core;
 pub extern crate hyper;
 
 #[macro_use]
@@ -40,6 +40,7 @@ use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
 
 use hyper::server;
+use jsonrpc_core as jsonrpc;
 use jsonrpc::MetaIoHandler;
 use jsonrpc::futures::{self, Future, Stream};
 use jsonrpc::futures::sync::oneshot;

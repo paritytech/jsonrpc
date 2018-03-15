@@ -2,10 +2,11 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate parity_tokio_ipc;
 extern crate tokio_service;
+
+pub extern crate jsonrpc_core;
 
 #[macro_use] extern crate log;
 
@@ -15,6 +16,9 @@ extern crate tokio_service;
 
 mod server;
 mod meta;
+
+use jsonrpc_core as jsonrpc;
+
 pub use meta::{MetaExtractor, RequestContext};
 pub use server::{Server, ServerBuilder};
 

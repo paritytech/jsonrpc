@@ -9,18 +9,16 @@ WebSockets server for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-core = "6.0"
-jsonrpc-ws-server = "6.0"
+jsonrpc-ws-server = { git = "https://github.com/paritytech/jsonrpc" }
 ```
 
 `main.rs`
 
 ```rust
-extern crate jsonrpc_core;
 extern crate jsonrpc_ws_server;
 
-use jsonrpc_core::*;
 use jsonrpc_ws_server::*;
+use jsonrpc_ws_server::jsonrpc_core::*;
 
 fn main() {
 	let mut io = IoHandler::new();

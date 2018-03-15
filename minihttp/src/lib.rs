@@ -20,12 +20,13 @@
 #![warn(missing_docs)]
 
 extern crate bytes;
-extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils;
 extern crate parking_lot;
 extern crate tokio_proto;
 extern crate tokio_service;
 extern crate tokio_minihttp;
+
+pub extern crate jsonrpc_core;
 
 #[macro_use]
 extern crate log;
@@ -40,6 +41,7 @@ use std::sync::{Arc, mpsc};
 use std::net::SocketAddr;
 use std::thread;
 use parking_lot::RwLock;
+use jsonrpc_core as jsonrpc;
 use jsonrpc::futures::{self, future, Future};
 use jsonrpc::{FutureResult, MetaIoHandler, Response};
 use jsonrpc_server_utils::hosts;
