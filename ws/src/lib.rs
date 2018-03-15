@@ -2,12 +2,12 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_core as core;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate parking_lot;
 extern crate slab;
 
 pub extern crate ws;
+pub extern crate jsonrpc_core;
 
 #[macro_use]
 extern crate error_chain;
@@ -21,6 +21,8 @@ mod server_builder;
 mod session;
 #[cfg(test)]
 mod tests;
+
+use jsonrpc_core as core;
 
 pub use self::error::{Error, ErrorKind, Result};
 pub use self::metadata::{RequestContext, MetaExtractor, NoopExtractor};

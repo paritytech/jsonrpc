@@ -22,10 +22,11 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_core as jsonrpc;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate parking_lot;
 extern crate tokio_service;
+
+pub extern crate jsonrpc_core;
 
 #[macro_use] extern crate log;
 
@@ -39,6 +40,8 @@ mod service;
 
 #[cfg(test)] mod logger;
 #[cfg(test)] mod tests;
+
+use jsonrpc_core as jsonrpc;
 
 pub use dispatch::{Dispatcher, PushMessageError};
 pub use meta::{MetaExtractor, RequestContext};
