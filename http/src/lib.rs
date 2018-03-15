@@ -441,6 +441,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			let http = {
 				let mut http = server::Http::new();
 				http.keep_alive(keep_alive);
+				http.sleep_on_errors(true);
 				http
 			};
 			listener.incoming()
