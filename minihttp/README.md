@@ -19,6 +19,7 @@ extern crate jsonrpc_minihttp_server;
 
 use jsonrpc_minihttp_server::*;
 use jsonrpc_minihttp_server::jsonrpc_core::*;
+use jsonrpc_minihttp_server::cors::AccessControlAllowOrigin;
 
 fn main() {
     let mut io = IoHandler::default();
