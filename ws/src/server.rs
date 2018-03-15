@@ -49,9 +49,11 @@ impl Server {
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
 		remote: UninitializedRemote,
+		max_connections: usize,
 	) -> Result<Server> {
 		let config = {
 			let mut config = ws::Settings::default();
+			config.max_connections = max_connections;
 			// don't grow non-final fragments (to prevent DOS)
 			config.fragments_grow = false;
 			// don't accept super large requests
