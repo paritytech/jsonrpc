@@ -10,7 +10,7 @@ use self::jsonrpc_core::futures::{self, Future};
 use super::{ServerBuilder, Server, cors, hosts};
 
 fn serve_hosts(hosts: Vec<hosts::Host>) -> Server {
-	let _ = env_logger::init();
+	let _ = env_logger::try_init();
 
 	ServerBuilder::new(IoHandler::default())
 		.cors(hosts::DomainsValidation::AllowOnly(vec![cors::AccessControlAllowOrigin::Value("http://parity.io".into())]))
@@ -22,7 +22,7 @@ fn serve_hosts(hosts: Vec<hosts::Host>) -> Server {
 fn serve() -> Server {
 	use std::thread;
 
-	let _ = env_logger::init();
+	let _ = env_logger::try_init();
 	let mut io = IoHandler::default();
 	io.add_method("hello", |_params: Params| Ok(Value::String("world".into())));
 	io.add_method("hello_async", |_params: Params| {

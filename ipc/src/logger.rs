@@ -1,19 +1,19 @@
 #![allow(dead_code)]
 
 use std::env;
-use log::LogLevelFilter;
-use env_logger::LogBuilder;
+use log::LevelFilter;
+use env_logger::Builder;
 
 lazy_static! {
 	static ref LOG_DUMMY: bool = {
-		let mut builder = LogBuilder::new();
-		builder.filter(None, LogLevelFilter::Info);
+		let mut builder = Builder::new();
+		builder.filter(None, LevelFilter::Info);
 
 		if let Ok(log) = env::var("RUST_LOG") {
 			builder.parse(&log);
 		}
 
-		if let Ok(_) = builder.init() {
+		if let Ok(_) = builder.try_init() {
 			println!("logger initialized");
 		}
 		true

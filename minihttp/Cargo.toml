@@ -4,7 +4,7 @@ homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-minihttp-server"
-version = "8.0.0"
+version = "8.0.1"
 authors = ["tomusdrw <tomasz@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_minihttp_server/index.html"
@@ -13,14 +13,14 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_minihttp_server/in
 bytes = "0.4"
 jsonrpc-core = { version = "8.0", path = "../core" }
 jsonrpc-server-utils = { version = "8.0", path = "../server-utils" }
-log = "0.3"
+log = "0.4"
 parking_lot = "0.5"
 tokio-minihttp = { git = "https://github.com/tomusdrw/tokio-minihttp" }
 tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }
 tokio-service = "0.1"
 
 [dev-dependencies]
-env_logger = "0.4"
+env_logger = "0.5"
 reqwest = "0.6"
 
 [badges]
