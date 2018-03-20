@@ -74,6 +74,15 @@ impl Response {
 			content: "Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
 		}
 	}
+
+	/// Create a response for bad request
+	pub fn bad_request<S: Into<String>>(msg: S) -> Self {
+		Response {
+			code: StatusCode::BadRequest,
+			content_type: header::ContentType::plaintext(),
+			content: msg.into()
+		}
+	}
 }
 
 impl Into<server::Response> for Response {
