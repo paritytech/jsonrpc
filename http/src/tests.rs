@@ -352,6 +352,27 @@ fn should_add_cors_header_for_null_origin() {
 }
 
 #[test]
+fn should_not_allow_request_larger_than_max() {
+	let server = ServerBuilder::new(IoHandler::default())
+		.max_request_body_size(7)
+		.start_http(&"127.0.0.1:0".parse().unwrap())
+		.unwrap();
+
+	let response = request(server,
+		"\
+			POST / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Connection: close\r\n\
+			Content-Length: 8\r\n\
+			Content-Type: application/json\r\n\
+			\r\n\
+			12345678\r\n\
+		"
+	);
+	assert_eq!(response.status, "HTTP/1.1 413 Payload Too Large".to_owned());
+}
+
+#[test]
 fn should_reject_invalid_hosts() {
 	// given
 	let server = serve_hosts(vec!["parity.io".into()]);
