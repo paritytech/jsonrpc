@@ -193,6 +193,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	rest_api: RestApi,
 	keep_alive: bool,
 	threads: usize,
+	max_request_body_size: usize,
 }
 
 const SENDER_PROOF: &'static str = "Server initialization awaits local address.";
@@ -219,6 +220,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			rest_api: RestApi::Disabled,
 			keep_alive: true,
 			threads: 1,
+			max_request_body_size: 5 * 1024 * 1024,
 		}
 	}
 
@@ -290,6 +292,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Sets the maximum size of a request body in bytes (default is 5 MiB).
+	pub fn max_request_body_size(mut self, val: usize) -> Self {
+		self.max_request_body_size = val;
+		self
+	}
+
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> io::Result<Server> {
 		let cors_domains = self.cors_domains;
@@ -306,6 +314,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = oneshot::channel();
 		let eloop = self.remote.init_with_name("http.worker0")?;
+		let req_max_size = self.max_request_body_size;
 		serve(
 			(shutdown_signal, local_addr_tx),
 			eloop.remote(),
@@ -317,6 +326,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			rest_api,
 			keep_alive,
 			reuse_port,
+			req_max_size,
 		);
 		let handles = (0..self.threads - 1).map(|i| {
 			let (local_addr_tx, local_addr_rx) = mpsc::channel();
@@ -333,6 +343,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				rest_api,
 				keep_alive,
 				reuse_port,
+				req_max_size,
 			);
 			Ok((eloop, close, local_addr_rx))
 		}).collect::<io::Result<Vec<_>>>()?;
@@ -372,6 +383,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	rest_api: RestApi,
 	keep_alive: bool,
 	reuse_port: bool,
+	max_request_body_size: usize,
 ) {
 	let (shutdown_signal, local_addr_tx) = signals;
 	remote.spawn(move |handle| {
@@ -426,6 +438,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						allowed_hosts.clone(),
 						request_middleware.clone(),
 						rest_api,
+						max_request_body_size,
 					));
 					Ok(())
 				})
