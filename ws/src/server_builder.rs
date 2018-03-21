@@ -22,6 +22,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
 	session_stats: Option<Arc<SessionStats>>,
 	remote: UninitializedRemote,
+	max_connections: usize,
 }
 
 impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
@@ -47,6 +48,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware: None,
 			session_stats: None,
 			remote: UninitializedRemote::Unspawned,
+			max_connections: 100,
 		}
 	}
 
@@ -87,6 +89,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Maximal number of concurrent connections this server supports.
+	/// Default: 100
+	pub fn max_connections(mut self, max_connections: usize) -> Self {
+		self.max_connections = max_connections;
+		self
+	}
+
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
 	pub fn start(self, addr: &SocketAddr) -> Result<Server> {
@@ -99,6 +108,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.request_middleware,
 			self.session_stats,
 			self.remote,
+			self.max_connections,
 		)
 	}
 
