@@ -369,7 +369,7 @@ fn should_not_allow_request_larger_than_max() {
 			12345678\r\n\
 		"
 	);
-	assert_eq!(response.status, "HTTP/1.1 400 Bad Request".to_owned());
+	assert_eq!(response.status, "HTTP/1.1 413 Payload Too Large".to_owned());
 }
 
 #[test]

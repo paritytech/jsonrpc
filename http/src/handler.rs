@@ -201,7 +201,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 						RpcPollState::Ready(RpcHandlerState::Writing(resp))
 					}
 					Err(BodyError::TooLarge) => {
-						let resp = Response::bad_request("request body size exceeds allowed maximum");
+						let resp = Response::too_large("request body size exceeds allowed maximum");
 						RpcPollState::Ready(RpcHandlerState::Writing(resp))
 					}
 					Err(BodyError::Hyper(e)) => return Err(e),
@@ -354,11 +354,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		loop {
 			match body.poll()? {
 				Async::Ready(Some(chunk)) => {
-					// first check if this chunk itself is too large (in case it is already
-					// equal to `usize::MAX` where addition would overflow)
-					if chunk.len() > self.max_request_body_size
-						|| request.len() + chunk.len() > self.max_request_body_size
-					{
+					if request.len().checked_add(chunk.len()).map(|n| n > self.max_request_body_size).unwrap_or(true) {
 						return Err(BodyError::TooLarge)
 					}
 					request.extend_from_slice(&*chunk)

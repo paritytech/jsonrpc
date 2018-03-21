@@ -83,6 +83,15 @@ impl Response {
 			content: msg.into()
 		}
 	}
+
+	/// Create a response for too large (413)
+	pub fn too_large<S: Into<String>>(msg: S) -> Self {
+		Response {
+			code: StatusCode::PayloadTooLarge,
+			content_type: header::ContentType::plaintext(),
+			content: msg.into()
+		}
+	}
 }
 
 impl Into<server::Response> for Response {
