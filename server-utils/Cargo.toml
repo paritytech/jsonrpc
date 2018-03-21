@@ -1,7 +1,7 @@
 [package]
 description = "Server utils for jsonrpc-core crate."
 name = "jsonrpc-server-utils"
-version = "8.0.0"
+version = "8.0.1"
 authors = ["tomusdrw <tomasz@parity.io>"]
 license = "MIT"
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
@@ -11,7 +11,7 @@ repository = "https://github.com/paritytech/jsonrpc"
 
 [dependencies]
 globset = "0.2"
-log = "0.3"
+log = "0.4"
 jsonrpc-core = { version = "8.0", path = "../core" }
 tokio-core = { version = "0.1" }
 tokio-io = { version = "0.1" }
