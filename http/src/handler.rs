@@ -1,6 +1,6 @@
 use Rpc;
 
-use std::{fmt, mem};
+use std::{fmt, mem, str};
 use std::sync::Arc;
 
 use hyper::{self, mime, server, Method};
@@ -22,6 +22,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	cors_domains: CorsDomains,
 	middleware: Arc<RequestMiddleware>,
 	rest_api: RestApi,
+	max_request_body_size: usize,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
@@ -32,6 +33,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		allowed_hosts: AllowedHosts,
 		middleware: Arc<RequestMiddleware>,
 		rest_api: RestApi,
+		max_request_body_size: usize,
 	) -> Self {
 		ServerHandler {
 			jsonrpc_handler,
@@ -39,6 +41,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 			cors_domains,
 			middleware,
 			rest_api,
+			max_request_body_size,
 		}
 	}
 }
@@ -81,6 +84,7 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 					is_options: false,
 					cors_header: cors::CorsHeader::NotRequired,
 					rest_api: self.rest_api,
+					max_request_body_size: self.max_request_body_size,
 				})
 			}
 		}
@@ -173,6 +177,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	is_options: bool,
 	cors_header: cors::CorsHeader<header::AccessControlAllowOrigin>,
 	rest_api: RestApi,
+	max_request_body_size: usize,
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
@@ -189,7 +194,19 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
 			},
 			RpcHandlerState::ReadingBody { body, request, metadata, uri, } => {
-				self.process_body(body, request, uri, metadata)?
+				match self.process_body(body, request, uri, metadata) {
+					Err(BodyError::Utf8(ref e)) => {
+						let mesg = format!("utf-8 encoding error at byte {} in request body", e.valid_up_to());
+						let resp = Response::bad_request(mesg);
+						RpcPollState::Ready(RpcHandlerState::Writing(resp))
+					}
+					Err(BodyError::TooLarge) => {
+						let resp = Response::too_large("request body size exceeds allowed maximum");
+						RpcPollState::Ready(RpcHandlerState::Writing(resp))
+					}
+					Err(BodyError::Hyper(e)) => return Err(e),
+					Ok(state) => state,
+				}
 			},
 			RpcHandlerState::ProcessRest { uri, metadata } => {
 				self.process_rest(uri, metadata)?
@@ -228,6 +245,20 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				}
 			},
 		}
+	}
+}
+
+// Intermediate and internal error type to better distinguish
+// error cases occuring during request body processing.
+enum BodyError {
+	Hyper(hyper::Error),
+	Utf8(str::Utf8Error),
+	TooLarge,
+}
+
+impl From<hyper::Error> for BodyError {
+	fn from(e: hyper::Error) -> BodyError {
+		BodyError::Hyper(e)
 	}
 }
 
@@ -319,11 +350,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		mut request: Vec<u8>,
 		uri: Option<hyper::Uri>,
 		metadata: M,
-	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
+	) -> Result<RpcPollState<M, S::Future>, BodyError> {
 		loop {
 			match body.poll()? {
-				// TODO [ToDr] reject too large requests?
 				Async::Ready(Some(chunk)) => {
+					if request.len().checked_add(chunk.len()).map(|n| n > self.max_request_body_size).unwrap_or(true) {
+						return Err(BodyError::TooLarge)
+					}
 					request.extend_from_slice(&*chunk)
 				},
 				Async::Ready(None) => {
@@ -334,11 +367,11 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 						}));
 					}
 
-					let content = match ::std::str::from_utf8(&request) {
+					let content = match str::from_utf8(&request) {
 						Ok(content) => content,
 						Err(err) => {
 							// Return utf error.
-							return Err(hyper::Error::Utf8(err));
+							return Err(BodyError::Utf8(err));
 						},
 					};
 
