@@ -17,7 +17,7 @@ parity-tokio-ipc = { git = "https://github.com/nikvolf/parity-tokio-ipc" }
 
 [dev-dependencies]
 env_logger = "0.5"
-lazy_static = "0.2"
+lazy_static = "1.0"
 
 [target.'cfg(not(windows))'.dev-dependencies]
 tokio-uds = "0.1"
