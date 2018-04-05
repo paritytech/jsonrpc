@@ -97,7 +97,7 @@ impl LivenessPoll {
 
 		let (index, rx) = {
 			let mut task_slab = task_slab.lock();
-			if !task_slab.has_available() {
+			if task_slab.len() == task_slab.capacity() {
 				// grow the size if necessary.
 				// we don't expect this to get so big as to overflow.
 				let reserve = ::std::cmp::max(task_slab.capacity(), INITIAL_SIZE);
@@ -105,7 +105,7 @@ impl LivenessPoll {
 			}
 
 			let (tx, rx) = oneshot::channel();
-			let index = task_slab.insert(Some(tx)).expect("just checked slab capacity or grew; qed");
+			let index = task_slab.insert(Some(tx));
 			(index, rx)
 		};
 
@@ -155,7 +155,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
 
 		// signal to all still-live tasks that the session has been dropped.
-		for task in self.task_slab.lock().iter_mut() {
+		for (_index, task) in self.task_slab.lock().iter_mut() {
 			if let Some(task) = task.take() {
 				let _ = task.send(());
 			}
