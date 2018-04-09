@@ -17,6 +17,10 @@ fn serve_hosts(hosts: Vec<Host>) -> Server {
 }
 
 fn serve() -> Server {
+	serve_rest(false)
+}
+
+fn serve_rest(unsecure: bool) -> Server {
 	use std::thread;
 	let mut io = IoHandler::default();
 	io.add_method("hello", |params: Params| {
@@ -42,7 +46,7 @@ fn serve() -> Server {
 			AccessControlAllowOrigin::Value("parity.io".into()),
 			AccessControlAllowOrigin::Null,
 		]))
-		.rest_api(RestApi::Secure)
+		.rest_api(if unsecure { RestApi::Unsecure } else { RestApi::Secure })
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
 }
@@ -640,6 +644,30 @@ fn should_handle_rest_request_with_params() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_5());
+}
+
+#[test]
+fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
+	// given
+	let server = serve_rest(true);
+	let addr = server.address().clone();
+
+	// when
+	let req = "";
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
+	assert_eq!(&response.body, "51\nSupplied content type is not allowed. Content-Type: application/json is required\n");
 }
 
 fn invalid_host() -> String {
