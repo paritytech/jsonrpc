@@ -287,7 +287,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 					body: request.body(),
 				}
 			},
-			Method::Post if self.rest_api == RestApi::Unsecure => {
+			Method::Post if self.rest_api == RestApi::Unsecure && request.uri().path().split('/').count() > 2 => {
 				RpcHandlerState::ProcessRest {
 					metadata,
 					uri: request.uri().clone(),
