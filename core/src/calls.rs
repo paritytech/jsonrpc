@@ -7,6 +7,9 @@ use BoxFuture;
 /// Metadata trait
 pub trait Metadata: Clone + Send + 'static {}
 impl Metadata for () {}
+impl<T: Metadata> Metadata for Option<T> {}
+impl<T: Metadata> Metadata for Box<T> {}
+impl<T: Sync + Send + 'static> Metadata for Arc<T> {}
 
 /// Asynchronous Method
 pub trait RpcMethodSimple: Send + Sync + 'static {
