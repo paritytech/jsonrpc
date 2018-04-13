@@ -8,7 +8,7 @@ use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
-use jsonrpc_core::{Metadata, Error, ErrorCode, Result};
+use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_core::futures::Future;
 use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId};
 
@@ -40,7 +40,7 @@ struct RpcImpl {
 	active: Arc<RwLock<HashMap<SubscriptionId, pubsub::Sink<String>>>>,
 }
 impl Rpc for RpcImpl {
-	type Metadata = Meta;
+	type Metadata = Arc<Session>;
 
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
