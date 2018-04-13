@@ -185,6 +185,7 @@ pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Optio
 			}
 
 			match allowed.as_ref() {
+				None if *origin == "null" => CorsHeader::Ok(AccessControlAllowOrigin::Null),
 				None => CorsHeader::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
 				Some(ref allowed) if *origin == "null" => {
 					allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()

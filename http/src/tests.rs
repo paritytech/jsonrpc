@@ -17,10 +17,10 @@ fn serve_hosts(hosts: Vec<Host>) -> Server {
 }
 
 fn serve() -> Server {
-	serve_rest(false)
+	serve_rest(RestApi::Secure, false)
 }
 
-fn serve_rest(unsecure: bool) -> Server {
+fn serve_rest(rest: RestApi, cors_all: bool) -> Server {
 	use std::thread;
 	let mut io = IoHandler::default();
 	io.add_method("hello", |params: Params| {
@@ -42,11 +42,15 @@ fn serve_rest(unsecure: bool) -> Server {
 	});
 
 	ServerBuilder::new(io)
-		.cors(DomainsValidation::AllowOnly(vec![
-			AccessControlAllowOrigin::Value("parity.io".into()),
-			AccessControlAllowOrigin::Null,
-		]))
-		.rest_api(if unsecure { RestApi::Unsecure } else { RestApi::Secure })
+		.cors(if cors_all {
+			DomainsValidation::Disabled
+		} else {
+			DomainsValidation::AllowOnly(vec![
+				AccessControlAllowOrigin::Value("parity.io".into()),
+				AccessControlAllowOrigin::Null,
+			])
+		})
+		.rest_api(rest)
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
 }
@@ -353,6 +357,33 @@ fn should_add_cors_header_for_null_origin() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
+	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_add_cors_header_for_null_origin_when_all() {
+	// given
+	let server = serve_rest(RestApi::Secure, true);
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: null\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, method_not_found());
+	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -649,7 +680,7 @@ fn should_handle_rest_request_with_params() {
 #[test]
 fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 	// given
-	let server = serve_rest(true);
+	let server = serve_rest(RestApi::Unsecure, false);
 	let addr = server.address().clone();
 
 	// when
