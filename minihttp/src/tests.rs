@@ -52,7 +52,7 @@ struct Response {
 	pub headers: Headers,
 }
 
-fn request(server: Server, method: Method, headers: Headers, body: &str) -> Response {
+fn request(server: Server, method: Method, headers: Headers, body: &'static str) -> Response {
 	let client = reqwest::Client::new().unwrap();
 	let mut res = client.request(method, &format!("http://{}", server.address()))
 		.headers(headers)
