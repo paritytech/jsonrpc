@@ -7,7 +7,7 @@ use jsonrpc_pubsub as pubsub;
 use serde;
 use util::to_value;
 
-use self::core::futures::{self, Sink as FuturesSink};
+use self::core::futures::{self, Sink as FuturesSink, sync};
 
 pub use self::pubsub::SubscriptionId;
 
@@ -25,6 +25,16 @@ impl<T, E> Subscriber<T, E> {
 			subscriber: subscriber,
 			_data: PhantomData,
 		}
+	}
+
+	/// Create new subscriber for tests.
+	pub fn new_test<M: Into<String>>(method: M) -> (
+		Self,
+		sync::oneshot::Receiver<Result<SubscriptionId, core::Error>>,
+		sync::mpsc::Receiver<String>,
+	) {
+		let (subscriber, id, subscription) = pubsub::Subscriber::new_test(method);
+		(Subscriber::new(subscriber), id, subscription)
 	}
 
 	/// Reject subscription with given error.
