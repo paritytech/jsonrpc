@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 
 use core::{self, BoxFuture};
 use core::futures::{self, future, Sink as FuturesSink, Future};
-use core::futures::sync::oneshot;
+use core::futures::sync::{mpsc, oneshot};
 
 use handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
 use types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, SinkResult};
@@ -139,6 +139,26 @@ pub struct Subscriber {
 }
 
 impl Subscriber {
+	/// Creates new subscriber.
+	///
+	/// Should only be used for tests.
+	pub fn new_test<T: Into<String>>(method: T) -> (
+		Self,
+		oneshot::Receiver<Result<SubscriptionId, core::Error>>,
+		mpsc::Receiver<String>,
+	) {
+		let (sender, id_receiver) = oneshot::channel();
+		let (transport, transport_receiver) = mpsc::channel(1);
+
+		let subscriber = Subscriber {
+			notification: method.into(),
+			transport,
+			sender,
+		};
+
+		(subscriber, id_receiver, transport_receiver)
+	}
+
 	/// Consumes `Subscriber` and assigns unique id to a requestor.
 	/// Returns `Err` if request has already terminated.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink, ()> {
