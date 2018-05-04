@@ -79,6 +79,7 @@ pub fn new(body: &str, cors: Option<cors::AccessControlAllowOrigin>) -> Response
 				cors::AccessControlAllowOrigin::Any => "*",
 				cors::AccessControlAllowOrigin::Value(ref val) => val,
 			})
+			.header("Access-Control-Max-Age", "600")
 			.header("Vary", "Origin");
 	}
 	response
