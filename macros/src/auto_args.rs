@@ -72,44 +72,15 @@ macro_rules! metadata {
 
 #[macro_export]
 macro_rules! build_rpc_trait {
-	// entry-point. todo: make another for traits w/ bounds.
-	(
-		$(#[$t_attr: meta])*
-		pub trait $name: ident {
-			$(
-				$( #[doc=$m_doc:expr] )*
-				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error: ty)* >;
-			)*
-		}
-	) => {
-		$(#[$t_attr])*
-		pub trait $name: Sized + Send + Sync + 'static {
-			$(
-				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result<$out $(, $error)* > ;
-			)*
-
-			/// Transform this into an `IoDelegate`, automatically wrapping
-			/// the parameters.
-			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M> {
-				let mut del = $crate::IoDelegate::new(self.into());
-				$(
-					build_rpc_trait!(WRAP del =>
-						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out $(, $error)* >
-					);
-				)*
-				del
-			}
-		}
-	};
-
 	// entry-point for trait with metadata methods
 	(
 		$(#[$t_attr: meta])*
 		pub trait $name: ident {
 			type Metadata;
+
+			$(
+				type $t_name:ident;
+			)*
 
 			$(
 				$( #[ doc=$m_doc:expr ] )*
@@ -136,6 +107,10 @@ macro_rules! build_rpc_trait {
 			metadata! (
 				$( $sub_name )*
 			);
+
+			$(
+				type $t_name;
+			)*
 
 			$(
 				$(#[doc=$m_doc])*
@@ -166,6 +141,47 @@ macro_rules! build_rpc_trait {
 						fn $sub_name ( $($sub_p)* );
 						unsubscribe: ( $($unsub_t)* )
 						fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out $(, $error_unsub)* >;
+					);
+				)*
+				del
+			}
+		}
+	};
+
+	// entry-point. todo: make another for traits w/ bounds.
+	(
+		$(#[$t_attr: meta])*
+		pub trait $name: ident {
+			$(
+				type $t_name:ident;
+			)*
+			
+			$(
+				$( #[doc=$m_doc:expr] )*
+				#[ rpc( $($t:tt)* ) ]
+				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error: ty)* >;
+			)*
+		}
+	) => {
+		$(#[$t_attr])*
+		pub trait $name: Sized + Send + Sync + 'static {
+			$(
+				type $t_name;
+			)*
+
+			$(
+				$(#[doc=$m_doc])*
+				fn $m_name ( $($p)* ) -> $result<$out $(, $error)* > ;
+			)*
+
+			/// Transform this into an `IoDelegate`, automatically wrapping
+			/// the parameters.
+			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M> {
+				let mut del = $crate::IoDelegate::new(self.into());
+				$(
+					build_rpc_trait!(WRAP del =>
+						( $($t)* )
+						fn $m_name ( $($p)* ) -> $result <$out $(, $error)* >
 					);
 				)*
 				del
@@ -630,4 +646,3 @@ wrap_with_trailing!(4, A, B, C, D);
 wrap_with_trailing!(3, A, B, C);
 wrap_with_trailing!(2, A, B);
 wrap_with_trailing!(1, A);
-
