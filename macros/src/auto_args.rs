@@ -109,7 +109,7 @@ macro_rules! build_rpc_trait {
 			);
 
 			$(
-				type $t_name;
+				type $t_name: Send + Serialize;
 			)*
 
 			$(
@@ -155,7 +155,7 @@ macro_rules! build_rpc_trait {
 			$(
 				type $t_name:ident;
 			)*
-			
+
 			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
@@ -166,7 +166,7 @@ macro_rules! build_rpc_trait {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
 			$(
-				type $t_name;
+				type $t_name: Send + Serialize;
 			)*
 
 			$(
