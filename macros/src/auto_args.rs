@@ -77,12 +77,6 @@ macro_rules! build_rpc_trait {
 		$(#[$t_attr: meta])*
 		pub trait $name: ident {
 			$(
-				ASSOCIATED
-				$( #[doc=$t_doc:expr] )*
-				type $t_name:ident;
-			)*
-
-			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
 				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error: ty)* >;
@@ -91,11 +85,6 @@ macro_rules! build_rpc_trait {
 	) => {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
-			$(
-				$(#[doc=$t_doc])*
-				type $t_name: Send + $crate::Serialize;
-			)*
-
 			$(
 				$(#[doc=$m_doc])*
 				fn $m_name ( $($p)* ) -> $result<$out $(, $error)* > ;
