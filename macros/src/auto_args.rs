@@ -109,7 +109,7 @@ macro_rules! build_rpc_trait {
 			);
 
 			$(
-				type $t_name: Send + $crate::auto_args::Serialize;
+				type $t_name: Send + $crate::Serialize;
 			)*
 
 			$(
@@ -166,7 +166,7 @@ macro_rules! build_rpc_trait {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
 			$(
-				type $t_name: Send + $crate::auto_args::Serialize;
+				type $t_name: Send + $crate::Serialize;
 			)*
 
 			$(
