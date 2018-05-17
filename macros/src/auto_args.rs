@@ -112,12 +112,6 @@ macro_rules! build_rpc_trait {
 			type Metadata;
 
 			$(
-				ASSOCIATED
-				$( #[doc=$t_doc:expr] )*
-				type $t_name:ident;
-			)*
-
-			$(
 				$( #[ doc=$m_doc:expr ] )*
 				#[ rpc( $($t:tt)* ) ]
 				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error_std: ty) *>;
@@ -142,11 +136,6 @@ macro_rules! build_rpc_trait {
 			metadata! (
 				$( $sub_name )*
 			);
-
-			$(
-				$(#[doc=$t_doc])*
-				type $t_name: Send + $crate::Serialize;
-			)*
 
 			$(
 				$(#[doc=$m_doc])*
