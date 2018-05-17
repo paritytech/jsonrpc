@@ -9,7 +9,7 @@ use jsonrpc_core::futures::{self, Future, IntoFuture};
 use jsonrpc_core::futures::future::{self, Either};
 use jsonrpc_pubsub::{PubSubMetadata, Subscriber};
 use pubsub;
-use serde::Serialize;
+pub use serde::Serialize;
 use serde::de::DeserializeOwned;
 use util::{invalid_params, expect_no_params, to_value};
 
@@ -109,7 +109,7 @@ macro_rules! build_rpc_trait {
 			);
 
 			$(
-				type $t_name: Send + Serialize;
+				type $t_name: Send + $crate::auto_args::Serialize;
 			)*
 
 			$(
@@ -166,7 +166,7 @@ macro_rules! build_rpc_trait {
 		$(#[$t_attr])*
 		pub trait $name: Sized + Send + Sync + 'static {
 			$(
-				type $t_name: Send + Serialize;
+				type $t_name: Send + $crate::auto_args::Serialize;
 			)*
 
 			$(

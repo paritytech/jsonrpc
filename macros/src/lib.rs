@@ -60,7 +60,7 @@ mod util;
 pub mod pubsub;
 
 #[doc(hidden)]
-pub use auto_args::{WrapAsync, WrapMeta, WrapSubscribe};
+pub use auto_args::{WrapAsync, WrapMeta, WrapSubscribe, Serialize};
 pub use auto_args::Trailing;
 pub use delegates::IoDelegate;
 pub use util::to_value;
