@@ -34,3 +34,18 @@ fn main() {
 	server.wait().unwrap();
 }
 ```
+You can now test the above server by running `cargo run` in one terminal, and from another terminal issue the following POST request to your server:
+```
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "method": "say_hello", "id":123 }' 127.0.0.1:3030
+```
+to which the server will respond with the following:
+```
+{"jsonrpc":"2.0","result":"hello","id":123}
+```
+If you omit any of the fields above, or invoke a different method you will get an informative error message:
+```
+$ curl -X POST -H "Content-Type: application/json" -d '{"method": "say_hello", "id":123 }' 127.0.0.1:3030
+{"error":{"code":-32600,"message":"Unsupported JSON-RPC protocol version"},"id":123}
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc": "2.0", "method": "say_bye", "id":123 }' 127.0.0.1:3030
+{"jsonrpc":"2.0","error":{"code":-32601,"message":"Method not found"},"id":123}
+```
