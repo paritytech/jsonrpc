@@ -31,7 +31,7 @@ fn main() {
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
-	server.wait().unwrap();
+	server.wait();
 }
 ```
 You can now test the above server by running `cargo run` in one terminal, and from another terminal issue the following POST request to your server:
