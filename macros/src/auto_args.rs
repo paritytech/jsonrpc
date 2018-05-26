@@ -221,7 +221,9 @@ macro_rules! build_rpc_trait {
 			}),
 			($unsubscribe, move |base, id| {
 				use $crate::jsonrpc_core::futures::{IntoFuture, Future};
-				Self::$unsub_method(base, id).into_future().map($crate::to_value)
+				Self::$unsub_method(base, id).into_future()
+					.map($crate::to_value)
+					.map_err(Into::into)
 			}),
 		);
 
