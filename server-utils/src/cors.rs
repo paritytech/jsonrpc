@@ -103,8 +103,6 @@ impl ops::Deref for Origin {
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
 
-/// 1) Adding new CORS protocol to enum below
-
 pub enum AccessControlAllowOrigin {
 	/// Specific hostname
 	Value(Origin),
