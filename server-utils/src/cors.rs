@@ -142,8 +142,6 @@ pub enum AllowedCorsHeaders {
 	Only(Vec<CorsHeader>),
 }
 
-// 
-
 pub enum CorsHeader<T = AccessControlAllowOrigin> {
 	/// CORS header was not required. Origin is not present in the request.
 	NotRequired,
@@ -180,7 +178,7 @@ impl<T> Into<Option<T>> for CorsHeader<T> {
 }
 
 /// Returns correct CORS header (if any) given list of allowed origins and current origin.
-pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: AllowedCorsHeaders::Any) -> CorsHeader {
+pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> CorsHeader {
 	match origin {
 		None => CorsHeader::NotRequired,
 		Some(ref origin) => {
