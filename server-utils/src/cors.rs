@@ -103,8 +103,6 @@ impl ops::Deref for Origin {
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
 
-/// 1) Adding new CORS protocol to enum below
-
 pub enum AccessControlAllowOrigin {
 	/// Specific hostname
 	Value(Origin),
@@ -136,6 +134,16 @@ impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
 
 /// CORS Header Result.
 #[derive(Debug, Clone, PartialEq, Eq)]
+
+pub enum AllowedCorsHeaders {
+	/// Accept all incoming header requests
+	Any,
+	/// Accept only headers listed below:
+	Only(Vec<CorsHeader>),
+}
+
+// 
+
 pub enum CorsHeader<T = AccessControlAllowOrigin> {
 	/// CORS header was not required. Origin is not present in the request.
 	NotRequired,
@@ -172,7 +180,7 @@ impl<T> Into<Option<T>> for CorsHeader<T> {
 }
 
 /// Returns correct CORS header (if any) given list of allowed origins and current origin.
-pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> CorsHeader {
+pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: AllowedCorsHeaders::Any) -> CorsHeader {
 	match origin {
 		None => CorsHeader::NotRequired,
 		Some(ref origin) => {
