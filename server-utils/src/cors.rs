@@ -136,6 +136,14 @@ impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
 
 /// CORS Header Result.
 #[derive(Debug, Clone, PartialEq, Eq)]
+
+pub enum AllowedCorsHeaders {
+	/// Accept all incoming header requests
+	Any,
+	/// Accept only headers listed below:
+	Only(Vec<CorsHeader>),
+}
+
 pub enum CorsHeader<T = AccessControlAllowOrigin> {
 	/// CORS header was not required. Origin is not present in the request.
 	NotRequired,
