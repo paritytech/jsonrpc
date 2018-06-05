@@ -75,7 +75,7 @@ macro_rules! build_rpc_trait {
 	// entry-point. todo: make another for traits w/ bounds.
 	(
 		$(#[$t_attr: meta])*
-		pub trait $name: ident {
+		pub trait $name: ident $(<$($generics:ident),*>)* {
 			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
@@ -84,7 +84,7 @@ macro_rules! build_rpc_trait {
 		}
 	) => {
 		$(#[$t_attr])*
-		pub trait $name: Sized + Send + Sync + 'static {
+		pub trait $name $(<$($generics,)*>)* : Sized + Send + Sync + 'static {
 			$(
 				$(#[doc=$m_doc])*
 				fn $m_name ( $($p)* ) -> $result<$out $(, $error)* > ;
@@ -92,7 +92,9 @@ macro_rules! build_rpc_trait {
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
-			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M> {
+			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M>
+				where $($($generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned),*)*
+			{
 				let mut del = $crate::IoDelegate::new(self.into());
 				$(
 					build_rpc_trait!(WRAP del =>
@@ -108,7 +110,7 @@ macro_rules! build_rpc_trait {
 	// entry-point for trait with metadata methods
 	(
 		$(#[$t_attr: meta])*
-		pub trait $name: ident {
+		pub trait $name: ident $(<$($generics:ident),*>)* {
 			type Metadata;
 
 			$(
@@ -131,7 +133,7 @@ macro_rules! build_rpc_trait {
 		}
 	) => {
 		$(#[$t_attr])*
-		pub trait $name: Sized + Send + Sync + 'static {
+		pub trait $name $(<$($generics,)*>)* : Sized + Send + Sync + 'static {
 			// Metadata bound differs for traits with subscription methods.
 			metadata! (
 				$( $sub_name )*
@@ -151,7 +153,9 @@ macro_rules! build_rpc_trait {
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
-			fn to_delegate(self) -> $crate::IoDelegate<Self, Self::Metadata> {
+			fn to_delegate(self) -> $crate::IoDelegate<Self, Self::Metadata>
+				where $($($generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned),*)*
+			{
 				let mut del = $crate::IoDelegate::new(self.into());
 				$(
 					build_rpc_trait!(WRAP del =>
