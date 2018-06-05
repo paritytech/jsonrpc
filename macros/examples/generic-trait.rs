@@ -28,12 +28,13 @@ impl Rpc<u64, String> for RpcImpl {
 		Ok(100)
 	}
 
-	fn set_two(&self, x: String) -> Result<Two> {
+	fn set_two(&self, x: String) -> Result<()> {
 		println!("{}", x);
+		Ok(())
 	}
 
 	fn call(&self, num: u64) -> FutureResult<(u64, String), Error> {
-		::future::finished((999, "hello".into()))
+		::future::finished((num + 999, "hello".into()))
 	}
 }
 
