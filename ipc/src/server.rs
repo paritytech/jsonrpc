@@ -173,6 +173,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					})
 				})
 				.filter_map(|x| x)
+				// we use `select_both` here, instead of `select`, to close the stream
+				// as soon as the ipc pipe is closed
 				.select_both(receiver.map_err(|e| {
 					warn!(target: "ipc", "Notification error: {:?}", e);
 					std::io::ErrorKind::Other.into()
@@ -264,7 +266,6 @@ mod tests {
 	fn run(path: &str) -> Server {
 		let builder = server_builder();
 		let server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(5000));
 		server
 	}
 
@@ -275,12 +276,11 @@ mod tests {
 		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
 		let reply = writer
 			.send(data.to_owned())
-			.and_then(move |stream| {
+			.and_then(move |_| {
 				reader.into_future()
-					.map(|x| (stream, x))
 					.map_err(|(err, _)| err)
 			})
-			.and_then(|(_stream, (reply, _))| {
+			.and_then(|(reply, _)| {
 				future::ok(reply.expect("there should be one reply"))
 			});
 
@@ -316,6 +316,7 @@ mod tests {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
 		let server = run(path);
+		thread::sleep(::std::time::Duration::from_millis(1000));
 
 		let result = dummy_request_str(
 			path,
@@ -327,6 +328,8 @@ mod tests {
 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
 			"Response does not exactly match the expected response",
 		);
+
+		thread::sleep(::std::time::Duration::from_millis(1000));
 		server.close();
 	}
 
@@ -337,12 +340,14 @@ mod tests {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
 		let server = run(path);
+		thread::sleep(::std::time::Duration::from_millis(1000));
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
 			let path = path.clone();
 			handles.push(
 				thread::spawn(move || {
+					thread::sleep(::std::time::Duration::from_millis(100));
 					for _ in 0..100 {
 						let result = dummy_request_str(
 							&path,
@@ -362,6 +367,7 @@ mod tests {
 		for handle in handles.drain(..) {
 			handle.join().unwrap();
 		}
+		thread::sleep(::std::time::Duration::from_millis(1000));
 		server.close();
 	}
 
@@ -404,7 +410,7 @@ mod tests {
 		let builder = ServerBuilder::new(io);
 
 		let server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(5000));
+		thread::sleep(::std::time::Duration::from_millis(1000));
 
 		let result = dummy_request_str(&path,
 			"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
@@ -415,6 +421,8 @@ mod tests {
 			huge_response_test_json(),
 			"Response does not exactly match the expected response",
 		);
+
+		thread::sleep(::std::time::Duration::from_millis(1000));
 		server.close();
 	}
 
