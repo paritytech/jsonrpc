@@ -23,51 +23,51 @@ impl<T> SelectBothExt for T where T: Stream {
 #[derive(Debug)]
 #[must_use = "streams do nothing unless polled"]
 pub struct SelectBoth<S1, S2> {
-    stream1: Fuse<S1>,
-    stream2: Fuse<S2>,
-    flag: bool,
+	stream1: Fuse<S1>,
+	stream2: Fuse<S2>,
+	flag: bool,
 }
 
 fn new<S1, S2>(stream1: S1, stream2: S2) -> SelectBoth<S1, S2>
-    where S1: Stream,
-          S2: Stream<Item = S1::Item, Error = S1::Error>
+	where S1: Stream,
+		  S2: Stream<Item = S1::Item, Error = S1::Error>
 {
-    SelectBoth {
-        stream1: stream1.fuse(),
-        stream2: stream2.fuse(),
-        flag: false,
-    }
+	SelectBoth {
+		stream1: stream1.fuse(),
+		stream2: stream2.fuse(),
+		flag: false,
+	}
 }
 
 impl<S1, S2> Stream for SelectBoth<S1, S2>
-    where S1: Stream,
-          S2: Stream<Item = S1::Item, Error = S1::Error>
+	where S1: Stream,
+		  S2: Stream<Item = S1::Item, Error = S1::Error>
 {
-    type Item = S1::Item;
-    type Error = S1::Error;
+	type Item = S1::Item;
+	type Error = S1::Error;
 
-    fn poll(&mut self) -> Poll<Option<S1::Item>, S1::Error> {
-        let (a, b) = if self.flag {
-            (&mut self.stream2 as &mut Stream<Item=_, Error=_>,
-             &mut self.stream1 as &mut Stream<Item=_, Error=_>)
-        } else {
-            (&mut self.stream1 as &mut Stream<Item=_, Error=_>,
-             &mut self.stream2 as &mut Stream<Item=_, Error=_>)
-        };
-        self.flag = !self.flag;
+	fn poll(&mut self) -> Poll<Option<S1::Item>, S1::Error> {
+		let (a, b) = if self.flag {
+			(&mut self.stream2 as &mut Stream<Item=_, Error=_>,
+			 &mut self.stream1 as &mut Stream<Item=_, Error=_>)
+		} else {
+			(&mut self.stream1 as &mut Stream<Item=_, Error=_>,
+			 &mut self.stream2 as &mut Stream<Item=_, Error=_>)
+		};
+		self.flag = !self.flag;
 
-        match a.poll()? {
-            Async::Ready(Some(item)) => return Ok(Some(item).into()),
-            Async::Ready(None) => return Ok(None.into()),
-            Async::NotReady => (),
-        };
+		match a.poll()? {
+			Async::Ready(Some(item)) => return Ok(Some(item).into()),
+			Async::Ready(None) => return Ok(None.into()),
+			Async::NotReady => (),
+		};
 
 		self.flag = !self.flag;
 
-        match b.poll()? {
-            Async::Ready(Some(item)) => Ok(Some(item).into()),
+		match b.poll()? {
+			Async::Ready(Some(item)) => Ok(Some(item).into()),
 			Async::Ready(None) => Ok(None.into()),
-            Async::NotReady => Ok(Async::NotReady),
-        }
-    }
+			Async::NotReady => Ok(Async::NotReady),
+		}
+	}
 }
