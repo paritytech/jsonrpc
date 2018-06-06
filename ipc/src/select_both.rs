@@ -64,10 +64,6 @@ impl<S1, S2> Stream for SelectBoth<S1, S2>
 
 		self.flag = !self.flag;
 
-		match b.poll()? {
-			Async::Ready(Some(item)) => Ok(Some(item).into()),
-			Async::Ready(None) => Ok(None.into()),
-			Async::NotReady => Ok(Async::NotReady),
-		}
+		b.poll()
 	}
 }

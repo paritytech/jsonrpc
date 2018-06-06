@@ -264,7 +264,7 @@ mod tests {
 	fn run(path: &str) -> Server {
 		let builder = server_builder();
 		let server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(50));
+		thread::sleep(::std::time::Duration::from_millis(5000));
 		server
 	}
 
@@ -275,10 +275,12 @@ mod tests {
 		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
 		let reply = writer
 			.send(data.to_owned())
-			.and_then(move |_| {
-				reader.into_future().map_err(|(err, _)| err)
+			.and_then(move |stream| {
+				reader.into_future()
+					.map(|x| (stream, x))
+					.map_err(|(err, _)| err)
 			})
-			.and_then(|(reply, _)| {
+			.and_then(|(_stream, (reply, _))| {
 				future::ok(reply.expect("there should be one reply"))
 			});
 
@@ -313,7 +315,7 @@ mod tests {
 	fn request() {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
-		let _server = run(path);
+		let server = run(path);
 
 		let result = dummy_request_str(
 			path,
@@ -324,7 +326,8 @@ mod tests {
 			result,
 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
 			"Response does not exactly match the expected response",
-			);
+		);
+		server.close();
 	}
 
 	#[test]
@@ -333,7 +336,7 @@ mod tests {
 
 		::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
-		let _server = run(path);
+		let server = run(path);
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
@@ -351,8 +354,6 @@ mod tests {
 							"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
 							"Response does not exactly match the expected response",
 							);
-
-						::std::thread::sleep(::std::time::Duration::from_millis(10));
 					}
 				})
 			);
@@ -361,6 +362,7 @@ mod tests {
 		for handle in handles.drain(..) {
 			handle.join().unwrap();
 		}
+		server.close();
 	}
 
 	#[test]
@@ -401,8 +403,8 @@ mod tests {
 		});
 		let builder = ServerBuilder::new(io);
 
-		let _server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(::std::time::Duration::from_millis(50));
+		let server = builder.start(path).expect("Server must run with no issues");
+		thread::sleep(::std::time::Duration::from_millis(5000));
 
 		let result = dummy_request_str(&path,
 			"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
@@ -412,8 +414,8 @@ mod tests {
 			result,
 			huge_response_test_json(),
 			"Response does not exactly match the expected response",
-			);
-
+		);
+		server.close();
 	}
 
 
