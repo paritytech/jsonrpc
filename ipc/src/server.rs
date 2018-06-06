@@ -11,6 +11,7 @@ use server_utils::tokio_io::AsyncRead;
 use server_utils::{reactor, session, codecs};
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
+use select_both::SelectBothExt;
 
 /// IPC server session
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -172,7 +173,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					})
 				})
 				.filter_map(|x| x)
-				.select(receiver.map_err(|e| {
+				.select_both(receiver.map_err(|e| {
 					warn!(target: "ipc", "Notification error: {:?}", e);
 					std::io::ErrorKind::Other.into()
 				}));
