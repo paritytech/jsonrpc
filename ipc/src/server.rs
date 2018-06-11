@@ -317,15 +317,17 @@ mod tests {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
 		let server = run(path);
+		thread::sleep(Duration::from_millis(1000));
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
-		let _ = thread::spawn(move || {
+		let t = thread::spawn(move || {
 			let result = dummy_request_str(
 				path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
 				);
 			stop_signal.send(result).unwrap();
-		}).join().unwrap();
+		});
+		t.join().unwrap();
 
 		let _ = stop_receiver.map(move |result: String| {
 			assert_eq!(
@@ -342,9 +344,9 @@ mod tests {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
 		let server = run(path);
-		thread::sleep(Duration::from_millis(100));
 		let (stop_signal, stop_receiver) = mpsc::channel(400);
 
+		thread::sleep(Duration::from_millis(1000));
 		let mut handles = Vec::new();
 		for _ in 0..4 {
 			let path = path.clone();
@@ -361,7 +363,6 @@ mod tests {
 				})
 			);
 		}
-		thread::sleep(Duration::from_millis(100));
 
 		for handle in handles.drain(..) {
 			handle.join().unwrap();
@@ -416,16 +417,18 @@ mod tests {
 		let builder = ServerBuilder::new(io);
 
 		let server = builder.start(path).expect("Server must run with no issues");
+		thread::sleep(Duration::from_millis(1000));
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
-		let _ = thread::spawn(move || {
+		let t = thread::spawn(move || {
 			let result = dummy_request_str(
 				&path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
 			);
 
 			stop_signal.send(result).unwrap();
-		}).join().unwrap();
+		});
+		t.join().unwrap();
 
 		let _ = stop_receiver.map(move |result: String| {
 			assert_eq!(
