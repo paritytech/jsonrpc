@@ -18,7 +18,7 @@ matrix:
 
 script:
   - cargo build --all
-  - cargo test --all
+  - RUST_LOG=ipc cargo test --all
 
 after_success: |
   [ $TRAVIS_BRANCH = master ] &&
