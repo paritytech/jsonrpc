@@ -6,30 +6,10 @@ use std::{time, thread};
 use std::sync::Arc;
 
 use jsonrpc_core::*;
-use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, Subscriber, SubscriptionId};
+use jsonrpc_pubsub::{PubSubHandler, Session, Subscriber, SubscriptionId};
 use jsonrpc_tcp_server::{ServerBuilder, RequestContext};
 
 use jsonrpc_core::futures::Future;
-
-#[derive(Clone)]
-struct Meta {
-	session: Option<Arc<Session>>,
-}
-
-impl Default for Meta {
-	fn default() -> Self {
-		Meta {
-			session: None,
-		}
-	}
-}
-
-impl Metadata for Meta {}
-impl PubSubMetadata for Meta {
-	fn session(&self) -> Option<Arc<Session>> {
-		self.session.clone()
-	}
-}
 
 /// To test the server:
 ///
@@ -79,11 +59,7 @@ fn main() {
 	);
 
 	let server = ServerBuilder::new(io)
-		.session_meta_extractor(|context: &RequestContext| {
-			Meta {
-				session: Some(Arc::new(Session::new(context.sender.clone()))),
-			}
-		})
+		.session_meta_extractor(|context: &RequestContext| Some(Arc::new(Session::new(context.sender.clone()))))
 		.start(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 

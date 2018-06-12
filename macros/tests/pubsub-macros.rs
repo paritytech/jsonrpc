@@ -6,9 +6,17 @@ extern crate jsonrpc_macros;
 
 use std::sync::Arc;
 use jsonrpc_core::futures::sync::mpsc;
-use jsonrpc_core::Result;
 use jsonrpc_pubsub::{PubSubHandler, SubscriptionId, Session, PubSubMetadata};
 use jsonrpc_macros::{pubsub, Trailing};
+
+pub enum MyError {}
+impl From<MyError> for jsonrpc_core::Error {
+	fn from(_e: MyError) -> Self {
+		unreachable!()
+	}
+}
+
+type Result<T> = ::std::result::Result<T, MyError>;
 
 build_rpc_trait! {
 	pub trait Rpc {

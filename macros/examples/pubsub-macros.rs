@@ -8,23 +8,11 @@ use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
 
-use jsonrpc_core::{Metadata, Error, ErrorCode, Result};
+use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_core::futures::Future;
-use jsonrpc_pubsub::{Session, PubSubMetadata, PubSubHandler, SubscriptionId};
+use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;
-
-#[derive(Clone)]
-struct Meta {
-	session: Arc<Session>,
-}
-
-impl Metadata for Meta {}
-impl PubSubMetadata for Meta {
-	fn session(&self) -> Option<Arc<Session>> {
-		Some(self.session.clone())
-	}
-}
 
 build_rpc_trait! {
 	pub trait Rpc {
@@ -52,7 +40,7 @@ struct RpcImpl {
 	active: Arc<RwLock<HashMap<SubscriptionId, pubsub::Sink<String>>>>,
 }
 impl Rpc for RpcImpl {
-	type Metadata = Meta;
+	type Metadata = Arc<Session>;
 
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
@@ -109,11 +97,7 @@ fn main() {
 	io.extend_with(rpc.to_delegate());
 
 	let server = jsonrpc_tcp_server::ServerBuilder
-		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| {
-			Meta {
-				session: Arc::new(Session::new(context.sender.clone())),
-			}
-		})
+		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| Arc::new(Session::new(context.sender.clone())))
 		.start(&"0.0.0.0:3030".parse().unwrap())
 		.expect("Server must start with no issues");
 

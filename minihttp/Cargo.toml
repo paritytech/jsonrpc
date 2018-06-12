@@ -14,7 +14,7 @@ bytes = "0.4"
 jsonrpc-core = { version = "8.0", path = "../core" }
 jsonrpc-server-utils = { version = "8.0", path = "../server-utils" }
 log = "0.4"
-parking_lot = "0.5"
+parking_lot = "0.6"
 tokio-minihttp = { git = "https://github.com/tomusdrw/tokio-minihttp" }
 tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }
 tokio-service = "0.1"

@@ -18,6 +18,18 @@ pub trait PubSubMetadata: core::Metadata {
 	fn session(&self) -> Option<Arc<Session>>;
 }
 
+impl PubSubMetadata for Arc<Session> {
+	fn session(&self) -> Option<Arc<Session>> {
+		Some(self.clone())
+	}
+}
+
+impl<T: PubSubMetadata> PubSubMetadata for Option<T> {
+	fn session(&self) -> Option<Arc<Session>> {
+		self.as_ref().and_then(|s| s.session())
+	}
+}
+
 /// Unique subscription id.
 /// NOTE Assigning same id to different requests will cause the previous request to be unsubscribed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

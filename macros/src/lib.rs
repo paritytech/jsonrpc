@@ -61,6 +61,10 @@ pub mod pubsub;
 
 #[doc(hidden)]
 pub use auto_args::{WrapAsync, WrapMeta, WrapSubscribe};
+
+#[doc(hidden)]
+pub use serde::{de::DeserializeOwned, Serialize};
+
 pub use auto_args::Trailing;
 pub use delegates::IoDelegate;
 pub use util::to_value;
