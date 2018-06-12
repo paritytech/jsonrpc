@@ -247,7 +247,6 @@ mod tests {
 	extern crate tokio_uds;
 
 	use std::thread;
-	use std::time::Duration;
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
 	use jsonrpc::futures::{Future, future, Stream, Sink};
@@ -319,7 +318,6 @@ mod tests {
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
 		let t = thread::spawn(move || {
-			thread::sleep(Duration::from_millis(5000));
 			let result = dummy_request_str(
 				path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
@@ -351,7 +349,6 @@ mod tests {
 			let mut stop_signal = stop_signal.clone();
 			handles.push(
 				thread::spawn(move || {
-					thread::sleep(Duration::from_millis(5000));
 					for _ in 0..100 {
 						let result = dummy_request_str(
 							&path,
@@ -419,7 +416,6 @@ mod tests {
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
 		let t = thread::spawn(move || {
-			thread::sleep(Duration::from_millis(5000));
 			let result = dummy_request_str(
 				&path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",

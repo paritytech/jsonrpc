@@ -19,7 +19,7 @@ impl<T> SelectWithWeakExt for T where T: Stream {
 /// they become available, and the streams are polled in a round-robin fashion.
 /// Errors, however, are not merged: you get at most one error at a time.
 ///
-/// Finishes when either of the streams stops responding
+/// Finishes when strong stream finishes
 #[derive(Debug)]
 #[must_use = "streams do nothing unless polled"]
 pub struct SelectWithWeak<S1, S2> {
