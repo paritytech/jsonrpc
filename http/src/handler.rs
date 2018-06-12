@@ -413,6 +413,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				Ascii::new("content-type".to_owned()),
 				Ascii::new("accept".to_owned()),
 			]));
+			headers.set(header::AccessControlMaxAge(vec![
+				Ascii::new("600".to_owned()),
+			]));
 			headers.set(cors_domain);
 			headers.set(header::Vary::Items(vec![
 				Ascii::new("origin".to_owned())
