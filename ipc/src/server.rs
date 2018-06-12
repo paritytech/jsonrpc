@@ -132,7 +132,6 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			};
 
-			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
 			let remote = handle.remote().clone();
 			let connections = listener.incoming();
 			let mut id = 0u64;
@@ -190,6 +189,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 				Ok(())
 			});
+			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
 
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			future::Either::B(
@@ -272,7 +272,7 @@ mod tests {
 	}
 
 	fn dummy_request_str(path: &str, data: &str) -> String {
-		let core = Core::new().unwrap();
+		let mut core = Core::new().unwrap();
 		let stream = UnixStream::connect(path, &core.handle()).expect("Should have been connected to the server");
 		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
 		let reply = writer
@@ -285,7 +285,7 @@ mod tests {
 				future::ok(reply.expect("there should be one reply"))
 			});
 
-		reply.wait().unwrap()
+		core.run(reply).unwrap()
 	}
 
 	#[test]
@@ -320,7 +320,7 @@ mod tests {
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
 		let t = thread::spawn(move || {
-			thread::sleep(Duration::from_millis(1000));
+			thread::sleep(Duration::from_millis(5000));
 			let result = dummy_request_str(
 				path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
@@ -352,7 +352,7 @@ mod tests {
 			let mut stop_signal = stop_signal.clone();
 			handles.push(
 				thread::spawn(move || {
-					thread::sleep(Duration::from_millis(1000));
+					thread::sleep(Duration::from_millis(5000));
 					for _ in 0..100 {
 						let result = dummy_request_str(
 							&path,
@@ -420,7 +420,7 @@ mod tests {
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
 		let t = thread::spawn(move || {
-			thread::sleep(Duration::from_millis(1000));
+			thread::sleep(Duration::from_millis(5000));
 			let result = dummy_request_str(
 				&path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
