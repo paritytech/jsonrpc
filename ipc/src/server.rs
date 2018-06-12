@@ -11,7 +11,7 @@ use server_utils::tokio_io::AsyncRead;
 use server_utils::{reactor, session, codecs};
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
-use select_both::SelectBothExt;
+use select_with_weak::SelectWithWeakExt;
 
 /// IPC server session
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -172,9 +172,9 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					})
 				})
 				.filter_map(|x| x)
-				// we use `select_both` here, instead of `select`, to close the stream
+				// we use `select_with_weak` here, instead of `select`, to close the stream
 				// as soon as the ipc pipe is closed
-				.select_both(receiver.map_err(|e| {
+				.select_with_weak(receiver.map_err(|e| {
 					warn!(target: "ipc", "Notification error: {:?}", e);
 					std::io::ErrorKind::Other.into()
 				}));
@@ -253,7 +253,6 @@ mod tests {
 	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
-	use server_utils::tokio_core::reactor::Core;
 	use server_utils::tokio_io::AsyncRead;
 	use server_utils::codecs;
 
@@ -272,21 +271,21 @@ mod tests {
 	}
 
 	fn dummy_request_str(path: &str, data: &str) -> String {
-		let mut core = Core::new().unwrap();
-		let stream = UnixStream::connect(path, &core.handle()).expect("Should have been connected to the server");
-		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
-		let reply = writer
-			.send(data.to_owned())
-			.and_then(move |writer| {
-				reader.into_future()
-					.map_err(|(err, _)| err)
-					.map(|x| (writer, x))
-			})
-			.and_then(|(_writer, (reply, _))| {
-				future::ok(reply.expect("there should be one reply"))
-			});
+		let stream_future = UnixStream::connect(path);
+		let reply = stream_future.and_then(|stream| {
+			let stream= stream.framed(codecs::StreamCodec::stream_incoming());
+			let reply = stream
+				.send(data.to_owned())
+				.and_then(move |stream| {
+					stream.into_future().map_err(|(err, _)| err)
+				})
+				.and_then(|(reply, _)| {
+					future::ok(reply.expect("there should be one reply"))
+				});
+			reply
+		});
 
-		core.run(reply).unwrap()
+		reply.wait().expect("wait for reply")
 	}
 
 	#[test]
@@ -309,8 +308,7 @@ mod tests {
 		let path = "/tmp/test-ipc-30000";
 		let _server = run(path);
 
-		let core = Core::new().expect("Tokio Core should be created with no errors");
-		UnixStream::connect(path, &core.handle()).expect("Socket should connect");
+		UnixStream::connect(path).wait().expect("Socket should connect");
 	}
 
 	#[test]
@@ -387,8 +385,7 @@ mod tests {
 		server.close();
 
 		assert!(::std::fs::metadata(path).is_err(), "There should be no socket file left");
-		let core = Core::new().expect("Tokio Core should be created with no errors");
-		assert!(UnixStream::connect(path, &core.handle()).is_err(), "Connection to the closed socket should fail");
+		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
 	}
 
 	fn huge_response_test_str() -> String {
@@ -409,6 +406,7 @@ mod tests {
 
 	#[test]
 	fn test_huge_response() {
+		::logger::init_log();
 		let path = "/tmp/test-ipc-60000";
 
 		let mut io = MetaIoHandler::<()>::default();
