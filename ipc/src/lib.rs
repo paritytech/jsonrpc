@@ -15,6 +15,7 @@ pub extern crate jsonrpc_core;
 #[cfg(test)] mod logger;
 
 mod server;
+mod select_with_weak;
 mod meta;
 
 use jsonrpc_core as jsonrpc;
