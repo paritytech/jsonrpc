@@ -245,15 +245,19 @@ impl Drop for Server {
 #[cfg(not(windows))]
 mod tests {
 	extern crate tokio_uds;
+	extern crate parking_lot;
 
 	use std::thread;
+	use std::sync::Arc;
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
 	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
+	use self::parking_lot::Mutex;
 	use server_utils::tokio_io::AsyncRead;
 	use server_utils::codecs;
+	use meta::{MetaExtractor, RequestContext};
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -432,6 +436,51 @@ mod tests {
 				"Response does not exactly match the expected response",
 			);
 			server.close();
-		});
+		}).wait();
+	}
+
+	#[test]
+	fn test_session_end() {
+		struct SessionEndMeta {
+			drop_signal: Option<oneshot::Sender<()>>,
+		}
+
+		impl Drop for SessionEndMeta {
+			fn drop(&mut self) {
+				trace!(target: "ipc", "Dropping session meta");
+				self.drop_signal.take().unwrap().send(()).unwrap()
+			}
+		}
+
+		#[derive(Default)]
+		struct SessionEndExtractor {
+			drop_receivers: Arc<Mutex<Vec<oneshot::Receiver<()>>>>,
+		}
+
+		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
+			fn extract(&self, _context: &RequestContext) -> Arc<SessionEndMeta> {
+				let (signal, receiver) = oneshot::channel();
+				self.drop_receivers.lock().push(receiver);
+				let meta = SessionEndMeta {
+					drop_signal: Some(signal),
+				};
+				Arc::new(meta)
+			}
+		}
+
+		::logger::init_log();
+		let path = "/tmp/test-ipc-30009";
+		let session_metadata_extractor = SessionEndExtractor::default();
+		let drop_receivers = session_metadata_extractor.drop_receivers.clone();
+
+		let io = MetaIoHandler::<Arc<SessionEndMeta>>::default();
+		let builder = ServerBuilder::with_meta_extractor(io, session_metadata_extractor);
+		let server = builder.start(path).expect("Server must run with no issues");
+		UnixStream::connect(path).wait().expect("Socket should connect");
+		server.close();
+
+		assert_eq!(drop_receivers.lock().len(), 1);
+		let receiver = drop_receivers.lock().pop().unwrap();
+		let _ = receiver.map(|_| {}).wait().unwrap();
 	}
 }
