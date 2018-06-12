@@ -317,10 +317,10 @@ mod tests {
 		::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
 		let server = run(path);
-		thread::sleep(Duration::from_millis(1000));
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
 		let t = thread::spawn(move || {
+			thread::sleep(Duration::from_millis(1000));
 			let result = dummy_request_str(
 				path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
@@ -346,13 +346,13 @@ mod tests {
 		let server = run(path);
 		let (stop_signal, stop_receiver) = mpsc::channel(400);
 
-		thread::sleep(Duration::from_millis(1000));
 		let mut handles = Vec::new();
 		for _ in 0..4 {
 			let path = path.clone();
 			let mut stop_signal = stop_signal.clone();
 			handles.push(
 				thread::spawn(move || {
+					thread::sleep(Duration::from_millis(1000));
 					for _ in 0..100 {
 						let result = dummy_request_str(
 							&path,
@@ -417,10 +417,10 @@ mod tests {
 		let builder = ServerBuilder::new(io);
 
 		let server = builder.start(path).expect("Server must run with no issues");
-		thread::sleep(Duration::from_millis(1000));
 		let (stop_signal, stop_receiver) = oneshot::channel();
 
 		let t = thread::spawn(move || {
+			thread::sleep(Duration::from_millis(1000));
 			let result = dummy_request_str(
 				&path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
