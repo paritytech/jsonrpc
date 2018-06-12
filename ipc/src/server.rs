@@ -452,15 +452,14 @@ mod tests {
 			}
 		}
 
-		#[derive(Default)]
 		struct SessionEndExtractor {
-			drop_receivers: Arc<Mutex<Vec<oneshot::Receiver<()>>>>,
+			drop_receivers: Arc<Mutex<mpsc::Sender<oneshot::Receiver<()>>>>,
 		}
 
 		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
 			fn extract(&self, _context: &RequestContext) -> Arc<SessionEndMeta> {
 				let (signal, receiver) = oneshot::channel();
-				self.drop_receivers.lock().push(receiver);
+				self.drop_receivers.lock().try_send(receiver).unwrap();
 				let meta = SessionEndMeta {
 					drop_signal: Some(signal),
 				};
@@ -470,17 +469,22 @@ mod tests {
 
 		::logger::init_log();
 		let path = "/tmp/test-ipc-30009";
-		let session_metadata_extractor = SessionEndExtractor::default();
-		let drop_receivers = session_metadata_extractor.drop_receivers.clone();
+		let (signal, receiver) = mpsc::channel(16);
+		let session_metadata_extractor = SessionEndExtractor {
+			drop_receivers: Arc::new(Mutex::new(signal))
+		};
 
 		let io = MetaIoHandler::<Arc<SessionEndMeta>>::default();
 		let builder = ServerBuilder::with_meta_extractor(io, session_metadata_extractor);
 		let server = builder.start(path).expect("Server must run with no issues");
-		UnixStream::connect(path).wait().expect("Socket should connect");
-		server.close();
+		{
+			let _ = UnixStream::connect(path).wait().expect("Socket should connect");
+		}
 
-		assert_eq!(drop_receivers.lock().len(), 1);
-		let receiver = drop_receivers.lock().pop().unwrap();
-		let _ = receiver.map(|_| {}).wait().unwrap();
+		receiver.into_future()
+			.map_err(|_| ())
+			.and_then(|drop_receiver| drop_receiver.0.unwrap().map_err(|_| ()))
+			.wait().unwrap();
+		server.close();
 	}
 }
