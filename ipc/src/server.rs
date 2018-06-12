@@ -277,11 +277,12 @@ mod tests {
 		let (writer, reader) = stream.framed(codecs::StreamCodec::stream_incoming()).split();
 		let reply = writer
 			.send(data.to_owned())
-			.and_then(move |_| {
+			.and_then(move |writer| {
 				reader.into_future()
 					.map_err(|(err, _)| err)
+					.map(|x| (writer, x))
 			})
-			.and_then(|(reply, _)| {
+			.and_then(|(_writer, (reply, _))| {
 				future::ok(reply.expect("there should be one reply"))
 			});
 
