@@ -14,6 +14,7 @@ extern crate tokio_service;
 #[cfg(test)] mod logger;
 
 mod server;
+mod select_with_weak;
 mod meta;
 pub use meta::{MetaExtractor, RequestContext};
 pub use server::{Server, ServerBuilder};
