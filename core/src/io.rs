@@ -263,7 +263,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				B(futures::finished(None))
 			},
-			Call::Invalid(id) => {
+			Call::Invalid { id } => {
 				B(futures::finished(Some(Output::invalid_request(id, self.compatibility.default_version()))))
 			},
 		}
