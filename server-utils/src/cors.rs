@@ -102,6 +102,7 @@ impl ops::Deref for Origin {
 
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
+
 pub enum AccessControlAllowOrigin {
 	/// Specific hostname
 	Value(Origin),
@@ -133,6 +134,14 @@ impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
 
 /// CORS Header Result.
 #[derive(Debug, Clone, PartialEq, Eq)]
+
+pub enum AllowedCorsHeaders {
+	/// Accept all incoming header requests
+	Any,
+	/// Accept only headers listed below:
+	Only(Vec<CorsHeader>),
+}
+
 pub enum CorsHeader<T = AccessControlAllowOrigin> {
 	/// CORS header was not required. Origin is not present in the request.
 	NotRequired,
@@ -274,6 +283,8 @@ mod tests {
 		assert_eq!(res, CorsHeader::NotRequired);
 	}
 
+// 2) This test needs to pass when new CORS requirements added
+
 	#[test]
 	fn should_return_domain_when_all_are_allowed() {
 		// given
@@ -316,6 +327,8 @@ mod tests {
 		// then
 		assert_eq!(res, CorsHeader::NotRequired);
 	}
+
+// 2.5) Need to make sure this still "passes" (i.e. request fails), correct?
 
 	#[test]
 	fn should_return_none_for_not_matching_origin() {
