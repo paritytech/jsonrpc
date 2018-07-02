@@ -8,6 +8,17 @@ use serde_json::value::from_value;
 
 use super::{Value, Error};
 
+pub struct LazyParams<'a> {
+	request: &'a str,
+}
+
+impl<'a> LazyParams<'a> {
+	pub fn parse<D>(self) -> Result<D, Error> where D: Deserialize<'a> {
+		let req = Request<Cow<'a, str>, D> = serde_json::from_str(self.request)?;
+		req.params
+	}
+}
+
 /// Request parameters
 #[derive(Debug, PartialEq, Clone)]
 pub enum Params {

@@ -14,7 +14,7 @@ pub use serde_json::to_string;
 
 pub use self::error::{ErrorCode, Error};
 pub use self::id::Id;
-pub use self::params::Params;
-pub use self::request::{Request, Call, MethodCall, Notification};
+pub use self::params::{Params, LazyParams};
+pub use self::request::{Request, Call, MethodName, MethodCall, Notification};
 pub use self::response::{Output, Response, Success, Failure};
 pub use self::version::Version;

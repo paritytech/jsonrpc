@@ -8,7 +8,7 @@ use futures::{self, future, Future};
 use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 use middleware::{self, Middleware};
 use types::{Params, Error, ErrorCode, Version};
-use types::{Request, Response, Call, Output};
+use types::{Request, Response, Call, Output, MethodName};
 
 /// A type representing middleware or RPC response before serialization.
 pub type FutureResponse = Box<Future<Item=Option<Response>, Error=()> + Send>;
@@ -188,7 +188,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Handle deserialized RPC request.
-	pub fn handle_rpc_request(&self, request: Request, meta: T) -> S::Future {
+	pub fn handle_rpc_request<M: MethodName, P>(&self, request: Request<M, P>, meta: T) -> S::Future {
 		use self::future::Either::{A, B};
 
 		self.middleware.on_request(request, meta, |request, meta| match request {
@@ -210,7 +210,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Handle single call asynchronously.
-	pub fn handle_call(&self, call: Call, meta: T) -> FutureOutput {
+	pub fn handle_call<M: MethodName, P>(&self, call: Call<M, P>, meta: T) -> FutureOutput {
 		use self::future::Either::{A, B};
 
 		match call {
@@ -225,7 +225,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 					futures::lazy(move || method.call(params, meta))
 				};
 
-				let result = match (valid_version, self.methods.get(&method.method)) {
+				let result = match (valid_version, self.methods.get(&*method.method)) {
 					(false, _) => Err(Error::invalid_version()),
 					(true, Some(&RemoteProcedure::Method(ref method))) => Ok(call_method(method)),
 					(true, Some(&RemoteProcedure::Alias(ref alias))) => match self.methods.get(alias) {
@@ -249,7 +249,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 					return B(futures::finished(None));
 				}
 
-				match self.methods.get(&notification.method) {
+				match self.methods.get(&*notification.method) {
 					Some(&RemoteProcedure::Notification(ref notification)) => {
 						notification.execute(params, meta);
 					},
@@ -331,7 +331,7 @@ impl From<IoHandler> for MetaIoHandler<()> {
 	}
 }
 
-fn read_request(request_str: &str) -> Result<Request, Error> {
+fn read_request<'a>(request_str: &'a str) -> Result<Request<Cow<'a, str>, ::types::LazyParams>, Error> {
 	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
