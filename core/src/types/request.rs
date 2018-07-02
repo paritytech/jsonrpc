@@ -1,10 +1,18 @@
 //! jsonrpc request
+use std::{borrow::Cow, ops::Deref};
 use super::{Id, Params, Version};
+
+/// Marker trait for types allowed as JSON-RPC method name.
+pub trait MethodName: Deref<Target=str> {}
+
+impl MethodName for String {}
+impl<'a> MethodName for &'a str {}
+impl<'a> MethodName for Cow<'a, str> {}
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct MethodCall<M = String, P = Params> {
+pub struct MethodCall<M: MethodName = String, P = Params> {
 	/// A String specifying the version of the JSON-RPC protocol.
 	pub jsonrpc: Option<Version>,
 	/// A String containing the name of the method to be invoked.
@@ -21,7 +29,7 @@ pub struct MethodCall<M = String, P = Params> {
 /// Represents jsonrpc request which is a notification.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct Notification<M = String, P = Params> {
+pub struct Notification<M: MethodName = String, P = Params> {
 	/// A String specifying the version of the JSON-RPC protocol.
 	pub jsonrpc: Option<Version>,
 	/// A String containing the name of the method to be invoked.
@@ -34,7 +42,7 @@ pub struct Notification<M = String, P = Params> {
 /// Represents single jsonrpc call.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum Call<M = String, P = Params> {
+pub enum Call<M: MethodName = String, P = Params> {
 	/// Call method
 	MethodCall(MethodCall<M, P>),
 	/// Fire notification
@@ -43,7 +51,7 @@ pub enum Call<M = String, P = Params> {
 	Invalid {
 		/// Request id
 		#[serde(default = "default_id")]
-		id: Id
+		id: Id,
 	},
 }
 
@@ -51,13 +59,13 @@ fn default_id() -> Id {
 	Id::Null
 }
 
-impl<M, P> From<MethodCall<M, P>> for Call<M, P> {
+impl<M: MethodName, P> From<MethodCall<M, P>> for Call<M, P> {
 	fn from(mc: MethodCall<M, P>) -> Self {
 		Call::MethodCall(mc)
 	}
 }
 
-impl<M, P> From<Notification<M, P>> for Call<M, P> {
+impl<M: MethodName, P> From<Notification<M, P>> for Call<M, P> {
 	fn from(n: Notification<M, P>) -> Self {
 		Call::Notification(n)
 	}
@@ -66,7 +74,7 @@ impl<M, P> From<Notification<M, P>> for Call<M, P> {
 /// Represents jsonrpc request.
 #[derive(Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum Request<M = String, P = Params> {
+pub enum Request<M: MethodName = String, P = Params> {
 	/// Single request (call)
 	Single(Call<M, P>),
 	/// Batch of requests (calls)

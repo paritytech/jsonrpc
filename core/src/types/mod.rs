@@ -5,6 +5,7 @@ pub mod id;
 pub mod params;
 pub mod request;
 pub mod response;
+pub mod partial_params;
 pub mod version;
 
 pub use serde_json::Value;
