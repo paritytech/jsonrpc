@@ -332,7 +332,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		let call = Request::Single(Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: method.into(),
-			params: Some(Params::Array(params)),
+			params: Params::Array(params),
 			id: Id::Num(1),
 		}));
 

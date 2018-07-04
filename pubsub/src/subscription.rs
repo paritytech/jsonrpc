@@ -99,11 +99,11 @@ impl Sink {
 		let notification = core::Notification {
 			jsonrpc: Some(core::Version::V2),
 			method: self.notification.clone(),
-			params: Some(val),
+			params: val,
 		};
 		(
 			core::to_string(&notification).expect("Notification serialization never fails."),
-			notification.params.expect("Always Some"),
+			notification.params,
 		)
 	}
 }

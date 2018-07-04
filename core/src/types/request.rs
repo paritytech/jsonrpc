@@ -12,7 +12,8 @@ pub struct MethodCall {
 	pub method: String,
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
-	pub params: Option<Params>,
+	#[serde(default = "default_params")]
+	pub params: Params,
 	/// An identifier established by the Client that MUST contain a String,
 	/// Number, or NULL value if included. If it is not included it is assumed
 	/// to be a notification.
@@ -29,7 +30,8 @@ pub struct Notification {
 	pub method: String,
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
-	pub params: Option<Params>,
+	#[serde(default = "default_params")]
+	pub params: Params,
 }
 
 /// Represents single jsonrpc call.
@@ -46,6 +48,10 @@ pub enum Call {
 		#[serde(default = "default_id")]
 		id: Id,
 	},
+}
+
+fn default_params() -> Params {
+	Params::None
 }
 
 fn default_id() -> Id {
@@ -87,7 +93,7 @@ mod tests {
 		let m = MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::from(1), Value::from(2)])),
+			params: Params::Array(vec![Value::from(1), Value::from(2)]),
 			id: Id::Num(1)
 		};
 
@@ -103,7 +109,7 @@ mod tests {
 		let n = Notification {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::from(1), Value::from(2)]))
+			params: Params::Array(vec![Value::from(1), Value::from(2)])
 		};
 
 		let serialized = serde_json::to_string(&n).unwrap();
@@ -118,7 +124,7 @@ mod tests {
 		let n = Call::Notification(Notification {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::from(1)]))
+			params: Params::Array(vec![Value::from(1)])
 		});
 
 		let serialized = serde_json::to_string(&n).unwrap();
@@ -133,13 +139,13 @@ mod tests {
 			Call::MethodCall(MethodCall {
 				jsonrpc: Some(Version::V2),
 				method: "update".to_owned(),
-				params: Some(Params::Array(vec![Value::from(1), Value::from(2)])),
+				params: Params::Array(vec![Value::from(1), Value::from(2)]),
 				id: Id::Num(1)
 			}),
 			Call::Notification(Notification {
 				jsonrpc: Some(Version::V2),
 				method: "update".to_owned(),
-				params: Some(Params::Array(vec![Value::from(1)]))
+				params: Params::Array(vec![Value::from(1)])
 			})
 		]);
 
@@ -159,7 +165,7 @@ mod tests {
 		assert_eq!(deserialized, Notification {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::from(1), Value::from(2)]))
+			params: Params::Array(vec![Value::from(1), Value::from(2)])
 		});
 
 		let s = r#"{"jsonrpc": "2.0", "method": "foobar"}"#;
@@ -168,7 +174,7 @@ mod tests {
 		assert_eq!(deserialized, Notification {
 			jsonrpc: Some(Version::V2),
 			method: "foobar".to_owned(),
-			params: None
+			params: Params::None,
 		});
 
 		let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [1,2], "id": 1}"#;
@@ -185,7 +191,7 @@ mod tests {
 		assert_eq!(deserialized, Call::Notification(Notification {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::from(1)]))
+			params: Params::Array(vec![Value::from(1)])
 		}));
 
 		let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [1], "id": 1}"#;
@@ -193,7 +199,35 @@ mod tests {
 		assert_eq!(deserialized, Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: "update".to_owned(),
-			params: Some(Params::Array(vec![Value::from(1)])),
+			params: Params::Array(vec![Value::from(1)]),
+			id: Id::Num(1)
+		}));
+
+		let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [], "id": 1}"#;
+		let deserialized: Call = serde_json::from_str(s).unwrap();
+		assert_eq!(deserialized, Call::MethodCall(MethodCall {
+			jsonrpc: Some(Version::V2),
+			method: "update".to_owned(),
+			params: Params::Array(vec![]),
+			id: Id::Num(1)
+		}));
+
+		let s = r#"{"jsonrpc": "2.0", "method": "update", "params": null, "id": 1}"#;
+		let deserialized: Call = serde_json::from_str(s).unwrap();
+		assert_eq!(deserialized, Call::MethodCall(MethodCall {
+			jsonrpc: Some(Version::V2),
+			method: "update".to_owned(),
+			params: Params::None,
+			id: Id::Num(1)
+		}));
+
+
+		let s = r#"{"jsonrpc": "2.0", "method": "update", "id": 1}"#;
+		let deserialized: Call = serde_json::from_str(s).unwrap();
+		assert_eq!(deserialized, Call::MethodCall(MethodCall {
+			jsonrpc: Some(Version::V2),
+			method: "update".to_owned(),
+			params: Params::None,
 			id: Id::Num(1)
 		}));
 	}
@@ -209,13 +243,13 @@ mod tests {
 			Call::MethodCall(MethodCall {
 				jsonrpc: Some(Version::V2),
 				method: "update".to_owned(),
-				params: Some(Params::Array(vec![Value::from(1), Value::from(2)])),
+				params: Params::Array(vec![Value::from(1), Value::from(2)]),
 				id: Id::Num(1)
 			}),
 			Call::Notification(Notification {
 				jsonrpc: Some(Version::V2),
 				method: "update".to_owned(),
-				params: Some(Params::Array(vec![Value::from(1)]))
+				params: Params::Array(vec![Value::from(1)])
 			})
 		]))
 	}

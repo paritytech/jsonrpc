@@ -10,12 +10,12 @@ use super::{Value, Error};
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Params {
+	/// No parameters
+	None,
 	/// Array of values
 	Array(Vec<Value>),
 	/// Map of values
 	Map(serde_json::Map<String, Value>),
-	/// No parameters
-	None
 }
 
 impl Params {
