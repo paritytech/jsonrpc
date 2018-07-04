@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{FutureResult, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
@@ -14,7 +14,7 @@ use meta::{MetaExtractor, NoopExtractor, RequestContext};
 use select_with_weak::SelectWithWeakExt;
 
 /// IPC server session
-pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta: M,
 }
@@ -32,7 +32,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 
 	type Error = ();
 
-	type Future = FutureResult<S::Future>;
+	type Future = FutureResult<S::Future, S::CallFuture>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
 		trace!(target: "ipc", "Received request: {}", req);
@@ -41,7 +41,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 }
 
 /// IPC server builder
-pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	session_stats: Option<Arc<session::SessionStats>>,

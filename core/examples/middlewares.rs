@@ -14,6 +14,7 @@ impl Metadata for Meta {}
 struct MyMiddleware(AtomicUsize);
 impl Middleware<Meta> for MyMiddleware {
 	type Future = FutureResponse;
+	type CallFuture = middleware::NoopCallFuture;
 
 	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> Either<Self::Future, X> where
 		F: FnOnce(Request, Meta) -> X + Send,

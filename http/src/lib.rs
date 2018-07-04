@@ -152,7 +152,7 @@ impl<M: jsonrpc::Metadata + Default> MetaExtractor<M> for NoopExtractor {
 }
 //
 /// RPC Handler bundled with metadata extractor.
-pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
+pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::middleware::Noop> {
 	/// RPC Handler
 	pub handler: Arc<MetaIoHandler<M, S>>,
 	/// Metadata extractor
@@ -190,7 +190,7 @@ pub enum RestApi {
 }
 
 /// Convenient JSON-RPC HTTP Server builder.
-pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
+pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	remote: UninitializedRemote,
 	meta_extractor: Arc<MetaExtractor<M>>,

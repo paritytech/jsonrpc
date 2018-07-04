@@ -43,7 +43,7 @@ use std::thread;
 use parking_lot::RwLock;
 use jsonrpc_core as jsonrpc;
 use jsonrpc::futures::{self, future, Future};
-use jsonrpc::{FutureResult, MetaIoHandler, Response};
+use jsonrpc::{FutureResult, MetaIoHandler, Response, Output};
 use jsonrpc_server_utils::hosts;
 
 pub use jsonrpc_server_utils::cors;
@@ -74,7 +74,7 @@ impl<M: jsonrpc::Metadata + Default> MetaExtractor<M> for NoopExtractor {
 }
 
 /// Convenient JSON-RPC HTTP Server builder.
-pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::NoopMiddleware> {
+pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::middleware::Noop> {
 	jsonrpc_handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	cors_domains: Option<Vec<cors::AccessControlAllowOrigin>>,
@@ -235,7 +235,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 	type Error = io::Error;
 	type Future = future::Either<
 		future::FutureResult<tokio_minihttp::Response, io::Error>,
-		RpcResponse<S::Future>,
+		RpcResponse<S::Future, S::CallFuture>,
 	>;
 
 	fn call(&self, request: Self::Request) -> Self::Future {
@@ -298,12 +298,18 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 }
 
 /// RPC response wrapper
-pub struct RpcResponse<F: Future<Item = Option<Response>, Error = ()>> {
-	future: FutureResult<F>,
+pub struct RpcResponse<F, G> where
+	F: Future<Item = Option<Response>, Error = ()>,
+	G: Future<Item = Option<Output>, Error = ()>,
+{
+	future: FutureResult<F, G>,
 	cors: Option<cors::AccessControlAllowOrigin>,
 }
 
-impl<F: Future<Item = Option<Response>, Error = ()>> Future for RpcResponse<F> {
+impl<F, G> Future for RpcResponse<F, G> where
+	F: Future<Item = Option<Response>, Error = ()>,
+	G: Future<Item = Option<Output>, Error = ()>,
+{
 	type Item = tokio_minihttp::Response;
 	type Error = io::Error;
 
