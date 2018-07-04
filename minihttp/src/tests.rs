@@ -215,7 +215,7 @@ fn should_return_method_not_found() {
 	let response = request(server,
 		Method::Post,
 		content_type_json(),
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -236,7 +236,7 @@ fn should_add_cors_headers() {
 			headers.set(header::Origin::new("http", "parity.io", None));
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -261,7 +261,7 @@ fn should_add_cors_headers_for_options() {
 			headers.set(header::Origin::new("http", "parity.io", None));
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -287,7 +287,7 @@ fn should_not_process_request_with_invalid_cors() {
 			headers.set(header::Origin::new("http", "fake.io", None));
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -308,7 +308,7 @@ fn should_add_cors_header_for_null_origin() {
 			headers.append_raw("origin", b"null".to_vec());
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -333,7 +333,7 @@ fn should_reject_invalid_hosts() {
 			headers.set_raw("Host", vec![b"127.0.0.1:8080".to_vec()]);
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -354,7 +354,7 @@ fn should_allow_if_host_is_valid() {
 			headers.set_raw("Host", vec![b"parity.io".to_vec()]);
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -376,7 +376,7 @@ fn should_always_allow_the_bind_address() {
 			headers.set_raw("Host", vec![format!("{}", addr).as_bytes().to_vec()]);
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -398,7 +398,7 @@ fn should_always_allow_the_bind_address_as_localhost() {
 			headers.set_raw("Host", vec![format!("localhost:{}", addr.port()).as_bytes().to_vec()]);
 			headers
 		},
-		r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#,
 	);
 
 	// then
@@ -415,7 +415,7 @@ fn should_handle_sync_requests_correctly() {
 	let response = request(server,
 		Method::Post,
 		content_type_json(),
-		r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#,
 	);
 
 	// then
@@ -432,7 +432,7 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 	let response = request(server,
 		Method::Post,
 		content_type_json(),
-		r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"hello_async"}"#,
 	);
 
 	// then
@@ -449,7 +449,7 @@ fn should_handle_async_requests_correctly() {
 	let response = request(server,
 		Method::Post,
 		content_type_json(),
-		r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#,
+		r#"{"jsonrpc":"2.0","id":1,"method":"hello_async2"}"#,
 	);
 
 	// then
@@ -466,7 +466,7 @@ fn should_handle_sync_batch_requests_correctly() {
 	let response = request(server,
 		Method::Post,
 		content_type_json(),
-		r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#,
+		r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#,
 	);
 
 	// then
