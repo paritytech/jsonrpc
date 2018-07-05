@@ -216,7 +216,7 @@ fn should_return_method_not_found() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -240,7 +240,7 @@ fn should_add_cors_headers() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -266,7 +266,7 @@ fn should_not_add_cors_headers() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -291,7 +291,7 @@ fn should_not_process_the_request_in_case_of_invalid_cors() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
 	let response = request(server,
 		&format!("\
 			OPTIONS / HTTP/1.1\r\n\
@@ -340,7 +340,7 @@ fn should_add_cors_header_for_null_origin() {
 	let server = serve();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -366,7 +366,7 @@ fn should_add_cors_header_for_null_origin_when_all() {
 	let server = serve_rest(RestApi::Secure, true);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -413,7 +413,7 @@ fn should_reject_invalid_hosts() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -437,7 +437,7 @@ fn should_reject_missing_host() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -460,7 +460,7 @@ fn should_allow_if_host_is_valid() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -484,7 +484,7 @@ fn should_allow_application_json_utf8() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -509,7 +509,7 @@ fn should_always_allow_the_bind_address() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -534,7 +534,7 @@ fn should_always_allow_the_bind_address_as_localhost() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -559,7 +559,7 @@ fn should_handle_sync_requests_correctly() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -584,7 +584,7 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_async"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -609,7 +609,7 @@ fn should_handle_async_requests_correctly() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_async2"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -634,7 +634,7 @@ fn should_handle_sync_batch_requests_correctly() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#;
+	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\

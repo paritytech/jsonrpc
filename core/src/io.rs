@@ -7,7 +7,7 @@ use futures::{self, future, Future};
 
 use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 use middleware::{self, Middleware};
-use types::{Params, Error, ErrorCode, Version};
+use types::{Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
 
 /// A type representing middleware or RPC response before serialization.
@@ -215,7 +215,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 		match call {
 			Call::MethodCall(method) => {
-				let params = method.params.unwrap_or(Params::None);
+				let params = method.params;
 				let id = method.id;
 				let jsonrpc = method.jsonrpc;
 				let valid_version = self.compatibility.is_version_valid(jsonrpc);
@@ -243,7 +243,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				}
 			},
 			Call::Notification(notification) => {
-				let params = notification.params.unwrap_or(Params::None);
+				let params = notification.params;
 				let jsonrpc = notification.jsonrpc;
 				if !self.compatibility.is_version_valid(jsonrpc) {
 					return B(futures::finished(None));
@@ -263,7 +263,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				B(futures::finished(None))
 			},
-			Call::Invalid(id) => {
+			Call::Invalid { id } => {
 				B(futures::finished(Some(Output::invalid_request(id, self.compatibility.default_version()))))
 			},
 		}
