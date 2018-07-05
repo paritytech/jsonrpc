@@ -267,7 +267,7 @@ fn should_add_cors_max_age_headers() {
 	let server = serve_rest(RestApi::Disabled, false, Some(1_000));
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
