@@ -10,6 +10,8 @@ use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
 use server_utils::{reactor, session, codecs};
 
+use parking_lot::Mutex;
+
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 use select_with_weak::SelectWithWeakExt;
 
@@ -113,6 +115,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let outgoing_separator = self.outgoing_separator;
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
+		let (wait_signal, wait_receiver) = oneshot::channel();
 
 		remote.remote().spawn(move |handle| {
 			use parity_tokio_ipc::Endpoint;
@@ -194,13 +197,25 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			future::Either::B(
 				server.select(stop)
-					.map(|_| ())
+					.map(|_| {
+						let _ = wait_signal.send(());
+						()
+					})
 					.map_err(|_| ())
 			)
 		});
 
+		let handle = InnerHandles {
+						remote: Some(remote),
+						stop: Some(stop_signal),
+						path: path.to_owned(),
+		};
+
 		match start_receiver.wait().expect("Message should always be sent") {
-			Ok(()) => Ok(Server { path: path.to_owned(), remote: Some(remote), stop: Some(stop_signal) }),
+			Ok(()) => Ok(Server {
+							handles: Arc::new(Mutex::new(handle)),
+							wait_handle: Some(wait_receiver),
+			}),
 			Err(e) => Err(e)
 		}
 	}
@@ -209,35 +224,59 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 /// IPC Server handle
 pub struct Server {
-	path: String,
-	remote: Option<reactor::Remote>,
-	stop: Option<oneshot::Sender<()>>,
+	handles: Arc<Mutex<InnerHandles>>,
+	wait_handle: Option<oneshot::Receiver<()>>,
 }
 
 impl Server {
 	/// Closes the server (waits for finish)
-	pub fn close(mut self) {
-		self.stop.take().map(|stop| stop.send(()));
-		self.remote.take().unwrap().close();
-		self.clear_file();
+	pub fn close(self) {
+		self.handles.lock().close();
+	}
+
+	/// Creates a close handle that can be used to stop the server remotely
+	pub fn close_handle(&self) -> CloseHandle {
+		CloseHandle {
+			inner: self.handles.clone(),
+		}
 	}
 
 	/// Wait for the server to finish
 	pub fn wait(mut self) {
-		self.remote.take().unwrap().wait();
+		self.wait_handle.take().map(|wait_receiver| wait_receiver.wait());
 	}
 
-	/// Remove socket file
-	fn clear_file(&self) {
+}
+
+
+struct InnerHandles {
+	remote: Option<reactor::Remote>,
+	stop: Option<oneshot::Sender<()>>,
+	path: String,
+}
+
+impl InnerHandles {
+	pub fn close(&mut self) {
+		let _ = self.stop.take().map(|stop| stop.send(()));
+		self.remote.take().map(|remote| remote.close());
 		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
 
-impl Drop for Server {
+impl Drop for InnerHandles {
 	fn drop(&mut self) {
-		let _ = self.stop.take().map(|stop| stop.send(()));
-		self.remote.take().map(|remote| remote.close());
-		self.clear_file();
+		self.close();
+	}
+}
+/// `CloseHandle` allows one to stop an `IpcServer` remotely.
+pub struct CloseHandle {
+	inner: Arc<Mutex<InnerHandles>>,
+}
+
+impl CloseHandle {
+	/// `close` closes the corresponding `IpcServer` instance.
+	pub fn close(self) {
+		self.inner.lock().close();
 	}
 }
 
@@ -245,18 +284,19 @@ impl Drop for Server {
 #[cfg(not(windows))]
 mod tests {
 	extern crate tokio_uds;
-	extern crate parking_lot;
 
 	use std::thread;
 	use std::sync::Arc;
+	use std::time;
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
 	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
-	use self::parking_lot::Mutex;
+	use parking_lot::Mutex;
 	use server_utils::tokio_io::AsyncRead;
 	use server_utils::codecs;
+	use tokio_core::reactor::{Timeout, Core};
 	use meta::{MetaExtractor, RequestContext};
 
 	fn server_builder() -> ServerBuilder {
@@ -486,5 +526,47 @@ mod tests {
 			.and_then(|drop_receiver| drop_receiver.0.unwrap().map_err(|_| ()))
 			.wait().unwrap();
 		server.close();
+	}
+
+	#[test]
+	fn close_handle() {
+		::logger::init_log();
+		let path = "/tmp/test-ipc-90000";
+		let server = run(path);
+		let handle = server.close_handle();
+		handle.close();
+		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+	}
+
+	#[test]
+	fn close_when_waiting() {
+		::logger::init_log();
+		let path = "/tmp/test-ipc-70000";
+		let server = run(path);
+		let close_handle = server.close_handle();
+		let (tx, rx) = oneshot::channel();
+
+		thread::spawn(move || {
+			thread::sleep(time::Duration::from_millis(100));
+			close_handle.close();
+		});
+		thread::spawn(move || {
+			server.wait();
+			tx.send(true).expect("failed to report that the server has stopped");
+		});
+
+		let mut core = Core::new().expect("failed to create a core");
+		let timeout = Timeout::new(time::Duration::from_millis(500), &core.handle())
+			.expect("failed to setup a timer")
+			.map(|_| false)
+			.map_err(|_| ());
+
+		let result_fut = rx.map_err(|_| ())
+			.select(timeout)
+			.map(|(result, _next_fut)| result)
+			.map_err(|_| ());
+		let result = core.run(result_fut);
+		assert_eq!(result, Ok(true), "Wait timeout exceeded");
+		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
 	}
 }
