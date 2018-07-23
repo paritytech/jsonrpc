@@ -17,6 +17,7 @@ pub fn invalid_params<T>(param: &str, details: T) -> Error where T: fmt::Debug {
 pub fn expect_no_params(params: Params) -> core::Result<()> {
 	match params {
 		Params::None => Ok(()),
+		Params::Array(ref v) if v.is_empty() => Ok(()),
 		p => Err(invalid_params("No parameters were expected", p)),
 	}
 }
