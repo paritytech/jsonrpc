@@ -20,6 +20,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	jsonrpc_handler: Rpc<M, S>,
 	allowed_hosts: AllowedHosts,
 	cors_domains: CorsDomains,
+	cors_max_age: Option<u32>,
 	middleware: Arc<RequestMiddleware>,
 	rest_api: RestApi,
 	max_request_body_size: usize,
@@ -30,6 +31,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	pub fn new(
 		jsonrpc_handler: Rpc<M, S>,
 		cors_domains: CorsDomains,
+		cors_max_age: Option<u32>,
 		allowed_hosts: AllowedHosts,
 		middleware: Arc<RequestMiddleware>,
 		rest_api: RestApi,
@@ -39,6 +41,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 			jsonrpc_handler,
 			allowed_hosts,
 			cors_domains,
+			cors_max_age,
 			middleware,
 			rest_api,
 			max_request_body_size,
@@ -84,6 +87,7 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 					is_options: false,
 					cors_header: cors::CorsHeader::NotRequired,
 					rest_api: self.rest_api,
+					cors_max_age: self.cors_max_age,
 					max_request_body_size: self.max_request_body_size,
 				})
 			}
@@ -176,6 +180,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	state: RpcHandlerState<M, S::Future>,
 	is_options: bool,
 	cors_header: cors::CorsHeader<header::AccessControlAllowOrigin>,
+	cors_max_age: Option<u32>,
 	rest_api: RestApi,
 	max_request_body_size: usize,
 }
@@ -233,7 +238,12 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 			RpcHandlerState::Writing(res) => {
 				let mut response: server::Response = res.into();
 				let cors_header = mem::replace(&mut self.cors_header, cors::CorsHeader::Invalid);
-				Self::set_response_headers(response.headers_mut(), self.is_options, cors_header.into());
+				Self::set_response_headers(
+					response.headers_mut(),
+					self.is_options,
+					cors_header.into(),
+					self.cors_max_age,
+				);
 				Ok(Async::Ready(response))
 			},
 			state => {
@@ -392,7 +402,12 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 	}
 
-	fn set_response_headers(headers: &mut Headers, is_options: bool, cors_header: Option<header::AccessControlAllowOrigin>) {
+	fn set_response_headers(
+		headers: &mut Headers,
+		is_options: bool,
+		cors_header: Option<header::AccessControlAllowOrigin>,
+		cors_max_age: Option<u32>,
+	) {
 		if is_options {
 			headers.set(header::Allow(vec![
 				Method::Options,
@@ -413,6 +428,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				Ascii::new("content-type".to_owned()),
 				Ascii::new("accept".to_owned()),
 			]));
+			if let Some(cors_max_age) = cors_max_age {
+				headers.set(header::AccessControlMaxAge(cors_max_age));
+			}
 			headers.set(cors_domain);
 			headers.set(header::Vary::Items(vec![
 				Ascii::new("origin".to_owned())

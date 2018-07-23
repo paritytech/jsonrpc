@@ -196,6 +196,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	meta_extractor: Arc<MetaExtractor<M>>,
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: CorsDomains,
+	cors_max_age: Option<u32>,
 	allowed_hosts: AllowedHosts,
 	rest_api: RestApi,
 	keep_alive: bool,
@@ -234,6 +235,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(extractor),
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
+			cors_max_age: None,
 			allowed_hosts: None,
 			rest_api: RestApi::Disabled,
 			keep_alive: true,
@@ -243,14 +245,16 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Utilize existing event loop remote to poll RPC results.
+	///
 	/// Applies only to 1 of the threads. Other threads will spawn their own Event Loops.
 	pub fn event_loop_remote(mut self, remote: tokio_core::reactor::Remote) -> Self {
 		self.remote = UninitializedRemote::Shared(remote);
 		self
 	}
 
-	/// Enable the REST -> RPC converter. Allows you to invoke RPCs
-	/// by sending `POST /<method>/<param1>/<param2>` requests
+	/// Enable the REST -> RPC converter.
+	///
+	/// Allows you to invoke RPCs by sending `POST /<method>/<param1>/<param2>` requests
 	/// (with no body). Disabled by default.
 	pub fn rest_api(mut self, rest_api: RestApi) -> Self {
 		self.rest_api = rest_api;
@@ -258,6 +262,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Sets Enables or disables HTTP keep-alive.
+	///
 	/// Default is true.
 	pub fn keep_alive(mut self, val: bool) -> Self {
 		self.keep_alive  = val;
@@ -265,6 +270,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Sets number of threads of the server to run.
+	///
 	/// Panics when set to `0`.
 	#[cfg(not(unix))]
 	pub fn threads(mut self, _threads: usize) -> Self {
@@ -273,6 +279,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Sets number of threads of the server to run.
+	///
 	/// Panics when set to `0`.
 	#[cfg(unix)]
 	pub fn threads(mut self, threads: usize) -> Self {
@@ -283,6 +290,16 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Configures a list of allowed CORS origins.
 	pub fn cors(mut self, cors_domains: DomainsValidation<AccessControlAllowOrigin>) -> Self {
 		self.cors_domains = cors_domains.into();
+		self
+	}
+
+	/// Configure CORS `AccessControlMaxAge` header returned.
+	///
+	/// Passing `Some(millis)` informs the client that the CORS preflight request is not necessary
+	/// for at list `millis` ms.
+	/// Disabled by default.
+	pub fn cors_max_age<T: Into<Option<u32>>>(mut self, cors_max_age: T) -> Self {
+		self.cors_max_age = cors_max_age.into();
 		self
 	}
 
@@ -319,6 +336,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Start this JSON-RPC HTTP server trying to bind to specified `SocketAddr`.
 	pub fn start_http(self, addr: &SocketAddr) -> io::Result<Server> {
 		let cors_domains = self.cors_domains;
+		let cors_max_age = self.cors_max_age;
 		let request_middleware = self.request_middleware;
 		let allowed_hosts = self.allowed_hosts;
 		let jsonrpc_handler = Rpc {
@@ -338,6 +356,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			eloop.remote(),
 			addr.to_owned(),
 			cors_domains.clone(),
+			cors_max_age,
 			request_middleware.clone(),
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
@@ -355,6 +374,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				eloop.remote(),
 				addr.to_owned(),
 				cors_domains.clone(),
+				cors_max_age,
 				request_middleware.clone(),
 				allowed_hosts.clone(),
 				jsonrpc_handler.clone(),
@@ -395,6 +415,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	remote: tokio_core::reactor::Remote,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
+	cors_max_age: Option<u32>,
 	request_middleware: Arc<RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
@@ -454,6 +475,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					http.bind_connection(&handle, socket, addr, ServerHandler::new(
 						jsonrpc_handler.clone(),
 						cors_domains.clone(),
+						cors_max_age,
 						allowed_hosts.clone(),
 						request_middleware.clone(),
 						rest_api,
