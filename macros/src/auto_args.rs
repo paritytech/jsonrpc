@@ -255,6 +255,12 @@ impl<T> Into<Option<T>> for Trailing<T> {
 	}
 }
 
+impl<T> From<Option<T>> for Trailing<T> {
+	fn from(o: Option<T>) -> Self {
+		Trailing(o)
+	}
+}
+
 impl<T: DeserializeOwned> Trailing<T> {
 	/// Returns a underlying value if present or provided value.
 	pub fn unwrap_or(self, other: T) -> T {
