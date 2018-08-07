@@ -269,6 +269,7 @@ impl Drop for InnerHandles {
 	}
 }
 /// `CloseHandle` allows one to stop an `IpcServer` remotely.
+#[derive(Clone)]
 pub struct CloseHandle {
 	inner: Arc<Mutex<InnerHandles>>,
 }
