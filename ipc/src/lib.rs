@@ -21,7 +21,7 @@ mod meta;
 
 use jsonrpc_core as jsonrpc;
 
-pub use meta::{MetaExtractor, RequestContext};
+pub use meta::{MetaExtractor, NoopExtractor, RequestContext};
 pub use server::{Server, ServerBuilder, CloseHandle};
 
 pub use self::server_utils::tokio_core;

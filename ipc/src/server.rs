@@ -84,7 +84,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Sets session metadata extractor.
-	pub fn session_metadata_extractor<X>(mut self, meta_extractor: X) -> Self where
+	pub fn session_meta_extractor<X>(mut self, meta_extractor: X) -> Self where
 		X: MetaExtractor<M>,
 	{
 		self.meta_extractor = Arc::new(meta_extractor);
@@ -269,6 +269,7 @@ impl Drop for InnerHandles {
 	}
 }
 /// `CloseHandle` allows one to stop an `IpcServer` remotely.
+#[derive(Clone)]
 pub struct CloseHandle {
 	inner: Arc<Mutex<InnerHandles>>,
 }
