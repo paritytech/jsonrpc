@@ -8,9 +8,10 @@ extern crate log;
 extern crate globset;
 extern crate jsonrpc_core as core;
 extern crate bytes;
+extern crate num_cpus;
 
-pub extern crate tokio_core;
-pub extern crate tokio_io;
+pub extern crate tokio;
+pub extern crate tokio_codec;
 
 pub mod cors;
 pub mod hosts;

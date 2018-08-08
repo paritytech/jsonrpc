@@ -7,11 +7,11 @@ use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
 use jsonrpc::{FutureResult, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
-
-use server_utils::tokio_core::reactor::Remote;
-use server_utils::tokio_io::AsyncRead;
-use server_utils::{reactor, session, codecs};
-
+use server_utils::{
+	tokio_codec::Framed,
+	tokio::{self, runtime::TaskExecutor, reactor::Handle},
+	reactor, session, codecs,
+};
 use parking_lot::Mutex;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -51,7 +51,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	session_stats: Option<Arc<session::SessionStats>>,
-	remote: reactor::UninitializedRemote,
+	executor: reactor::UninitializedExecutor,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
 	security_attributes: SecurityAttributes,
@@ -76,16 +76,16 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(extractor),
 			session_stats: None,
-			remote: reactor::UninitializedRemote::Unspawned,
+			executor: reactor::UninitializedExecutor::Unspawned,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
 			security_attributes: SecurityAttributes::empty(),
 		}
 	}
 
-	/// Sets shared different event loop remote.
-	pub fn event_loop_remote(mut self, remote: Remote) -> Self {
-		self.remote = reactor::UninitializedRemote::Shared(remote);
+	/// Sets shared different event loop executor.
+	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
+		self.executor = reactor::UninitializedExecutor::Shared(executor);
 		self
 	}
 
@@ -118,7 +118,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
-		let remote = self.remote.initialize()?;
+		let executor = self.executor.initialize()?;
 		let rpc_handler = self.handler;
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor;
@@ -130,8 +130,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let (wait_signal, wait_receiver) = oneshot::channel();
 		let security_attributes = self.security_attributes;
 
-		remote.remote().spawn(move |handle| {
-
+		executor.spawn(future::lazy(move || {
 			let mut endpoint = Endpoint::new(endpoint_addr);
 			endpoint.set_security_attributes(security_attributes);
 
@@ -142,8 +141,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			}
 
-			let endpoint_handle = handle.clone();
-			let connections = match endpoint.incoming(endpoint_handle) {
+			let endpoint_handle = Handle::current();
+			let connections = match endpoint.incoming(&endpoint_handle) {
 				Ok(connections) => connections,
 				Err(e) => {
 					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
@@ -151,7 +150,6 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			};
 
-			let remote = handle.remote().clone();
 			let mut id = 0u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
@@ -168,12 +166,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					sender,
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = io_stream.framed(
-					codecs::StreamCodec::new(
-						incoming_separator.clone(),
-						outgoing_separator.clone(),
-					)
-				).split();
+				let (writer, reader) = Framed::new(
+	                io_stream,
+	                codecs::StreamCodec::new(
+	                    incoming_separator.clone(),
+	                    outgoing_separator.clone(),
+	                ),
+	            ).split();
 				let responses = reader.and_then(move |req| {
 					service.call(req).then(move |response| match response {
 						Err(e) => {
@@ -203,7 +202,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					Ok(())
 				});
 
-				remote.spawn(|_| writer);
+				tokio::spawn(writer);
 
 				Ok(())
 			});
@@ -218,18 +217,18 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					})
 					.map_err(|_| ())
 			)
-		});
+		}));
 
 		let handle = InnerHandles {
-						remote: Some(remote),
-						stop: Some(stop_signal),
-						path: path.to_owned(),
+			executor: Some(executor),
+			stop: Some(stop_signal),
+			path: path.to_owned(),
 		};
 
 		match start_receiver.wait().expect("Message should always be sent") {
 			Ok(()) => Ok(Server {
-							handles: Arc::new(Mutex::new(handle)),
-							wait_handle: Some(wait_receiver),
+				handles: Arc::new(Mutex::new(handle)),
+				wait_handle: Some(wait_receiver),
 			}),
 			Err(e) => Err(e)
 		}
@@ -267,7 +266,7 @@ impl Server {
 
 #[derive(Debug)]
 struct InnerHandles {
-	remote: Option<reactor::Remote>,
+	executor: Option<reactor::Executor>,
 	stop: Option<oneshot::Sender<()>>,
 	path: String,
 }
@@ -275,7 +274,7 @@ struct InnerHandles {
 impl InnerHandles {
 	pub fn close(&mut self) {
 		let _ = self.stop.take().map(|stop| stop.send(()));
-		self.remote.take().map(|remote| remote.close());
+		self.executor.take().map(|executor| executor.close());
 		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
@@ -306,15 +305,18 @@ mod tests {
 	use std::thread;
 	use std::sync::Arc;
 	use std::time;
+	use std::time::{Instant, Duration};
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
 	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
 	use parking_lot::Mutex;
-	use server_utils::tokio_io::AsyncRead;
+	use server_utils::{
+		tokio_codec::Decoder,
+		tokio::{self, timer::Delay}
+	};
 	use server_utils::codecs;
-	use tokio_core::reactor::{Timeout, Core};
 	use meta::{MetaExtractor, RequestContext, NoopExtractor};
 	use super::SecurityAttributes;
 
@@ -335,7 +337,8 @@ mod tests {
 	fn dummy_request_str(path: &str, data: &str) -> String {
 		let stream_future = UnixStream::connect(path);
 		let reply = stream_future.and_then(|stream| {
-			let stream= stream.framed(codecs::StreamCodec::stream_incoming());
+			let stream = codecs::StreamCodec::stream_incoming()
+				.framed(stream);
 			let reply = stream
 				.send(data.to_owned())
 				.and_then(move |stream| {
@@ -574,19 +577,26 @@ mod tests {
 			tx.send(true).expect("failed to report that the server has stopped");
 		});
 
-		let mut core = Core::new().expect("failed to create a core");
-		let timeout = Timeout::new(time::Duration::from_millis(500), &core.handle())
-			.expect("failed to setup a timer")
+		let delay = Delay::new(Instant::now() + Duration::from_millis(500))
 			.map(|_| false)
-			.map_err(|_| ());
+			.map_err(|err| panic!("{:?}", err));
 
-		let result_fut = rx.map_err(|_| ())
-			.select(timeout)
-			.map(|(result, _next_fut)| result)
-			.map_err(|_| ());
-		let result = core.run(result_fut);
-		assert_eq!(result, Ok(true), "Wait timeout exceeded");
-		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+		let result_fut = rx
+			.map_err(|_| ())
+			.select(delay)
+			.then(move |result| {
+				match result {
+					Ok((result, _)) => {
+						assert_eq!(result, true, "Wait timeout exceeded");
+						assert!(UnixStream::connect(path).wait().is_err(),
+							"Connection to the closed socket should fail");
+						Ok(())
+					},
+					Err(_) => Err(()),
+				}
+			});
+
+		tokio::run(result_fut);
 	}
 
 	#[test]

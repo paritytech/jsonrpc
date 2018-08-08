@@ -1,5 +1,5 @@
 use std::{io, str};
-use tokio_io::codec::{Decoder, Encoder};
+use tokio_codec::{Decoder, Encoder};
 use bytes::BytesMut;
 
 /// Separator for enveloping messages in streaming codecs
@@ -64,7 +64,7 @@ impl Decoder for StreamCodec {
 				}
 			} else {
 				Ok(None)
-			}			
+			}
 		} else {
 			let mut depth = 0;
 			let mut in_str = false;
@@ -112,7 +112,7 @@ impl Decoder for StreamCodec {
 impl Encoder for StreamCodec {
 	type Item = String;
 	type Error = io::Error;
-	
+
 	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
 		let mut payload = msg.into_bytes();
 		if let Separator::Byte(separator) = self.outgoing_separator {
@@ -127,7 +127,7 @@ impl Encoder for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
-	use tokio_io::codec::Decoder;
+	use tokio_codec::Decoder;
 	use bytes::{BytesMut, BufMut};
 
 	#[test]
@@ -269,5 +269,5 @@ mod tests {
 
 		assert_eq!(request, "{ test: 1 }");
 		assert_eq!(request2, "{ test: 2 }");
-	}	
+	}
 }

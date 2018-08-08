@@ -89,7 +89,7 @@ fn request(server: Server, request: &str) -> Response {
 
 	let mut lines = response.lines();
 	let status = lines.next().unwrap().to_owned();
-	let headers =	read_block(&mut lines);
+	let headers = read_block(&mut lines);
 	let body = read_block(&mut lines);
 
 	Response {
@@ -117,7 +117,7 @@ fn should_return_method_not_allowed_for_get() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 405 Method Not Allowed".to_owned());
-	assert_eq!(response.body, "3D\nUsed HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned());
+	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned());
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn should_handle_health_endpoint() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert_eq!(response.body, "7\n\"world\"\n0\n");
+	assert_eq!(response.body, "\"world\"\n");
 }
 
 #[test]
@@ -159,7 +159,8 @@ fn should_handle_health_endpoint_failure() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 503 Service Unavailable".to_owned());
-	assert_eq!(response.body, "25\n{\"code\":-34,\"message\":\"Server error\"}\n0\n");
+	// assert_eq!(response.body, "25\n{\"code\":-34,\"message\":\"Server error\"}\n0\n");
+	assert_eq!(response.body, "Service Unavailable: {\"code\":-34,\"message\":\"Server error\"}\n");
 }
 
 #[test]
@@ -180,7 +181,7 @@ fn should_return_unsupported_media_type_if_not_json() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(response.body, "51\nSupplied content type is not allowed. Content-Type: application/json is required\n".to_owned());
+	assert_eq!(response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned());
 }
 
 #[test]
@@ -252,7 +253,7 @@ fn should_return_empty_response_for_notification() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert_eq!(response.body, "0\n".to_owned());
+	assert_eq!(response.body, "".to_owned());
 }
 
 
@@ -303,7 +304,7 @@ fn should_add_cors_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: http://parity.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: http://parity.io"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -329,8 +330,8 @@ fn should_add_cors_max_age_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: http://parity.io"), "Headers missing in {}", response.headers);
-	assert!(response.headers.contains("Access-Control-Max-Age: 1000"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: http://parity.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-max-age: 1000"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -404,9 +405,10 @@ fn should_return_proper_headers_on_options() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("Allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
-	assert!(response.headers.contains("Accept: application/json"), "Headers missing in {}", response.headers);
-	assert_eq!(response.body, "0\n");
+	assert!(response.headers.contains("allow: OPTIONS") && response.headers.contains("allow: POST"),
+		"Headers missing in {}", response.headers);
+	assert!(response.headers.contains("accept: application/json"), "Headers missing in {}", response.headers);
+	assert_eq!(response.body, "");
 }
 
 #[test]
@@ -432,7 +434,7 @@ fn should_add_cors_header_for_null_origin() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -458,7 +460,8 @@ fn should_add_cors_header_for_null_origin_when_all() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
+	// println!("HEADERS: {:?}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -773,30 +776,30 @@ fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(&response.body, "51\nSupplied content type is not allowed. Content-Type: application/json is required\n");
+	assert_eq!(&response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n");
 }
 
 fn invalid_host() -> String {
-	"29\nProvided Host header is not whitelisted.\n".into()
+	"Provided Host header is not whitelisted.\n".into()
 }
 
 fn cors_invalid() -> String {
-	"76\nOrigin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
+	"Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn method_not_found() -> String {
- "4E\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
 }
 
 fn invalid_request() -> String {
- "50\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
 }
 fn world() -> String {
- "2A\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
 }
 fn world_5() -> String {
- "2D\n{\"jsonrpc\":\"2.0\",\"result\":\"world: 5\",\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"result\":\"world: 5\",\"id\":1}\n".into()
 }
 fn world_batch() -> String {
- "2C\n[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
+ "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
 }
