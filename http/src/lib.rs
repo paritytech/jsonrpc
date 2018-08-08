@@ -23,12 +23,12 @@
 
 #![warn(missing_docs)]
 
-extern crate unicase;
 extern crate jsonrpc_server_utils as server_utils;
 extern crate net2;
+extern crate unicase;
 
-pub extern crate jsonrpc_core;
 pub extern crate hyper;
+pub extern crate jsonrpc_core;
 
 #[macro_use]
 extern crate log;

@@ -4,13 +4,16 @@ use hyper::server;
 
 pub use hyper::{header, Method, StatusCode};
 
+const CONTENT_TYPE_JSON: header::HeaderValue = header::HeaderValue::from_static("application/json");
+const CONTENT_TYPE_PLAINTEXT: header::HeaderValue = header::HeaderValue::from_static("text/plain");
+
 /// Simple server response structure
 #[derive(Debug)]
 pub struct Response {
 	/// Response code
 	pub code: StatusCode,
 	/// Response content type
-	pub content_type: header::ContentType,
+	pub content_type: header::HeaderValue,
 	/// Response body
 	pub content: String,
 }
@@ -25,7 +28,7 @@ impl Response {
 	pub fn ok<T: Into<String>>(response: T) -> Self {
 		Response {
 			code: StatusCode::Ok,
-			content_type: header::ContentType::json(),
+			content_type: header::HeaderValue::from_static()::json(),
 			content: response.into(),
 		}
 	}
@@ -43,7 +46,7 @@ impl Response {
 	pub fn host_not_allowed() -> Self {
 		Response {
 			code: StatusCode::Forbidden,
-			content_type: header::ContentType::plaintext(),
+			content_type: header::CONTENT_TYPE::plaintext(),
 			content: "Provided Host header is not whitelisted.\n".to_owned(),
 		}
 	}
