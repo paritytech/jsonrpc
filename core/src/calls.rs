@@ -5,7 +5,7 @@ use futures::{Future, IntoFuture};
 use BoxFuture;
 
 /// Metadata trait
-pub trait Metadata: Clone + Send + 'static {}
+pub trait Metadata: Clone + Send + Sync + 'static {}
 impl Metadata for () {}
 impl<T: Metadata> Metadata for Option<T> {}
 impl<T: Metadata> Metadata for Box<T> {}

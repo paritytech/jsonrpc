@@ -4,7 +4,7 @@ homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-pubsub"
-version = "8.0.1"
+version = "9.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_pubsub/index.html"
@@ -12,10 +12,10 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_pubsub/index.html"
 [dependencies]
 log = "0.4"
 parking_lot = "0.6"
-jsonrpc-core = { version = "8.0", path = "../core" }
+jsonrpc-core = { version = "9.0", path = "../core" }
 
 [dev-dependencies]
-jsonrpc-tcp-server = { version = "8.0", path = "../tcp" }
+jsonrpc-tcp-server = { version = "9.0", path = "../tcp" }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

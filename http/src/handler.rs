@@ -3,9 +3,8 @@ use Rpc;
 use std::{fmt, mem, str};
 use std::sync::Arc;
 
-use hyper::{self, mime, server, Method};
-use hyper::header::{self, Headers};
-use unicase::Ascii;
+use hyper::{self, service::Service, Body, Method};
+use hyper::header::{self, HeaderMap, HeaderValue};
 
 use jsonrpc::{self as core, FutureResult, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{Future, Poll, Async, Stream, future};
@@ -56,13 +55,13 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
-	type Request = server::Request;
-	type Response = server::Response;
+impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
+	type ReqBody = Body;
+	type ResBody = Body;
 	type Error = hyper::Error;
 	type Future = Handler<M, S>;
 
-	fn call(&self, request: Self::Request) -> Self::Future {
+	fn call(&mut self, request: hyper::Request<Self::ReqBody>) -> Self::Future {
 		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
 		let action = self.middleware.on_request(request);
 
@@ -108,11 +107,11 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Rpc(RpcHandler<M, S>),
 	Error(Option<Response>),
-	Middleware(Box<Future<Item=server::Response, Error=hyper::Error> + Send>),
+	Middleware(Box<Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>),
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
-	type Item = server::Response;
+	type Item = hyper::Response<Body>;
 	type Error = hyper::Error;
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -155,7 +154,7 @@ enum RpcHandlerState<M, F> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
 {
 	ReadingHeaders {
-		request: server::Request,
+		request: hyper::Request<Body>,
 		cors_domains: CorsDomains,
 		continue_on_invalid_cors: bool,
 	},
@@ -202,9 +201,9 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	jsonrpc_handler: Rpc<M, S>,
 	state: RpcHandlerState<M, S::Future>,
 	is_options: bool,
-	cors_allow_origin: cors::AllowOrigin<header::AccessControlAllowOrigin>,
+	cors_allow_origin: cors::AllowOrigin<header::HeaderValue>,
 	cors_max_age: Option<u32>,
-	cors_allow_headers: cors::AllowHeaders<header::AccessControlAllowHeaders>,
+	cors_allow_headers: cors::AllowHeaders<header::HeaderMap>,
 	allowed_headers: cors::AccessControlAllowHeadersUnicase,
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
@@ -212,7 +211,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
-	type Item = server::Response;
+	type Item = hyper::Response<Body>;
 	type Error = hyper::Error;
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
@@ -223,7 +222,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				// Read cors header
 				self.cors_allow_origin = utils::cors_allow_origin(&request, &cors_domains);
 				self.cors_allow_headers = utils::cors_allow_headers(&request, &allowed_headers);
-				self.is_options = *request.method() == Method::Options;
+				self.is_options = *request.method() == Method::OPTIONS;
 				// Read other headers
 				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
 			},
@@ -279,10 +278,9 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 		let (new_state, is_ready) = new_state.decompose();
 		match new_state {
 			RpcHandlerState::Writing(res) => {
-				let mut response: server::Response = res.into();
+				let mut response: hyper::Response<Body> = res.into();
 				let cors_allow_origin = mem::replace(&mut self.cors_allow_origin, cors::AllowOrigin::Invalid);
 				let cors_allow_headers = mem::replace(&mut self.cors_allow_headers, cors::AllowHeaders::Invalid);
-
 				Self::set_response_headers(
 					response.headers_mut(),
 					self.is_options,
@@ -305,7 +303,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 }
 
 // Intermediate and internal error type to better distinguish
-// error cases occuring during request body processing.
+// error cases occurring during request body processing.
 enum BodyError {
 	Hyper(hyper::Error),
 	Utf8(str::Utf8Error),
@@ -321,7 +319,7 @@ impl From<hyper::Error> for BodyError {
 impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	fn read_headers(
 		&self,
-		request: server::Request,
+		request: hyper::Request<Body>,
 		continue_on_invalid_cors: bool,
 	) -> RpcHandlerState<M, S::Future> {
 		if self.cors_allow_origin == cors::AllowOrigin::Invalid && !continue_on_invalid_cors {
@@ -335,34 +333,34 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		let metadata = self.jsonrpc_handler.extractor.read_metadata(&request);
 
 		// Proceed
-		match *request.method() {
+		match request.method().clone() {
 			// Validate the ContentType header
 			// to prevent Cross-Origin XHRs with text/plain
-			Method::Post if Self::is_json(request.headers().get::<header::ContentType>()) => {
+			Method::POST if Self::is_json(request.headers().get("content-type")) => {
 				let uri = if self.rest_api != RestApi::Disabled { Some(request.uri().clone()) } else { None };
 				RpcHandlerState::ReadingBody {
 					metadata,
 					request: Default::default(),
 					uri,
-					body: request.body(),
+					body: request.into_body(),
 				}
 			},
-			Method::Post if self.rest_api == RestApi::Unsecure && request.uri().path().split('/').count() > 2 => {
+			Method::POST if self.rest_api == RestApi::Unsecure && request.uri().path().split('/').count() > 2 => {
 				RpcHandlerState::ProcessRest {
 					metadata,
 					uri: request.uri().clone(),
 				}
 			},
 			// Just return error for unsupported content type
-			Method::Post => {
+			Method::POST => {
 				RpcHandlerState::Writing(Response::unsupported_content_type())
 			},
 			// Don't validate content type on options
-			Method::Options => {
+			Method::OPTIONS => {
 				RpcHandlerState::Writing(Response::empty())
 			},
 			// Respond to health API request if there is one configured.
-			Method::Get if self.health_api.as_ref().map(|x| &*x.0) == Some(request.uri().path()) => {
+			Method::GET if self.health_api.as_ref().map(|x| &*x.0) == Some(request.uri().path()) => {
 				RpcHandlerState::ProcessHealth {
 					metadata,
 					method: self.health_api.as_ref()
@@ -497,51 +495,53 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	}
 
 	fn set_response_headers(
-		headers: &mut Headers,
+		headers: &mut HeaderMap,
 		is_options: bool,
-		cors_allow_origin: Option<header::AccessControlAllowOrigin>,
+		cors_allow_origin: Option<HeaderValue>,
 		cors_max_age: Option<u32>,
-		cors_allow_headers: AllowHeaders<header::AccessControlAllowHeaders>,
+		cors_allow_headers: AllowHeaders<header::HeaderMap>,
 	) {
 		if is_options {
-			headers.set(header::Allow(vec![
-				Method::Options,
-				Method::Post,
-			]));
-			headers.set(header::Accept(vec![
-				header::qitem(mime::APPLICATION_JSON)
-			]));
+			headers.append(header::ALLOW, Method::OPTIONS.as_str().parse().expect("`Method` will always parse; qed"));
+			headers.append(header::ALLOW, Method::POST.as_str().parse().expect("`Method` will always parse; qed"));
+
+			headers.append(header::ACCEPT, HeaderValue::from_static("application/json"));
+
 		}
 
 		if let Some(cors_domain) = cors_allow_origin {
-			headers.set(header::AccessControlAllowMethods(vec![
-				Method::Options,
-				Method::Post
-			]));
+			headers.append(header::ACCESS_CONTROL_ALLOW_METHODS, Method::OPTIONS.as_str().parse()
+				.expect("`Method` will always parse; qed"));
+			headers.append(header::ACCESS_CONTROL_ALLOW_METHODS, Method::POST.as_str().parse()
+				.expect("`Method` will always parse; qed"));
 
 			if let AllowHeaders::Ok(cors_allow_headers) = cors_allow_headers {
-				if !cors_allow_headers.is_empty() {
-					headers.set(cors_allow_headers);
-				}
+				headers.extend(cors_allow_headers);
 			}
 
-			if let Some(cors_max_age) = cors_max_age {
-				headers.set(header::AccessControlMaxAge(cors_max_age));
+			if let Some(cma) = cors_max_age {
+				headers.append(header::ACCESS_CONTROL_MAX_AGE, HeaderValue::from_str(&cma.to_string())
+					.expect("`u32` will always parse; qed"));
 			}
-			headers.set(cors_domain);
-			headers.set(header::Vary::Items(vec![
-				Ascii::new("origin".to_owned())
-			]));
+
+			headers.append(header::ACCESS_CONTROL_ALLOW_ORIGIN, cors_domain);
+			headers.append(header::VARY, HeaderValue::from_static("origin"));
 		}
 	}
 
-	fn is_json(content_type: Option<&header::ContentType>) -> bool {
-		const APPLICATION_JSON_UTF_8: &str = "application/json; charset=utf-8";
-
+	/// Returns true if the `content_type` header indicates a valid JSON
+	/// message.
+	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
 		match content_type {
-			Some(&header::ContentType(ref mime))
-				if *mime == mime::APPLICATION_JSON || *mime == APPLICATION_JSON_UTF_8 => true,
-			_ => false
+			Some(header_val) => {
+				match header_val.to_str() {
+					Ok(header_str) => {
+						header_str == "application/json" || header_str == "application/json; charset=utf-8"
+					},
+					Err(_) => false,
+				}
+			}
+			_ => false,
 		}
 	}
 }

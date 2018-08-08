@@ -5,7 +5,7 @@ use core;
 use server_utils;
 use server_utils::cors::Origin;
 use server_utils::hosts::{Host, DomainsValidation};
-use server_utils::reactor::UninitializedRemote;
+use server_utils::reactor::UninitializedExecutor;
 use server_utils::session::SessionStats;
 
 use error::Result;
@@ -21,7 +21,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<session::RequestMiddleware>>,
 	session_stats: Option<Arc<SessionStats>>,
-	remote: UninitializedRemote,
+	executor: UninitializedExecutor,
 	max_connections: usize,
 }
 
@@ -47,14 +47,14 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			allowed_hosts: None,
 			request_middleware: None,
 			session_stats: None,
-			remote: UninitializedRemote::Unspawned,
+			executor: UninitializedExecutor::Unspawned,
 			max_connections: 100,
 		}
 	}
 
-	/// Utilize existing event loop remote to poll RPC results.
-	pub fn event_loop_remote(mut self, remote: server_utils::tokio_core::reactor::Remote) -> Self {
-		self.remote = UninitializedRemote::Shared(remote);
+	/// Utilize existing event loop executor to poll RPC results.
+	pub fn event_loop_executor(mut self, executor: server_utils::tokio::runtime::TaskExecutor) -> Self {
+		self.executor = UninitializedExecutor::Shared(executor);
 		self
 	}
 
@@ -107,7 +107,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.allowed_hosts,
 			self.request_middleware,
 			self.session_stats,
-			self.remote,
+			self.executor,
 			self.max_connections,
 		)
 	}
