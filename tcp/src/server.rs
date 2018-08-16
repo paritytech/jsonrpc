@@ -25,7 +25,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 }
 
 impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
-	/// Creates new `SeverBuilder` wih given `IoHandler`
+	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn new<T>(handler: T) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 	{
@@ -34,7 +34,7 @@ impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 }
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
-	/// Creates new `SeverBuilder` wih given `IoHandler`
+	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M> + 'static,
