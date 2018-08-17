@@ -17,6 +17,7 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 - [jsonrpc-ipc-server](./ipc)
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
 - [jsonrpc-ws-server](./ws)
+- [jsonrpc-stdio-server](./stdio)
 - [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url]
 - [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
 - [jsonrpc-pubsub](./pubsub) [![crates.io][pubsub-image]][pubsub-url]
