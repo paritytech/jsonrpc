@@ -42,6 +42,7 @@ mod tests;
 use std::io;
 use std::sync::{mpsc, Arc};
 use std::net::SocketAddr;
+use std::thread;
 
 use hyper::server;
 use jsonrpc_core as jsonrpc;
@@ -203,8 +204,6 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	threads: usize,
 	max_request_body_size: usize,
 }
-
-const SENDER_PROOF: &'static str = "Server initialization awaits local address.";
 
 impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
@@ -448,13 +447,17 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		let bind_result = match bind() {
 			Ok((listener, local_addr)) => {
 				// Send local address
-				local_addr_tx.send(Ok(local_addr)).expect(SENDER_PROOF);
-
-				futures::future::ok((listener, local_addr))
+				match local_addr_tx.send(Ok(local_addr)) {
+					Ok(_) => futures::future::ok((listener, local_addr)),
+					Err(_) => {
+						warn!("Thread {:?} unable to reach receiver, closing server", thread::current().name());
+						futures::future::err(())
+					},
+				}
 			},
 			Err(err) => {
 				// Send error
-				local_addr_tx.send(Err(err)).expect(SENDER_PROOF);
+				let _send_result = local_addr_tx.send(Err(err));
 
 				futures::future::err(())
 			}
@@ -551,4 +554,3 @@ impl Drop for Server {
 		});
 	}
 }
-
