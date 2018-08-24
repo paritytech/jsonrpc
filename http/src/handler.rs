@@ -366,7 +366,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
 		use self::core::types::{Call, MethodCall, Version, Params, Request, Id, Output, Success, Failure};
 
-		// Parse request
+		// Create a request
 		let call = Request::Single(Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method,
@@ -414,7 +414,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			params.push(v)
 		}
 
-		// Parse request
+		// Create a request
 		let call = Request::Single(Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: method.into(),
