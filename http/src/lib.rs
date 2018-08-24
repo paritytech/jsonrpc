@@ -270,8 +270,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Error returned from the method will be converted to status `500` response.
 	///
 	/// Expects a tuple with `(<path>, <rpc-method-name>)`.
-	pub fn health_api<'a, T: Into<Option<(&'a str, &'a str)>>>(mut self, health_api: T) -> Self {
-		self.health_api = health_api.into().map(|(a, b)| (a.to_owned(), b.to_owned()));
+	pub fn health_api<A, B, T>(mut self, health_api: T) -> Self where
+		T: Into<Option<(A, B)>>,
+		A: Into<String>,
+		B: Into<String>,
+	{
+		self.health_api = health_api.into().map(|(a, b)| (a.into(), b.into()));
 		self
 	}
 
