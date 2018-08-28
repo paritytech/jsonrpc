@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use std;
 use std::sync::Arc;
 
@@ -127,16 +129,17 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			}
 
-			let listener = match Endpoint::new(endpoint_addr, handle) {
-				Ok(l) => l,
+			let listener = Endpoint::new(endpoint_addr);
+
+			let remote = handle.remote().clone();
+			let connections = match listener.incoming(handle.clone()) {
+				Ok(connections) => connections,
 				Err(e) => {
 					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
 					return future::Either::A(future::ok(()));
 				}
 			};
 
-			let remote = handle.remote().clone();
-			let connections = listener.incoming();
 			let mut id = 0u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
