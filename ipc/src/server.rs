@@ -16,6 +16,8 @@ use parking_lot::Mutex;
 
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 use select_with_weak::SelectWithWeakExt;
+use parity_tokio_ipc::Endpoint;
+pub use parity_tokio_ipc::SecurityAttributes;
 
 /// IPC server session
 pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -52,6 +54,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 	remote: reactor::UninitializedRemote,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
+	security_attributes: SecurityAttributes,
 }
 
 impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
@@ -76,6 +79,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			remote: reactor::UninitializedRemote::Unspawned,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
+			security_attributes: SecurityAttributes::empty(),
 		}
 	}
 
@@ -106,7 +110,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-	/// Run server (in a separate thread)
+	/// Sets the security attributes for the underlying IPC socket/pipe
+	pub fn set_security_attributes(mut self, attr: SecurityAttributes) -> Self {
+		self.security_attributes = attr;
+		self
+	}
+
+	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler;
@@ -118,21 +128,22 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
 		let (wait_signal, wait_receiver) = oneshot::channel();
+		let security_attributes = self.security_attributes;
 
 		remote.remote().spawn(move |handle| {
-			use parity_tokio_ipc::Endpoint;
+
+			let mut endpoint = Endpoint::new(endpoint_addr);
+			endpoint.set_security_attributes(security_attributes);
 
 			if cfg!(unix) {
 				// warn about existing file and remove it
-				if ::std::fs::remove_file(&endpoint_addr).is_ok() {
-					warn!("Removed existing file '{}'.", &endpoint_addr);
+				if ::std::fs::remove_file(endpoint.path()).is_ok() {
+					warn!("Removed existing file '{}'.", endpoint.path());
 				}
 			}
 
-			let listener = Endpoint::new(endpoint_addr);
-
-			let remote = handle.remote().clone();
-			let connections = match listener.incoming(handle.clone()) {
+			let endpoint_handle = handle.clone();
+			let connections = match endpoint.incoming(endpoint_handle) {
 				Ok(connections) => connections,
 				Err(e) => {
 					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
@@ -140,6 +151,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			};
 
+			let remote = handle.remote().clone();
 			let mut id = 0u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
@@ -226,6 +238,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 
 /// IPC Server handle
+#[derive(Debug)]
 pub struct Server {
 	handles: Arc<Mutex<InnerHandles>>,
 	wait_handle: Option<oneshot::Receiver<()>>,
@@ -252,6 +265,7 @@ impl Server {
 }
 
 
+#[derive(Debug)]
 struct InnerHandles {
 	remote: Option<reactor::Remote>,
 	stop: Option<oneshot::Sender<()>>,
@@ -301,7 +315,8 @@ mod tests {
 	use server_utils::tokio_io::AsyncRead;
 	use server_utils::codecs;
 	use tokio_core::reactor::{Timeout, Core};
-	use meta::{MetaExtractor, RequestContext};
+	use meta::{MetaExtractor, RequestContext, NoopExtractor};
+	use super::SecurityAttributes;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -572,5 +587,15 @@ mod tests {
 		let result = core.run(result_fut);
 		assert_eq!(result, Ok(true), "Wait timeout exceeded");
 		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+	}
+
+	#[test]
+	fn runs_with_security_attributes() {
+		let path = "/tmp/test-ipc-9001";
+		let io = MetaIoHandler::<Arc<()>>::default();
+		ServerBuilder::with_meta_extractor(io, NoopExtractor)
+			.set_security_attributes(SecurityAttributes::empty())
+			.start(path)
+			.expect("Server must run with no issues");
 	}
 }
