@@ -131,9 +131,9 @@ impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
 	}
 }
 
-/// CORS Header Result.
+/// CORS Allow-Origin Header Result.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CorsHeader<T = AccessControlAllowOrigin> {
+pub enum AllowOrigin<T = AccessControlAllowOrigin> {
 	/// CORS header was not required. Origin is not present in the request.
 	NotRequired,
 	/// CORS header is not returned, Origin is not allowed to access the resource.
@@ -142,12 +142,12 @@ pub enum CorsHeader<T = AccessControlAllowOrigin> {
 	Ok(T),
 }
 
-impl<T> CorsHeader<T> {
-	/// Maps `Ok` variant of `CorsHeader`.
-	pub fn map<F, O>(self, f: F) -> CorsHeader<O> where
+impl<T> AllowOrigin<T> {
+	/// Maps `Ok` variant of `AllowOrigin`.
+	pub fn map<F, O>(self, f: F) -> AllowOrigin<O> where
 		F: FnOnce(T) -> O,
 	{
-		use self::CorsHeader::*;
+		use self::AllowOrigin::*;
 
 		match self {
 			NotRequired => NotRequired,
@@ -157,9 +157,9 @@ impl<T> CorsHeader<T> {
 	}
 }
 
-impl<T> Into<Option<T>> for CorsHeader<T> {
+impl<T> Into<Option<T>> for AllowOrigin<T> {
 	fn into(self) -> Option<T> {
-		use self::CorsHeader::*;
+		use self::AllowOrigin::*;
 
 		match self {
 			NotRequired | Invalid => None,
@@ -169,9 +169,9 @@ impl<T> Into<Option<T>> for CorsHeader<T> {
 }
 
 /// Returns correct CORS header (if any) given list of allowed origins and current origin.
-pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> CorsHeader {
+pub fn get_cors_allow_origin(origin: Option<&str>, host: Option<&str>, allowed: &Option<Vec<AccessControlAllowOrigin>>) -> AllowOrigin {
 	match origin {
-		None => CorsHeader::NotRequired,
+		None => AllowOrigin::NotRequired,
 		Some(ref origin) => {
 			if let Some(host) = host {
 				// Request initiated from the same server.
@@ -179,18 +179,18 @@ pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Optio
 					// Additional check
 					let origin = Origin::parse(origin);
 					if &*origin.host == host {
-						return CorsHeader::NotRequired;
+						return AllowOrigin::NotRequired;
 					}
 				}
 			}
 
 			match allowed.as_ref() {
-				None if *origin == "null" => CorsHeader::Ok(AccessControlAllowOrigin::Null),
-				None => CorsHeader::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
+				None if *origin == "null" => AllowOrigin::Ok(AccessControlAllowOrigin::Null),
+				None => AllowOrigin::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
 				Some(ref allowed) if *origin == "null" => {
 					allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
-						.map(CorsHeader::Ok)
-						.unwrap_or(CorsHeader::Invalid)
+						.map(AllowOrigin::Ok)
+						.unwrap_or(AllowOrigin::Invalid)
 				},
 				Some(ref allowed) => {
 					allowed.iter().find(|cors| {
@@ -201,7 +201,7 @@ pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Optio
 						}
 					})
 					.map(|_| AccessControlAllowOrigin::Value(Origin::parse(origin)))
-					.map(CorsHeader::Ok).unwrap_or(CorsHeader::Invalid)
+					.map(AllowOrigin::Ok).unwrap_or(AllowOrigin::Invalid)
 				},
 			}
 		},
@@ -212,7 +212,7 @@ pub fn get_cors_header(origin: Option<&str>, host: Option<&str>, allowed: &Optio
 #[cfg(test)]
 mod tests {
 	use hosts::Host;
-	use super::{get_cors_header, CorsHeader, AccessControlAllowOrigin, Origin, OriginProtocol};
+	use super::{get_cors_allow_origin, AllowOrigin, AccessControlAllowOrigin, Origin, OriginProtocol};
 
 	#[test]
 	fn should_parse_origin() {
@@ -237,12 +237,12 @@ mod tests {
 		let host = Some(&*host);
 
 		// when
-		let res1 = get_cors_header(origin1, host, &Some(vec![]));
-		let res2 = get_cors_header(origin2, host, &Some(vec![]));
+		let res1 = get_cors_allow_origin(origin1, host, &Some(vec![]));
+		let res2 = get_cors_allow_origin(origin2, host, &Some(vec![]));
 
 		// then
-		assert_eq!(res1, CorsHeader::Invalid);
-		assert_eq!(res2, CorsHeader::Invalid);
+		assert_eq!(res1, AllowOrigin::Invalid);
+		assert_eq!(res2, AllowOrigin::Invalid);
 	}
 
 	#[test]
@@ -255,10 +255,10 @@ mod tests {
 		let host = Some(&*host);
 
 		// when
-		let res = get_cors_header(origin, host, &None);
+		let res = get_cors_allow_origin(origin, host, &None);
 
 		// then
-		assert_eq!(res, CorsHeader::NotRequired);
+		assert_eq!(res, AllowOrigin::NotRequired);
 	}
 
 	#[test]
@@ -268,10 +268,10 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(origin, host, &None);
+		let res = get_cors_allow_origin(origin, host, &None);
 
 		// then
-		assert_eq!(res, CorsHeader::NotRequired);
+		assert_eq!(res, AllowOrigin::NotRequired);
 	}
 
 	#[test]
@@ -281,10 +281,10 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(origin, host, &None);
+		let res = get_cors_allow_origin(origin, host, &None);
 
 		// then
-		assert_eq!(res, CorsHeader::Ok("parity.io".into()));
+		assert_eq!(res, AllowOrigin::Ok("parity.io".into()));
 	}
 
 	#[test]
@@ -294,14 +294,14 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(
+		let res = get_cors_allow_origin(
 			origin,
 			host,
 			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())]),
 		);
 
 		// then
-		assert_eq!(res, CorsHeader::NotRequired);
+		assert_eq!(res, AllowOrigin::NotRequired);
 	}
 
 	#[test]
@@ -311,10 +311,10 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(origin, host, &Some(Vec::new()));
+		let res = get_cors_allow_origin(origin, host, &Some(Vec::new()));
 
 		// then
-		assert_eq!(res, CorsHeader::NotRequired);
+		assert_eq!(res, AllowOrigin::NotRequired);
 	}
 
 	#[test]
@@ -324,14 +324,14 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(
+		let res = get_cors_allow_origin(
 			origin,
 			host,
 			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into())]),
 		);
 
 		// then
-		assert_eq!(res, CorsHeader::Invalid);
+		assert_eq!(res, AllowOrigin::Invalid);
 	}
 
 	#[test]
@@ -341,10 +341,10 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(origin, host, &Some(vec![AccessControlAllowOrigin::Any]));
+		let res = get_cors_allow_origin(origin, host, &Some(vec![AccessControlAllowOrigin::Any]));
 
 		// then
-		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(res, AllowOrigin::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
 	}
 
 	#[test]
@@ -354,14 +354,14 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(
+		let res = get_cors_allow_origin(
 			origin,
 			host,
 			&Some(vec![AccessControlAllowOrigin::Null]),
 		);
 
 		// then
-		assert_eq!(res, CorsHeader::NotRequired);
+		assert_eq!(res, AllowOrigin::NotRequired);
 	}
 
 	#[test]
@@ -371,14 +371,14 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(
+		let res = get_cors_allow_origin(
 			origin,
 			host,
 			&Some(vec![AccessControlAllowOrigin::Null]),
 		);
 
 		// then
-		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Null));
+		assert_eq!(res, AllowOrigin::Ok(AccessControlAllowOrigin::Null));
 	}
 
 	#[test]
@@ -388,14 +388,14 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_header(
+		let res = get_cors_allow_origin(
 			origin,
 			host,
 			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://parity.io".into())]),
 		);
 
 		// then
-		assert_eq!(res, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(res, AllowOrigin::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
 	}
 
 	#[test]
@@ -411,13 +411,13 @@ mod tests {
 		]);
 
 		// when
-		let res1 = get_cors_header(origin1, host, &allowed);
-		let res2 = get_cors_header(origin2, host, &allowed);
-		let res3 = get_cors_header(origin3, host, &allowed);
+		let res1 = get_cors_allow_origin(origin1, host, &allowed);
+		let res2 = get_cors_allow_origin(origin2, host, &allowed);
+		let res3 = get_cors_allow_origin(origin3, host, &allowed);
 
 		// then
-		assert_eq!(res1, CorsHeader::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
-		assert_eq!(res2, CorsHeader::Invalid);
-		assert_eq!(res3, CorsHeader::Ok(AccessControlAllowOrigin::Value("chrome-extension://test".into())));
+		assert_eq!(res1, AllowOrigin::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(res2, AllowOrigin::Invalid);
+		assert_eq!(res3, AllowOrigin::Ok(AccessControlAllowOrigin::Value("chrome-extension://test".into())));
 	}
 }

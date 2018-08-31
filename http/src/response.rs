@@ -76,7 +76,7 @@ impl Response {
 	}
 
 	/// CORS invalid
-	pub fn invalid_cors() -> Self {
+	pub fn invalid_allow_origin() -> Self {
 		Response {
 			code: StatusCode::Forbidden,
 			content_type: header::ContentType::plaintext(),

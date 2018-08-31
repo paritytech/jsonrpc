@@ -281,7 +281,7 @@ fn should_return_method_not_found() {
 }
 
 #[test]
-fn should_add_cors_headers() {
+fn should_add_cors_allow_origins() {
 	// given
 	let server = serve(id);
 
@@ -334,7 +334,7 @@ fn should_add_cors_max_age_headers() {
 }
 
 #[test]
-fn should_not_add_cors_headers() {
+fn should_not_add_cors_allow_origins() {
 	// given
 	let server = serve(id);
 
@@ -355,13 +355,13 @@ fn should_not_add_cors_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
-	assert_eq!(response.body, cors_invalid());
+	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
 
 
 #[test]
-fn should_not_process_the_request_in_case_of_invalid_cors() {
+fn should_not_process_the_request_in_case_of_invalid_allow_origin() {
 	// given
 	let server = serve(id);
 
@@ -382,7 +382,7 @@ fn should_not_process_the_request_in_case_of_invalid_cors() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
-	assert_eq!(response.body, cors_invalid());
+	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
 
@@ -410,7 +410,7 @@ fn should_return_proper_headers_on_options() {
 }
 
 #[test]
-fn should_add_cors_header_for_null_origin() {
+fn should_add_cors_allow_origin_for_null_origin() {
 	// given
 	let server = serve(id);
 
@@ -436,7 +436,7 @@ fn should_add_cors_header_for_null_origin() {
 }
 
 #[test]
-fn should_add_cors_header_for_null_origin_when_all() {
+fn should_add_cors_allow_origin_for_null_origin_when_all() {
 	// given
 	let server = serve(|builder| builder.cors(DomainsValidation::Disabled));
 
@@ -780,7 +780,7 @@ fn invalid_host() -> String {
 	"29\nProvided Host header is not whitelisted.\n".into()
 }
 
-fn cors_invalid() -> String {
+fn cors_invalid_allow_origin() -> String {
 	"76\nOrigin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 

@@ -1,7 +1,7 @@
 use hyper::{header, server};
 
 use server_utils::{cors, hosts};
-pub use server_utils::cors::CorsHeader;
+pub use server_utils::cors::AllowOrigin;
 
 /// Extracts string value of a single header in request.
 fn read_header<'a>(req: &'a server::Request, header: &str) -> Option<&'a str> {
@@ -22,11 +22,11 @@ pub fn is_host_allowed(
 }
 
 /// Returns a CORS header that should be returned with that request.
-pub fn cors_header(
+pub fn cors_allow_origin(
 	request: &server::Request,
 	cors_domains: &Option<Vec<cors::AccessControlAllowOrigin>>
-) -> CorsHeader<header::AccessControlAllowOrigin> {
-	cors::get_cors_header(read_header(request, "origin"), read_header(request, "host"), cors_domains).map(|origin| {
+) -> AllowOrigin<header::AccessControlAllowOrigin> {
+	cors::get_cors_allow_origin(read_header(request, "origin"), read_header(request, "host"), cors_domains).map(|origin| {
 		use self::cors::AccessControlAllowOrigin::*;
 		match origin {
 			Value(val) => header::AccessControlAllowOrigin::Value((*val).to_owned()),

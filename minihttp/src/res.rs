@@ -43,7 +43,7 @@ pub fn internal_error() -> Response {
 	response
 }
 
-pub fn invalid_cors() -> Response {
+pub fn invalid_allow_origin() -> Response {
 	let mut response = Response::new();
 	response
 		.status_code(403, "Forbidden")

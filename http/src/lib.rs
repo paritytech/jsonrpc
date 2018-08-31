@@ -55,7 +55,7 @@ pub use server_utils::hosts::{Host, DomainsValidation};
 pub use server_utils::cors::{AccessControlAllowOrigin, Origin};
 pub use server_utils::tokio_core;
 pub use handler::ServerHandler;
-pub use utils::{is_host_allowed, cors_header, CorsHeader};
+pub use utils::{is_host_allowed, cors_allow_origin, AllowOrigin};
 pub use response::Response;
 
 /// Action undertaken by a middleware.
