@@ -52,7 +52,8 @@ use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Remote, UninitializedRemote};
 
 pub use server_utils::hosts::{Host, DomainsValidation};
-pub use server_utils::cors::{AccessControlAllowOrigin, Origin};
+pub use server_utils::cors::{AccessControlAllowOrigin, Origin, AccessControlAllowHeaders};
+pub use server_utils::cors;
 pub use server_utils::tokio_core;
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_allow_origin, AllowOrigin};
@@ -198,6 +199,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
+	allowed_headers: cors::AccessControlAllowHeaders,
 	allowed_hosts: AllowedHosts,
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
@@ -236,6 +238,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			cors_max_age: None,
+			allowed_headers: cors::AccessControlAllowHeaders::Any,
 			allowed_hosts: None,
 			rest_api: RestApi::Disabled,
 			health_api: None,
@@ -320,6 +323,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Configure the CORS `AccessControlAllowHeaders` header which are allowed.
+	pub fn cors_allow_headers(mut self, allowed_headers: cors::AccessControlAllowHeaders) -> Self {
+		self.allowed_headers = allowed_headers;
+		self
+	}
+
 	/// Configures request middleware
 	pub fn request_middleware<T: RequestMiddleware>(mut self, middleware: T) -> Self {
 		self.request_middleware = Arc::new(middleware);
@@ -354,6 +363,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	pub fn start_http(self, addr: &SocketAddr) -> io::Result<Server> {
 		let cors_domains = self.cors_domains;
 		let cors_max_age = self.cors_max_age;
+		let allowed_headers = self.allowed_headers;
 		let request_middleware = self.request_middleware;
 		let allowed_hosts = self.allowed_hosts;
 		let jsonrpc_handler = Rpc {
@@ -375,6 +385,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			addr.to_owned(),
 			cors_domains.clone(),
 			cors_max_age,
+			allowed_headers.clone(),
 			request_middleware.clone(),
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
@@ -394,6 +405,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				addr.to_owned(),
 				cors_domains.clone(),
 				cors_max_age,
+				allowed_headers.clone(),
 				request_middleware.clone(),
 				allowed_hosts.clone(),
 				jsonrpc_handler.clone(),
@@ -436,6 +448,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
+	allowed_headers: cors::AccessControlAllowHeaders,
 	request_middleware: Arc<RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
@@ -501,6 +514,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						jsonrpc_handler.clone(),
 						cors_domains.clone(),
 						cors_max_age,
+						allowed_headers.clone(),
 						allowed_hosts.clone(),
 						request_middleware.clone(),
 						rest_api,

@@ -84,6 +84,15 @@ impl Response {
 		}
 	}
 
+	/// CORS header invalid
+	pub fn invalid_allow_headers() -> Self {
+		Response {
+			code: StatusCode::Forbidden,
+			content_type: header::ContentType::plaintext(),
+			content: "Header field is not allowed.\n".to_owned(),
+		}
+	}
+
 	/// Create a response for bad request
 	pub fn bad_request<S: Into<String>>(msg: S) -> Self {
 		Response {

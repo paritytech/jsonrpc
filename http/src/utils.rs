@@ -1,7 +1,7 @@
 use hyper::{header, server};
 
 use server_utils::{cors, hosts};
-pub use server_utils::cors::AllowOrigin;
+pub use server_utils::cors::{AllowOrigin, AllowHeaders, AccessControlAllowHeaders};
 
 /// Extracts string value of a single header in request.
 fn read_header<'a>(req: &'a server::Request, header: &str) -> Option<&'a str> {
@@ -34,4 +34,12 @@ pub fn cors_allow_origin(
 			Any => header::AccessControlAllowOrigin::Any,
 		}
 	})
+}
+
+/// Returns the CORS header that should be returned with that request.
+pub fn cors_allow_headers(
+	request: &server::Request,
+	cors_allow_headers: &cors::AccessControlAllowHeaders
+) -> AllowHeaders<header::AccessControlAllowHeaders> {
+	cors::get_cors_allow_headers(request.headers(), cors_allow_headers)
 }
