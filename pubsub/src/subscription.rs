@@ -17,7 +17,7 @@ use types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, Sin
 pub struct Session {
 	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<Fn(SubscriptionId) + Send + 'static>>>,
 	transport: TransportSender,
-	on_drop: Mutex<Vec<Box<Fn() + Send>>>,
+	on_drop: Mutex<Vec<Box<FnMut() + Send>>>,
 }
 
 impl fmt::Debug for Session {
@@ -46,8 +46,13 @@ impl Session {
 	}
 
 	/// Adds a function to call when session is dropped.
-	pub fn on_drop(&self, on_drop: Box<Fn() + Send>) {
-		self.on_drop.lock().push(on_drop);
+	pub fn on_drop<F: FnOnce() + Send + 'static>(&self, on_drop: F) {
+		let mut func = Some(on_drop);
+		self.on_drop.lock().push(Box::new(move || {
+			if let Some(f) = func.take() {
+				f();
+			}
+		}));
 	}
 
 	/// Adds new active subscription
@@ -75,7 +80,7 @@ impl Drop for Session {
 		}
 
 		let mut on_drop = self.on_drop.lock();
-		for on_drop in on_drop.drain(..) {
+		for mut on_drop in on_drop.drain(..) {
 			on_drop();
 		}
 	}
