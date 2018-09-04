@@ -200,6 +200,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	cors_max_age: Option<u32>,
 	allowed_hosts: AllowedHosts,
 	rest_api: RestApi,
+	health_api: Option<(String, String)>,
 	keep_alive: bool,
 	threads: usize,
 	max_request_body_size: usize,
@@ -237,6 +238,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			cors_max_age: None,
 			allowed_hosts: None,
 			rest_api: RestApi::Disabled,
+			health_api: None,
 			keep_alive: true,
 			threads: 1,
 			max_request_body_size: 5 * 1024 * 1024,
@@ -260,7 +262,23 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-	/// Sets Enables or disables HTTP keep-alive.
+	/// Enable health endpoint.
+	///
+	/// Allows you to expose one of the methods under `GET /<path>`
+	/// The method will be invoked with no parameters.
+	/// Error returned from the method will be converted to status `500` response.
+	///
+	/// Expects a tuple with `(<path>, <rpc-method-name>)`.
+	pub fn health_api<A, B, T>(mut self, health_api: T) -> Self where
+		T: Into<Option<(A, B)>>,
+		A: Into<String>,
+		B: Into<String>,
+	{
+		self.health_api = health_api.into().map(|(a, b)| (a.into(), b.into()));
+		self
+	}
+
+	/// Enables or disables HTTP keep-alive.
 	///
 	/// Default is true.
 	pub fn keep_alive(mut self, val: bool) -> Self {
@@ -343,6 +361,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			extractor: self.meta_extractor,
 		};
 		let rest_api = self.rest_api;
+		let health_api = self.health_api;
 		let keep_alive = self.keep_alive;
 		let reuse_port = self.threads > 1;
 
@@ -360,6 +379,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
 			rest_api,
+			health_api.clone(),
 			keep_alive,
 			reuse_port,
 			req_max_size,
@@ -378,6 +398,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				allowed_hosts.clone(),
 				jsonrpc_handler.clone(),
 				rest_api,
+				health_api.clone(),
 				keep_alive,
 				reuse_port,
 				req_max_size,
@@ -419,6 +440,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
 	rest_api: RestApi,
+	health_api: Option<(String, String)>,
 	keep_alive: bool,
 	reuse_port: bool,
 	max_request_body_size: usize,
@@ -482,6 +504,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						allowed_hosts.clone(),
 						request_middleware.clone(),
 						rest_api,
+						health_api.clone(),
 						max_request_body_size,
 					));
 					Ok(())
