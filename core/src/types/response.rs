@@ -1,7 +1,4 @@
 //! jsonrpc response
-use serde::de::{Deserialize, Deserializer, Error as DeError};
-use serde::ser::{Serialize, Serializer};
-use serde_json::value::from_value;
 use super::{Id, Value, Error, ErrorCode, Version};
 use {Result as CoreResult};
 
@@ -30,7 +27,8 @@ pub struct Failure {
 }
 
 /// Represents output - failure or success
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum Output {
 	/// Success
 	Success(Success),
@@ -91,53 +89,14 @@ impl From<Output> for CoreResult<Value> {
 	}
 }
 
-impl<'a> Deserialize<'a> for Output {
-	fn deserialize<D>(deserializer: D) -> Result<Output, D::Error>
-	where D: Deserializer<'a> {
-		let v: Value = try!(Deserialize::deserialize(deserializer));
-		from_value(v.clone()).map(Output::Failure)
-			.or_else(|_| from_value(v).map(Output::Success))
-			.map_err(|_| D::Error::custom("")) // types must match
-	}
-}
-
-impl Serialize for Output {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where S: Serializer {
-		match *self {
-			Output::Success(ref s) => s.serialize(serializer),
-			Output::Failure(ref f) => f.serialize(serializer)
-		}
-	}
-}
-
 /// Synchronous response
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
 pub enum Response {
 	/// Single response
 	Single(Output),
 	/// Response to batch request (batch of responses)
 	Batch(Vec<Output>)
-}
-
-impl<'a> Deserialize<'a> for Response {
-	fn deserialize<D>(deserializer: D) -> Result<Response, D::Error>
-	where D: Deserializer<'a> {
-		let v: Value = try!(Deserialize::deserialize(deserializer));
-		from_value(v.clone()).map(Response::Batch)
-			.or_else(|_| from_value(v).map(Response::Single))
-			.map_err(|_| D::Error::custom("")) // types must match
-	}
-}
-
-impl Serialize for Response {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where S: Serializer {
-		match *self {
-			Response::Single(ref o) => o.serialize(serializer),
-			Response::Batch(ref b) => b.serialize(serializer)
-		}
-	}
 }
 
 impl Response {

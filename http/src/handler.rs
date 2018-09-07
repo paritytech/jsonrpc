@@ -20,8 +20,10 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	jsonrpc_handler: Rpc<M, S>,
 	allowed_hosts: AllowedHosts,
 	cors_domains: CorsDomains,
+	cors_max_age: Option<u32>,
 	middleware: Arc<RequestMiddleware>,
 	rest_api: RestApi,
+	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
 }
 
@@ -30,17 +32,21 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	pub fn new(
 		jsonrpc_handler: Rpc<M, S>,
 		cors_domains: CorsDomains,
+		cors_max_age: Option<u32>,
 		allowed_hosts: AllowedHosts,
 		middleware: Arc<RequestMiddleware>,
 		rest_api: RestApi,
+		health_api: Option<(String, String)>,
 		max_request_body_size: usize,
 	) -> Self {
 		ServerHandler {
 			jsonrpc_handler,
 			allowed_hosts,
 			cors_domains,
+			cors_max_age,
 			middleware,
 			rest_api,
+			health_api,
 			max_request_body_size,
 		}
 	}
@@ -84,6 +90,8 @@ impl<M: Metadata, S: Middleware<M>> server::Service for ServerHandler<M, S> {
 					is_options: false,
 					cors_header: cors::CorsHeader::NotRequired,
 					rest_api: self.rest_api,
+					health_api: self.health_api.clone(),
+					cors_max_age: self.cors_max_age,
 					max_request_body_size: self.max_request_body_size,
 				})
 			}
@@ -133,6 +141,11 @@ impl<M, F, G> RpcPollState<M, F, G> where
 	}
 }
 
+type FutureResponse<F, G> = future::Map<
+	future::Either<future::FutureResult<Option<core::Response>, ()>, core::FutureRpcResult<F, G>>,
+	fn(Option<core::Response>) -> Response,
+>;
+
 enum RpcHandlerState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
 	G: Future<Item = Option<core::Output>, Error = ()>,
@@ -152,8 +165,13 @@ enum RpcHandlerState<M, F, G> where
 		uri: hyper::Uri,
 		metadata: M,
 	},
+	ProcessHealth {
+		method: String,
+		metadata: M,
+	},
 	Writing(Response),
 	Waiting(FutureResult<F, G>),
+	WaitingForResponse(FutureResponse<F, G>),
 	Done,
 }
 
@@ -168,7 +186,9 @@ impl<M, F, G> fmt::Debug for RpcHandlerState<M, F, G> where
 			ReadingHeaders {..} => write!(fmt, "ReadingHeaders"),
 			ReadingBody {..} => write!(fmt, "ReadingBody"),
 			ProcessRest {..} => write!(fmt, "ProcessRest"),
+			ProcessHealth {..} => write!(fmt, "ProcessHealth"),
 			Writing(ref res) => write!(fmt, "Writing({:?})", res),
+			WaitingForResponse(_) => write!(fmt, "WaitingForResponse"),
 			Waiting(_) => write!(fmt, "Waiting"),
 			Done => write!(fmt, "Done"),
 		}
@@ -180,7 +200,9 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	state: RpcHandlerState<M, S::Future, S::CallFuture>,
 	is_options: bool,
 	cors_header: cors::CorsHeader<header::AccessControlAllowOrigin>,
+	cors_max_age: Option<u32>,
 	rest_api: RestApi,
+	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
 }
 
@@ -215,6 +237,18 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 			RpcHandlerState::ProcessRest { uri, metadata } => {
 				self.process_rest(uri, metadata)?
 			},
+			RpcHandlerState::ProcessHealth { method, metadata } => {
+				self.process_health(method, metadata)?
+			},
+			RpcHandlerState::WaitingForResponse(mut waiting) => {
+				match waiting.poll() {
+					Ok(Async::Ready(response)) => RpcPollState::Ready(RpcHandlerState::Writing(response.into())),
+					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::WaitingForResponse(waiting)),
+					Err(e) => RpcPollState::Ready(RpcHandlerState::Writing(
+						Response::internal_error(format!("{:?}", e))
+					)),
+				}
+			},
 			RpcHandlerState::Waiting(mut waiting) => {
 				match waiting.poll() {
 					Ok(Async::Ready(response)) => {
@@ -226,7 +260,9 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 						}.into()))
 					},
 					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
-					Err(_) => RpcPollState::Ready(RpcHandlerState::Writing(Response::internal_error())),
+					Err(e) => RpcPollState::Ready(RpcHandlerState::Writing(
+						Response::internal_error(format!("{:?}", e))
+					)),
 				}
 			},
 			state => RpcPollState::NotReady(state),
@@ -237,7 +273,12 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 			RpcHandlerState::Writing(res) => {
 				let mut response: server::Response = res.into();
 				let cors_header = mem::replace(&mut self.cors_header, cors::CorsHeader::Invalid);
-				Self::set_response_headers(response.headers_mut(), self.is_options, cors_header.into());
+				Self::set_response_headers(
+					response.headers_mut(),
+					self.is_options,
+					cors_header.into(),
+					self.cors_max_age,
+				);
 				Ok(Async::Ready(response))
 			},
 			state => {
@@ -305,11 +346,55 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			Method::Options => {
 				RpcHandlerState::Writing(Response::empty())
 			},
+			// Respond to health API request if there is one configured.
+			Method::Get if self.health_api.as_ref().map(|x| &*x.0) == Some(request.uri().path()) => {
+				RpcHandlerState::ProcessHealth {
+					metadata,
+					method: self.health_api.as_ref()
+							.map(|x| x.1.clone())
+							.expect("Health api is defined since the URI matched."),
+				}
+			},
 			// Disallow other methods.
 			_ => {
 				RpcHandlerState::Writing(Response::method_not_allowed())
 			},
 		}
+	}
+
+	fn process_health(
+		&self,
+		method: String,
+		metadata: M,
+	) -> Result<RpcPollState<M, S::Future, S::CallFuture>, hyper::Error> {
+		use self::core::types::{Call, MethodCall, Version, Params, Request, Id, Output, Success, Failure};
+
+		// Create a request
+		let call = Request::Single(Call::MethodCall(MethodCall {
+			jsonrpc: Some(Version::V2),
+			method,
+			params: Params::None,
+			id: Id::Num(1),
+		}));
+
+		return Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(
+			future::Either::B(self.jsonrpc_handler.handler.handle_rpc_request(call, metadata))
+				.map(|res| match res {
+					Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
+						let result = serde_json::to_string(&result)
+							.expect("Serialization of result is infallible;qed");
+
+						Response::ok(result)
+					},
+					Some(core::Response::Single(Output::Failure(Failure { error, .. }))) => {
+						let result = serde_json::to_string(&error)
+							.expect("Serialization of error is infallible;qed");
+
+						Response::service_unavailable(result)
+					},
+					e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
+				})
+		)));
 	}
 
 	fn process_rest(
@@ -332,11 +417,11 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			params.push(v)
 		}
 
-		// Parse request
+		// Create a request
 		let call = Request::Single(Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: method.into(),
-			params: Some(Params::Array(params)),
+			params: Params::Array(params),
 			id: Id::Num(1),
 		}));
 
@@ -396,7 +481,12 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 	}
 
-	fn set_response_headers(headers: &mut Headers, is_options: bool, cors_header: Option<header::AccessControlAllowOrigin>) {
+	fn set_response_headers(
+		headers: &mut Headers,
+		is_options: bool,
+		cors_header: Option<header::AccessControlAllowOrigin>,
+		cors_max_age: Option<u32>,
+	) {
 		if is_options {
 			headers.set(header::Allow(vec![
 				Method::Options,
@@ -417,6 +507,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 				Ascii::new("content-type".to_owned()),
 				Ascii::new("accept".to_owned()),
 			]));
+			if let Some(cors_max_age) = cors_max_age {
+				headers.set(header::AccessControlMaxAge(cors_max_age));
+			}
 			headers.set(cors_domain);
 			headers.set(header::Vary::Items(vec![
 				Ascii::new("origin".to_owned())
