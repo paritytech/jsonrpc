@@ -14,7 +14,6 @@ tokio-service = "0.1"
 jsonrpc-core = { version = "8.0", path = "../core" }
 jsonrpc-server-utils = { version = "8.0", path = "../server-utils" }
 parity-tokio-ipc = { git = "https://github.com/nikvolf/parity-tokio-ipc", rev = "7c9bbe3bc45d8e72a92b0951acc877da228abd50" }
-parking_lot = "0.6"
 
 [dev-dependencies]
 env_logger = "0.4"
