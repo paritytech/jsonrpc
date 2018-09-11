@@ -4,6 +4,7 @@ use std::time::Instant;
 use std::sync::atomic::{self, AtomicUsize};
 use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
+use jsonrpc_core::futures::future::Either;
 
 #[derive(Clone, Debug)]
 struct Meta(usize);
@@ -14,7 +15,7 @@ struct MyMiddleware(AtomicUsize);
 impl Middleware<Meta> for MyMiddleware {
 	type Future = FutureResponse;
 
-	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> FutureResponse where
+	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> Either<Self::Future, X> where
 		F: FnOnce(Request, Meta) -> X + Send,
 		X: Future<Item=Option<Response>, Error=()> + Send + 'static,
 	{
@@ -22,10 +23,10 @@ impl Middleware<Meta> for MyMiddleware {
 		let request_number = self.0.fetch_add(1, atomic::Ordering::SeqCst);
 		println!("Processing request {}: {:?}, {:?}", request_number, request, meta);
 
-		Box::new(next(request, meta).map(move |res| {
+		Either::A(Box::new(next(request, meta).map(move |res| {
 			println!("Processing took: {:?}", start.elapsed());
 			res
-		}))
+		})))
 	}
 }
 

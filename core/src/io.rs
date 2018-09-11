@@ -15,7 +15,7 @@ pub type FutureResponse = Box<Future<Item=Option<Response>, Error=()> + Send>;
 
 /// A type representing future string response.
 pub type FutureResult<F> = future::Map<
-	future::Either<future::FutureResult<Option<Response>, ()>, F>,
+	future::Either<future::FutureResult<Option<Response>, ()>, FutureRpcResult<F>>,
 	fn(Option<Response>) -> Option<String>,
 >;
 
@@ -23,6 +23,21 @@ pub type FutureResult<F> = future::Map<
 pub type FutureOutput = future::Either<
 	Box<Future<Item=Option<Output>, Error=()> + Send>,
 	future::FutureResult<Option<Output>, ()>,
+>;
+
+/// A type representing an optional `Response` for RPC `Request`.
+pub type FutureRpcResult<F> = future::Either<
+	F,
+	future::Either<
+		future::Map<
+			FutureOutput,
+			fn(Option<Output>) -> Option<Response>,
+		>,
+		future::Map<
+			future::JoinAll<Vec<FutureOutput>>,
+			fn(Vec<Option<Output>>) -> Option<Response>,
+		>,
+	>,
 >;
 
 /// `IoHandler` json-rpc protocol compatibility
@@ -188,23 +203,31 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Handle deserialized RPC request.
-	pub fn handle_rpc_request(&self, request: Request, meta: T) -> S::Future {
+	pub fn handle_rpc_request(&self, request: Request, meta: T) -> FutureRpcResult<S::Future> {
 		use self::future::Either::{A, B};
+
+		fn output_as_response(output: Option<Output>) -> Option<Response> {
+			output.map(Response::Single)
+		}
+
+		fn outputs_as_batch(outs: Vec<Option<Output>>) -> Option<Response> {
+			let outs: Vec<_> = outs.into_iter().filter_map(|v| v).collect();
+			if outs.is_empty() {
+				None
+			} else {
+				Some(Response::Batch(outs))
+			}
+		}
 
 		self.middleware.on_request(request, meta, |request, meta| match request {
 			Request::Single(call) => {
-				A(self.handle_call(call, meta).map(|output| output.map(Response::Single)))
+				A(self.handle_call(call, meta).map(output_as_response as fn(Option<Output>) ->
+												   Option<Response>))
 			},
 			Request::Batch(calls) => {
 				let futures: Vec<_> = calls.into_iter().map(move |call| self.handle_call(call, meta.clone())).collect();
-				B(futures::future::join_all(futures).map(|outs| {
-					let outs: Vec<_> = outs.into_iter().filter_map(|v| v).collect();
-					if outs.is_empty() {
-						None
-					} else {
-						Some(Response::Batch(outs))
-					}
-				}))
+				B(futures::future::join_all(futures).map(outputs_as_batch as fn(Vec<Option<Output>>) ->
+																				Option<Response>))
 			},
 		})
 	}
@@ -294,7 +317,7 @@ impl<M: Metadata + Default> IoHandler<M> {
 	}
 
 	/// Handle deserialized RPC request asynchronously.
-	pub fn handle_rpc_request(&self, request: Request) -> FutureResponse {
+	pub fn handle_rpc_request(&self, request: Request) -> FutureRpcResult<FutureResponse> {
 		self.0.handle_rpc_request(request, M::default())
 	}
 
