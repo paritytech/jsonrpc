@@ -12,9 +12,7 @@ install:
 build: false
 
 test_script:
-  - cargo test --all
+  - cargo test --all --verbose
 
-branches:
-  only:
-  - master
-  - /^parity-.*$/
+cache:
+  - C:\Users\appveyor\.cargo
