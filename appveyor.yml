@@ -14,5 +14,11 @@ build: false
 test_script:
   - cargo test --all --verbose
 
+# avoid running tests twice
+branches:
+  only:
+  - master
+  - /^parity-.*$/
+
 cache:
   - C:\Users\appveyor\.cargo
