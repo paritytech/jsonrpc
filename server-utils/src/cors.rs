@@ -6,6 +6,7 @@ use std::{fmt, ops};
 use hosts::{Host, Port};
 use matcher::{Matcher, Pattern};
 use std::ops::Deref;
+use std::collections::HashSet;
 pub use cors::hyper::header;
 pub use cors::hyper::header::AccessControlRequestHeaders;
 pub use cors::hyper::Headers;
@@ -260,7 +261,7 @@ pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &Ac
 		let are_all_allowed = request_headers.iter()
 			.all(|header| {
 				only.contains(&Ascii::new(header.name().to_owned())) ||
-				get_always_allowed_headers().contains(&Ascii::new(header.name()))
+				ALWAYS_ALLOWED_HEADERS.contains(&Ascii::new(header.name()))
 			});
 
 		if !are_all_allowed {
@@ -302,7 +303,7 @@ pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &Ac
 					let are_all_allowed = requested.iter()
 						.all(|header| {
 							let name = &Ascii::new(header.as_ref());
-							only.contains(header) || get_always_allowed_headers().contains(name)
+							only.contains(header) || ALWAYS_ALLOWED_HEADERS.contains(name)
 						});
 
 					if !are_all_allowed {
@@ -317,20 +318,22 @@ pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &Ac
 }
 
 /// Returns headers which are always allowed.
-pub fn get_always_allowed_headers() -> Vec<Ascii<&'static str>> {
-	vec![
-		Ascii::new("Accept"),
-		Ascii::new("Accept-Language"),
-		Ascii::new("Access-Control-Allow-Origin"),
-		Ascii::new("Access-Control-Request-Headers"),
-		Ascii::new("Content-Language"),
-		Ascii::new("Content-Type"),
-		Ascii::new("Host"),
-		Ascii::new("Origin"),
-		Ascii::new("Content-Length"),
-		Ascii::new("Connection"),
-		Ascii::new("User-Agent"),
-	]
+lazy_static! {
+	static ref ALWAYS_ALLOWED_HEADERS: HashSet<Ascii<&'static str>> = {
+		let mut hs = HashSet::new();
+		hs.insert(Ascii::new("Accept"));
+		hs.insert(Ascii::new("Accept-Language"));
+		hs.insert(Ascii::new("Access-Control-Allow-Origin"));
+		hs.insert(Ascii::new("Access-Control-Request-Headers"));
+		hs.insert(Ascii::new("Content-Language"));
+		hs.insert(Ascii::new("Content-Type"));
+		hs.insert(Ascii::new("Host"));
+		hs.insert(Ascii::new("Origin"));
+		hs.insert(Ascii::new("Content-Length"));
+		hs.insert(Ascii::new("Connection"));
+		hs.insert(Ascii::new("User-Agent"));
+		hs
+	};
 }
 
 #[cfg(test)]
