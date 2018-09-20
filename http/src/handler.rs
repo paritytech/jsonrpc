@@ -140,7 +140,7 @@ impl<M, F> RpcPollState<M, F> where
 }
 
 type FutureResponse<F> = future::Map<
-	future::Either<future::FutureResult<Option<core::Response>, ()>, F>,
+	future::Either<future::FutureResult<Option<core::Response>, ()>, core::FutureRpcResult<F>>,
 	fn(Option<core::Response>) -> Response,
 >;
 
