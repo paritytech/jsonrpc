@@ -151,7 +151,7 @@ pub enum AllowOrigin<T = AccessControlAllowOrigin> {
 
 /// Headers allowed to access
 #[derive(Debug, Clone, PartialEq)]
-pub enum AccessControlAllowHeadersUnicase<T = Vec<Ascii<String>>> {
+pub enum AccessControlAllowHeadersUnicase<T = HashSet<Ascii<String>>> {
 	/// Specific headers
 	Only(T),
 	/// Any non-null origin
@@ -169,13 +169,17 @@ pub enum AllowHeaders<T = header::AccessControlAllowHeaders> {
 	Ok(T),
 }
 
-impl Into<Vec<Ascii<String>>> for AccessControlAllowHeadersUnicase {
-	fn into(self) -> Vec<Ascii<String>> {
+impl Into<HashSet<Ascii<String>>> for AccessControlAllowHeadersUnicase {
+	fn into(self) -> HashSet<Ascii<String>> {
 		use self::AccessControlAllowHeadersUnicase::Any;
 		use self::AccessControlAllowHeadersUnicase::Only;
 
 		match self {
-			Any => vec![Ascii::new("*".to_owned())],
+			Any => {
+				let mut hs = HashSet::new();
+				hs.insert(Ascii::new("*".to_owned()));
+				hs
+			},
 			Only(h) => h,
 		}
 	}
@@ -202,7 +206,7 @@ impl From<AccessControlAllowHeaders> for AccessControlAllowHeadersUnicase {
   }
 }
 
-impl Into<AccessControlAllowHeadersUnicase> for Vec<Ascii<String>>  {
+impl Into<AccessControlAllowHeadersUnicase> for HashSet<Ascii<String>>  {
 	fn into(self) -> AccessControlAllowHeadersUnicase {
 		AccessControlAllowHeadersUnicase::Only(self)
 	}
