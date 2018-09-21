@@ -577,8 +577,8 @@ fn should_allow_if_host_is_valid() {
 fn should_respond_configured_allowed_hosts_to_options() {
 	// given
 	let allowed = vec![
-			"X-Allowed".to_owned(),
-			"X-AlsoAllowed".to_owned()
+			"X-Allowed",
+			"X-AlsoAllowed",
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -656,8 +656,8 @@ fn should_respond_valid_to_default_allowed_headers() {
 fn should_by_default_respond_valid_to_any_request_headers() {
 	// given
 	let allowed = vec![
-		"X-Abc".to_owned(),
-		"X-123".to_owned()
+		"X-Abc",
+		"X-123",
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -686,8 +686,8 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 fn should_respond_valid_to_configured_allow_headers() {
 	// given
 	let allowed = vec![
-			"X-Allowed".to_owned(),
-			"X-AlsoAllowed".to_owned()
+			"X-Allowed",
+			"X-AlsoAllowed",
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -717,7 +717,7 @@ fn should_respond_invalid_if_non_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed".to_owned(),
+			"X-Allowed",
 		]);
 	let server = serve_allow_headers(custom);
 
@@ -745,7 +745,7 @@ fn should_respond_valid_if_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed".to_owned(),
+			"X-Allowed",
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -775,7 +775,7 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed".to_owned(),
+			"X-Allowed",
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -804,8 +804,8 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// given
 	let allowed = vec![
-		"X-Allowed".to_owned(),
-		"X-AlsoAllowed".to_owned()
+		"X-Allowed",
+		"X-AlsoAllowed",
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -864,7 +864,7 @@ fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed".to_owned(),
+			"X-Allowed",
 		]);
 	let server = serve_allow_headers(custom);
 

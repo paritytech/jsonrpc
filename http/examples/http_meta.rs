@@ -27,7 +27,7 @@ fn main() {
 	let server = ServerBuilder::new(io)
 		.cors_allow_headers(AccessControlAllowHeaders::Only(
 			vec![
-				"Authorization".to_owned(),
+				"Authorization",
 			])
 		)
 		.rest_api(RestApi::Unsecure)
