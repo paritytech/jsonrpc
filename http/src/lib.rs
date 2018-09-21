@@ -199,7 +199,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
-	allowed_headers: cors::AccessControlAllowHeaders,
+	allowed_headers: cors::AccessControlAllowHeadersUnicase,
 	allowed_hosts: AllowedHosts,
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
@@ -238,7 +238,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			cors_max_age: None,
-			allowed_headers: cors::AccessControlAllowHeaders::Any,
+			allowed_headers: cors::AccessControlAllowHeadersUnicase::Any,
 			allowed_hosts: None,
 			rest_api: RestApi::Disabled,
 			health_api: None,
@@ -325,7 +325,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 	/// Configure the CORS `AccessControlAllowHeaders` header which are allowed.
 	pub fn cors_allow_headers(mut self, allowed_headers: cors::AccessControlAllowHeaders) -> Self {
-		self.allowed_headers = allowed_headers;
+		self.allowed_headers = allowed_headers.into();
 		self
 	}
 
@@ -448,7 +448,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
-	allowed_headers: cors::AccessControlAllowHeaders,
+	allowed_headers: cors::AccessControlAllowHeadersUnicase,
 	request_middleware: Arc<RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,

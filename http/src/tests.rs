@@ -4,7 +4,6 @@ use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
 use self::jsonrpc_core::{IoHandler, Params, Value, Error, ErrorCode};
-use unicase::Ascii;
 
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
@@ -118,16 +117,6 @@ fn request(server: Server, request: &str) -> Response {
 		headers: headers,
 		body: body,
 	}
-}
-
-fn concat(list: &Vec<Ascii<String>>) -> Ascii<String> {
-	let line = list
-		.iter()
-		.map(|x| x.to_string())
-		.collect::<Vec<String>>()
-		.join(", ");
-
-	Ascii::new(line.to_owned())
 }
 
 #[test]
@@ -588,8 +577,8 @@ fn should_allow_if_host_is_valid() {
 fn should_respond_configured_allowed_hosts_to_options() {
 	// given
 	let allowed = vec![
-			Ascii::new("X-Allowed".to_owned()),
-			Ascii::new("X-AlsoAllowed".to_owned())
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned()
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -605,12 +594,12 @@ fn should_respond_configured_allowed_hosts_to_options() {
 			Content-Type: application/json\r\n\
 			Connection: close\r\n\
 			\r\n\
-		", concat(&allowed))
+		", &allowed.join(", "))
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", concat(&allowed));
+	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -667,8 +656,8 @@ fn should_respond_valid_to_default_allowed_headers() {
 fn should_by_default_respond_valid_to_any_request_headers() {
 	// given
 	let allowed = vec![
-		Ascii::new("X-Abc".to_owned()),
-		Ascii::new("X-123".to_owned())
+		"X-Abc".to_owned(),
+		"X-123".to_owned()
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -684,12 +673,12 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 			Connection: close\r\n\
 			Access-Control-Request-Headers: {}\r\n\
 			\r\n\
-		", concat(&allowed))
+		", &allowed.join(", "))
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", concat(&allowed));
+	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -697,8 +686,8 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 fn should_respond_valid_to_configured_allow_headers() {
 	// given
 	let allowed = vec![
-			Ascii::new("X-Allowed".to_owned()),
-			Ascii::new("X-AlsoAllowed".to_owned())
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned()
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -714,12 +703,12 @@ fn should_respond_valid_to_configured_allow_headers() {
 			Connection: close\r\n\
 			Access-Control-Request-Headers: {}\r\n\
 			\r\n\
-		", concat(&allowed))
+		", &allowed.join(", "))
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", concat(&allowed));
+	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -728,7 +717,7 @@ fn should_respond_invalid_if_non_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			Ascii::new("X-Allowed".to_owned()),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 
@@ -756,7 +745,7 @@ fn should_respond_valid_if_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			Ascii::new("X-Allowed".to_owned()),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -786,7 +775,7 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			Ascii::new("X-Allowed".to_owned()),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -815,8 +804,8 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// given
 	let allowed = vec![
-		Ascii::new("X-Allowed".to_owned()),
-		Ascii::new("X-AlsoAllowed".to_owned())
+		"X-Allowed".to_owned(),
+		"X-AlsoAllowed".to_owned()
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -875,7 +864,7 @@ fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			Ascii::new("X-Allowed".to_owned()),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 

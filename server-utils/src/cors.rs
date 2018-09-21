@@ -151,7 +151,7 @@ pub enum AllowOrigin<T = AccessControlAllowOrigin> {
 
 /// Headers allowed to access
 #[derive(Debug, Clone, PartialEq)]
-pub enum AccessControlAllowHeaders<T = Vec<Ascii<String>>> {
+pub enum AccessControlAllowHeadersUnicase<T = Vec<Ascii<String>>> {
 	/// Specific headers
 	Only(T),
 	/// Any non-null origin
@@ -169,10 +169,10 @@ pub enum AllowHeaders<T = header::AccessControlAllowHeaders> {
 	Ok(T),
 }
 
-impl Into<Vec<Ascii<String>>> for AccessControlAllowHeaders {
+impl Into<Vec<Ascii<String>>> for AccessControlAllowHeadersUnicase {
 	fn into(self) -> Vec<Ascii<String>> {
-		use self::AccessControlAllowHeaders::Any;
-		use self::AccessControlAllowHeaders::Only;
+		use self::AccessControlAllowHeadersUnicase::Any;
+		use self::AccessControlAllowHeadersUnicase::Only;
 
 		match self {
 			Any => vec![Ascii::new("*".to_owned())],
@@ -181,9 +181,30 @@ impl Into<Vec<Ascii<String>>> for AccessControlAllowHeaders {
 	}
 }
 
-impl Into<AccessControlAllowHeaders> for Vec<Ascii<String>>  {
-	fn into(self) -> AccessControlAllowHeaders {
-		AccessControlAllowHeaders::Only(self)
+/// Headers allowed to access
+#[derive(Debug, Clone, PartialEq)]
+pub enum AccessControlAllowHeaders<T = Vec<String>> {
+  /// Specific headers
+  Only(T),
+  /// Any non-null origin
+  Any,
+}
+
+impl From<AccessControlAllowHeaders> for AccessControlAllowHeadersUnicase {
+  fn from(foo: AccessControlAllowHeaders) -> AccessControlAllowHeadersUnicase {
+    match foo {
+      AccessControlAllowHeaders::Any => AccessControlAllowHeadersUnicase::Any,
+      AccessControlAllowHeaders::Only(h) => {
+        let o = h.into_iter().map(|x| Ascii::new(x)).collect();
+        AccessControlAllowHeadersUnicase::Only(o)
+      },
+    }
+  }
+}
+
+impl Into<AccessControlAllowHeadersUnicase> for Vec<Ascii<String>>  {
+	fn into(self) -> AccessControlAllowHeadersUnicase {
+		AccessControlAllowHeadersUnicase::Only(self)
 	}
 }
 
@@ -254,9 +275,9 @@ pub fn get_cors_allow_origin(origin: Option<&str>, host: Option<&str>, allowed: 
 }
 
 /// Validates if the `AccessControlAllowedHeaders` in the request are allowed.
-pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &AccessControlAllowHeaders) -> AllowHeaders {
+pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &AccessControlAllowHeadersUnicase) -> AllowHeaders {
 	// Check if the header fields which were sent in the request are required
-	if let AccessControlAllowHeaders::Only(only) = cors_allow_headers {
+	if let AccessControlAllowHeadersUnicase::Only(only) = cors_allow_headers {
 		let are_all_allowed = request_headers.iter()
 			.all(|header| {
 				only.contains(&Ascii::new(header.name().to_owned())) ||
@@ -273,11 +294,11 @@ pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &Ac
 		None => {
 			// No fields were requested, no comparison necessary
 			match cors_allow_headers {
-				AccessControlAllowHeaders::Any => AllowHeaders::NotRequired,
+				AccessControlAllowHeadersUnicase::Any => AllowHeaders::NotRequired,
 
 				// The fields which can be used are constrainted, but since it
 				// was asked for none we don't return any.
-				AccessControlAllowHeaders::Only(_) => {
+				AccessControlAllowHeadersUnicase::Only(_) => {
 					let empty = header::AccessControlAllowHeaders(vec![]);
 					AllowHeaders::Ok(empty)
 				},
@@ -292,13 +313,13 @@ pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &Ac
 			);
 
 			match cors_allow_headers {
-				AccessControlAllowHeaders::Any => {
+				AccessControlAllowHeadersUnicase::Any => {
 					// Any field is allowed. Our response are the fields about which
 					// the request inquired.
 					echo
 				},
 
-				AccessControlAllowHeaders::Only(only) => {
+				AccessControlAllowHeadersUnicase::Only(only) => {
 					let are_all_allowed = requested.iter()
 						.all(|header| {
 							let name = &Ascii::new(header.as_ref());
@@ -554,7 +575,7 @@ mod tests {
 		// given
 		let cors_allow_headers = AccessControlAllowHeaders::Only(
 			vec![
-				Ascii::new("x-allowed".to_owned()),
+				"x-allowed".to_owned(),
 			]);
 		let mut request_headers = Headers::new();
 		request_headers.set::<AccessControlRequestHeaders>(
@@ -564,7 +585,7 @@ mod tests {
 		);
 
 		// when
-		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers);
+		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers.into());
 
 		// then
 		assert_eq!(res, AllowHeaders::Invalid);
@@ -574,7 +595,7 @@ mod tests {
 	fn should_return_valid_if_header_allowed() {
 		// given
 		let allowed = vec![
-			Ascii::new("x-allowed".to_owned()),
+			"x-allowed".to_owned(),
 		];
 		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed.clone());
 		let mut request_headers = Headers::new();
@@ -585,9 +606,12 @@ mod tests {
 		);
 
 		// when
-		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers);
+		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers.into());
 
 		// then
+		let allowed = vec![
+			Ascii::new("x-allowed".to_owned()),
+		];
 		assert_eq!(res, AllowHeaders::Ok(header::AccessControlAllowHeaders(allowed)));
 	}
 
@@ -595,13 +619,13 @@ mod tests {
 	fn should_return_no_allowed_headers_if_none_in_request() {
 		// given
 		let allowed = vec![
-			Ascii::new("x-allowed".to_owned()),
+			"x-allowed".to_owned(),
 		];
 		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed.clone());
 		let request_headers = Headers::new();
 
 		// when
-		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers);
+		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers.into());
 
 		// then
 		assert_eq!(res, AllowHeaders::Ok(header::AccessControlAllowHeaders(vec![])));
@@ -614,7 +638,7 @@ mod tests {
 		let request_headers = Headers::new();
 
 		// when
-		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers);
+		let res = get_cors_allow_headers(&request_headers, &cors_allow_headers.into());
 
 		// then
 		assert_eq!(res, AllowHeaders::NotRequired);

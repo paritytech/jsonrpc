@@ -39,7 +39,7 @@ pub fn cors_allow_origin(
 /// Returns the CORS header that should be returned with that request.
 pub fn cors_allow_headers(
 	request: &server::Request,
-	cors_allow_headers: &cors::AccessControlAllowHeaders
+	cors_allow_headers: &cors::AccessControlAllowHeadersUnicase
 ) -> AllowHeaders<header::AccessControlAllowHeaders> {
-	cors::get_cors_allow_headers(request.headers(), cors_allow_headers)
+	cors::get_cors_allow_headers(request.headers(), cors_allow_headers.into())
 }
