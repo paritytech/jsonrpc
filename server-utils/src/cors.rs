@@ -5,7 +5,6 @@ extern crate unicase;
 use std::{fmt, ops};
 use hosts::{Host, Port};
 use matcher::{Matcher, Pattern};
-use std::ops::Deref;
 use std::collections::HashSet;
 pub use cors::hyper::header;
 pub use cors::hyper::header::AccessControlRequestHeaders;
@@ -289,7 +288,7 @@ pub fn get_cors_allow_headers(request_headers: &Headers, cors_allow_headers: &Ac
 			// if they can be used.
 
 			let echo = AllowHeaders::Ok(
-				header::AccessControlAllowHeaders(requested.deref().clone())
+				header::AccessControlAllowHeaders(requested.to_vec())
 			);
 
 			match cors_allow_headers {
