@@ -21,7 +21,7 @@ tokio-service = "0.1"
 
 [dev-dependencies]
 env_logger = "0.5"
-reqwest = "0.6"
+reqwest = "0.9"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
