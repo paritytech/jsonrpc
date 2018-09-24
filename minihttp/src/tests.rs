@@ -128,7 +128,7 @@ fn should_return_403_for_options_if_origin_is_invalid() {
 
 	// then
 	assert_eq!(response.status, StatusCode::Forbidden);
-	assert_eq!(response.body, cors_invalid());
+	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
 #[test]
@@ -224,7 +224,7 @@ fn should_return_method_not_found() {
 }
 
 #[test]
-fn should_add_cors_headers() {
+fn should_add_cors_allow_origins() {
 	// given
 	let server = serve();
 
@@ -249,7 +249,7 @@ fn should_add_cors_headers() {
 }
 
 #[test]
-fn should_add_cors_headers_for_options() {
+fn should_add_cors_allow_origins_for_options() {
 	// given
 	let server = serve();
 
@@ -275,7 +275,7 @@ fn should_add_cors_headers_for_options() {
 }
 
 #[test]
-fn should_not_process_request_with_invalid_cors() {
+fn should_not_process_request_with_invalid_allow_origin() {
 	// given
 	let server = serve();
 
@@ -292,11 +292,11 @@ fn should_not_process_request_with_invalid_cors() {
 
 	// then
 	assert_eq!(response.status, StatusCode::Forbidden);
-	assert_eq!(response.body, cors_invalid());
+	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
 #[test]
-fn should_add_cors_header_for_null_origin() {
+fn should_add_cors_allow_origin_for_null_origin() {
 	// given
 	let server = serve();
 
@@ -478,7 +478,7 @@ fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
 }
 
-fn cors_invalid() -> String {
+fn cors_invalid_allow_origin() -> String {
 	"Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
