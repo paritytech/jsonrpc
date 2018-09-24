@@ -8,8 +8,8 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 [travis-image]: https://travis-ci.org/paritytech/jsonrpc.svg?branch=master
 [travis-url]: https://travis-ci.org/paritytech/jsonrpc
-[appveyor-image]: https://ci.appveyor.com/api/projects/status/github/devops-parity/jsonrpc?svg=true
-[appveyor-url]: https://ci.appveyor.com/project/devops-parity/jsonrpc/branch/master
+[appveyor-image]: https://ci.appveyor.com/api/projects/status/github/paritytech/jsonrpc?svg=true
+[appveyor-url]: https://ci.appveyor.com/project/paritytech/jsonrpc/branch/master
 
 [Documentation](http://paritytech.github.io/jsonrpc/)
 
