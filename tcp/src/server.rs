@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio_service::Service as TokioService;
 
-use jsonrpc::{MetaIoHandler, Metadata, Middleware, NoopMiddleware};
+use jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
 use server_utils::{reactor, tokio_core, codecs};
@@ -15,7 +15,7 @@ use meta::{MetaExtractor, RequestContext, NoopExtractor};
 use service::Service;
 
 /// TCP server builder
-pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	remote: reactor::UninitializedRemote,
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
@@ -25,7 +25,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
 }
 
 impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
-	/// Creates new `SeverBuilder` wih given `IoHandler`
+	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn new<T>(handler: T) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 	{
@@ -34,7 +34,7 @@ impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 }
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
-	/// Creates new `SeverBuilder` wih given `IoHandler`
+	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M> + 'static,

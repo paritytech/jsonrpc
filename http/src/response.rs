@@ -30,12 +30,21 @@ impl Response {
 		}
 	}
 
-	/// Create a response for internal error.
-	pub fn internal_error() -> Self {
+	/// Create a response for plaintext internal error.
+	pub fn internal_error<T: Into<String>>(msg: T) -> Self {
 		Response {
-			code: StatusCode::Forbidden,
+			code: StatusCode::InternalServerError,
 			content_type: header::ContentType::plaintext(),
-			content: "Provided Host header is not whitelisted.\n".to_owned(),
+			content: format!("Internal Server Error: {}", msg.into()),
+		}
+	}
+
+	/// Create a json response for service unavailable.
+	pub fn service_unavailable<T: Into<String>>(msg: T) -> Self {
+		Response {
+			code: StatusCode::ServiceUnavailable,
+			content_type: header::ContentType::json(),
+			content: msg.into(),
 		}
 	}
 

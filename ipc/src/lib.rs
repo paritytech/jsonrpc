@@ -5,6 +5,7 @@
 extern crate jsonrpc_server_utils as server_utils;
 extern crate parity_tokio_ipc;
 extern crate tokio_service;
+extern crate parking_lot;
 
 pub extern crate jsonrpc_core;
 
@@ -20,8 +21,8 @@ mod meta;
 
 use jsonrpc_core as jsonrpc;
 
-pub use meta::{MetaExtractor, RequestContext};
-pub use server::{Server, ServerBuilder};
+pub use meta::{MetaExtractor, NoopExtractor, RequestContext};
+pub use server::{Server, ServerBuilder, CloseHandle,SecurityAttributes};
 
-pub use self::server_utils::tokio_core;
+pub use self::server_utils::{tokio_core, codecs::Separator};
 pub use self::server_utils::session::{SessionStats, SessionId};

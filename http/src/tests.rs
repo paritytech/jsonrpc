@@ -3,7 +3,7 @@ extern crate jsonrpc_core;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use self::jsonrpc_core::{IoHandler, Params, Value, Error};
+use self::jsonrpc_core::{IoHandler, Params, Value, Error, ErrorCode};
 
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
@@ -16,12 +16,26 @@ fn serve_hosts(hosts: Vec<Host>) -> Server {
 		.unwrap()
 }
 
-fn serve() -> Server {
-	serve_rest(RestApi::Secure, false)
+fn id<T>(t: T) -> T { t }
+
+fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
+	let builder = ServerBuilder::new(io())
+		.cors(DomainsValidation::AllowOnly(vec![
+			AccessControlAllowOrigin::Value("parity.io".into()),
+			AccessControlAllowOrigin::Null,
+		]))
+		.cors_max_age(None)
+		.rest_api(RestApi::Secure)
+		.health_api(("/health", "hello_async"));
+
+	alter(builder)
+		.start_http(&"127.0.0.1:0".parse().unwrap())
+		.unwrap()
 }
 
-fn serve_rest(rest: RestApi, cors_all: bool) -> Server {
-	use std::thread;
+fn io() -> IoHandler {
+	use std::{thread, time};
+
 	let mut io = IoHandler::default();
 	io.add_method("hello", |params: Params| {
 		match params.parse::<(u64, )>() {
@@ -29,30 +43,20 @@ fn serve_rest(rest: RestApi, cors_all: bool) -> Server {
 			_ => Ok(Value::String("world".into())),
 		}
 	});
+	io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
 	io.add_method("hello_async", |_params: Params| {
 		futures::finished(Value::String("world".into()))
 	});
 	io.add_method("hello_async2", |_params: Params| {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
-			thread::sleep(::std::time::Duration::from_millis(10));
+			thread::sleep(time::Duration::from_millis(10));
 			c.send(Value::String("world".into())).unwrap();
 		});
 		p.map_err(|_| Error::invalid_request())
 	});
 
-	ServerBuilder::new(io)
-		.cors(if cors_all {
-			DomainsValidation::Disabled
-		} else {
-			DomainsValidation::AllowOnly(vec![
-				AccessControlAllowOrigin::Value("parity.io".into()),
-				AccessControlAllowOrigin::Null,
-			])
-		})
-		.rest_api(rest)
-		.start_http(&"127.0.0.1:0".parse().unwrap())
-		.unwrap()
+	io
 }
 
 struct Response {
@@ -98,7 +102,7 @@ fn request(server: Server, request: &str) -> Response {
 #[test]
 fn should_return_method_not_allowed_for_get() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
 	let response = request(server,
@@ -117,9 +121,51 @@ fn should_return_method_not_allowed_for_get() {
 }
 
 #[test]
+fn should_handle_health_endpoint() {
+	// given
+	let server = serve(id);
+
+	// when
+	let response = request(server,
+		"\
+			GET /health HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Connection: close\r\n\
+			\r\n\
+			I shouldn't be read.\r\n\
+		"
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, "7\n\"world\"\n0\n");
+}
+
+#[test]
+fn should_handle_health_endpoint_failure() {
+	// given
+	let server = serve(|builder| builder.health_api(("/api/health", "fail")));
+
+	// when
+	let response = request(server,
+		"\
+			GET /api/health HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Connection: close\r\n\
+			\r\n\
+			I shouldn't be read.\r\n\
+		"
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 503 Service Unavailable".to_owned());
+	assert_eq!(response.body, "25\n{\"code\":-34,\"message\":\"Server error\"}\n0\n");
+}
+
+#[test]
 fn should_return_unsupported_media_type_if_not_json() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
 	let response = request(server,
@@ -140,7 +186,7 @@ fn should_return_unsupported_media_type_if_not_json() {
 #[test]
 fn should_return_error_for_malformed_request() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
 	let req = r#"{"jsonrpc":"3.0","method":"x"}"#;
@@ -164,7 +210,7 @@ fn should_return_error_for_malformed_request() {
 #[test]
 fn should_return_error_for_malformed_request2() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","metho1d":""}"#;
@@ -188,7 +234,7 @@ fn should_return_error_for_malformed_request2() {
 #[test]
 fn should_return_empty_response_for_notification() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","method":"x"}"#;
@@ -213,10 +259,10 @@ fn should_return_empty_response_for_notification() {
 #[test]
 fn should_return_method_not_found() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -237,10 +283,10 @@ fn should_return_method_not_found() {
 #[test]
 fn should_add_cors_headers() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -261,12 +307,39 @@ fn should_add_cors_headers() {
 }
 
 #[test]
-fn should_not_add_cors_headers() {
+fn should_add_cors_max_age_headers() {
 	// given
-	let server = serve();
+	let server = serve(|builder| builder.cors_max_age(1_000));
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, method_not_found());
+	assert!(response.headers.contains("Access-Control-Allow-Origin: http://parity.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("Access-Control-Max-Age: 1000"), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_not_add_cors_headers() {
+	// given
+	let server = serve(id);
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -285,13 +358,15 @@ fn should_not_add_cors_headers() {
 	assert_eq!(response.body, cors_invalid());
 }
 
+
+
 #[test]
 fn should_not_process_the_request_in_case_of_invalid_cors() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
 	let response = request(server,
 		&format!("\
 			OPTIONS / HTTP/1.1\r\n\
@@ -314,7 +389,7 @@ fn should_not_process_the_request_in_case_of_invalid_cors() {
 #[test]
 fn should_return_proper_headers_on_options() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
 	let response = request(server,
@@ -337,10 +412,10 @@ fn should_return_proper_headers_on_options() {
 #[test]
 fn should_add_cors_header_for_null_origin() {
 	// given
-	let server = serve();
+	let server = serve(id);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -363,10 +438,10 @@ fn should_add_cors_header_for_null_origin() {
 #[test]
 fn should_add_cors_header_for_null_origin_when_all() {
 	// given
-	let server = serve_rest(RestApi::Secure, true);
+	let server = serve(|builder| builder.cors(DomainsValidation::Disabled));
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -413,7 +488,7 @@ fn should_reject_invalid_hosts() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -437,7 +512,7 @@ fn should_reject_missing_host() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -460,7 +535,7 @@ fn should_allow_if_host_is_valid() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -484,7 +559,7 @@ fn should_allow_application_json_utf8() {
 	let server = serve_hosts(vec!["parity.io".into()]);
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -509,7 +584,7 @@ fn should_always_allow_the_bind_address() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -534,7 +609,7 @@ fn should_always_allow_the_bind_address_as_localhost() {
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"x"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -555,11 +630,11 @@ fn should_always_allow_the_bind_address_as_localhost() {
 #[test]
 fn should_handle_sync_requests_correctly() {
 	// given
-	let server = serve();
+	let server = serve(id);
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -580,11 +655,11 @@ fn should_handle_sync_requests_correctly() {
 #[test]
 fn should_handle_async_requests_with_immediate_response_correctly() {
 	// given
-	let server = serve();
+	let server = serve(id);
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_async"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -605,11 +680,11 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 #[test]
 fn should_handle_async_requests_correctly() {
 	// given
-	let server = serve();
+	let server = serve(id);
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"{"jsonrpc":"2.0","id":"1","method":"hello_async2"}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_async2"}"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -630,11 +705,11 @@ fn should_handle_async_requests_correctly() {
 #[test]
 fn should_handle_sync_batch_requests_correctly() {
 	// given
-	let server = serve();
+	let server = serve(id);
 	let addr = server.address().clone();
 
 	// when
-	let req = r#"[{"jsonrpc":"2.0","id":"1","method":"hello"}]"#;
+	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
 	let response = request(server,
 		&format!("\
 			POST / HTTP/1.1\r\n\
@@ -655,7 +730,7 @@ fn should_handle_sync_batch_requests_correctly() {
 #[test]
 fn should_handle_rest_request_with_params() {
 	// given
-	let server = serve();
+	let server = serve(id);
 	let addr = server.address().clone();
 
 	// when
@@ -680,7 +755,7 @@ fn should_handle_rest_request_with_params() {
 #[test]
 fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 	// given
-	let server = serve_rest(RestApi::Unsecure, false);
+	let server = serve(|builder| builder.rest_api(RestApi::Unsecure));
 	let addr = server.address().clone();
 
 	// when

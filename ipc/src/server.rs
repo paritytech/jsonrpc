@@ -1,20 +1,26 @@
+#![allow(deprecated)]
+
 use std;
 use std::sync::Arc;
 
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{FutureResult, Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
 
 use server_utils::tokio_core::reactor::Remote;
 use server_utils::tokio_io::AsyncRead;
 use server_utils::{reactor, session, codecs};
 
+use parking_lot::Mutex;
+
 use meta::{MetaExtractor, NoopExtractor, RequestContext};
 use select_with_weak::SelectWithWeakExt;
+use parity_tokio_ipc::Endpoint;
+pub use parity_tokio_ipc::SecurityAttributes;
 
 /// IPC server session
-pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta: M,
 }
@@ -32,7 +38,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 
 	type Error = ();
 
-	type Future = FutureResult<S::Future>;
+	type Future = FutureResult<S::Future, S::CallFuture>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
 		trace!(target: "ipc", "Received request: {}", req);
@@ -41,13 +47,14 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 }
 
 /// IPC server builder
-pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	session_stats: Option<Arc<session::SessionStats>>,
 	remote: reactor::UninitializedRemote,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
+	security_attributes: SecurityAttributes,
 }
 
 impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
@@ -72,6 +79,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			remote: reactor::UninitializedRemote::Unspawned,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
+			security_attributes: SecurityAttributes::empty(),
 		}
 	}
 
@@ -82,7 +90,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Sets session metadata extractor.
-	pub fn session_metadata_extractor<X>(mut self, meta_extractor: X) -> Self where
+	pub fn session_meta_extractor<X>(mut self, meta_extractor: X) -> Self where
 		X: MetaExtractor<M>,
 	{
 		self.meta_extractor = Arc::new(meta_extractor);
@@ -102,7 +110,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
-	/// Run server (in a separate thread)
+	/// Sets the security attributes for the underlying IPC socket/pipe
+	pub fn set_security_attributes(mut self, attr: SecurityAttributes) -> Self {
+		self.security_attributes = attr;
+		self
+	}
+
+	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let remote = self.remote.initialize()?;
 		let rpc_handler = self.handler;
@@ -113,19 +127,24 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let outgoing_separator = self.outgoing_separator;
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
+		let (wait_signal, wait_receiver) = oneshot::channel();
+		let security_attributes = self.security_attributes;
 
 		remote.remote().spawn(move |handle| {
-			use parity_tokio_ipc::Endpoint;
+
+			let mut endpoint = Endpoint::new(endpoint_addr);
+			endpoint.set_security_attributes(security_attributes);
 
 			if cfg!(unix) {
 				// warn about existing file and remove it
-				if ::std::fs::remove_file(&endpoint_addr).is_ok() {
-					warn!("Removed existing file '{}'.", &endpoint_addr);
+				if ::std::fs::remove_file(endpoint.path()).is_ok() {
+					warn!("Removed existing file '{}'.", endpoint.path());
 				}
 			}
 
-			let listener = match Endpoint::new(endpoint_addr, handle) {
-				Ok(l) => l,
+			let endpoint_handle = handle.clone();
+			let connections = match endpoint.incoming(endpoint_handle) {
+				Ok(connections) => connections,
 				Err(e) => {
 					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
 					return future::Either::A(future::ok(()));
@@ -133,7 +152,6 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			};
 
 			let remote = handle.remote().clone();
-			let connections = listener.incoming();
 			let mut id = 0u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
@@ -194,13 +212,25 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			future::Either::B(
 				server.select(stop)
-					.map(|_| ())
+					.map(|_| {
+						let _ = wait_signal.send(());
+						()
+					})
 					.map_err(|_| ())
 			)
 		});
 
+		let handle = InnerHandles {
+						remote: Some(remote),
+						stop: Some(stop_signal),
+						path: path.to_owned(),
+		};
+
 		match start_receiver.wait().expect("Message should always be sent") {
-			Ok(()) => Ok(Server { path: path.to_owned(), remote: Some(remote), stop: Some(stop_signal) }),
+			Ok(()) => Ok(Server {
+							handles: Arc::new(Mutex::new(handle)),
+							wait_handle: Some(wait_receiver),
+			}),
 			Err(e) => Err(e)
 		}
 	}
@@ -208,36 +238,63 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 
 /// IPC Server handle
+#[derive(Debug)]
 pub struct Server {
-	path: String,
-	remote: Option<reactor::Remote>,
-	stop: Option<oneshot::Sender<()>>,
+	handles: Arc<Mutex<InnerHandles>>,
+	wait_handle: Option<oneshot::Receiver<()>>,
 }
 
 impl Server {
 	/// Closes the server (waits for finish)
-	pub fn close(mut self) {
-		self.stop.take().map(|stop| stop.send(()));
-		self.remote.take().unwrap().close();
-		self.clear_file();
+	pub fn close(self) {
+		self.handles.lock().close();
+	}
+
+	/// Creates a close handle that can be used to stop the server remotely
+	pub fn close_handle(&self) -> CloseHandle {
+		CloseHandle {
+			inner: self.handles.clone(),
+		}
 	}
 
 	/// Wait for the server to finish
 	pub fn wait(mut self) {
-		self.remote.take().unwrap().wait();
+		self.wait_handle.take().map(|wait_receiver| wait_receiver.wait());
 	}
 
-	/// Remove socket file
-	fn clear_file(&self) {
+}
+
+
+#[derive(Debug)]
+struct InnerHandles {
+	remote: Option<reactor::Remote>,
+	stop: Option<oneshot::Sender<()>>,
+	path: String,
+}
+
+impl InnerHandles {
+	pub fn close(&mut self) {
+		let _ = self.stop.take().map(|stop| stop.send(()));
+		self.remote.take().map(|remote| remote.close());
 		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
 
-impl Drop for Server {
+impl Drop for InnerHandles {
 	fn drop(&mut self) {
-		let _ = self.stop.take().map(|stop| stop.send(()));
-		self.remote.take().map(|remote| remote.close());
-		self.clear_file();
+		self.close();
+	}
+}
+/// `CloseHandle` allows one to stop an `IpcServer` remotely.
+#[derive(Clone)]
+pub struct CloseHandle {
+	inner: Arc<Mutex<InnerHandles>>,
+}
+
+impl CloseHandle {
+	/// `close` closes the corresponding `IpcServer` instance.
+	pub fn close(self) {
+		self.inner.lock().close();
 	}
 }
 
@@ -245,19 +302,21 @@ impl Drop for Server {
 #[cfg(not(windows))]
 mod tests {
 	extern crate tokio_uds;
-	extern crate parking_lot;
 
 	use std::thread;
 	use std::sync::Arc;
+	use std::time;
 	use super::{ServerBuilder, Server};
 	use jsonrpc::{MetaIoHandler, Value};
 	use jsonrpc::futures::{Future, future, Stream, Sink};
 	use jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
-	use self::parking_lot::Mutex;
+	use parking_lot::Mutex;
 	use server_utils::tokio_io::AsyncRead;
 	use server_utils::codecs;
-	use meta::{MetaExtractor, RequestContext};
+	use tokio_core::reactor::{Timeout, Core};
+	use meta::{MetaExtractor, RequestContext, NoopExtractor};
+	use super::SecurityAttributes;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -486,5 +545,57 @@ mod tests {
 			.and_then(|drop_receiver| drop_receiver.0.unwrap().map_err(|_| ()))
 			.wait().unwrap();
 		server.close();
+	}
+
+	#[test]
+	fn close_handle() {
+		::logger::init_log();
+		let path = "/tmp/test-ipc-90000";
+		let server = run(path);
+		let handle = server.close_handle();
+		handle.close();
+		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+	}
+
+	#[test]
+	fn close_when_waiting() {
+		::logger::init_log();
+		let path = "/tmp/test-ipc-70000";
+		let server = run(path);
+		let close_handle = server.close_handle();
+		let (tx, rx) = oneshot::channel();
+
+		thread::spawn(move || {
+			thread::sleep(time::Duration::from_millis(100));
+			close_handle.close();
+		});
+		thread::spawn(move || {
+			server.wait();
+			tx.send(true).expect("failed to report that the server has stopped");
+		});
+
+		let mut core = Core::new().expect("failed to create a core");
+		let timeout = Timeout::new(time::Duration::from_millis(500), &core.handle())
+			.expect("failed to setup a timer")
+			.map(|_| false)
+			.map_err(|_| ());
+
+		let result_fut = rx.map_err(|_| ())
+			.select(timeout)
+			.map(|(result, _next_fut)| result)
+			.map_err(|_| ());
+		let result = core.run(result_fut);
+		assert_eq!(result, Ok(true), "Wait timeout exceeded");
+		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+	}
+
+	#[test]
+	fn runs_with_security_attributes() {
+		let path = "/tmp/test-ipc-9001";
+		let io = MetaIoHandler::<Arc<()>>::default();
+		ServerBuilder::with_meta_extractor(io, NoopExtractor)
+			.set_security_attributes(SecurityAttributes::empty())
+			.start(path)
+			.expect("Server must run with no issues");
 	}
 }
