@@ -46,5 +46,5 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 
 pub use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 pub use io::{Compatibility, IoHandler, MetaIoHandler, FutureOutput, FutureResult, FutureResponse, FutureRpcResult};
-pub use middleware::Middleware;
+pub use middleware::{Middleware, Noop as NoopMiddleware};
 pub use types::*;

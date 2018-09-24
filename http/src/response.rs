@@ -76,11 +76,20 @@ impl Response {
 	}
 
 	/// CORS invalid
-	pub fn invalid_cors() -> Self {
+	pub fn invalid_allow_origin() -> Self {
 		Response {
 			code: StatusCode::Forbidden,
 			content_type: header::ContentType::plaintext(),
 			content: "Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
+		}
+	}
+
+	/// CORS header invalid
+	pub fn invalid_allow_headers() -> Self {
+		Response {
+			code: StatusCode::Forbidden,
+			content_type: header::ContentType::plaintext(),
+			content: "Header field is not allowed.\n".to_owned(),
 		}
 	}
 
