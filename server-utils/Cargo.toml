@@ -10,13 +10,15 @@ homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
 
 [dependencies]
+bytes = "0.4"
 globset = "0.4"
-log = "0.4"
 jsonrpc-core = { version = "9.0", path = "../core" }
+lazy_static = "1.1.0"
+log = "0.4"
+num_cpus = "1.8"
 tokio = { version = "0.1" }
 tokio-codec = { version = "0.1" }
-bytes = "0.4"
-num_cpus = "~1.8"
+unicase = "2.0"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

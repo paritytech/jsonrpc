@@ -1,6 +1,7 @@
 extern crate jsonrpc_http_server;
+extern crate unicase;
 
-use jsonrpc_http_server::{ServerBuilder, hyper, RestApi};
+use jsonrpc_http_server::{ServerBuilder, hyper, RestApi, cors::AccessControlAllowHeaders};
 use jsonrpc_http_server::jsonrpc_core::*;
 
 #[derive(Default, Clone)]
@@ -23,6 +24,11 @@ fn main() {
 	});
 
 	let server = ServerBuilder::new(io)
+		.cors_allow_headers(AccessControlAllowHeaders::Only(
+			vec![
+				"Authorization".to_owned(),
+			])
+		)
 		.rest_api(RestApi::Unsecure)
 		// You can also implement `MetaExtractor` trait and pass a struct here.
 		.meta_extractor(|req: &hyper::Request<hyper::Body>| {

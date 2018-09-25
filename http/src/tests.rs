@@ -33,6 +33,26 @@ fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
 		.unwrap()
 }
 
+fn serve_allow_headers(cors_allow_headers: cors::AccessControlAllowHeaders) -> Server {
+	let mut io = IoHandler::default();
+	io.add_method("hello", |params: Params| {
+		match params.parse::<(u64, )>() {
+			Ok((num, )) => Ok(Value::String(format!("world: {}", num))),
+			_ => Ok(Value::String("world".into())),
+		}
+	});
+	ServerBuilder::new(io)
+		.cors(
+			DomainsValidation::AllowOnly(vec![
+				AccessControlAllowOrigin::Value("parity.io".into()),
+				AccessControlAllowOrigin::Null,
+			])
+		)
+		.cors_allow_headers(cors_allow_headers)
+		.start_http(&"127.0.0.1:0".parse().unwrap())
+		.unwrap()
+}
+
 fn io() -> IoHandler {
 	use std::{thread, time};
 
@@ -282,7 +302,7 @@ fn should_return_method_not_found() {
 }
 
 #[test]
-fn should_add_cors_headers() {
+fn should_add_cors_allow_origins() {
 	// given
 	let server = serve(id);
 
@@ -335,7 +355,7 @@ fn should_add_cors_max_age_headers() {
 }
 
 #[test]
-fn should_not_add_cors_headers() {
+fn should_not_add_cors_allow_origins() {
 	// given
 	let server = serve(id);
 
@@ -356,13 +376,13 @@ fn should_not_add_cors_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
-	assert_eq!(response.body, cors_invalid());
+	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
 
 
 #[test]
-fn should_not_process_the_request_in_case_of_invalid_cors() {
+fn should_not_process_the_request_in_case_of_invalid_allow_origin() {
 	// given
 	let server = serve(id);
 
@@ -383,7 +403,7 @@ fn should_not_process_the_request_in_case_of_invalid_cors() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
-	assert_eq!(response.body, cors_invalid());
+	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
 
@@ -412,7 +432,7 @@ fn should_return_proper_headers_on_options() {
 }
 
 #[test]
-fn should_add_cors_header_for_null_origin() {
+fn should_add_cors_allow_origin_for_null_origin() {
 	// given
 	let server = serve(id);
 
@@ -438,7 +458,7 @@ fn should_add_cors_header_for_null_origin() {
 }
 
 #[test]
-fn should_add_cors_header_for_null_origin_when_all() {
+fn should_add_cors_allow_origin_for_null_origin_when_all() {
 	// given
 	let server = serve(|builder| builder.cors(DomainsValidation::Disabled));
 
@@ -554,6 +574,345 @@ fn should_allow_if_host_is_valid() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
+}
+
+#[test]
+fn should_respond_configured_allowed_hosts_to_options() {
+	// given
+	let allowed = vec![
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned(),
+	];
+	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
+	let server = serve_allow_headers(custom);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Access-Control-Request-Headers: {}\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			\r\n\
+		", &allowed.join(", "))
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_not_contain_default_cors_allow_headers() {
+	// given
+	let server = serve(id);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: 0\r\n\
+			\r\n\
+		")
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert!(!response.headers.contains("Access-Control-Allow-Headers:"),
+		"Header should not be in {}", response.headers);
+}
+
+#[test]
+fn should_respond_valid_to_default_allowed_headers() {
+	// given
+	let server = serve(id);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: Accept, Content-Type, Origin\r\n\
+			\r\n\
+		")
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	let expected = "Access-Control-Allow-Headers: Accept, Content-Type, Origin";
+	assert!(response.headers.contains(expected), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_by_default_respond_valid_to_any_request_headers() {
+	// given
+	let allowed = vec![
+		"X-Abc".to_owned(),
+		"X-123".to_owned(),
+	];
+	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
+	let server = serve_allow_headers(custom);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: {}\r\n\
+			\r\n\
+		", &allowed.join(", "))
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_respond_valid_to_configured_allow_headers() {
+	// given
+	let allowed = vec![
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned(),
+	];
+	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
+	let server = serve_allow_headers(custom);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: {}\r\n\
+			\r\n\
+		", &allowed.join(", "))
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_respond_invalid_if_non_allowed_header_used() {
+	// given
+	let custom = cors::AccessControlAllowHeaders::Only(
+		vec![
+			"X-Allowed".to_owned(),
+		]);
+	let server = serve_allow_headers(custom);
+
+	// when
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			X-Not-Allowed: not allowed\r\n\
+			\r\n\
+		")
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.body, cors_invalid_allow_headers());
+}
+
+#[test]
+fn should_respond_valid_if_allowed_header_used() {
+	// given
+	let custom = cors::AccessControlAllowHeaders::Only(
+		vec![
+			"X-Allowed".to_owned(),
+		]);
+	let server = serve_allow_headers(custom);
+	let addr = server.address().clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			X-Allowed: Foobar\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world());
+}
+
+#[test]
+fn should_respond_valid_if_case_insensitive_allowed_header_used() {
+	// given
+	let custom = cors::AccessControlAllowHeaders::Only(
+		vec![
+			"X-Allowed".to_owned(),
+		]);
+	let server = serve_allow_headers(custom);
+	let addr = server.address().clone();
+
+	// when
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			X-AlLoWed: Foobar\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world());
+}
+
+#[test]
+fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
+	// given
+	let allowed = vec![
+		"X-Allowed".to_owned(),
+		"X-AlsoAllowed".to_owned(),
+	];
+	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
+	let server = serve_allow_headers(custom);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: x-ALLoweD, x-alSOaLloWeD\r\n\
+			\r\n\
+		")
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	let contained = response.headers.contains(
+		"Access-Control-Allow-Headers: x-ALLoweD, x-alSOaLloWeD"
+	);
+	assert!(contained, "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_respond_valid_to_any_requested_header() {
+	// given
+	let custom = cors::AccessControlAllowHeaders::Any;
+	let server = serve_allow_headers(custom);
+	let headers = "Something, Anything, Xyz, 123, _?";
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: {}\r\n\
+			\r\n\
+		", headers)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	let expected = format!("Access-Control-Allow-Headers: {}", headers);
+	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+}
+
+#[test]
+fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
+	// given
+	let custom = cors::AccessControlAllowHeaders::Only(
+		vec![
+			"X-Allowed".to_owned(),
+		]);
+	let server = serve_allow_headers(custom);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: *\r\n\
+			\r\n\
+		")
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
+	assert_eq!(response.body, cors_invalid_allow_headers());
+}
+
+#[test]
+fn should_respond_valid_to_wildcard_if_any_header_allowed() {
+	// given
+	let server = serve_allow_headers(cors::AccessControlAllowHeaders::Any);
+
+	// when
+	let response = request(server,
+		&format!("\
+			OPTIONS / HTTP/1.1\r\n\
+			Host: 127.0.0.1:8080\r\n\
+			Origin: http://parity.io\r\n\
+			Content-Length: 0\r\n\
+			Content-Type: application/json\r\n\
+			Connection: close\r\n\
+			Access-Control-Request-Headers: *\r\n\
+			\r\n\
+		")
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert!(response.headers.contains("Access-Control-Allow-Headers: *"),
+		"Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -783,8 +1142,12 @@ fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
 }
 
-fn cors_invalid() -> String {
+fn cors_invalid_allow_origin() -> String {
 	"Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
+}
+
+fn cors_invalid_allow_headers() -> String {
+	"Requested headers are not allowed for CORS. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn method_not_found() -> String {

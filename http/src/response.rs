@@ -23,7 +23,7 @@ impl Response {
 	pub fn ok<T: Into<String>>(response: T) -> Self {
 		Response {
 			code: StatusCode::OK,
-			content_type: HeaderValue::from_static("application/json"),
+			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
 			content: response.into(),
 		}
 	}
@@ -32,7 +32,7 @@ impl Response {
 	pub fn internal_error<T: Into<String>>(msg: T) -> Self {
 		Response {
 			code: StatusCode::INTERNAL_SERVER_ERROR,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: format!("Internal Server Error: {}", msg.into()),
 		}
 	}
@@ -41,7 +41,7 @@ impl Response {
 	pub fn service_unavailable<T: Into<String>>(msg: T) -> Self {
 		Response {
 			code: StatusCode::SERVICE_UNAVAILABLE,
-			content_type: HeaderValue::from_static("application/json"),
+			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
 			content: format!("Service Unavailable: {}", msg.into()),
 		}
 	}
@@ -50,7 +50,7 @@ impl Response {
 	pub fn host_not_allowed() -> Self {
 		Response {
 			code: StatusCode::FORBIDDEN,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: "Provided Host header is not whitelisted.\n".to_owned(),
 		}
 	}
@@ -59,7 +59,7 @@ impl Response {
 	pub fn unsupported_content_type() -> Self {
 		Response {
 			code: StatusCode::UNSUPPORTED_MEDIA_TYPE,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: "Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned(),
 		}
 	}
@@ -68,17 +68,26 @@ impl Response {
 	pub fn method_not_allowed() -> Self {
 		Response {
 			code: StatusCode::METHOD_NOT_ALLOWED,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: "Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned(),
 		}
 	}
 
 	/// CORS invalid
-	pub fn invalid_cors() -> Self {
+	pub fn invalid_allow_origin() -> Self {
 		Response {
 			code: StatusCode::FORBIDDEN,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: "Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
+		}
+	}
+
+	/// CORS header invalid
+	pub fn invalid_allow_headers() -> Self {
+		Response {
+			code: StatusCode::FORBIDDEN,
+			content_type: plain_text(),
+			content: "Requested headers are not allowed for CORS. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
 		}
 	}
 
@@ -86,7 +95,7 @@ impl Response {
 	pub fn bad_request<S: Into<String>>(msg: S) -> Self {
 		Response {
 			code: StatusCode::BAD_REQUEST,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: msg.into()
 		}
 	}
@@ -95,10 +104,14 @@ impl Response {
 	pub fn too_large<S: Into<String>>(msg: S) -> Self {
 		Response {
 			code: StatusCode::PAYLOAD_TOO_LARGE,
-			content_type: HeaderValue::from_static("text/plain; charset=utf-8"),
+			content_type: plain_text(),
 			content: msg.into()
 		}
 	}
+}
+
+fn plain_text() -> HeaderValue {
+	HeaderValue::from_static("text/plain; charset=utf-8")
 }
 
 // TODO: Consider removing this panicking conversion or else switch to a
