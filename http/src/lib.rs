@@ -52,7 +52,7 @@ use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Executor, UninitializedExecutor};
 
 pub use server_utils::hosts::{Host, DomainsValidation};
-pub use server_utils::cors::{self, AccessControlAllowOrigin, Origin};
+pub use server_utils::cors::{self, AccessControlAllowOrigin, Origin, AllowCors};
 pub use server_utils::tokio;
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_allow_origin, cors_allow_headers};
