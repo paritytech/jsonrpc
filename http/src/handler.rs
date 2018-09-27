@@ -331,7 +331,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		let metadata = self.jsonrpc_handler.extractor.read_metadata(&request);
 
 		// Proceed
-		match request.method().clone() {
+		match *request.method() {
 			// Validate the ContentType header
 			// to prevent Cross-Origin XHRs with text/plain
 			Method::POST if Self::is_json(request.headers().get("content-type")) => {
@@ -541,15 +541,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	/// Returns true if the `content_type` header indicates a valid JSON
 	/// message.
 	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
-		match content_type {
-			Some(header_val) => {
-				match header_val.to_str() {
-					Ok(header_str) => {
-						header_str == "application/json" || header_str == "application/json; charset=utf-8"
-					},
-					Err(_) => false,
-				}
-			}
+		match content_type.and_then(|val| val.to_str().ok()) {
+			Some("application/json") => true,
+			Some("application/json; charset=utf-8") => true,
 			_ => false,
 		}
 	}

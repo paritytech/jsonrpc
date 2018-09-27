@@ -33,7 +33,7 @@ fn main() {
 		// You can also implement `MetaExtractor` trait and pass a struct here.
 		.meta_extractor(|req: &hyper::Request<hyper::Body>| {
 			let auth = req.headers().get(hyper::header::AUTHORIZATION)
-				.map(|h| h.to_str().expect("Invalid authorization value").to_owned());
+				.map(|h| h.to_str().unwrap_or("").to_owned());
 
 			Meta { auth }
 		})

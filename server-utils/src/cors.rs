@@ -513,7 +513,7 @@ mod tests {
 	}
 
 	#[test]
-	fn should_return_empty_list_if_header_not_allowed() {
+	fn should_return_invalid_if_header_not_allowed() {
 		// given
 		let cors_allow_headers = AccessControlAllowHeaders::Only(vec![
 			"x-allowed".to_owned(),
@@ -525,7 +525,7 @@ mod tests {
 		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| x);
 
 		// then
-		assert_eq!(res, AllowCors::Ok(vec![]));
+		assert_eq!(res, AllowCors::Invalid);
 	}
 
 	#[test]

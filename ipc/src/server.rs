@@ -167,12 +167,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = Framed::new(
-	                io_stream,
-	                codecs::StreamCodec::new(
-	                    incoming_separator.clone(),
-	                    outgoing_separator.clone(),
-	                ),
-	            ).split();
+					io_stream,
+					codecs::StreamCodec::new(
+						incoming_separator.clone(),
+						outgoing_separator.clone(),
+					),
+				).split();
 				let responses = reader.and_then(move |req| {
 					service.call(req).then(move |response| match response {
 						Err(e) => {

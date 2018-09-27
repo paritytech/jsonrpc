@@ -179,7 +179,6 @@ fn should_handle_health_endpoint_failure() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 503 Service Unavailable".to_owned());
-	// assert_eq!(response.body, "25\n{\"code\":-34,\"message\":\"Server error\"}\n0\n");
 	assert_eq!(response.body, "Service Unavailable: {\"code\":-34,\"message\":\"Server error\"}\n");
 }
 
@@ -479,7 +478,6 @@ fn should_add_cors_allow_origin_for_null_origin_when_all() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	// println!("HEADERS: {:?}", response.headers);
 	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
 }
 
@@ -821,7 +819,7 @@ fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 			Content-Length: 0\r\n\
 			Content-Type: application/json\r\n\
 			Connection: close\r\n\
-			Access-Control-Request-Headers: x-ALLoweD, x-alSO-aLloWeD\r\n\
+			Access-Control-Request-Headers: x-ALLoweD, x-alSOaLloWeD\r\n\
 			\r\n\
 		")
 	);
