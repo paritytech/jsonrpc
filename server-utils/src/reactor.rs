@@ -131,7 +131,6 @@ impl RpcEventLoop {
 						.map_err(|_| ());
 					runtime.spawn(terminate);
 					runtime.shutdown_on_idle().wait().unwrap();
-					println!("Server has shut down.");
 				},
 				Err(err) => {
 					tx.send(Err(err)).expect("Rx is blocking upper thread.");

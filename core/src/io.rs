@@ -11,7 +11,7 @@ use types::{Error, ErrorCode, Version};
 use types::{Request, Response, Call, Output};
 
 /// A type representing middleware or RPC response before serialization.
-pub type FutureResponse = Box<Future<Item=Option<Response>, Error=()> + Send + 'static>;
+pub type FutureResponse = Box<Future<Item=Option<Response>, Error=()> + Send>;
 
 /// A type representing future string response.
 pub type FutureResult<F> = future::Map<

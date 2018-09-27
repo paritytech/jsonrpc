@@ -3,7 +3,6 @@ extern crate jsonrpc_core;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
-use hyper::header::HeaderName;
 use self::jsonrpc_core::{IoHandler, Params, Value, Error, ErrorCode};
 
 use self::jsonrpc_core::futures::{self, Future};
@@ -180,7 +179,6 @@ fn should_handle_health_endpoint_failure() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 503 Service Unavailable".to_owned());
-	// assert_eq!(response.body, "25\n{\"code\":-34,\"message\":\"Server error\"}\n0\n");
 	assert_eq!(response.body, "Service Unavailable: {\"code\":-34,\"message\":\"Server error\"}\n");
 }
 
@@ -426,8 +424,7 @@ fn should_return_proper_headers_on_options() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("allow: OPTIONS") && response.headers.contains("allow: POST"),
-		"Headers missing in {}", response.headers);
+	assert!(response.headers.contains("allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
 	assert!(response.headers.contains("accept: application/json"), "Headers missing in {}", response.headers);
 	assert_eq!(response.body, "");
 }
@@ -481,7 +478,6 @@ fn should_add_cors_allow_origin_for_null_origin_when_all() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	// println!("HEADERS: {:?}", response.headers);
 	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
 }
 
@@ -581,8 +577,8 @@ fn should_allow_if_host_is_valid() {
 fn should_respond_configured_allowed_hosts_to_options() {
 	// given
 	let allowed = vec![
-			HeaderName::from_static("x-allowed"),
-			HeaderName::from_static("x-also-allowed"),
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -660,8 +656,8 @@ fn should_respond_valid_to_default_allowed_headers() {
 fn should_by_default_respond_valid_to_any_request_headers() {
 	// given
 	let allowed = vec![
-		HeaderName::from_static("x-abc"),
-		HeaderName::from_static("x-123"),
+		"X-Abc".to_owned(),
+		"X-123".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -690,8 +686,8 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 fn should_respond_valid_to_configured_allow_headers() {
 	// given
 	let allowed = vec![
-			HeaderName::from_static("x-allowed"),
-			HeaderName::from_static("x-also-allowed"),
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -721,7 +717,7 @@ fn should_respond_invalid_if_non_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			HeaderName::from_static("x-allowed"),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 
@@ -749,7 +745,7 @@ fn should_respond_valid_if_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			HeaderName::from_static("x-allowed"),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -779,7 +775,7 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			HeaderName::from_static("x-allowed"),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -808,8 +804,8 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// given
 	let allowed = vec![
-		HeaderName::from_static("x-allowed"),
-		HeaderName::from_static("x-also-allowed"),
+		"X-Allowed".to_owned(),
+		"X-AlsoAllowed".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -823,7 +819,7 @@ fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 			Content-Length: 0\r\n\
 			Content-Type: application/json\r\n\
 			Connection: close\r\n\
-			Access-Control-Request-Headers: x-ALLoweD, x-alSO-aLloWeD\r\n\
+			Access-Control-Request-Headers: x-ALLoweD, x-alSOaLloWeD\r\n\
 			\r\n\
 		")
 	);
@@ -831,7 +827,7 @@ fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let contained = response.headers.contains(
-		"access-control-allow-headers: x-ALLoweD, x-alSO-aLloWeD"
+		"access-control-allow-headers: x-ALLoweD, x-alSOaLloWeD"
 	);
 	assert!(contained, "Headers missing in {}", response.headers);
 }
@@ -864,11 +860,11 @@ fn should_respond_valid_to_any_requested_header() {
 }
 
 #[test]
-fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
+fn should_forbid_invalid_request_headers() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			HeaderName::from_static("x-allowed"),
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 
@@ -887,6 +883,9 @@ fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
 	);
 
 	// then
+	// According to the spec wildcard is nly supported for `Allow-Origin`,
+	// some ppl believe it should be supported by other `Allow-*` headers,
+	// but I didn't see any mention of allowing wildcard for `Request-Headers`.
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
 	assert_eq!(response.body, cors_invalid_allow_headers());
 }
@@ -1148,7 +1147,7 @@ fn cors_invalid_allow_origin() -> String {
 }
 
 fn cors_invalid_allow_headers() -> String {
-	"Header field is not allowed.\n".into()
+	"Requested headers are not allowed for CORS. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn method_not_found() -> String {

@@ -52,10 +52,10 @@ use jsonrpc::futures::sync::oneshot;
 use server_utils::reactor::{Executor, UninitializedExecutor};
 
 pub use server_utils::hosts::{Host, DomainsValidation};
-pub use server_utils::cors::{self, AccessControlAllowOrigin, AccessControlAllowHeaders, Origin};
+pub use server_utils::cors::{self, AccessControlAllowOrigin, Origin};
 pub use server_utils::tokio;
 pub use handler::ServerHandler;
-pub use utils::{is_host_allowed, cors_allow_origin, AllowOrigin};
+pub use utils::{is_host_allowed, cors_allow_origin, cors_allow_headers};
 pub use response::Response;
 
 /// Action undertaken by a middleware.
@@ -198,7 +198,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	request_middleware: Arc<RequestMiddleware>,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
-	allowed_headers: cors::AccessControlAllowHeadersUnicase,
+	allowed_headers: cors::AccessControlAllowHeaders,
 	allowed_hosts: AllowedHosts,
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
@@ -237,7 +237,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			request_middleware: Arc::new(NoopRequestMiddleware::default()),
 			cors_domains: None,
 			cors_max_age: None,
-			allowed_headers: cors::AccessControlAllowHeadersUnicase::Any,
+			allowed_headers: cors::AccessControlAllowHeaders::Any,
 			allowed_hosts: None,
 			rest_api: RestApi::Disabled,
 			health_api: None,
@@ -447,7 +447,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
-	allowed_headers: cors::AccessControlAllowHeadersUnicase,
+	allowed_headers: cors::AccessControlAllowHeaders,
 	request_middleware: Arc<RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,

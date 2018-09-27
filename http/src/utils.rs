@@ -1,7 +1,6 @@
 use hyper::{self, header};
 
 use server_utils::{cors, hosts};
-pub use server_utils::cors::{AllowOrigin, AllowHeaders, AccessControlAllowHeaders};
 
 /// Extracts string value of a single header in request.
 fn read_header<'a>(req: &'a hyper::Request<hyper::Body>, header_name: &str) -> Option<&'a str> {
@@ -16,11 +15,11 @@ pub fn is_host_allowed(
 	hosts::is_host_valid(read_header(request, "host"), allowed_hosts)
 }
 
-/// Returns a CORS header that should be returned with that request.
+/// Returns a CORS AllowOrigin header that should be returned with that request.
 pub fn cors_allow_origin(
 	request: &hyper::Request<hyper::Body>,
 	cors_domains: &Option<Vec<cors::AccessControlAllowOrigin>>
-) -> AllowOrigin<header::HeaderValue> {
+) -> cors::AllowCors<header::HeaderValue> {
 	cors::get_cors_allow_origin(read_header(request, "origin"), read_header(request, "host"), cors_domains).map(|origin| {
 		use self::cors::AccessControlAllowOrigin::*;
 		match origin {
@@ -31,10 +30,25 @@ pub fn cors_allow_origin(
 	})
 }
 
-/// Returns the CORS header that should be returned with that request.
+/// Returns the CORS AllowHeaders header that should be returned with that request.
 pub fn cors_allow_headers(
 	request: &hyper::Request<hyper::Body>,
-	cors_allow_headers: &cors::AccessControlAllowHeadersUnicase
-) -> AllowHeaders {
-	cors::get_cors_allow_headers(request.headers(), cors_allow_headers.into())
+	cors_allow_headers: &cors::AccessControlAllowHeaders
+) -> cors::AllowCors<Vec<header::HeaderValue>> {
+	let headers = request.headers().keys()
+		.map(|name| name.as_str());
+	let requested_headers = request.headers()
+		.get_all("access-control-request-headers")
+		.iter()
+		.filter_map(|val| val.to_str().ok())
+		.flat_map(|val| val.split(", "))
+		.flat_map(|val| val.split(","));
+
+	cors::get_cors_allow_headers(
+		headers,
+		requested_headers,
+		cors_allow_headers.into(),
+		|name| header::HeaderValue::from_str(name)
+			.unwrap_or_else(|_| header::HeaderValue::from_static("unknown"))
+	)
 }
