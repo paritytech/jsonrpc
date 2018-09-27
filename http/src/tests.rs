@@ -821,7 +821,7 @@ fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 			Content-Length: 0\r\n\
 			Content-Type: application/json\r\n\
 			Connection: close\r\n\
-			Access-Control-Request-Headers: x-ALLoweD, x-alSOaLloWeD\r\n\
+			Access-Control-Request-Headers: x-ALLoweD, x-alSO-aLloWeD\r\n\
 			\r\n\
 		")
 	);

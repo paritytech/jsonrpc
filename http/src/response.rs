@@ -114,20 +114,22 @@ fn plain_text() -> HeaderValue {
 	HeaderValue::from_static("text/plain; charset=utf-8")
 }
 
-// TODO: Consider removing this panicking conversion or else switch to a
-// `HttpTryFrom` or `TryFrom` conversion.
+// TODO: Consider switching to a `TryFrom` conversion once it stabilizes.
 impl From<Response> for hyper::Response<Body> {
 	/// Converts from a jsonrpc `Response` to a `hyper::Response`
 	///
 	/// ## Panics
 	///
-	/// Panics if the response cannot be converted.
+	/// Panics if the response cannot be converted due to failure to parse
+	/// body content.
 	///
 	fn from(res: Response) -> hyper::Response<Body> {
 		hyper::Response::builder()
 			.status(res.code)
 			.header("content-type", res.content_type)
 			.body(res.content.into())
-			.expect("Unable to convert response")
+			// Parsing `StatusCode` and `HeaderValue` is infalliable but
+			// parsing body content is not.
+			.expect("Unable to parse response body for type conversion")
 	}
 }

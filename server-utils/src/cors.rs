@@ -212,7 +212,10 @@ pub fn get_cors_allow_origin(
 					allowed.iter().find(|cors| {
 						match **cors {
 							AccessControlAllowOrigin::Any => true,
-							AccessControlAllowOrigin::Value(ref val) if val.matches(origin) => true,
+							AccessControlAllowOrigin::Value(ref val) if val.matches(origin) =>
+							{
+								true
+							},
 							_ => false
 						}
 					})
@@ -519,7 +522,7 @@ mod tests {
 		let requested = vec!["x-not-allowed"];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into());
+		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| x);
 
 		// then
 		assert_eq!(res, AllowCors::Ok(vec![]));
@@ -536,7 +539,7 @@ mod tests {
 		let requested = vec!["x-allowed"];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into());
+		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| (*x).to_owned());
 
 		// then
 		let allowed = vec![
@@ -555,7 +558,7 @@ mod tests {
 		let headers: Vec<String> = vec![];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), iter::empty(), &cors_allow_headers);
+		let res = get_cors_allow_headers(headers.iter(), iter::empty(), &cors_allow_headers, |x| x);
 
 		// then
 		assert_eq!(res, AllowCors::NotRequired);
@@ -568,7 +571,7 @@ mod tests {
 		let headers: Vec<String> = vec![];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), iter::empty(), &cors_allow_headers.into());
+		let res = get_cors_allow_headers(headers.iter(), iter::empty(), &cors_allow_headers.into(), |x| x);
 
 		// then
 		assert_eq!(res, AllowCors::NotRequired);
