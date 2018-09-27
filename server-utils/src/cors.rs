@@ -225,10 +225,11 @@ pub fn get_cors_allow_origin(
 }
 
 /// Validates if the `AccessControlAllowedHeaders` in the request are allowed.
-pub fn get_cors_allow_headers<T: AsRef<str>, O: From<T>>(
+pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 	mut headers: impl Iterator<Item=T>,
 	requested_headers: impl Iterator<Item=T>,
 	cors_allow_headers: &AccessControlAllowHeaders,
+	to_result: F
 ) -> AllowCors<Vec<O>> {
 	// Check if the header fields which were sent in the request are allowed
 	if let AccessControlAllowHeaders::Only(only) = cors_allow_headers {
@@ -246,7 +247,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O: From<T>>(
 	// Check if `AccessControlRequestHeaders` contains fields which were allowed
 	let (filtered, headers) = match cors_allow_headers {
 		AccessControlAllowHeaders::Any => {
-			let headers = requested_headers.map(|s| s.into()).collect();
+			let headers = requested_headers.map(to_result).collect();
 			(false, headers)
 		},
 		AccessControlAllowHeaders::Only(only) => {
@@ -257,15 +258,19 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O: From<T>>(
 					filtered = true;
 					only.iter().any(|h| &Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
 				})
-				.map(|header| header.into())
+				.map(to_result)
 				.collect();
 
 			(filtered, headers)
 		},
 	};
 
-	if !filtered && headers.is_empty() {
-		AllowCors::NotRequired
+	if headers.is_empty() {
+		if filtered {
+			AllowCors::Invalid
+		} else {
+			AllowCors::NotRequired
+		}
 	} else {
 		AllowCors::Ok(headers)
 	}

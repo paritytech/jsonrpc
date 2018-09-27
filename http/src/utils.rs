@@ -35,6 +35,20 @@ pub fn cors_allow_headers(
 	request: &hyper::Request<hyper::Body>,
 	cors_allow_headers: &cors::AccessControlAllowHeaders
 ) -> cors::AllowCors<Vec<header::HeaderValue>> {
-	// cors::get_cors_allow_headers(request.headers(), cors_allow_headers.into())
-	unimplemented!()
+	let headers = request.headers().keys()
+		.map(|name| name.as_str());
+	let requested_headers = request.headers()
+		.get_all("access-control-request-headers")
+		.iter()
+		.filter_map(|val| val.to_str().ok())
+		.flat_map(|val| val.split(", "))
+		.flat_map(|val| val.split(","));
+
+	cors::get_cors_allow_headers(
+		headers,
+		requested_headers,
+		cors_allow_headers.into(),
+		|name| header::HeaderValue::from_str(name)
+			.unwrap_or_else(|_| header::HeaderValue::from_static("unknown"))
+	)
 }

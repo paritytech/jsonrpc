@@ -500,18 +500,27 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		cors_allow_headers: Option<Vec<HeaderValue>>,
 	) {
 		let as_header = |m: Method| m.as_str().parse().expect("`Method` will always parse; qed");
-		if is_options {
-			headers.append(header::ALLOW, as_header(Method::OPTIONS));
-			headers.append(header::ALLOW, as_header(Method::POST));
+		let concat = |headers: &[HeaderValue]| {
+			let separator = b", ";
+			let val = headers
+				.iter()
+				.flat_map(|h| h.as_bytes().iter().chain(separator.iter()))
+				.cloned()
+				.collect::<Vec<_>>();
+			let max_len = if val.is_empty() { 0 } else { val.len() - 2 };
+			HeaderValue::from_bytes(&val[..max_len]).expect("Concatenation of valid headers with `, ` is still valid; qed")
+		};
 
+		let allowed = concat(&[as_header(Method::OPTIONS), as_header(Method::POST)]);
+
+		if is_options {
+			headers.append(header::ALLOW, allowed.clone());
 			headers.append(header::ACCEPT, HeaderValue::from_static("application/json"));
 		}
 
 		if let Some(cors_allow_origin) = cors_allow_origin {
 			headers.append(header::VARY, HeaderValue::from_static("origin"));
-			headers.append(header::ACCESS_CONTROL_ALLOW_METHODS, as_header(Method::OPTIONS));
-			headers.append(header::ACCESS_CONTROL_ALLOW_METHODS, as_header(Method::POST));
-
+			headers.append(header::ACCESS_CONTROL_ALLOW_METHODS, allowed);
 			headers.append(header::ACCESS_CONTROL_ALLOW_ORIGIN, cors_allow_origin);
 
 			if let Some(cma) = cors_max_age {
@@ -522,8 +531,8 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			}
 
 			if let Some(cors_allow_headers) = cors_allow_headers {
-				for val in cors_allow_headers {
-					headers.append(header::ACCESS_CONTROL_ALLOW_HEADERS, val);
+				if !cors_allow_headers.is_empty() {
+					headers.append(header::ACCESS_CONTROL_ALLOW_HEADERS, concat(&cors_allow_headers));
 				}
 			}
 		}

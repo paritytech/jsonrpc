@@ -425,8 +425,7 @@ fn should_return_proper_headers_on_options() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("allow: OPTIONS") && response.headers.contains("allow: POST"),
-		"Headers missing in {}", response.headers);
+	assert!(response.headers.contains("allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
 	assert!(response.headers.contains("accept: application/json"), "Headers missing in {}", response.headers);
 	assert_eq!(response.body, "");
 }
@@ -602,7 +601,7 @@ fn should_respond_configured_allowed_hosts_to_options() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -626,7 +625,7 @@ fn should_not_contain_default_cors_allow_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(!response.headers.contains("Access-Control-Allow-Headers:"),
+	assert!(!response.headers.contains("access-control-allow-headers:"),
 		"Header should not be in {}", response.headers);
 }
 
@@ -651,7 +650,7 @@ fn should_respond_valid_to_default_allowed_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = "Access-Control-Allow-Headers: Accept, Content-Type, Origin";
+	let expected = "access-control-allow-headers: Accept, Content-Type, Origin";
 	assert!(response.headers.contains(expected), "Headers missing in {}", response.headers);
 }
 
@@ -681,7 +680,7 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -711,7 +710,7 @@ fn should_respond_valid_to_configured_allow_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -830,7 +829,7 @@ fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let contained = response.headers.contains(
-		"Access-Control-Allow-Headers: x-ALLoweD, x-alSOaLloWeD"
+		"access-control-allow-headers: x-ALLoweD, x-alSOaLloWeD"
 	);
 	assert!(contained, "Headers missing in {}", response.headers);
 }
@@ -858,12 +857,12 @@ fn should_respond_valid_to_any_requested_header() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", headers);
+	let expected = format!("access-control-allow-headers: {}", headers);
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
 #[test]
-fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
+fn should_forbid_invalid_request_headers() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
@@ -886,6 +885,9 @@ fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
 	);
 
 	// then
+	// According to the spec wildcard is nly supported for `Allow-Origin`,
+	// some ppl believe it should be supported by other `Allow-*` headers,
+	// but I didn't see any mention of allowing wildcard for `Request-Headers`.
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
 	assert_eq!(response.body, cors_invalid_allow_headers());
 }
@@ -911,7 +913,7 @@ fn should_respond_valid_to_wildcard_if_any_header_allowed() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("Access-Control-Allow-Headers: *"),
+	assert!(response.headers.contains("access-control-allow-headers: *"),
 		"Headers missing in {}", response.headers);
 }
 
