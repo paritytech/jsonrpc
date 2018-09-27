@@ -1,68 +1,77 @@
-//! Event Loop Remote
+//! Event Loop Executor
 //! Either spawns a new event loop, or re-uses provided one.
 
 use std::{io, thread};
 use std::sync::mpsc;
-use tokio_core;
+use tokio;
+use num_cpus;
 
 use core::futures::{self, Future};
 
-/// Possibly uninitialized event loop remote.
+/// Possibly uninitialized event loop executor.
 #[derive(Debug)]
-pub enum UninitializedRemote {
-	/// Shared instance of remote.
-	Shared(tokio_core::reactor::Remote),
+pub enum UninitializedExecutor {
+	/// Shared instance of executor.
+	Shared(tokio::runtime::TaskExecutor),
 	/// Event Loop should be spawned by the transport.
 	Unspawned,
 }
 
-impl UninitializedRemote {
-	/// Initializes remote.
-	/// In case there is no shared remote, will spawn a new event loop.
-	/// Dropping `Remote` closes the loop.
-	pub fn initialize(self) -> io::Result<Remote> {
+impl UninitializedExecutor {
+	/// Initializes executor.
+	/// In case there is no shared executor, will spawn a new event loop.
+	/// Dropping `Executor` closes the loop.
+	pub fn initialize(self) -> io::Result<Executor> {
 		self.init_with_name("event.loop")
 	}
 
-	/// Initializes remote.
-	/// In case there is no shared remote, will spawn a new event loop.
-	/// Dropping `Remote` closes the loop.
-	pub fn init_with_name<T: Into<String>>(self, name: T) -> io::Result<Remote> {
+	/// Initializes executor.
+	/// In case there is no shared executor, will spawn a new event loop.
+	/// Dropping `Executor` closes the loop.
+	pub fn init_with_name<T: Into<String>>(self, name: T) -> io::Result<Executor> {
 		match self {
-			UninitializedRemote::Shared(remote) => Ok(Remote::Shared(remote)),
-			UninitializedRemote::Unspawned => RpcEventLoop::with_name(Some(name.into())).map(Remote::Spawned),
+			UninitializedExecutor::Shared(executor) => Ok(Executor::Shared(executor)),
+			UninitializedExecutor::Unspawned => RpcEventLoop::with_name(Some(name.into())).map(Executor::Spawned),
 		}
 	}
 }
 
-/// Initialized Remote
+/// Initialized Executor
 #[derive(Debug)]
-pub enum Remote {
+pub enum Executor {
 	/// Shared instance
-	Shared(tokio_core::reactor::Remote),
+	Shared(tokio::runtime::TaskExecutor),
 	/// Spawned Event Loop
 	Spawned(RpcEventLoop),
 }
 
-impl Remote {
-	/// Get remote associated with this event loop.
-	pub fn remote(&self) -> tokio_core::reactor::Remote {
+impl Executor {
+	/// Get tokio executor associated with this event loop.
+	pub fn executor(&self) -> tokio::runtime::TaskExecutor {
 		match *self {
-			Remote::Shared(ref remote) => remote.clone(),
-			Remote::Spawned(ref eloop) => eloop.remote(),
+			Executor::Shared(ref executor) => executor.clone(),
+			Executor::Spawned(ref eloop) => eloop.executor(),
 		}
+	}
+
+	/// Spawn a future onto the Tokio runtime.
+	pub fn spawn<F>(&self, future: F)
+	where
+		F: Future<Item = (), Error = ()> + Send + 'static,
+	{
+		self.executor().spawn(future)
 	}
 
 	/// Closes underlying event loop (if any!).
 	pub fn close(self) {
-		if let Remote::Spawned(eloop) = self {
+		if let Executor::Spawned(eloop) = self {
 			eloop.close()
 		}
 	}
 
 	/// Wait for underlying event loop to finish (if any!).
 	pub fn wait(self) {
-		if let Remote::Spawned(eloop) = self {
+		if let Executor::Spawned(eloop) = self {
 			let _ = eloop.wait();
 		}
 	}
@@ -71,7 +80,7 @@ impl Remote {
 /// A handle to running event loop. Dropping the handle will cause event loop to finish.
 #[derive(Debug)]
 pub struct RpcEventLoop {
-	remote: tokio_core::reactor::Remote,
+	executor: tokio::runtime::TaskExecutor,
 	close: Option<futures::Complete<()>>,
 	handle: Option<thread::JoinHandle<()>>,
 }
@@ -96,30 +105,51 @@ impl RpcEventLoop {
 		if let Some(name) = name {
 			tb = tb.name(name);
 		}
+
 		let handle = tb.spawn(move || {
-			let el = tokio_core::reactor::Core::new();
-			match el {
-				Ok(mut el) => {
-					tx.send(Ok(el.remote())).expect("Rx is blocking upper thread.");
-					let _ = el.run(futures::empty().select(stopped));
+			let mut tp_builder = tokio::executor::thread_pool::Builder::new();
+
+			let pool_size = match num_cpus::get_physical() {
+				1 => 1,
+				2...4 => 2,
+				_ => 3,
+			};
+
+			tp_builder
+				.pool_size(pool_size)
+				.name_prefix("jsonrpc-eventloop-");
+
+			let runtime = tokio::runtime::Builder::new()
+				.threadpool_builder(tp_builder)
+				.build();
+
+			match runtime {
+				Ok(mut runtime) => {
+					tx.send(Ok(runtime.executor())).expect("Rx is blocking upper thread.");
+					let terminate = futures::empty().select(stopped)
+						.map(|_| ())
+						.map_err(|_| ());
+					runtime.spawn(terminate);
+					runtime.shutdown_on_idle().wait().unwrap();
 				},
 				Err(err) => {
 					tx.send(Err(err)).expect("Rx is blocking upper thread.");
 				}
 			}
 		}).expect("Couldn't spawn a thread.");
-		let remote = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
-		remote.map(|remote| RpcEventLoop {
-			remote: remote,
+		let exec = rx.recv().expect("tx is transfered to a newly spawned thread.");
+
+		exec.map(|executor| RpcEventLoop {
+			executor,
 			close: Some(stop),
 			handle: Some(handle),
 		})
 	}
 
-	/// Get remote for this event loop.
-	pub fn remote(&self) -> tokio_core::reactor::Remote {
-		self.remote.clone()
+	/// Get executor for this event loop.
+	pub fn executor(&self) -> tokio::runtime::TaskExecutor {
+		self.executor.clone()
 	}
 
 	/// Blocks current thread and waits until the event loop is finished.

@@ -46,4 +46,4 @@ use jsonrpc_core as jsonrpc;
 pub use dispatch::{Dispatcher, PushMessageError};
 pub use meta::{MetaExtractor, RequestContext};
 pub use server::{ServerBuilder, Server};
-pub use self::server_utils::tokio_core;
+pub use self::server_utils::tokio;

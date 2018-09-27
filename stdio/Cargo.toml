@@ -10,7 +10,7 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_stdio_server/index
 
 [dependencies]
 futures = "0.1.23"
-jsonrpc-core = { version = "8.0", path = "../core" }
+jsonrpc-core = { version = "9.0", path = "../core" }
 log = "0.4"
 tokio = "0.1.7"
 tokio-codec = "0.1.0"

@@ -1,7 +1,7 @@
 [package]
 name = "jsonrpc-tcp-server"
 description = "TCP/IP server for JSON-RPC"
-version = "8.0.1"
+version = "9.0.0"
 authors = ["NikVolf <nikvolf@gmail.com>"]
 license = "MIT"
 homepage = "https://github.com/paritytech/jsonrpc"
@@ -12,8 +12,8 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_tcp_server/index.h
 log = "0.4"
 parking_lot = "0.6"
 tokio-service = "0.1"
-jsonrpc-core = { version = "8.0", path = "../core" }
-jsonrpc-server-utils = { version = "8.0", path = "../server-utils" }
+jsonrpc-core = { version = "9.0", path = "../core" }
+jsonrpc-server-utils = { version = "9.0", path = "../server-utils" }
 
 [dev-dependencies]
 lazy_static = "1.0"

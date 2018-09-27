@@ -14,8 +14,8 @@ fn main() {
 
 	let server = ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
-		.request_middleware(|request: hyper::server::Request| {
-			if request.path() == "/status" {
+		.request_middleware(|request: hyper::Request<hyper::Body>| {
+			if request.uri() == "/status" {
 				Response::ok("Server running OK.").into()
 			} else {
 				request.into()

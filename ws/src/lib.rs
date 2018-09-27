@@ -31,5 +31,5 @@ pub use self::server::{CloseHandle, Server};
 pub use self::server_builder::ServerBuilder;
 pub use self::server_utils::cors::Origin;
 pub use self::server_utils::hosts::{Host, DomainsValidation};
-pub use self::server_utils::tokio_core;
+pub use self::server_utils::tokio;
 pub use self::server_utils::session::{SessionId, SessionStats};

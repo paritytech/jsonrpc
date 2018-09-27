@@ -6,7 +6,7 @@ use std::thread;
 use core;
 use server_utils::cors::Origin;
 use server_utils::hosts::{self, Host};
-use server_utils::reactor::{UninitializedRemote, Remote};
+use server_utils::reactor::{UninitializedExecutor, Executor};
 use server_utils::session::SessionStats;
 use ws;
 
@@ -18,7 +18,7 @@ use session;
 pub struct Server {
 	addr: SocketAddr,
 	handle: Option<thread::JoinHandle<Result<()>>>,
-	remote: Arc<Mutex<Option<Remote>>>,
+	executor: Arc<Mutex<Option<Executor>>>,
 	broadcaster: ws::Sender,
 }
 
@@ -27,7 +27,7 @@ impl fmt::Debug for Server {
 		f.debug_struct("Server")
 			.field("addr", &self.addr)
 			.field("handle", &self.handle)
-			.field("remote", &self.remote)
+			.field("executor", &self.executor)
 			.finish()
     }
 }
@@ -48,7 +48,7 @@ impl Server {
 		allowed_hosts: Option<Vec<Host>>,
 		request_middleware: Option<Arc<session::RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
-		remote: UninitializedRemote,
+		executor: UninitializedExecutor,
 		max_connections: usize,
 	) -> Result<Server> {
 		let config = {
@@ -71,12 +71,12 @@ impl Server {
 		let allowed_hosts = hosts::update(allowed_hosts, addr);
 
 		// Spawn event loop (if necessary)
-		let eloop = remote.initialize()?;
-		let remote = eloop.remote();
+		let eloop = executor.initialize()?;
+		let executor = eloop.executor();
 
 		// Create WebSocket
 		let ws = ws::Builder::new().with_settings(config).build(session::Factory::new(
-			handler, meta_extractor, allowed_origins, allowed_hosts, request_middleware, stats, remote
+			handler, meta_extractor, allowed_origins, allowed_hosts, request_middleware, stats, executor
 		))?;
 		let broadcaster = ws.broadcaster();
 
@@ -100,7 +100,7 @@ impl Server {
 		Ok(Server {
 			addr: local_addr,
 			handle: Some(handle),
-			remote: Arc::new(Mutex::new(Some(eloop))),
+			executor: Arc::new(Mutex::new(Some(eloop))),
 			broadcaster: broadcaster,
 		})
 	}
@@ -121,7 +121,7 @@ impl Server {
 	/// blocking in `wait`.
 	pub fn close_handle(&self) -> CloseHandle {
 		CloseHandle {
-			remote: self.remote.clone(),
+			executor: self.executor.clone(),
 			broadcaster: self.broadcaster.clone(),
 		}
 	}
@@ -138,7 +138,7 @@ impl Drop for Server {
 /// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
 #[derive(Clone)]
 pub struct CloseHandle {
-	remote: Arc<Mutex<Option<Remote>>>,
+	executor: Arc<Mutex<Option<Executor>>>,
 	broadcaster: ws::Sender,
 }
 
@@ -146,6 +146,6 @@ impl CloseHandle {
 	/// Closes the `Server`.
 	pub fn close(self) {
 		let _ = self.broadcaster.shutdown();
-		self.remote.lock().unwrap().take().map(|remote| remote.close());
+		self.executor.lock().unwrap().take().map(|executor| executor.close());
 	}
 }
