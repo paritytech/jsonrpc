@@ -53,10 +53,11 @@ use server_utils::reactor::{Executor, UninitializedExecutor};
 
 pub use server_utils::hosts::{Host, DomainsValidation};
 pub use server_utils::cors::{self, AccessControlAllowOrigin, Origin, AllowCors};
-pub use server_utils::tokio;
+pub use server_utils::{tokio, SuspendableStream};
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_allow_origin, cors_allow_headers};
 pub use response::Response;
+use std::time::Duration;
 
 /// Action undertaken by a middleware.
 pub enum RequestMiddlewareAction {
@@ -503,8 +504,9 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 
 			let mut http = server::conn::Http::new();
 			http.keep_alive(keep_alive);
+			let tcp_stream = SuspendableStream::new(listener.incoming(), Duration::from_secs(2));
 
-			listener.incoming()
+			tcp_stream
 				.for_each(move |socket| {
 					let service = ServerHandler::new(
 						jsonrpc_handler.clone(),

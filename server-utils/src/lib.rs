@@ -22,7 +22,9 @@ pub mod session;
 pub mod reactor;
 mod matcher;
 mod stream_codec;
+mod suspendable_stream;
 
+pub use suspendable_stream::SuspendableStream;
 pub use matcher::Pattern;
 
 /// Codecs utilities

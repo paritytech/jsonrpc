@@ -10,11 +10,13 @@ use jsonrpc::futures::sync::{mpsc, oneshot};
 use server_utils::{
 	tokio_codec::Framed,
 	tokio, reactor, codecs,
+	SuspendableStream
 };
 
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
 use service::Service;
+use std::time::Duration;
 
 /// TCP server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -86,7 +88,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		executor.spawn(future::lazy(move || {
 			let start = move || {
 				let listener = tokio::net::TcpListener::bind(&address)?;
-				let connections = listener.incoming();
+				let connections = SuspendableStream::new(listener.incoming(), Duration::from_secs(5));
 
 				let server = connections.for_each(move |socket| {
 					let peer_addr = socket.peer_addr().expect("Unable to determine socket peer address");
@@ -152,7 +154,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 				Ok(server)
 			};
 
-			let stop = stop_rx.map_err(|_| std::io::ErrorKind::Interrupted.into());
+			let stop = stop_rx.map_err(|_| ());
 			match start() {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
