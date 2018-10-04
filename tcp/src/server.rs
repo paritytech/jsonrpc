@@ -16,7 +16,6 @@ use server_utils::{
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
 use meta::{MetaExtractor, RequestContext, NoopExtractor};
 use service::Service;
-use std::time::Duration;
 
 /// TCP server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
@@ -88,7 +87,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		executor.spawn(future::lazy(move || {
 			let start = move || {
 				let listener = tokio::net::TcpListener::bind(&address)?;
-				let connections = SuspendableStream::new(listener.incoming(), Duration::from_secs(5));
+				let connections = SuspendableStream::new(listener.incoming());
 
 				let server = connections.for_each(move |socket| {
 					let peer_addr = socket.peer_addr().expect("Unable to determine socket peer address");

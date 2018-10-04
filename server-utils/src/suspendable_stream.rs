@@ -11,15 +11,13 @@ pub struct SuspendableStream<S> {
 	timeout: Option<Delay>,
 }
 
-impl<S, I> SuspendableStream<S>
-	where S: Stream<Item=I, Error=io::Error>
-{
+impl<S> SuspendableStream<S> {
 	/// construct a new Suspendable stream, given tokio::Incoming
 	/// and the amount of time to pause for.
-	pub fn new(stream: S, delay: Duration) -> Self {
+	pub fn new(stream: S) -> Self {
 		SuspendableStream {
 			stream,
-			delay,
+			delay: Duration::from_millis(500),
 			timeout: None,
 		}
 	}
@@ -32,37 +30,32 @@ impl<S, I> Stream for SuspendableStream<S>
 	type Error = ();
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, ()> {
-		if let Some(ref mut timeout) = self.timeout {
+		let mut recovered = None;
+		if let Some(mut timeout) = self.timeout.take() {
 			match timeout.poll() {
-				Ok(Async::Ready(_)) => {}
-				Ok(Async::NotReady) => return Ok(Async::NotReady),
+				Ok(Async::Ready(_)) => {
+					recovered = Some(());
+				}
+				Ok(Async::NotReady) => {
+					self.timeout = Some(timeout);
+					return Ok(Async::NotReady)
+				},
 				Err(_) => unreachable!("Polling a delay shouldn't yield any errors")
 			}
 		}
 
-		self.timeout = None;
-
 		loop {
 			match self.stream.poll() {
-				Ok(socket) => return Ok(socket),
+				Ok(item) => return Ok(item),
 				Err(err) => {
-					//  Os { code: 24, kind: Other, message: "Too many open files" }
-					if let Some(24) = err.raw_os_error() {
-						debug!("Error accepting connection: {}", err);
-						debug!("The server will stop accepting connections for {:?}", self.delay);
-						let mut timeout = Delay::new(Instant::now() + self.delay);
-
-						match timeout.poll() {
-							Ok(Async::Ready(())) => continue,
-							Ok(Async::NotReady) => {
-								self.timeout = Some(timeout);
-								return Ok(Async::NotReady);
-							}
-							Err(_) => unreachable!("Polling a delay shouldn't yield any errors")
-						}
+					self.delay = if recovered.is_some() && self.delay.as_secs() < 5 {
+						self.delay * 2
 					} else {
-						continue
-					}
+						self.delay
+					};
+					warn!("Error accepting connection: {}", err);
+					warn!("The server will stop accepting connections for {:?}", self.delay);
+					self.timeout = Some(Delay::new(Instant::now() + self.delay));
 				}
 			}
 		}
