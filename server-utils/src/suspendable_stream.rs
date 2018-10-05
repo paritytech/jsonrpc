@@ -11,13 +11,15 @@ pub struct SuspendableStream<S> {
 	timeout: Option<Delay>,
 }
 
+const MAX_DELAY_SECS: u64 = 5;
+
 impl<S> SuspendableStream<S> {
 	/// construct a new Suspendable stream, given tokio::Incoming
 	/// and the amount of time to pause for.
 	pub fn new(stream: S) -> Self {
 		SuspendableStream {
 			stream,
-			delay: Duration::from_millis(500),
+			delay: Duration::from_millis(20),
 			timeout: None,
 		}
 	}
@@ -46,13 +48,18 @@ impl<S, I> Stream for SuspendableStream<S>
 
 		loop {
 			match self.stream.poll() {
-				Ok(item) => return Ok(item),
+				Ok(item) => {
+					if self.delay.as_millis() > 20 {
+						self.delay = Duration::from_millis(20);
+					}
+					return Ok(item)
+				},
 				Err(ref e) => if connection_error(e) {
 					warn!("Connection Error: {:?}", e);
 					continue
 				}
 				Err(err) => {
-					self.delay = if resumed && self.delay.as_secs() < 5 {
+					self.delay = if resumed && self.delay.as_secs() < MAX_DELAY_SECS {
 						self.delay * 2
 					} else {
 						self.delay
