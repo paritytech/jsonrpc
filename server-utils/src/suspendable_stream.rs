@@ -30,25 +30,29 @@ impl<S, I> Stream for SuspendableStream<S>
 	type Error = ();
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, ()> {
-		let mut recovered = None;
+		let mut resumed = false;
 		if let Some(mut timeout) = self.timeout.take() {
 			match timeout.poll() {
 				Ok(Async::Ready(_)) => {
-					recovered = Some(());
+					resumed = true;
 				}
 				Ok(Async::NotReady) => {
 					self.timeout = Some(timeout);
-					return Ok(Async::NotReady)
-				},
-				Err(_) => unreachable!("Polling a delay shouldn't yield any errors")
+					return Ok(Async::NotReady);
+				}
+				Err(_) => unreachable!("Polling a delay shouldn't yield any errors; qed")
 			}
 		}
 
 		loop {
 			match self.stream.poll() {
 				Ok(item) => return Ok(item),
+				Err(ref e) => if connection_error(e) {
+					warn!("Connection Error: {:?}", e);
+					continue
+				}
 				Err(err) => {
-					self.delay = if recovered.is_some() && self.delay.as_secs() < 5 {
+					self.delay = if resumed && self.delay.as_secs() < 5 {
 						self.delay * 2
 					} else {
 						self.delay
@@ -61,3 +65,10 @@ impl<S, I> Stream for SuspendableStream<S>
 		}
 	}
 }
+
+fn connection_error(e: &io::Error) -> bool {
+	e.kind() == io::ErrorKind::ConnectionRefused ||
+		e.kind() == io::ErrorKind::ConnectionAborted ||
+		e.kind() == io::ErrorKind::ConnectionReset
+}
+
