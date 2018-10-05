@@ -109,7 +109,7 @@ fn request(server: Server, request: &str) -> Response {
 
 	let mut lines = response.lines();
 	let status = lines.next().unwrap().to_owned();
-	let headers =	read_block(&mut lines);
+	let headers = read_block(&mut lines);
 	let body = read_block(&mut lines);
 
 	Response {
@@ -137,7 +137,7 @@ fn should_return_method_not_allowed_for_get() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 405 Method Not Allowed".to_owned());
-	assert_eq!(response.body, "3D\nUsed HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned());
+	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned());
 }
 
 #[test]
@@ -158,7 +158,7 @@ fn should_handle_health_endpoint() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert_eq!(response.body, "7\n\"world\"\n0\n");
+	assert_eq!(response.body, "\"world\"\n");
 }
 
 #[test]
@@ -179,7 +179,7 @@ fn should_handle_health_endpoint_failure() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 503 Service Unavailable".to_owned());
-	assert_eq!(response.body, "25\n{\"code\":-34,\"message\":\"Server error\"}\n0\n");
+	assert_eq!(response.body, "Service Unavailable: {\"code\":-34,\"message\":\"Server error\"}\n");
 }
 
 #[test]
@@ -200,7 +200,7 @@ fn should_return_unsupported_media_type_if_not_json() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(response.body, "51\nSupplied content type is not allowed. Content-Type: application/json is required\n".to_owned());
+	assert_eq!(response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned());
 }
 
 #[test]
@@ -272,7 +272,7 @@ fn should_return_empty_response_for_notification() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert_eq!(response.body, "0\n".to_owned());
+	assert_eq!(response.body, "".to_owned());
 }
 
 
@@ -323,7 +323,7 @@ fn should_add_cors_allow_origins() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: http://parity.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: http://parity.io"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -349,8 +349,8 @@ fn should_add_cors_max_age_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: http://parity.io"), "Headers missing in {}", response.headers);
-	assert!(response.headers.contains("Access-Control-Max-Age: 1000"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: http://parity.io"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-max-age: 1000"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -424,9 +424,9 @@ fn should_return_proper_headers_on_options() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("Allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
-	assert!(response.headers.contains("Accept: application/json"), "Headers missing in {}", response.headers);
-	assert_eq!(response.body, "0\n");
+	assert!(response.headers.contains("allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("accept: application/json"), "Headers missing in {}", response.headers);
+	assert_eq!(response.body, "");
 }
 
 #[test]
@@ -452,7 +452,7 @@ fn should_add_cors_allow_origin_for_null_origin() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -478,7 +478,7 @@ fn should_add_cors_allow_origin_for_null_origin_when_all() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("Access-Control-Allow-Origin: null"), "Headers missing in {}", response.headers);
+	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
 }
 
 #[test]
@@ -577,8 +577,8 @@ fn should_allow_if_host_is_valid() {
 fn should_respond_configured_allowed_hosts_to_options() {
 	// given
 	let allowed = vec![
-			"X-Allowed",
-			"X-AlsoAllowed",
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -599,7 +599,7 @@ fn should_respond_configured_allowed_hosts_to_options() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -623,7 +623,7 @@ fn should_not_contain_default_cors_allow_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(!response.headers.contains("Access-Control-Allow-Headers:"),
+	assert!(!response.headers.contains("access-control-allow-headers:"),
 		"Header should not be in {}", response.headers);
 }
 
@@ -648,7 +648,7 @@ fn should_respond_valid_to_default_allowed_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = "Access-Control-Allow-Headers: Accept, Content-Type, Origin";
+	let expected = "access-control-allow-headers: Accept, Content-Type, Origin";
 	assert!(response.headers.contains(expected), "Headers missing in {}", response.headers);
 }
 
@@ -656,8 +656,8 @@ fn should_respond_valid_to_default_allowed_headers() {
 fn should_by_default_respond_valid_to_any_request_headers() {
 	// given
 	let allowed = vec![
-		"X-Abc",
-		"X-123",
+		"X-Abc".to_owned(),
+		"X-123".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -678,7 +678,7 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -686,8 +686,8 @@ fn should_by_default_respond_valid_to_any_request_headers() {
 fn should_respond_valid_to_configured_allow_headers() {
 	// given
 	let allowed = vec![
-			"X-Allowed",
-			"X-AlsoAllowed",
+			"X-Allowed".to_owned(),
+			"X-AlsoAllowed".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -708,7 +708,7 @@ fn should_respond_valid_to_configured_allow_headers() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", &allowed.join(", "));
+	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
@@ -717,7 +717,7 @@ fn should_respond_invalid_if_non_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed",
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 
@@ -745,7 +745,7 @@ fn should_respond_valid_if_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed",
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -775,7 +775,7 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed",
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
@@ -804,8 +804,8 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// given
 	let allowed = vec![
-		"X-Allowed",
-		"X-AlsoAllowed",
+		"X-Allowed".to_owned(),
+		"X-AlsoAllowed".to_owned(),
 	];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
@@ -827,7 +827,7 @@ fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let contained = response.headers.contains(
-		"Access-Control-Allow-Headers: x-ALLoweD, x-alSOaLloWeD"
+		"access-control-allow-headers: x-ALLoweD, x-alSOaLloWeD"
 	);
 	assert!(contained, "Headers missing in {}", response.headers);
 }
@@ -855,16 +855,16 @@ fn should_respond_valid_to_any_requested_header() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let expected = format!("Access-Control-Allow-Headers: {}", headers);
+	let expected = format!("access-control-allow-headers: {}", headers);
 	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
 }
 
 #[test]
-fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
+fn should_forbid_invalid_request_headers() {
 	// given
 	let custom = cors::AccessControlAllowHeaders::Only(
 		vec![
-			"X-Allowed",
+			"X-Allowed".to_owned(),
 		]);
 	let server = serve_allow_headers(custom);
 
@@ -883,6 +883,9 @@ fn should_respond_invalid_to_wildcard_if_only_certain_headers_allowed() {
 	);
 
 	// then
+	// According to the spec wildcard is nly supported for `Allow-Origin`,
+	// some ppl believe it should be supported by other `Allow-*` headers,
+	// but I didn't see any mention of allowing wildcard for `Request-Headers`.
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
 	assert_eq!(response.body, cors_invalid_allow_headers());
 }
@@ -908,7 +911,7 @@ fn should_respond_valid_to_wildcard_if_any_header_allowed() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("Access-Control-Allow-Headers: *"),
+	assert!(response.headers.contains("access-control-allow-headers: *"),
 		"Headers missing in {}", response.headers);
 }
 
@@ -1132,34 +1135,34 @@ fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(&response.body, "51\nSupplied content type is not allowed. Content-Type: application/json is required\n");
+	assert_eq!(&response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n");
 }
 
 fn invalid_host() -> String {
-	"29\nProvided Host header is not whitelisted.\n".into()
+	"Provided Host header is not whitelisted.\n".into()
 }
 
 fn cors_invalid_allow_origin() -> String {
-	"76\nOrigin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
+	"Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn cors_invalid_allow_headers() -> String {
-	"1D\nHeader field is not allowed.\n".into()
+	"Requested headers are not allowed for CORS. CORS headers would not be sent and any side-effects were cancelled as well.\n".into()
 }
 
 fn method_not_found() -> String {
- "4E\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
 }
 
 fn invalid_request() -> String {
- "50\n{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
 }
 fn world() -> String {
- "2A\n{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
 }
 fn world_5() -> String {
- "2D\n{\"jsonrpc\":\"2.0\",\"result\":\"world: 5\",\"id\":1}\n".into()
+ "{\"jsonrpc\":\"2.0\",\"result\":\"world: 5\",\"id\":1}\n".into()
 }
 fn world_batch() -> String {
- "2C\n[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
+ "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
 }

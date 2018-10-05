@@ -3,8 +3,7 @@ use std::sync::{atomic, Arc};
 
 use core::{self, futures};
 use core::futures::sync::mpsc;
-use server_utils::tokio_core::reactor::Remote;
-use server_utils::session;
+use server_utils::{session, tokio::runtime::TaskExecutor};
 use ws;
 
 use error;
@@ -74,7 +73,7 @@ pub struct RequestContext {
 	/// Direct channel to send messages to a client.
 	pub out: Sender,
 	/// Remote to underlying event loop.
-	pub remote: Remote,
+	pub executor: TaskExecutor,
 }
 
 impl RequestContext {
@@ -83,7 +82,7 @@ impl RequestContext {
 	pub fn sender(&self) -> mpsc::Sender<String> {
 		let out = self.out.clone();
 		let (sender, receiver) = mpsc::channel(1);
-		self.remote.spawn(move |_| SenderFuture(out, receiver));
+		self.executor.spawn(SenderFuture(out, receiver));
 		sender
 	}
 }

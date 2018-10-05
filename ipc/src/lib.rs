@@ -24,5 +24,5 @@ use jsonrpc_core as jsonrpc;
 pub use meta::{MetaExtractor, NoopExtractor, RequestContext};
 pub use server::{Server, ServerBuilder, CloseHandle,SecurityAttributes};
 
-pub use self::server_utils::{tokio_core, codecs::Separator};
+pub use self::server_utils::{tokio, codecs::Separator};
 pub use self::server_utils::session::{SessionStats, SessionId};

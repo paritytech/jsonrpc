@@ -11,8 +11,8 @@ use slab::Slab;
 use server_utils::Pattern;
 use server_utils::cors::Origin;
 use server_utils::hosts::Host;
-use server_utils::tokio_core::reactor::Remote;
 use server_utils::session::{SessionId, SessionStats};
+use server_utils::tokio::runtime::TaskExecutor;
 use ws;
 
 use error;
@@ -145,7 +145,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
 	metadata: Option<M>,
-	remote: Remote,
+	executor: TaskExecutor,
 	task_slab: Arc<TaskSlab>,
 }
 
@@ -268,7 +268,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 			.map(|_| ())
 			.map_err(|_| ());
 
-		self.remote.spawn(|_| future);
+		self.executor.spawn(future);
 
 		Ok(())
 	}
@@ -282,7 +282,7 @@ pub struct Factory<M: core::Metadata, S: core::Middleware<M>> {
 	allowed_hosts: Option<Vec<Host>>,
 	request_middleware: Option<Arc<RequestMiddleware>>,
 	stats: Option<Arc<SessionStats>>,
-	remote: Remote,
+	executor: TaskExecutor,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
@@ -293,7 +293,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 		allowed_hosts: Option<Vec<Host>>,
 		request_middleware: Option<Arc<RequestMiddleware>>,
 		stats: Option<Arc<SessionStats>>,
-		remote: Remote,
+		executor: TaskExecutor,
 	) -> Self {
 		Factory {
 			session_id: 0,
@@ -303,7 +303,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 			allowed_hosts: allowed_hosts,
 			request_middleware: request_middleware,
 			stats: stats,
-			remote: remote,
+			executor: executor,
 		}
 	}
 }
@@ -323,7 +323,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 				origin: None,
 				protocols: Vec::new(),
 				out: metadata::Sender::new(sender, active),
-				remote: self.remote.clone(),
+				executor: self.executor.clone(),
 			},
 			handler: self.handler.clone(),
 			meta_extractor: self.meta_extractor.clone(),
@@ -332,7 +332,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 			stats: self.stats.clone(),
 			request_middleware: self.request_middleware.clone(),
 			metadata: None,
-			remote: self.remote.clone(),
+			executor: self.executor.clone(),
 			task_slab: Arc::new(Mutex::new(Slab::with_capacity(0))),
 		}
 	}

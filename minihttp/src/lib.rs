@@ -263,7 +263,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> tokio_service::Service for
 		let cors = cors::get_cors_allow_origin(origin, host, &self.cors_domains);
 
 		// Validate cors header
-		if let cors::AllowOrigin::Invalid = cors {
+		if let cors::AllowCors::Invalid = cors {
 			return Either::A(future::ok(
 				res::invalid_allow_origin()
 			));
