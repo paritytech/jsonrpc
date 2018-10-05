@@ -7,7 +7,7 @@ use tokio_service::Service as TokioService;
 use jsonrpc::{MetaIoHandler, Metadata, Middleware, NoopMiddleware};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use server_utils::{reactor, tokio_core, codecs};
+use server_utils::{reactor, tokio_core, codecs, SuspendableStream};
 use server_utils::tokio_io::AsyncRead;
 
 use dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
@@ -84,7 +84,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 		remote.remote().spawn(move |handle| {
 			let start = move || {
 				let listener = tokio_core::net::TcpListener::bind(&address, handle)?;
-				let connections = listener.incoming();
+				let connections = SuspendableStream::new(listener.incoming());
 				let remote = handle.remote().clone();
 				let server = connections.for_each(move |(socket, peer_addr)| {
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
@@ -148,7 +148,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 				Ok(server)
 			};
 
-			let stop = stop.map_err(|_| std::io::ErrorKind::Interrupted.into());
+			let stop = stop.map_err(|_| ());
 			match start() {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
