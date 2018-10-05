@@ -47,7 +47,10 @@ impl<S, I> Stream for SuspendableStream<S>
 					self.timeout = Some(timeout);
 					return Ok(Async::NotReady);
 				}
-				Err(_) => unreachable!("Polling a delay shouldn't yield any errors; qed")
+				Err(_) => {
+					// we've reached maximum number of concurrent timers; drop the timeout,
+					// and attempt to accept a new connection.
+				}
 			}
 		}
 
