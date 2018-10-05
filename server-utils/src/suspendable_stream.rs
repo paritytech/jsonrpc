@@ -26,7 +26,7 @@ impl<S> SuspendableStream<S> {
 		SuspendableStream {
 			stream,
 			next_delay: Duration::from_millis(20),
-			initial_delay: Duration::from_millis(20),
+			initial_delay: Duration::from_millis(10),
 			max_delay: Duration::from_secs(5),
 			timeout: None,
 		}
