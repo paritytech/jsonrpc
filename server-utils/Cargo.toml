@@ -15,6 +15,7 @@ log = "0.3"
 jsonrpc-core = { version = "8.0", path = "../core" }
 tokio-core = { version = "0.1" }
 tokio-io = { version = "0.1" }
+tokio-timer="0.2"
 bytes = "0.4"
 
 [badges]
