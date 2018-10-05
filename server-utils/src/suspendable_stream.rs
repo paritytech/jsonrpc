@@ -3,15 +3,21 @@ use tokio::timer::Delay;
 use std::io;
 use tokio::prelude::*;
 
-/// A wrapper type for tokio::Incoming that stops accepting new connections
-/// for a specified amount of time once `ulimit` is reached
+/// `Incoming` is a stream of incoming sockets
+/// Polling the stream may return a temporary io::Error (for instance if we can't open the connection because of "too many open files" limit)
+/// we use for_each combinator which:
+/// 1. Runs for every Ok(socket)
+/// 2. Stops on the FIRST Err()
+/// So any temporary io::Error will cause the entire server to terminate.
+/// This wrapper type for tokio::Incoming stops accepting new connections
+/// for a specified amount of time once an io::Error is encountered
 pub struct SuspendableStream<S> {
 	stream: S,
-	delay: Duration,
+	next_delay: Duration,
+	initial_delay: Duration,
+	max_delay: Duration,
 	timeout: Option<Delay>,
 }
-
-const MAX_DELAY_SECS: u64 = 5;
 
 impl<S> SuspendableStream<S> {
 	/// construct a new Suspendable stream, given tokio::Incoming
@@ -19,7 +25,9 @@ impl<S> SuspendableStream<S> {
 	pub fn new(stream: S) -> Self {
 		SuspendableStream {
 			stream,
-			delay: Duration::from_millis(20),
+			next_delay: Duration::from_millis(20),
+			initial_delay: Duration::from_millis(20),
+			max_delay: Duration::from_secs(5),
 			timeout: None,
 		}
 	}
@@ -32,12 +40,9 @@ impl<S, I> Stream for SuspendableStream<S>
 	type Error = ();
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, ()> {
-		let mut resumed = false;
 		if let Some(mut timeout) = self.timeout.take() {
 			match timeout.poll() {
-				Ok(Async::Ready(_)) => {
-					resumed = true;
-				}
+				Ok(Async::Ready(_)) => {}
 				Ok(Async::NotReady) => {
 					self.timeout = Some(timeout);
 					return Ok(Async::NotReady);
@@ -49,8 +54,8 @@ impl<S, I> Stream for SuspendableStream<S>
 		loop {
 			match self.stream.poll() {
 				Ok(item) => {
-					if self.delay.as_millis() > 20 {
-						self.delay = Duration::from_millis(20);
+					if self.next_delay > self.initial_delay {
+						self.next_delay = self.initial_delay;
 					}
 					return Ok(item)
 				},
@@ -59,20 +64,22 @@ impl<S, I> Stream for SuspendableStream<S>
 					continue
 				}
 				Err(err) => {
-					self.delay = if resumed && self.delay.as_secs() < MAX_DELAY_SECS {
-						self.delay * 2
+					self.next_delay = if self.next_delay < self.max_delay {
+						self.next_delay * 2
 					} else {
-						self.delay
+						self.next_delay
 					};
 					warn!("Error accepting connection: {}", err);
-					warn!("The server will stop accepting connections for {:?}", self.delay);
-					self.timeout = Some(Delay::new(Instant::now() + self.delay));
+					warn!("The server will stop accepting connections for {:?}", self.next_delay);
+					self.timeout = Some(Delay::new(Instant::now() + self.next_delay));
 				}
 			}
 		}
 	}
 }
 
+
+/// assert that the error was a connection error
 fn connection_error(e: &io::Error) -> bool {
 	e.kind() == io::ErrorKind::ConnectionRefused ||
 		e.kind() == io::ErrorKind::ConnectionAborted ||
