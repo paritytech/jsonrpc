@@ -61,12 +61,12 @@ impl<S, I> Stream for SuspendableStream<S>
 						self.next_delay = self.initial_delay;
 					}
 					return Ok(item)
-				},
-				Err(ref e) => if connection_error(e) {
-					warn!("Connection Error: {:?}", e);
-					continue
 				}
-				Err(err) => {
+				Err(ref err) => {
+					if connection_error(err) {
+						warn!("Connection Error: {:?}", err);
+						continue
+					}
 					self.next_delay = if self.next_delay < self.max_delay {
 						self.next_delay * 2
 					} else {
