@@ -40,30 +40,34 @@ impl<S, I> Stream for SuspendableStream<S>
 	type Error = ();
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, ()> {
-		if let Some(mut timeout) = self.timeout.take() {
-			match timeout.poll() {
-				Ok(Async::Ready(_)) => {}
-				Ok(Async::NotReady) => {
-					self.timeout = Some(timeout);
-					return Ok(Async::NotReady);
-				}
-				Err(_) => unreachable!("Polling a delay shouldn't yield any errors; qed")
-			}
-		}
-
 		loop {
+			if let Some(mut timeout) = self.timeout.take() {
+				match timeout.poll() {
+					Ok(Async::Ready(_)) => {}
+					Ok(Async::NotReady) => {
+						self.timeout = Some(timeout);
+						return Ok(Async::NotReady);
+					}
+					Err(err) => {
+						warn!("Timeout error {:?}", err);
+						task::current().notify();
+						return Ok(Async::NotReady);
+					}
+				}
+			}
+
 			match self.stream.poll() {
 				Ok(item) => {
 					if self.next_delay > self.initial_delay {
 						self.next_delay = self.initial_delay;
 					}
 					return Ok(item)
-				},
-				Err(ref e) => if connection_error(e) {
-					warn!("Connection Error: {:?}", e);
-					continue
 				}
-				Err(err) => {
+				Err(ref err) => {
+					if connection_error(err) {
+						warn!("Connection Error: {:?}", err);
+						continue
+					}
 					self.next_delay = if self.next_delay < self.max_delay {
 						self.next_delay * 2
 					} else {
