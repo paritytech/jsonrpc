@@ -40,21 +40,21 @@ impl<S, I> Stream for SuspendableStream<S>
 	type Error = ();
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, ()> {
-		if let Some(mut timeout) = self.timeout.take() {
-			match timeout.poll() {
-				Ok(Async::Ready(_)) => {}
-				Ok(Async::NotReady) => {
-					self.timeout = Some(timeout);
-					return Ok(Async::NotReady);
-				}
-				Err(_) => {
-					// we've reached maximum number of concurrent timers; drop the timeout,
-					// and attempt to accept a new connection.
+		loop {
+			if let Some(mut timeout) = self.timeout.take() {
+				match timeout.poll() {
+					Ok(Async::Ready(_)) => {}
+					Ok(Async::NotReady) => {
+						self.timeout = Some(timeout);
+						return Ok(Async::NotReady);
+					}
+					Err(_) => {
+						// we've reached maximum number of concurrent timers; drop the timeout,
+						// and attempt to accept a new connection.
+					}
 				}
 			}
-		}
 
-		loop {
 			match self.stream.poll() {
 				Ok(item) => {
 					if self.next_delay > self.initial_delay {
