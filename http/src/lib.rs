@@ -48,7 +48,7 @@ use server_utils::reactor::{Remote, UninitializedRemote};
 
 pub use server_utils::hosts::{Host, DomainsValidation};
 pub use server_utils::cors::{AccessControlAllowOrigin, Origin};
-pub use server_utils::tokio_core;
+pub use server_utils::{tokio_core, SuspendableStream};
 pub use handler::ServerHandler;
 pub use utils::{is_host_allowed, cors_header, CorsHeader};
 pub use response::Response;
@@ -438,23 +438,24 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		let handle = handle.clone();
 		bind_result.and_then(move |(listener, local_addr)| {
 			let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
-
+			
 			let http = {
-				let mut http = server::Http::new();
-				http.keep_alive(keep_alive);
-				http.sleep_on_errors(true);
-				http
+				let mut h = server::Http::new();
+				h.keep_alive(keep_alive);
+				h
 			};
-			listener.incoming()
+			let tcp_stream = SuspendableStream::new(listener.incoming());
+			tcp_stream
 				.for_each(move |(socket, addr)| {
-					http.bind_connection(&handle, socket, addr, ServerHandler::new(
+					let service = ServerHandler::new(
 						jsonrpc_handler.clone(),
 						cors_domains.clone(),
 						allowed_hosts.clone(),
 						request_middleware.clone(),
 						rest_api,
 						max_request_body_size,
-					));
+					);
+					http.bind_connection(&handle, socket, addr, service);
 					Ok(())
 				})
 				.map_err(|e| {
