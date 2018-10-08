@@ -48,9 +48,10 @@ impl<S, I> Stream for SuspendableStream<S>
 						self.timeout = Some(timeout);
 						return Ok(Async::NotReady);
 					}
-					Err(_) => {
-						// we've reached maximum number of concurrent timers; drop the timeout,
-						// and attempt to accept a new connection.
+					Err(err) => {
+						warn!("Timeout error {:?}", err);
+						task::current().notify();
+						return Ok(Async::NotReady);
 					}
 				}
 			}
