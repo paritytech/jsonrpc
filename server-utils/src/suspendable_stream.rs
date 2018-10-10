@@ -52,7 +52,7 @@ impl<S, I> Stream for SuspendableStream<S>
 						return Ok(Async::NotReady);
 					}
 					Err(err) => {
-						println!("Timeout error {:?}", err);
+						warn!("Timeout error {:?}", err);
 						task::current().notify();
 						return Ok(Async::NotReady);
 					}
@@ -145,7 +145,6 @@ mod test {
 			let mut stream_items = vec![];
 
 			let mut error_count = 1;
-			let duration = Duration::from_millis(20);
 			loop {
 				match stream.poll() {
 					Ok(Async::Ready(Some(item))) => {
@@ -159,7 +158,7 @@ mod test {
 					Err(_) => {
 						error_count *= 2;
 						assert_eq!(stream.timeout.is_some(), true);
-						assert_eq!(stream.next_delay, error_count * duration)
+						assert_eq!(stream.next_delay, Duration::from_millis(20 * error_count))
 					},
 				}
 			}
