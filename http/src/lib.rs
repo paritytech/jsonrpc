@@ -442,6 +442,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			let http = {
 				let mut h = server::Http::new();
 				h.keep_alive(keep_alive);
+				h.sleep_on_errors(true);
 				h
 			};
 			let tcp_stream = SuspendableStream::new(listener.incoming());
