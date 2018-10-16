@@ -212,11 +212,13 @@ fn peer_meta() {
 		b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"[..].to_owned()
 		);
 
+	println!("{}", result);
+
 	// contains random port, so just smoky comparing response length
 	assert_eq!(
-		59,
+		if cfg!(windows) { 58 } else { 59 },
 		result.len()
-		);
+	);
 }
 
 #[derive(Default)]
