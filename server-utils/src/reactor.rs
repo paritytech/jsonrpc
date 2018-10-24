@@ -62,6 +62,14 @@ impl Executor {
 		self.executor().spawn(future)
 	}
 
+	pub fn close_handle(&mut self) -> Option<futures::Complete<()>> {
+		if let Executor::Spawned(ref mut eloop) = self {
+			eloop.close_handle()
+		} else {
+			None
+		}
+	}
+
 	/// Closes underlying event loop (if any!).
 	pub fn close(self) {
 		if let Executor::Spawned(eloop) = self {
@@ -162,5 +170,9 @@ impl RpcEventLoop {
 		let _ = self.close.take().expect("Close is always set before self is consumed.").send(()).map_err(|e| {
 			warn!("Event Loop is already finished. {:?}", e);
 		});
+	}
+
+	pub fn close_handle(&mut self) -> Option<futures::Complete<()>>{
+		self.close.take()
 	}
 }

@@ -40,7 +40,7 @@ mod utils;
 mod tests;
 
 use std::io;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::net::SocketAddr;
 use std::thread;
 
@@ -430,7 +430,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		Ok(Server {
 			address: local_addr?,
 			executor: Some(executors),
-			close: Some(close),
+			close: Arc::new(Mutex::new(Some(close))),
 		})
 	}
 }
@@ -554,7 +554,7 @@ fn configure_port(_reuse: bool, _tcp: &net2::TcpBuilder) -> io::Result<()> {
 pub struct Server {
 	address: SocketAddr,
 	executor: Option<Vec<Executor>>,
-	close: Option<Vec<oneshot::Sender<()>>>,
+	close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
 }
 
 const PROOF: &'static str = "Server is always Some until self is consumed.";
@@ -566,13 +566,7 @@ impl Server {
 
 	/// Closes the server.
 	pub fn close(mut self) {
-		for close in self.close.take().expect(PROOF) {
-			let _ = close.send(());
-		}
-
-		for executor in self.executor.take().expect(PROOF) {
-			executor.close();
-		}
+		self.close_handle().close();
 	}
 
 	/// Will block, waiting for the server to finish.
@@ -581,12 +575,46 @@ impl Server {
 			executor.wait();
 		}
 	}
+
+	/// Returns a handle to the server that can be used to close it while another thread is
+    /// blocking in `wait`.
+    pub fn close_handle(&mut self) -> CloseHandle {
+		let executor_close: Option<Vec<_>> = self.executor.as_mut().map(|executors| {
+			executors.iter_mut().map(|executor| executor.close_handle()).collect()
+		});
+
+        CloseHandle {
+            executor_close,
+            close: self.close.clone(),
+        }
+    }
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.executor.take().map(|executors| {
-			for executor in executors { executor.close(); }
-		});
+		self.close_handle().close();
 	}
+}
+
+/// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
+pub struct CloseHandle {
+    close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
+    executor_close: Option<Vec<Option<futures::Complete<()>>>>,
+}
+
+impl CloseHandle {
+    /// Closes the `Server`.
+    pub fn close(mut self) {
+		self.close.lock().unwrap().take().map(|close_vector| {
+			for close in close_vector {
+				let _ = close.send(());
+			}
+		});
+
+        self.executor_close.take().map(|executor_close_vector| {
+			for e in executor_close_vector {
+            	e.map(|v| v.send(()));
+        	}
+		});
+    }
 }

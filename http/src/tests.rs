@@ -3,6 +3,7 @@ extern crate jsonrpc_core;
 use std::str::Lines;
 use std::net::TcpStream;
 use std::io::{Read, Write};
+use std::time::Duration;
 use self::jsonrpc_core::{IoHandler, Params, Value, Error, ErrorCode};
 
 use self::jsonrpc_core::futures::{self, Future};
@@ -1165,4 +1166,19 @@ fn world_5() -> String {
 }
 fn world_batch() -> String {
  "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
+}
+
+#[test]
+fn close_handle_makes_wait_return() {
+	let mut server = serve(id);
+	let close_handle = server.close_handle();
+
+	let (tx, rx) = mpsc::channel();
+	thread::spawn(move || {
+		tx.send(server.wait()).unwrap();
+	});
+	thread::sleep(Duration::from_secs(1));
+	close_handle.close();
+
+	rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
 }
