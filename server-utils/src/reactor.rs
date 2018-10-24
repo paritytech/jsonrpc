@@ -62,6 +62,7 @@ impl Executor {
 		self.executor().spawn(future)
 	}
 
+	/// Returns a handle to close the underlying event loop
 	pub fn close_handle(&mut self) -> Option<futures::Complete<()>> {
 		if let Executor::Spawned(ref mut eloop) = self {
 			eloop.close_handle()
@@ -172,6 +173,8 @@ impl RpcEventLoop {
 		});
 	}
 
+	/// Returns the close signal that can be used to close the event loop even while
+	/// another thread is blocked on the event loop in "wait"
 	pub fn close_handle(&mut self) -> Option<futures::Complete<()>>{
 		self.close.take()
 	}

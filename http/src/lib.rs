@@ -577,17 +577,17 @@ impl Server {
 	}
 
 	/// Returns a handle to the server that can be used to close it while another thread is
-    /// blocking in `wait`.
-    pub fn close_handle(&mut self) -> CloseHandle {
+	/// blocking in `wait`.
+	pub fn close_handle(&mut self) -> CloseHandle {
 		let executor_close: Option<Vec<_>> = self.executor.as_mut().map(|executors| {
 			executors.iter_mut().map(|executor| executor.close_handle()).collect()
 		});
 
-        CloseHandle {
-            executor_close,
-            close: self.close.clone(),
-        }
-    }
+		CloseHandle {
+			executor_close,
+			close: self.close.clone(),
+		}
+	}
 }
 
 impl Drop for Server {
@@ -598,8 +598,8 @@ impl Drop for Server {
 
 /// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
 pub struct CloseHandle {
-    close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
-    executor_close: Option<Vec<Option<futures::Complete<()>>>>,
+	close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
+	executor_close: Option<Vec<Option<futures::Complete<()>>>>,
 }
 
 impl CloseHandle {
