@@ -580,11 +580,14 @@ impl Server {
 	/// blocking in `wait`.
 	pub fn close_handle(&mut self) -> CloseHandle {
 		let executor_close: Option<Vec<_>> = self.executor.as_mut().map(|executors| {
-			executors.iter_mut().map(|executor| executor.close_handle()).collect()
+			executors
+				.iter_mut()
+				.map(|executor| executor.close_handle())
+				.collect()
 		});
 
 		CloseHandle {
-			executor_close,
+			executor_close: Arc::new(Mutex::new(executor_close)),
 			close: self.close.clone(),
 		}
 	}
@@ -597,24 +600,25 @@ impl Drop for Server {
 }
 
 /// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
+#[derive(Clone)]
 pub struct CloseHandle {
 	close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
-	executor_close: Option<Vec<Option<futures::Complete<()>>>>,
+	executor_close: Arc<Mutex<Option<Vec<Option<futures::Complete<()>>>>>>,
 }
 
 impl CloseHandle {
-    /// Closes the `Server`.
-    pub fn close(mut self) {
+	/// Closes the `Server`.
+	pub fn close(self) {
 		self.close.lock().unwrap().take().map(|close_vector| {
 			for close in close_vector {
 				let _ = close.send(());
 			}
 		});
 
-        self.executor_close.take().map(|executor_close_vector| {
+		self.executor_close.lock().unwrap().take().map(|executor_close_vector| {
 			for e in executor_close_vector {
-            	e.map(|v| v.send(()));
-        	}
+				e.map(|v| v.send(()));
+			}
 		});
-    }
+	}
 }
