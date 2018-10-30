@@ -56,6 +56,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
 	security_attributes: SecurityAttributes,
+	client_buffer_size: usize,
 }
 
 impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
@@ -81,6 +82,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
 			security_attributes: SecurityAttributes::empty(),
+			client_buffer_size: 5,
 		}
 	}
 
@@ -117,6 +119,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Sets how many concurrent requests per client can be processed at any one time. Set to 5 by default.
+	pub fn set_client_buffer_size(mut self, buffer_size: usize) -> Self {
+		self.client_buffer_size = buffer_size;
+		self
+	}
+
 	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let executor = self.executor.initialize()?;
@@ -130,6 +138,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let (start_signal, start_receiver) = oneshot::channel();
 		let (wait_signal, wait_receiver) = oneshot::channel();
 		let security_attributes = self.security_attributes;
+		let client_buffer_size = self.client_buffer_size;
 
 		executor.spawn(future::lazy(move || {
 			let mut endpoint = Endpoint::new(endpoint_addr);
@@ -174,27 +183,26 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 						outgoing_separator.clone(),
 					),
 				).split();
-				let responses = reader.and_then(move |req| {
-					service.call(req).then(move |response| match response {
-						Err(e) => {
-							warn!(target: "ipc", "Error while processing request: {:?}", e);
-							future::ok(None)
-						},
-						Ok(None) => {
-							future::ok(None)
-						},
-						Ok(Some(response_data)) => {
-							trace!(target: "ipc", "Sent response: {}", &response_data);
-							future::ok(Some(response_data))
-						}
+				let responses = reader
+					.map(move |req| {
+						service.call(req)
+							.then(|result| {
+								match result {
+									Err(_) => {
+										future::ok(None)
+									}
+									Ok(some_result) => future::ok(some_result),
+								}
+							})
+							.map_err(|_:()| std::io::ErrorKind::Other.into())
 					})
-				})
-				.filter_map(|x| x)
-				// we use `select_with_weak` here, instead of `select`, to close the stream
-				// as soon as the ipc pipe is closed
-				.select_with_weak(receiver.map_err(|e| {
-					warn!(target: "ipc", "Notification error: {:?}", e);
-					std::io::ErrorKind::Other.into()
+					.buffer_unordered(client_buffer_size)
+					.filter_map(|x| x)
+					// we use `select_with_weak` here, instead of `select`, to close the stream
+					// as soon as the ipc pipe is closed
+					.select_with_weak(receiver.map_err(|e| {
+						warn!(target: "ipc", "Notification error: {:?}", e);
+						std::io::ErrorKind::Other.into()
 				}));
 
 				let writer = writer.send_all(responses).then(move |_| {

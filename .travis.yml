@@ -10,9 +10,16 @@ cache: cargo
 matrix:
   fast_finish: false
   include:
-  - rust: stable
-  - rust: beta
-  - rust: nightly
+  - os: linux
+    rust: stable
+  - os: linux
+    rust: beta
+  - os: linux
+    rust: nightly
+  - os: osx
+    rust: stable
+  - os: windows
+    rust: stable
   allow_failures:
   - rust: nightly
 
@@ -21,6 +28,7 @@ script:
   - cargo test --all
 
 after_success: |
+  [ $TRAVIS_OS_NAME == 'linux' ] &&
   [ $TRAVIS_BRANCH = master ] &&
   [ $TRAVIS_PULL_REQUEST = false ] &&
   [ $TRAVIS_RUST_VERSION = stable ] &&
