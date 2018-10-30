@@ -179,7 +179,7 @@ fn should_handle_health_endpoint_failure() {
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 503 Service Unavailable".to_owned());
-	assert_eq!(response.body, "Service Unavailable: {\"code\":-34,\"message\":\"Server error\"}\n");
+	assert_eq!(response.body, "{\"code\":-34,\"message\":\"Server error\"}\n");
 }
 
 #[test]
