@@ -42,7 +42,7 @@ impl Response {
 		Response {
 			code: StatusCode::SERVICE_UNAVAILABLE,
 			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
-			content: format!("Service Unavailable: {}", msg.into()),
+			content: format!("{}", msg.into()),
 		}
 	}
 
