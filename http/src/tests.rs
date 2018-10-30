@@ -1185,8 +1185,8 @@ fn should_close_connection_without_keep_alive() {
 	);
 
 	// then
-	assert!(!response.headers.contains("connection:"),
-		"Header present in {}", response.headers);
+	assert!(response.headers.contains("connection: close"),
+		"Header missing in {}", response.headers);
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
 }

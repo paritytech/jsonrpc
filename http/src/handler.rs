@@ -102,7 +102,7 @@ impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
 					health_api: self.health_api.clone(),
 					max_request_body_size: self.max_request_body_size,
 					// initial value, overwritten when reading client headers
-					keep_alive: None,
+					keep_alive: true,
 				})
 			}
 		}
@@ -214,7 +214,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
-	keep_alive: Option<bool>,
+	keep_alive: bool,
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
@@ -510,7 +510,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		cors_max_age: Option<u32>,
 		cors_allow_origin: Option<HeaderValue>,
 		cors_allow_headers: Option<Vec<HeaderValue>>,
-		keep_alive: Option<bool>,
+		keep_alive: bool,
 	) {
 		let as_header = |m: Method| m.as_str().parse().expect("`Method` will always parse; qed");
 		let concat = |headers: &[HeaderValue]| {
@@ -550,12 +550,8 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			}
 		}
 
-		if let Some(keep_alive) = keep_alive {
-			headers.append(header::CONNECTION, if keep_alive {
-				HeaderValue::from_static("keep-alive")
-			} else {
-				HeaderValue::from_static("close")
-			});
+		if !keep_alive {
+			headers.append(header::CONNECTION, HeaderValue::from_static("close"));
 		}
 	}
 
