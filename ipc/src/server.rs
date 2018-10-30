@@ -6,7 +6,8 @@ use std::sync::Arc;
 use tokio_service::{self, Service as TokioService};
 use jsonrpc::futures::{future, Future, Stream, Sink};
 use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{Metadata, MetaIoHandler, Middleware, NoopMiddleware};
+use jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
+
 use server_utils::{
 	tokio_codec::Framed,
 	tokio::{self, runtime::TaskExecutor, reactor::Handle},
@@ -20,7 +21,7 @@ use parity_tokio_ipc::Endpoint;
 pub use parity_tokio_ipc::SecurityAttributes;
 
 /// IPC server session
-pub struct Service<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta: M,
 }
@@ -36,30 +37,18 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 	type Request = String;
 	type Response = Option<String>;
 
-	type Error = std::io::Error;
+	type Error = ();
 
-	type Future = Box<Future<Item=Self::Response,Error=Self::Error> + Send>;
+	type Future = FutureResult<S::Future, S::CallFuture>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
 		trace!(target: "ipc", "Received request: {}", req);
-		let fut = self.handler
-			.handle_request(&req, self.meta.clone())
-			.then(|result| {
-				match result {
-					Err(_) => {
-						future::ok(None)
-					}
-					Ok(some_result) => future::ok(some_result),
-				}
-			})
-			.map_err(|_:()| std::io::ErrorKind::Other.into());
-
-		Box::new(fut)
+		self.handler.handle_request(&req, self.meta.clone())
 	}
 }
 
 /// IPC server builder
-pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	meta_extractor: Arc<MetaExtractor<M>>,
 	session_stats: Option<Arc<session::SessionStats>>,
@@ -197,6 +186,15 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				let responses = reader
 					.map(move |req| {
 						service.call(req)
+							.then(|result| {
+								match result {
+									Err(_) => {
+										future::ok(None)
+									}
+									Ok(some_result) => future::ok(some_result),
+								}
+							})
+							.map_err(|_:()| std::io::ErrorKind::Other.into())
 					})
 					.buffer_unordered(client_buffer_size)
 					.filter_map(|x| x)

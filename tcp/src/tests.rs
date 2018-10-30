@@ -215,9 +215,8 @@ fn peer_meta() {
 	println!("{}", result);
 
 	// contains random port, so just smoky comparing response length
-	assert_eq!(
-		if cfg!(windows) { 58 } else { 59 },
-		result.len()
+	assert!(
+		result.len() == 58 || result.len() == 59
 	);
 }
 
