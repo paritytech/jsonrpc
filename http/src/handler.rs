@@ -25,6 +25,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
+	keep_alive: bool,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
@@ -39,6 +40,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		rest_api: RestApi,
 		health_api: Option<(String, String)>,
 		max_request_body_size: usize,
+		keep_alive: bool,
 	) -> Self {
 		ServerHandler {
 			jsonrpc_handler,
@@ -50,6 +52,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 			rest_api,
 			health_api,
 			max_request_body_size,
+			keep_alive,
 		}
 	}
 }
@@ -89,6 +92,7 @@ impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
 						cors_domains: self.cors_domains.clone(),
 						cors_headers: self.cors_allowed_headers.clone(),
 						continue_on_invalid_cors: should_continue_on_invalid_cors,
+						keep_alive: self.keep_alive,
 					},
 					is_options: false,
 					cors_max_age: self.cors_max_age,
@@ -97,6 +101,8 @@ impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
 					rest_api: self.rest_api,
 					health_api: self.health_api.clone(),
 					max_request_body_size: self.max_request_body_size,
+					// initial value, overwritten when reading client headers
+					keep_alive: true,
 				})
 			}
 		}
@@ -159,6 +165,7 @@ enum RpcHandlerState<M, F, G> where
 		cors_domains: CorsDomains,
 		cors_headers: cors::AccessControlAllowHeaders,
 		continue_on_invalid_cors: bool,
+		keep_alive: bool,
 	},
 	ReadingBody {
 		body: hyper::Body,
@@ -210,6 +217,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
+	keep_alive: bool,
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
@@ -218,10 +226,13 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let new_state = match mem::replace(&mut self.state, RpcHandlerState::Done) {
-			RpcHandlerState::ReadingHeaders { request, cors_domains, cors_headers, continue_on_invalid_cors, } => {
+			RpcHandlerState::ReadingHeaders {
+				request, cors_domains, cors_headers, continue_on_invalid_cors, keep_alive,
+			} => {
 				// Read cors header
 				self.cors_allow_origin = utils::cors_allow_origin(&request, &cors_domains);
 				self.cors_allow_headers = utils::cors_allow_headers(&request, &cors_headers);
+				self.keep_alive = utils::keep_alive(&request, keep_alive);
 				self.is_options = *request.method() == Method::OPTIONS;
 				// Read other headers
 				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
@@ -288,6 +299,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 					self.cors_max_age,
 					cors_allow_origin.into(),
 					cors_allow_headers.into(),
+					self.keep_alive,
 				);
 				Ok(Async::Ready(response))
 			},
@@ -502,6 +514,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		cors_max_age: Option<u32>,
 		cors_allow_origin: Option<HeaderValue>,
 		cors_allow_headers: Option<Vec<HeaderValue>>,
+		keep_alive: bool,
 	) {
 		let as_header = |m: Method| m.as_str().parse().expect("`Method` will always parse; qed");
 		let concat = |headers: &[HeaderValue]| {
@@ -539,6 +552,10 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 					headers.append(header::ACCESS_CONTROL_ALLOW_HEADERS, concat(&cors_allow_headers));
 				}
 			}
+		}
+
+		if !keep_alive {
+			headers.append(header::CONNECTION, HeaderValue::from_static("close"));
 		}
 	}
 
