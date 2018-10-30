@@ -35,7 +35,7 @@ pub extern crate serde_json;
 mod calls;
 mod io;
 
-mod middleware;
+pub mod middleware;
 pub mod types;
 
 /// A `Future` trait object.

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use hyper::{self, service::Service, Body, Method};
 use hyper::header::{self, HeaderMap, HeaderValue};
 
-use jsonrpc::{self as core, FutureResult, Metadata, Middleware, NoopMiddleware, FutureRpcResult};
+use jsonrpc::{self as core, middleware, FutureResult, Metadata, Middleware};
 use jsonrpc::futures::{Future, Poll, Async, Stream, future};
 use jsonrpc::serde_json;
 use response::Response;
@@ -15,7 +15,7 @@ use server_utils::cors;
 use {utils, RequestMiddleware, RequestMiddlewareAction, CorsDomains, AllowedHosts, RestApi};
 
 /// jsonrpc http request handler.
-pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = NoopMiddleware> {
+pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	jsonrpc_handler: Rpc<M, S>,
 	allowed_hosts: AllowedHosts,
 	cors_domains: CorsDomains,
@@ -124,17 +124,19 @@ impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
 	}
 }
 
-enum RpcPollState<M, F> where
+enum RpcPollState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
+	G: Future<Item = Option<core::Output>, Error = ()>,
 {
-	Ready(RpcHandlerState<M, F>),
-	NotReady(RpcHandlerState<M, F>),
+	Ready(RpcHandlerState<M, F, G>),
+	NotReady(RpcHandlerState<M, F, G>),
 }
 
-impl<M, F> RpcPollState<M, F> where
+impl<M, F, G> RpcPollState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
+	G: Future<Item = Option<core::Output>, Error = ()>,
 {
-	fn decompose(self) -> (RpcHandlerState<M, F>, bool) {
+	fn decompose(self) -> (RpcHandlerState<M, F, G>, bool) {
 		use self::RpcPollState::*;
 		match self {
 			Ready(handler) => (handler, true),
@@ -143,14 +145,14 @@ impl<M, F> RpcPollState<M, F> where
 	}
 }
 
-type FutureResponse<F> = future::Map<
-	future::Either<future::FutureResult<Option<core::Response>, ()>, FutureRpcResult<F>>,
+type FutureResponse<F, G> = future::Map<
+	future::Either<future::FutureResult<Option<core::Response>, ()>, core::FutureRpcResult<F, G>>,
 	fn(Option<core::Response>) -> Response,
 >;
 
-
-enum RpcHandlerState<M, F> where
+enum RpcHandlerState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
+	G: Future<Item = Option<core::Output>, Error = ()>,
 {
 	ReadingHeaders {
 		request: hyper::Request<Body>,
@@ -173,13 +175,14 @@ enum RpcHandlerState<M, F> where
 		metadata: M,
 	},
 	Writing(Response),
-	WaitingForResponse(FutureResponse<F>),
-	Waiting(FutureResult<F>),
+	Waiting(FutureResult<F, G>),
+	WaitingForResponse(FutureResponse<F, G>),
 	Done,
 }
 
-impl<M, F> fmt::Debug for RpcHandlerState<M, F> where
+impl<M, F, G> fmt::Debug for RpcHandlerState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
+	G: Future<Item = Option<core::Output>, Error = ()>,
 {
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		use self::RpcHandlerState::*;
@@ -199,7 +202,7 @@ impl<M, F> fmt::Debug for RpcHandlerState<M, F> where
 
 pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	jsonrpc_handler: Rpc<M, S>,
-	state: RpcHandlerState<M, S::Future>,
+	state: RpcHandlerState<M, S::Future, S::CallFuture>,
 	is_options: bool,
 	cors_allow_origin: cors::AllowCors<header::HeaderValue>,
 	cors_allow_headers: cors::AllowCors<Vec<header::HeaderValue>>,
@@ -319,10 +322,11 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		&self,
 		request: hyper::Request<Body>,
 		continue_on_invalid_cors: bool,
-	) -> RpcHandlerState<M, S::Future> {
+	) -> RpcHandlerState<M, S::Future, S::CallFuture> {
 		if self.cors_allow_origin == cors::AllowCors::Invalid && !continue_on_invalid_cors {
 			return RpcHandlerState::Writing(Response::invalid_allow_origin());
 		}
+
 		if self.cors_allow_headers == cors::AllowCors::Invalid && !continue_on_invalid_cors {
 			return RpcHandlerState::Writing(Response::invalid_allow_headers());
 		}
@@ -377,7 +381,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		&self,
 		method: String,
 		metadata: M,
-	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
+	) -> Result<RpcPollState<M, S::Future, S::CallFuture>, hyper::Error> {
 		use self::core::types::{Call, MethodCall, Version, Params, Request, Id, Output, Success, Failure};
 
 		// Create a request
@@ -412,7 +416,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		&self,
 		uri: hyper::Uri,
 		metadata: M,
-	) -> Result<RpcPollState<M, S::Future>, hyper::Error> {
+	) -> Result<RpcPollState<M, S::Future, S::CallFuture>, hyper::Error> {
 		use self::core::types::{Call, MethodCall, Version, Params, Request, Id, Value};
 
 		// skip the initial /
@@ -450,7 +454,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		mut request: Vec<u8>,
 		uri: Option<hyper::Uri>,
 		metadata: M,
-	) -> Result<RpcPollState<M, S::Future>, BodyError> {
+	) -> Result<RpcPollState<M, S::Future, S::CallFuture>, BodyError> {
 		loop {
 			match body.poll()? {
 				Async::Ready(Some(chunk)) => {
