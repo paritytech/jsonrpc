@@ -1138,6 +1138,88 @@ fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 	assert_eq!(&response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n");
 }
 
+#[test]
+fn should_return_connection_header() {
+	// given
+	let server = serve(id);
+	let addr = server.address().clone();
+
+	// when
+	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert!(response.headers.contains("connection: close"),
+		"Headers missing in {}", response.headers);
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world_batch());
+}
+
+#[test]
+fn should_close_connection_without_keep_alive() {
+	// given
+	let server = serve(|builder| builder.keep_alive(false));
+	let addr = server.address().clone();
+
+	// when
+	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert!(!response.headers.contains("connection:"),
+		"Header present in {}", response.headers);
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world_batch());
+}
+
+#[test]
+fn should_respond_with_close_even_if_client_wants_to_keep_alive() {
+	// given
+	let server = serve(|builder| builder.keep_alive(false));
+	let addr = server.address().clone();
+
+	// when
+	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
+	let response = request(server,
+		&format!("\
+			POST / HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: keep-alive\r\n\
+			Content-Type: application/json\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert!(response.headers.contains("connection: close"),
+		"Headers missing in {}", response.headers);
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world_batch());
+}
+
+
+
 fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
 }

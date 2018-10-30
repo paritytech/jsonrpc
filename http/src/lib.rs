@@ -517,6 +517,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						rest_api,
 						health_api.clone(),
 						max_request_body_size,
+						keep_alive,
 					);
 					tokio::spawn(http.serve_connection(socket, service)
 						.map_err(|e| error!("Error serving connection: {:?}", e)));

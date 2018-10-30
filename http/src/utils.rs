@@ -52,3 +52,18 @@ pub fn cors_allow_headers(
 			.unwrap_or_else(|_| header::HeaderValue::from_static("unknown"))
 	)
 }
+
+/// Returns an optional value of `Connection` header that should be included in the response.
+/// The second parameter defines if server is configured with keep-alive option.
+/// Return value of `Some(true)` indicates that `Connection: keep-alive` should be included,
+/// `Some(false)` indicates `Connection: close` and `None` doesn't include the header at all.
+pub fn keep_alive(
+	request: &hyper::Request<hyper::Body>,
+	keep_alive: bool,
+) -> Option<bool> {
+	read_header(request, "connection")
+		.map(|val| match (keep_alive, val) {
+			(true, "keep-alive") => true,
+			_ => false,
+		})
+}
