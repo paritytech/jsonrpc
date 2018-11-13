@@ -17,7 +17,7 @@ parity-tokio-ipc = "0.1"
 parking_lot = "0.6"
 
 [dev-dependencies]
-env_logger = "0.5"
+env_logger = "0.6"
 lazy_static = "1.0"
 
 [target.'cfg(not(windows))'.dev-dependencies]

@@ -17,7 +17,7 @@ jsonrpc-server-utils = { version = "9.0", path = "../server-utils" }
 
 [dev-dependencies]
 lazy_static = "1.0"
-env_logger = "0.5"
+env_logger = "0.6"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

@@ -20,7 +20,7 @@ tokio-proto = { git = "https://github.com/tomusdrw/tokio-proto" }
 tokio-service = "0.1"
 
 [dev-dependencies]
-env_logger = "0.5"
+env_logger = "0.6"
 reqwest = "0.6"
 
 [badges]
