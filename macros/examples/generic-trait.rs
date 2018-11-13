@@ -17,7 +17,7 @@ build_rpc_trait! {
 
 		/// Performs asynchronous operation
 		#[rpc(name = "beFancy")]
-		fn call(&self, One) -> FutureResult<(One, u64), Error>;
+		fn call(&self, One) -> FutureResult<(One, Two), Error>;
 	}
 }
 
@@ -33,8 +33,8 @@ impl Rpc<u64, String> for RpcImpl {
 		Ok(())
 	}
 
-	fn call(&self, num: u64) -> FutureResult<(u64, u64), Error> {
-		::future::finished((num + 999, num))
+	fn call(&self, num: u64) -> FutureResult<(u64, String), Error> {
+		::future::finished((num + 999, "hello".into()))
 	}
 }
 

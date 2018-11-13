@@ -71,17 +71,6 @@ macro_rules! metadata {
 }
 
 #[macro_export]
-macro_rules! print_generics {
-	(
-		$(
-			$generics:ident
-		),*
-	) => {
-		$( $generics: Send + Sync + 'static ),*
-	};
-}
-
-#[macro_export]
 macro_rules! build_rpc_trait {
 	(
 		$(#[$t_attr: meta])*
