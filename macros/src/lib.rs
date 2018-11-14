@@ -53,6 +53,8 @@ pub extern crate jsonrpc_core;
 pub extern crate jsonrpc_pubsub;
 extern crate serde;
 
+#[macro_use] extern crate log;
+
 mod auto_args;
 mod delegates;
 mod util;

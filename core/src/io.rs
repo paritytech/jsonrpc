@@ -242,6 +242,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	pub fn handle_call(&self, call: Call, meta: T) -> FutureRpcOutput<S::CallFuture> {
 		use self::future::Either::{A, B};
 
+		trace!(target: "rpc", "handle_call");
+
 		self.middleware.on_call(call, meta, |call, meta| match call {
 			Call::MethodCall(method) => {
 				let params = method.params;

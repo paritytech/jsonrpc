@@ -33,20 +33,24 @@ impl Session {
 	/// Creates new session given transport raw send capabilities.
 	/// Session should be created as part of metadata, `sender` should be returned by transport.
 	pub fn new(sender: TransportSender) -> Self {
-		Session {
+		let s = Session {
 			active_subscriptions: Default::default(),
 			transport: sender,
 			on_drop: Default::default(),
-		}
+		};
+		trace!(target: "pubsub", "creating a new session: {:?}", s);
+		s
 	}
 
 	/// Returns transport write stream
 	pub fn sender(&self) -> TransportSender {
+		trace!(target: "pubsub", "clone sender");
 		self.transport.clone()
 	}
 
 	/// Adds a function to call when session is dropped.
 	pub fn on_drop<F: FnOnce() + Send + 'static>(&self, on_drop: F) {
+		trace!(target: "pubsub", "drop function call");
 		let mut func = Some(on_drop);
 		self.on_drop.lock().push(Box::new(move || {
 			if let Some(f) = func.take() {
@@ -59,6 +63,7 @@ impl Session {
 	fn add_subscription<F>(&self, name: &str, id: &SubscriptionId, remove: F) where
 		F: Fn(SubscriptionId) + Send + 'static,
 	{
+		trace!(target: "pubsub", "add_subscription: {} id: {:?}", name, id);
 		let ret = self.active_subscriptions.lock().insert((id.clone(), name.into()), Box::new(remove));
 		if let Some(remove) = ret {
 			warn!("SubscriptionId collision. Unsubscribing previous client.");
@@ -68,12 +73,14 @@ impl Session {
 
 	/// Removes existing subscription.
 	fn remove_subscription(&self, name: &str, id: &SubscriptionId) {
+		trace!(target: "pubsub", "remove_subscription: {} id: {:?}", name, id);
 		self.active_subscriptions.lock().remove(&(id.clone(), name.into()));
 	}
 }
 
 impl Drop for Session {
 	fn drop(&mut self) {
+		trace!(target: "pubsub", "drop session {:?}", &self);
 		let mut active = self.active_subscriptions.lock();
 		for (id, remove) in active.drain() {
 			remove(id.0)
@@ -83,6 +90,7 @@ impl Drop for Session {
 		for mut on_drop in on_drop.drain(..) {
 			on_drop();
 		}
+		trace!(target: "pubsub", "after drop {:?}", &self);
 	}
 }
 
@@ -97,6 +105,7 @@ impl Sink {
 	/// Sends a notification to a client.
 	pub fn notify(&self, val: core::Params) -> SinkResult {
 		let val = self.params_to_string(val);
+		trace!(target: "pubsub", "send notify: {:?}", val);
 		self.transport.clone().send(val.0)
 	}
 
@@ -119,6 +128,7 @@ impl FuturesSink for Sink {
 
 	fn start_send(&mut self, item: Self::SinkItem) -> futures::StartSend<Self::SinkItem, Self::SinkError> {
 		let (val, params) = self.params_to_string(item);
+		trace!(target: "pubsub", "start_send: {:?}", val);
 		self.transport.start_send(val).map(|result| match result {
 			futures::AsyncSink::Ready => futures::AsyncSink::Ready,
 			futures::AsyncSink::NotReady(_) => futures::AsyncSink::NotReady(params),
@@ -130,6 +140,7 @@ impl FuturesSink for Sink {
 	}
 
 	fn close(&mut self) -> futures::Poll<(), Self::SinkError> {
+		trace!(target: "pubsub", "close transport");
 		self.transport.close()
 	}
 }
@@ -167,7 +178,11 @@ impl Subscriber {
 	/// Consumes `Subscriber` and assigns unique id to a requestor.
 	/// Returns `Err` if request has already terminated.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink, ()> {
-		self.sender.send(Ok(id)).map_err(|_| ())?;
+		trace!(target: "pubsub", "assign_id: {:?}", id);
+		if let Err(e) = self.sender.send(Ok(id)) {
+			trace!(target: "pubsub", "assign_id error: {:?}", e);
+			return Err(());
+		}
 
 		Ok(Sink {
 			notification: self.notification,
@@ -178,6 +193,7 @@ impl Subscriber {
 	/// Rejects this subscription request with given error.
 	/// Returns `Err` if request has already terminated.
 	pub fn reject(self, error: core::Error) -> Result<(), ()> {
+		trace!(target: "pubsub", "reject: {:?}", error);
 		self.sender.send(Err(error)).map_err(|_| ())?;
 		Ok(())
 	}

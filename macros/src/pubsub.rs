@@ -68,6 +68,7 @@ pub struct Sink<T, E = core::Error> {
 impl<T: serde::Serialize, E: serde::Serialize> Sink<T, E> {
 	/// Sends a notification to the subscriber.
 	pub fn notify(&self, val: Result<T, E>) -> pubsub::SinkResult {
+		trace!(target: "pubsub", "notify subscriber");
 		self.sink.notify(self.val_to_params(val))
 	}
 
