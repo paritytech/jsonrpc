@@ -13,20 +13,23 @@ use proc_macro2::Span;
 use error::Result;
 
 /// Arguments given to the `rpc` attribute macro
-//struct RpcArgs {
-//	name: String,
-//}
+struct RpcArgs {
+	name: String,
+	aliases: Vec<String>,
+}
 
 //impl RpcArgs {
-//	pub fn from_attribute_args(attr_args: syn::AttributeArgs) -> Result<RpcArgs> {
-//		let name =
-//			if let Some(syn::NestedMeta::Meta(syn::Meta::Word(ident))) = attr_args.get(0) {
-//				Ok(ident.to_string())
-//			} else {
-//				Err("Expected `name` argument in rpc attribute".to_owned())
-//			}?;
+//	pub fn from_attribute(attr: syn::Attribute) -> Result<RpcArgs> {
+//		let meta = attr.parse_meta().map_error()?;
+//
+////			if let Some(syn::NestedMeta::Meta(syn::Meta::Word(ident))) = attr_args.get(0) {
+////				Ok(ident.to_string())
+////			} else {
+////				Err("Expected `name` argument in rpc attribute".to_owned())
+////			}?;
 //		Ok(RpcArgs {
 //			name,
+//			aliases,
 //		})
 //	}
 //}
@@ -57,52 +60,103 @@ pub fn rpc_api(args: proc_macro::TokenStream, input: proc_macro::TokenStream) ->
 }
 
 fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
-
-	let item_trait = match input {
+	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		_ => return Err("rpc_api trait only works with trait declarations".to_owned())
 	};
 	// todo: [AJ] extract this and other to struct
-	let name = item_trait.ident;
+	let name = rpc_trait.ident.clone();
 
 	let mod_name = format!("rpc_impl_{}", name.to_string());
 	let mod_name_ident = syn::Ident::new(&mod_name, Span::call_site());
 
-	let rpc_trait_toks = generate_rpc_wrapper(&name);
+	let rpc_methods = rpc_trait_methods(&rpc_trait.items);
+	let methods : Vec<proc_macro2::TokenStream> = rpc_methods
+		.iter()
+		.map(|(_, method)| quote! { #method }) // todo: [AJ] impl model to to_tokens?
+		.collect();
+	let to_delegate = generate_to_delegate_method(&rpc_methods);
 
 	Ok(quote! {
 		mod #mod_name_ident {
 //			extern crate jsonrpc_core;
-			#rpc_trait_toks
+			pub trait #name : Sized + Send + Sync + 'static {
+				#(#methods)*
+				#to_delegate
+			}
 		}
 	})
 }
 
-fn generate_rpc_wrapper(name: &syn::Ident) -> proc_macro2::TokenStream {
-	quote! {
-		pub trait #name : Sized + Send + Sync + 'static {
-			/// Transform this into an `IoDelegate`, automatically wrapping
-			/// the parameters.
-			fn to_delegate<M: jsonrpc_core::Metadata>(self) -> jsonrpc_core::IoDelegate<Self, M> {
-				unimplemented!();
+fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(syn::Attribute, syn::TraitItemMethod)> {
+	items
+		.iter()
+		.filter_map(|item| {
+			match item {
+				syn::TraitItem::Method(method) => {
+					let rpc_attr = method.attrs
+						.iter()
+						.cloned()
+						.find(|a| attr_has_name(a, "rpc"));
+					if let Some(rpc_attr) = rpc_attr {
+						// strip rpc attribute from method
+						let attrs_stripped = method.attrs
+							.iter()
+							.cloned()
+							.filter(|a| *a != rpc_attr)
+							.collect();
+						let method_stripped = syn::TraitItemMethod {
+							attrs: attrs_stripped,
+							sig: method.sig.clone(),
+							default: method.default.clone(),
+							semi_token: method.semi_token,
+						};
+						Some((rpc_attr, method_stripped))
+					} else {
+						// todo: [AJ] should we really discard non annotated functions? check old behaviour
+						None
+					}
+				},
+				// todo: [AJ] what to do with other TraitItems? Const/Type/Macro/Verbatim.
+				_ => None
 			}
-//			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M>
-//				where $(
-//					$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
-//					$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
-//				)*
-//			{
-//				let mut del = $crate::IoDelegate::new(self.into());
-//				$(
-//					build_rpc_trait!(WRAP del =>
-//						( $($t)* )
-//						fn $m_name ( $($p)* ) -> $result <$out $(, $error)* >
-//					);
-//				)*
-//				del
-//			}
+		})
+		.collect()
+}
+
+fn generate_to_delegate_method(rpc_methods: &[(syn::Attribute, syn::TraitItemMethod)]) -> proc_macro2::TokenStream {
+//	let add_methods = rpc_methods
+//		.into_iter()
+//		.map(|attr, method| quote! {
+		// todo: [AJ] extract name from attr
+//			del.add_method($name, move |base, params| {
+//				$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out $(, $error)*>), base, params)
+//			});
+//		});
+	quote! {
+		fn to_delegate<M: jsonrpc_core::Metadata>(self) -> jsonrpc_core::IoDelegate<Self, M>
+//			where $(
+//				$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
+//				$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
+//			)*
+		{
+			let mut del = jsonrpc_core::IoDelegate::new(self.into());
+//			$(
+//				build_rpc_trait!(WRAP del =>
+//					( $($t)* )
+//					fn $m_name ( $($p)* ) -> $result <$out $(, $error)* >
+//				);
+//			)*
+			del
 		}
 	}
+}
+
+fn attr_has_name(attr: &syn::Attribute, name: &str) -> bool {
+	if let Some(first_seg) = attr.path.segments.first() {
+		return first_seg.value().ident == name
+	};
+	false
 }
 
 /*
