@@ -106,6 +106,7 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 				#to_delegate
 			}
 		}
+		pub use self::#mod_name_ident::#name;
 	})
 }
 

@@ -13,3 +13,8 @@ pub trait Rpc {
 	#[rpc(name = "add")]
 	fn add(&self, u64, u64) -> jsonrpc_core::Result<u64>;
 }
+
+#[test]
+fn basic_rpc() {
+
+}
