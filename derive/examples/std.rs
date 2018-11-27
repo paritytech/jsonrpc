@@ -15,9 +15,9 @@ pub trait Rpc {
 	#[rpc(name = "add")]
 	fn add(&self, u64, u64) -> Result<u64>;
 
-//		/// Performs asynchronous operation
-//		#[rpc(name = "callAsync")]
-//		fn call(&self, u64) -> FutureResult<String, Error>;
+	/// Performs asynchronous operation
+	#[rpc(name = "callAsync")]
+	fn call(&self, u64) -> FutureResult<String, Error>;
 }
 
 struct RpcImpl;
@@ -31,11 +31,10 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-//	fn call(&self, _: u64) -> FutureResult<String, Error> {
-//		future::ok("OK".to_owned())
-//	}
+	fn call(&self, _: u64) -> FutureResult<String, Error> {
+		future::ok("OK".to_owned())
+	}
 }
-
 
 fn main() {
 	let mut io = IoHandler::new();

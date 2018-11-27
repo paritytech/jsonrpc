@@ -181,9 +181,6 @@ fn generate_to_delegate_method(rpc_methods: &[(RpcArgs, syn::TraitItemMethod)]) 
 				syn::ReturnType::Default => panic!("Return type required for RPC method signature")
 			};
 			quote! {
-//				$del.add_method_with_meta($name, move |base, params, meta| {
-//					$crate::WrapMeta::wrap_rpc(&(Self::$method as fn(&_, Self::Metadata $(, $param)*) -> $result <$out $(, $error)* >), base, params, meta)
-//				});
 				del.add_method(#rpc_name, move |base, params| {
 					jsonrpc_macros::WrapAsync::wrap_rpc(&(Self::#method as fn(&_ #(, #arg_types)*) -> #result), base, params)
 				});
