@@ -101,6 +101,9 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 
 	Ok(quote! {
 		mod #mod_name_ident {
+			extern crate jsonrpc_core as _jsonrpc_core;
+			extern crate jsonrpc_macros as _jsonrpc_macros;
+			use super::*;
 			pub trait #name : Sized + Send + Sync + 'static {
 				#(#methods)*
 				#to_delegate
@@ -189,7 +192,7 @@ fn generate_to_delegate_method(rpc_methods: &[(RpcArgs, syn::TraitItemMethod)]) 
 		.collect();
 
 	quote! {
-		fn to_delegate<M: jsonrpc_core::Metadata>(self) -> jsonrpc_macros::IoDelegate<Self, M>
+		fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> jsonrpc_macros::IoDelegate<Self, M>
 //			where $(
 //				$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
 //				$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
