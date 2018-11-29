@@ -7,10 +7,13 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+use std::collections::HashSet;
+
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{
-	Generics, GenericParam, punctuated::Punctuated, TypeParamBound, TraitItemMethod
+	Generics, GenericParam, punctuated::Punctuated, TypeParamBound, TraitItemMethod,
+	visit::{self, Visit},
 };
 
 type Result<T> = std::result::Result<T, String>;
@@ -96,7 +99,7 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 		.iter()
 		.map(|(_, method)| quote! { #method }) // todo: [AJ] impl model to to_tokens?
 		.collect();
-	let to_delegate = generate_to_delegate_method(generics, &rpc_methods);
+	let to_delegate = generate_to_delegate_method(&rpc_trait, generics, &rpc_methods);
 
 	Ok(quote! {
 		mod #mod_name_ident {
@@ -113,6 +116,7 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 	})
 }
 
+// todo: [AJ] could/should this be implemented as Fold?
 fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, TraitItemMethod)> {
 	items
 		.iter()
@@ -157,6 +161,7 @@ fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, TraitItemMethod)
 }
 
 fn generate_to_delegate_method(
+    trait_item: &syn::ItemTrait,
 	generics: &Generics,
 	rpc_methods: &[(RpcArgs, TraitItemMethod)]
 ) -> TraitItemMethod {
@@ -184,7 +189,7 @@ fn generate_to_delegate_method(
 			};
 			quote! {
 				del.add_method(#rpc_name, move |base, params| {
-					jsonrpc_macros::WrapAsync::wrap_rpc(&(Self::#method as fn(&_ #(, #arg_types)*) -> #result), base, params)
+					_jsonrpc_macros::WrapAsync::wrap_rpc(&(Self::#method as fn(&_ #(, #arg_types)*) -> #result), base, params)
 				});
 			}
 		})
@@ -193,10 +198,6 @@ fn generate_to_delegate_method(
 	let method: syn::TraitItemMethod =
 		parse_quote! {
 			fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
-	//			where $(
-	//				$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
-	//				$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
-	//			)*
 			{
 				let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
 				#(#add_methods)*
@@ -204,8 +205,46 @@ fn generate_to_delegate_method(
 			}
 		};
 
-	// add default bounds where no bounds specified
-	// todo: [AJ] add custom bounds
+	with_where_clause_serialization_bounds(&trait_item, &method, generics)
+}
+
+fn with_where_clause_serialization_bounds(
+	item_trait: &syn::ItemTrait,
+	method: &syn::TraitItemMethod,
+	generics: &Generics
+) -> syn::TraitItemMethod {
+	struct FindTyParams {
+		serialize_type_params: HashSet<syn::Ident>,
+		deserialize_type_params: HashSet<syn::Ident>,
+	}
+	impl<'ast> Visit<'ast> for FindTyParams {
+		fn visit_angle_bracketed_generic_arguments(
+			&mut self,
+			args: &'ast syn::AngleBracketedGenericArguments
+		) {
+			println!("ABGA {:?}", args)
+		}
+//		fn visit_return_type(&mut self, return_type: &'ast syn::ReturnType) {
+////			if
+////			self.serialize_type_params.insert(return_type.)
+//			if let syn::ReturnType::Type(_, ty) = return_type {
+//				if let syn::Type::Path(ty_path) = *ty.clone() {
+////					self.serialize_type_params.insert(ty_path)
+//					println!("RETURN TYPE {:?}", ty_path)
+//				}
+//			}
+//		}
+
+//		fn visit_parenthesized_generic_arguments(&mut self, gen_args: &'ast syn::ParenthesizedGenericArguments) {
+//			println!("ARGS: {:?}", gen_args)
+//		}
+	}
+	let mut visitor = FindTyParams {
+		serialize_type_params: HashSet::new(),
+		deserialize_type_params: HashSet::new(),
+	};
+	visitor.visit_item_trait(item_trait);
+
 	let trait_bounds: Punctuated<TypeParamBound, Token![+]> = parse_quote!(
 		'static
 		+ Send
@@ -214,7 +253,7 @@ fn generate_to_delegate_method(
 		+ _serde::de::DeserializeOwned
 	);
 
-	let new_predicates = generics
+	let predicates = generics
 		.type_params()
 		.map(|ty| {
 			let ty_path = syn::TypePath { qself: None, path: ty.ident.clone().into() };
@@ -230,20 +269,8 @@ fn generate_to_delegate_method(
 	method.sig.decl.generics
 		.make_where_clause()
 		.predicates
-		.extend(new_predicates);
+		.extend(predicates);
 	method
 }
-
-//fn add_trait_bounds(
-//	mut generics: Generics,
-//	bounds: Punctuated<TypeParamBound, Token![+]>
-//) -> Generics {
-//	for param in &mut generics.params {
-//		if let GenericParam::Type(ref mut type_param) = *param {
-//			type_param.bounds.extend(bounds.clone());
-//		}
-//	}
-//	generics
-//}
 
 

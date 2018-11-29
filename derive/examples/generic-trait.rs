@@ -28,7 +28,7 @@ impl Rpc<u64, String> for RpcImpl {
 	}
 
 	fn set_two(&self, x: String) -> Result<()> {
-//		println!("{}", x);
+		println!("{}", x);
 		Ok(())
 	}
 
