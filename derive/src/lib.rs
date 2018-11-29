@@ -7,7 +7,11 @@ extern crate syn;
 #[macro_use]
 extern crate quote;
 
+use proc_macro::TokenStream;
 use proc_macro2::Span;
+use syn::{
+	Generics, GenericParam, punctuated::Punctuated, TypeParamBound, TraitItemMethod
+};
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -58,27 +62,21 @@ impl RpcArgs {
 
 /// Marker attribute for rpc trait methods, handled in `rpc_api`
 #[proc_macro_attribute]
-pub fn rpc(_args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn rpc(_args: TokenStream, input: proc_macro::TokenStream) -> TokenStream {
 	input
 }
 
 #[proc_macro_attribute]
-pub fn rpc_api(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn rpc_api(args: TokenStream, input: TokenStream) -> TokenStream {
 	let args_toks = parse_macro_input!(args as syn::AttributeArgs);
 	let input_toks = parse_macro_input!(input as syn::Item);
-
-//	println!("input_toks {:?}", input_toks);
 
 	let output = match impl_rpc(args_toks, input_toks) {
 		Ok(output) => output,
 		Err(err) => panic!("[rpc_api] encountered error: {}", err),
 	};
 
-	let res: proc_macro::TokenStream = output.into();
-
-	println!("Output: {:?}", res);
-
-	res
+	output.into()
 }
 
 fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
@@ -91,20 +89,22 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 
 	let mod_name = format!("rpc_impl_{}", name.to_string());
 	let mod_name_ident = ident(&mod_name);
+	let generics = &rpc_trait.generics;
 
 	let rpc_methods = rpc_trait_methods(&rpc_trait.items);
 	let methods : Vec<proc_macro2::TokenStream> = rpc_methods
 		.iter()
 		.map(|(_, method)| quote! { #method }) // todo: [AJ] impl model to to_tokens?
 		.collect();
-	let to_delegate = generate_to_delegate_method(&rpc_methods);
+	let to_delegate = generate_to_delegate_method(generics, &rpc_methods);
 
 	Ok(quote! {
 		mod #mod_name_ident {
 			extern crate jsonrpc_core as _jsonrpc_core;
 			extern crate jsonrpc_macros as _jsonrpc_macros;
+			extern crate serde as _serde;
 			use super::*;
-			pub trait #name : Sized + Send + Sync + 'static {
+			pub trait #name #generics : Sized + Send + Sync + 'static {
 				#(#methods)*
 				#to_delegate
 			}
@@ -113,59 +113,58 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 	})
 }
 
-fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, syn::TraitItemMethod)> {
+fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, TraitItemMethod)> {
 	items
 		.iter()
 		.filter_map(|item| {
-			match item {
-				syn::TraitItem::Method(method) => {
-					let rpc_attr = method.attrs
+			if let syn::TraitItem::Method(method) = item {
+				let rpc_attr = method.attrs
+					.iter()
+					.cloned()
+					.find(|a| {
+						if let Ok(meta) = a.parse_meta() {
+							meta.name() == "rpc"
+						} else {
+							false
+						}
+					});
+				if let Some(rpc_attr) = rpc_attr {
+					// strip rpc attribute from method
+					let attrs_stripped = method.attrs
 						.iter()
 						.cloned()
-						.find(|a| {
-							if let Ok(meta) = a.parse_meta() {
-								meta.name() == "rpc"
-							} else {
-								false
-							}
-						});
-					if let Some(rpc_attr) = rpc_attr {
-						// strip rpc attribute from method
-						let attrs_stripped = method.attrs
-							.iter()
-							.cloned()
-							.filter(|a| *a != rpc_attr)
-							.collect();
-						let method_stripped = syn::TraitItemMethod {
-							attrs: attrs_stripped,
-							sig: method.sig.clone(),
-							default: method.default.clone(),
-							semi_token: method.semi_token,
-						};
-						match RpcArgs::from_attribute(rpc_attr) {
-							Ok(rpc_args) => Some((rpc_args, method_stripped)),
-							Err(e) => panic!("Failed to parse rpc_args: {:?}", e),
-						}
-
-					} else {
-						// todo: [AJ] should we really discard non annotated functions? check old behaviour
-						None
+						.filter(|a| *a != rpc_attr)
+						.collect();
+					let method_stripped = TraitItemMethod {
+						attrs: attrs_stripped,
+						.. method.clone()
+					};
+					match RpcArgs::from_attribute(rpc_attr) {
+						Ok(rpc_args) => Some((rpc_args, method_stripped)),
+						Err(e) => panic!("Failed to parse rpc_args: {:?}", e),
 					}
-				},
+				} else {
+					// todo: [AJ] should we really discard non annotated functions?
+					// todo: [AJ] we could assume all methods should be rpc and infer names
+					None
+				}
+			} else {
 				// todo: [AJ] what to do with other TraitItems? Const/Type/Macro/Verbatim.
-				_ => None
+				None
 			}
 		})
 		.collect()
 }
 
-fn generate_to_delegate_method(rpc_methods: &[(RpcArgs, syn::TraitItemMethod)]) -> proc_macro2::TokenStream {
+fn generate_to_delegate_method(
+	generics: &Generics,
+	rpc_methods: &[(RpcArgs, TraitItemMethod)]
+) -> TraitItemMethod {
 	let add_methods: Vec<proc_macro2::TokenStream> = rpc_methods
 		.into_iter()
 		.map(|(attr, trait_method)| {
 			let rpc_name = &attr.name;
 			let method = &trait_method.sig.ident;
-			println!("args: {:?}", trait_method.sig.decl.inputs);
 			let arg_types = trait_method.sig.decl.inputs
 				.iter()
 				.filter_map(|arg| {
@@ -179,7 +178,7 @@ fn generate_to_delegate_method(rpc_methods: &[(RpcArgs, syn::TraitItemMethod)]) 
 					ty.map(|t| quote! { #t })
 				});
 			let result = match trait_method.sig.decl.output {
-				// todo: [AJ] check for Result type?
+				// todo: [AJ] require Result type?
 				syn::ReturnType::Type(_, ref output) => output,
 				syn::ReturnType::Default => panic!("Return type required for RPC method signature")
 			};
@@ -191,22 +190,60 @@ fn generate_to_delegate_method(rpc_methods: &[(RpcArgs, syn::TraitItemMethod)]) 
 		})
 		.collect();
 
-	quote! {
-		fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> jsonrpc_macros::IoDelegate<Self, M>
-//			where $(
-//				$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
-//				$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
-//			)*
-		{
-			let mut del = jsonrpc_macros::IoDelegate::new(self.into());
-			#(#add_methods)*
-			del
-		}
-	}
+	let method: syn::TraitItemMethod =
+		parse_quote! {
+			fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
+	//			where $(
+	//				$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
+	//				$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
+	//			)*
+			{
+				let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
+				#(#add_methods)*
+				del
+			}
+		};
+
+	// add default bounds where no bounds specified
+	// todo: [AJ] add custom bounds
+	let trait_bounds: Punctuated<TypeParamBound, Token![+]> = parse_quote!(
+		'static
+		+ Send
+		+ Sync
+		+ _serde::Serialize
+		+ _serde::de::DeserializeOwned
+	);
+
+	let new_predicates = generics
+		.type_params()
+		.map(|ty| {
+			let ty_path = syn::TypePath { qself: None, path: ty.ident.clone().into() };
+			syn::WherePredicate::Type(syn::PredicateType {
+				lifetimes: None,
+				bounded_ty: syn::Type::Path(ty_path),
+				colon_token: <Token![:]>::default(),
+				bounds: trait_bounds.clone(),
+			})
+		});
+
+	let mut method = method.clone();
+	method.sig.decl.generics
+		.make_where_clause()
+		.predicates
+		.extend(new_predicates);
+	method
 }
 
-/*
-input_toks Trait(ItemTrait { attrs: [], vis: Public(VisPublic { pub_token: Pub }), unsafety: None, auto_token: None, trait_token: Trait, ident: Ident(Rpc), generics: Generics { lt_token: None, params: [], gt_token: None, where_clause: None }, colon_token: None, supertraits: [], brace_token: Brace, items: [Method(TraitItemMethod { attrs: [Attribute { pound_token: Pound, style: Outer, bracket_token: Bracket, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(doc), arguments: None }] }, tts: TokenStream [Punct { op: '=', spacing: Alone }, Literal { lit: " Returns a protocol version" }] }, Attribute { pound_token: Pound, style: Outer, bracket_token: Bracket, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(rpc), arguments: None }] }, tts: TokenStream [Group { delimiter: Parenthesis, stream: TokenStream [Ident { sym: name }, Punct { op: '=', spacing: Alone }, Literal { lit: "protocolVersion" }] }] }], sig: MethodSig { constness: None, unsafety: None, asyncness: None, abi: None, ident: Ident(protocol_version), decl: FnDecl { fn_token: Fn, generics: Generics { lt_token: None, params: [], gt_token: None, where_clause: None }, paren_token: Paren, inputs: [SelfRef(ArgSelfRef { and_token: And, lifetime: None, mutability: None, self_token: SelfValue })], variadic: None, output: Type(RArrow, Path(TypePath { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(Result), arguments: AngleBracketed(AngleBracketedGenericArguments { colon2_token: None, lt_token: Lt, args: [Type(Path(TypePath { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(String), arguments: None }] } }))], gt_token: Gt }) }] } })) } }, default: None, semi_token: Some(Semi) }), Method(TraitItemMethod { attrs: [Attribute { pound_token: Pound, style: Outer, bracket_token: Bracket, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(doc), arguments: None }] }, tts: TokenStream [Punct { op: '=', spacing: Alone }, Literal { lit: " Adds two numbers and returns a result" }] }, Attribute { pound_token: Pound, style: Outer, bracket_token: Bracket, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(rpc), arguments: None }] }, tts: TokenStream [Group { delimiter: Parenthesis, stream: TokenStream [Ident { sym: name }, Punct { op: '=', spacing: Alone }, Literal { lit: "add" }] }] }], sig: MethodSig { constness: None, unsafety: None, asyncness: None, abi: None, ident: Ident(add), decl: FnDecl { fn_token: Fn, generics: Generics { lt_token: None, params: [], gt_token: None, where_clause: None }, paren_token: Paren, inputs: [SelfRef(ArgSelfRef { and_token: And, lifetime: None, mutability: None, self_token: SelfValue }), Comma, Ignored(Path(TypePath { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(u64), arguments: None }] } })), Comma, Ignored(Path(TypePath { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(u64), arguments: None }] } }))], variadic: None, output: Type(RArrow, Path(TypePath { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(Result), arguments: AngleBracketed(AngleBracketedGenericArguments { colon2_token: None, lt_token: Lt, args: [Type(Path(TypePath { qself: None, path: Path { leading_colon: None, segments: [PathSegment { ident: Ident(u64), arguments: None }] } }))], gt_token: Gt }) }] } })) } }, default: None, semi_token: Some(Semi) })] })
-*/
+//fn add_trait_bounds(
+//	mut generics: Generics,
+//	bounds: Punctuated<TypeParamBound, Token![+]>
+//) -> Generics {
+//	for param in &mut generics.params {
+//		if let GenericParam::Type(ref mut type_param) = *param {
+//			type_param.bounds.extend(bounds.clone());
+//		}
+//	}
+//	generics
+//}
 
 
