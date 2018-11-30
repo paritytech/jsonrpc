@@ -86,8 +86,14 @@ impl Rpc {
 		io.into()
 	}
 
-	/// Perform a single, synchronous method call.
-	pub fn request<T>(&self, method: &str, params: &T) -> String where
+	fn request_helper<T>(
+		&self,
+		method: &str,
+		params: &T,
+		success_formatter: fn(&serde_json::Value) -> serde_json::Result<String>,
+		error_formatter: fn(&rpc::Error) -> serde_json::Result<String>,
+	) -> String
+	where
 		T: serde::Serialize,
 	{
 		use self::rpc::types::response;
@@ -104,14 +110,31 @@ impl Rpc {
 
 		// extract interesting part from the response
 		let extracted = match serde_json::from_str(&response).expect("We will always get a single output.") {
-			response::Output::Success(response::Success { result, .. }) => serde_json::to_string_pretty(&result),
-			response::Output::Failure(response::Failure { error, .. }) => serde_json::to_string_pretty(&error),
+			response::Output::Success(response::Success { result, .. }) => success_formatter(&result),
+			response::Output::Failure(response::Failure { error, .. }) => error_formatter(&error),
 		}.expect("Serialization is infallible; qed");
-
 
 		println!("\n{}\n --> {}\n", request, extracted);
 
 		extracted
+	}
+
+	/// Perform a single, synchronous method call and return pretty-printed value
+	pub fn request<T>(&self, method: &str, params: &T) -> String where
+		T: serde::Serialize,
+	{
+		let success_formatter = serde_json::to_string_pretty;
+		let error_formatter = serde_json::to_string_pretty;
+		self.request_helper(method, params, success_formatter, error_formatter)
+	}
+
+	/// Perform a single, synchronous method call.
+	pub fn make_request<T>(&self, method: &str, params: &T) -> String where
+		T: serde::Serialize,
+	{
+		let success_formatter = serde_json::to_string;
+		let error_formatter = serde_json::to_string;
+		self.request_helper(method, params, success_formatter, error_formatter)
 	}
 }
 
@@ -125,7 +148,7 @@ mod tests {
 		let rpc = {
 			let mut io = rpc::IoHandler::new();
 			io.add_method("test_method", |_| {
-				Ok(rpc::Value::Number(5.into()))
+				Ok(rpc::Value::Array(vec![5.into(), 10.into()]))
 			});
 			Rpc::from(io)
 		};
@@ -133,7 +156,25 @@ mod tests {
 		// when
 		assert_eq!(
 			rpc.request("test_method", &[5u64]),
-			r#"5"#
+			"[\n  5,\n  10\n]"
+		);
+	}
+
+	#[test]
+	fn should_test_make_request() {
+		// given
+		let rpc = {
+			let mut io = rpc::IoHandler::new();
+			io.add_method("test_method", |_| {
+				Ok(rpc::Value::Array(vec![5.into(), 10.into()]))
+			});
+			Rpc::from(io)
+		};
+
+		// when
+		assert_eq!(
+			rpc.make_request("test_method", &[5u64]),
+			"[5,10]"
 		);
 	}
 }
