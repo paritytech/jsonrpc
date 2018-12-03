@@ -8,13 +8,7 @@ extern crate syn;
 extern crate quote;
 
 use std::collections::HashSet;
-
-use proc_macro::TokenStream;
-use proc_macro2::Span;
-use syn::{
-	Generics, GenericParam, punctuated::Punctuated, TypeParamBound, TraitItemMethod,
-	visit::{self, Visit},
-};
+use syn::{punctuated::Punctuated, visit::{self, Visit}};
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -25,7 +19,7 @@ struct RpcArgs {
 }
 
 fn ident(s: &str) -> syn::Ident {
-	syn::Ident::new(s, Span::call_site())
+	syn::Ident::new(s, proc_macro2::Span::call_site())
 }
 
 impl RpcArgs {
@@ -65,12 +59,18 @@ impl RpcArgs {
 
 /// Marker attribute for rpc trait methods, handled in `rpc_api`
 #[proc_macro_attribute]
-pub fn rpc(_args: TokenStream, input: proc_macro::TokenStream) -> TokenStream {
+pub fn rpc(
+	_args: proc_macro::TokenStream,
+	input: proc_macro::TokenStream
+) -> proc_macro::TokenStream {
 	input
 }
 
 #[proc_macro_attribute]
-pub fn rpc_api(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn rpc_api(
+	args: proc_macro::TokenStream,
+	input: proc_macro::TokenStream
+) -> proc_macro::TokenStream {
 	let args_toks = parse_macro_input!(args as syn::AttributeArgs);
 	let input_toks = parse_macro_input!(input as syn::Item);
 
@@ -117,7 +117,7 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 }
 
 // todo: [AJ] could/should this be implemented as Fold?
-fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, TraitItemMethod)> {
+fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, syn::TraitItemMethod)> {
 	items
 		.iter()
 		.filter_map(|item| {
@@ -139,7 +139,7 @@ fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, TraitItemMethod)
 						.cloned()
 						.filter(|a| *a != rpc_attr)
 						.collect();
-					let method_stripped = TraitItemMethod {
+					let method_stripped = syn::TraitItemMethod {
 						attrs: attrs_stripped,
 						.. method.clone()
 					};
@@ -162,9 +162,9 @@ fn rpc_trait_methods(items: &[syn::TraitItem]) -> Vec<(RpcArgs, TraitItemMethod)
 
 fn generate_to_delegate_method(
     trait_item: &syn::ItemTrait,
-	generics: &Generics,
-	rpc_methods: &[(RpcArgs, TraitItemMethod)]
-) -> TraitItemMethod {
+	generics: &syn::Generics,
+	rpc_methods: &[(RpcArgs, syn::TraitItemMethod)]
+) -> syn::TraitItemMethod {
 	let add_methods: Vec<proc_macro2::TokenStream> = rpc_methods
 		.into_iter()
 		.map(|(attr, trait_method)| {
@@ -189,7 +189,11 @@ fn generate_to_delegate_method(
 			};
 			quote! {
 				del.add_method(#rpc_name, move |base, params| {
-					_jsonrpc_macros::WrapAsync::wrap_rpc(&(Self::#method as fn(&_ #(, #arg_types)*) -> #result), base, params)
+					_jsonrpc_macros::WrapAsync::wrap_rpc(
+						&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
+						base,
+						params
+					)
 				});
 			}
 		})
@@ -211,7 +215,7 @@ fn generate_to_delegate_method(
 fn with_where_clause_serialization_bounds(
 	item_trait: &syn::ItemTrait,
 	method: &syn::TraitItemMethod,
-	generics: &Generics
+	generics: &syn::Generics
 ) -> syn::TraitItemMethod {
 	struct FindTyParams {
 		trait_generics: HashSet<syn::Ident>,
@@ -232,7 +236,6 @@ fn with_where_clause_serialization_bounds(
 		}
 
 		fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
-			debug_assert_eq!(self.visiting_return_type == true && self.visiting_fn_arg == true, false);
 			if self.visiting_return_type && self.trait_generics.contains(&segment.ident) {
 				self.serialize_type_params.insert(segment.ident.clone());
 			}
@@ -261,7 +264,7 @@ fn with_where_clause_serialization_bounds(
 		.type_params()
 		.map(|ty| {
 			let ty_path = syn::TypePath { qself: None, path: ty.ident.clone().into() };
-			let mut bounds: Punctuated<TypeParamBound, Token![+]> =
+			let mut bounds: Punctuated<syn::TypeParamBound, Token![+]> =
 				parse_quote!(Send + Sync + 'static);
 			// add json serialization trait bounds
 			if visitor.serialize_type_params.contains(&ty.ident) {
