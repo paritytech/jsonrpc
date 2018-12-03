@@ -214,54 +214,58 @@ fn with_where_clause_serialization_bounds(
 	generics: &Generics
 ) -> syn::TraitItemMethod {
 	struct FindTyParams {
+		trait_generics: HashSet<syn::Ident>,
 		serialize_type_params: HashSet<syn::Ident>,
 		deserialize_type_params: HashSet<syn::Ident>,
+		visiting_return_type: bool,
 	}
 	impl<'ast> Visit<'ast> for FindTyParams {
-		fn visit_angle_bracketed_generic_arguments(
-			&mut self,
-			args: &'ast syn::AngleBracketedGenericArguments
-		) {
-			println!("ABGA {:?}", args)
+		fn visit_type_param(&mut self, ty_param: &'ast syn::TypeParam) {
+			self.trait_generics.insert(ty_param.ident.clone());
 		}
-//		fn visit_return_type(&mut self, return_type: &'ast syn::ReturnType) {
-////			if
-////			self.serialize_type_params.insert(return_type.)
-//			if let syn::ReturnType::Type(_, ty) = return_type {
-//				if let syn::Type::Path(ty_path) = *ty.clone() {
-////					self.serialize_type_params.insert(ty_path)
-//					println!("RETURN TYPE {:?}", ty_path)
-//				}
-//			}
-//		}
 
-//		fn visit_parenthesized_generic_arguments(&mut self, gen_args: &'ast syn::ParenthesizedGenericArguments) {
-//			println!("ARGS: {:?}", gen_args)
-//		}
+		fn visit_return_type(&mut self, return_type: &'ast syn::ReturnType) {
+			self.visiting_return_type = true;
+			visit::visit_return_type(self, return_type);
+			self.visiting_return_type = false
+		}
+
+		fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
+			if self.visiting_return_type && self.trait_generics.contains(&segment.ident) {
+				self.serialize_type_params.insert(segment.ident.clone());
+			}
+			visit::visit_path_segment(self, segment)
+		}
 	}
 	let mut visitor = FindTyParams {
+		visiting_return_type: false,
+		trait_generics: HashSet::new(),
 		serialize_type_params: HashSet::new(),
 		deserialize_type_params: HashSet::new(),
 	};
 	visitor.visit_item_trait(item_trait);
+	println!("SERIALIZE: {:?}", visitor.serialize_type_params);
 
-	let trait_bounds: Punctuated<TypeParamBound, Token![+]> = parse_quote!(
-		'static
-		+ Send
-		+ Sync
-		+ _serde::Serialize
-		+ _serde::de::DeserializeOwned
-	);
+	let trait_bounds: Punctuated<TypeParamBound, Token![+]> =
+		parse_quote!('static + Send + Sync);
 
 	let predicates = generics
 		.type_params()
 		.map(|ty| {
 			let ty_path = syn::TypePath { qself: None, path: ty.ident.clone().into() };
+			// add serde Serialization trait bounds
+			let mut bounds = trait_bounds.clone();
+			if visitor.serialize_type_params.contains(&ty.ident) {
+				bounds.push(parse_quote!(_serde::Serialize))
+			}
+			if visitor.deserialize_type_params.contains(&ty.ident) {
+				bounds.push(parse_quote!(_serde::de::Deserialize))
+			}
 			syn::WherePredicate::Type(syn::PredicateType {
 				lifetimes: None,
 				bounded_ty: syn::Type::Path(ty_path),
 				colon_token: <Token![:]>::default(),
-				bounds: trait_bounds.clone(),
+				bounds,
 			})
 		});
 
