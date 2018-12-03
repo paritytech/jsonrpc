@@ -218,6 +218,7 @@ fn with_where_clause_serialization_bounds(
 		serialize_type_params: HashSet<syn::Ident>,
 		deserialize_type_params: HashSet<syn::Ident>,
 		visiting_return_type: bool,
+		visiting_fn_arg: bool,
 	}
 	impl<'ast> Visit<'ast> for FindTyParams {
 		fn visit_type_param(&mut self, ty_param: &'ast syn::TypeParam) {
@@ -231,35 +232,43 @@ fn with_where_clause_serialization_bounds(
 		}
 
 		fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
+			debug_assert_eq!(self.visiting_return_type == true && self.visiting_fn_arg == true, false);
 			if self.visiting_return_type && self.trait_generics.contains(&segment.ident) {
 				self.serialize_type_params.insert(segment.ident.clone());
 			}
+			if self.visiting_fn_arg && self.trait_generics.contains(&segment.ident) {
+				self.deserialize_type_params.insert(segment.ident.clone());
+			}
 			visit::visit_path_segment(self, segment)
+		}
+
+		fn visit_fn_arg(&mut self, arg: &'ast syn::FnArg) {
+			self.visiting_fn_arg = true;
+			visit::visit_fn_arg(self, arg);
+			self.visiting_fn_arg = false;
 		}
 	}
 	let mut visitor = FindTyParams {
 		visiting_return_type: false,
+		visiting_fn_arg: false,
 		trait_generics: HashSet::new(),
 		serialize_type_params: HashSet::new(),
 		deserialize_type_params: HashSet::new(),
 	};
 	visitor.visit_item_trait(item_trait);
-	println!("SERIALIZE: {:?}", visitor.serialize_type_params);
-
-	let trait_bounds: Punctuated<TypeParamBound, Token![+]> =
-		parse_quote!('static + Send + Sync);
 
 	let predicates = generics
 		.type_params()
 		.map(|ty| {
 			let ty_path = syn::TypePath { qself: None, path: ty.ident.clone().into() };
-			// add serde Serialization trait bounds
-			let mut bounds = trait_bounds.clone();
+			let mut bounds: Punctuated<TypeParamBound, Token![+]> =
+				parse_quote!(Send + Sync + 'static);
+			// add json serialization trait bounds
 			if visitor.serialize_type_params.contains(&ty.ident) {
 				bounds.push(parse_quote!(_serde::Serialize))
 			}
 			if visitor.deserialize_type_params.contains(&ty.ident) {
-				bounds.push(parse_quote!(_serde::de::Deserialize))
+				bounds.push(parse_quote!(_serde::de::DeserializeOwned))
 			}
 			syn::WherePredicate::Type(syn::PredicateType {
 				lifetimes: None,
