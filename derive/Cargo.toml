@@ -8,7 +8,7 @@ proc-macro = true
 
 [dependencies]
 serde = "1.0"
-syn = { version = "0.15", features = ["full", "extra-traits", "visit"] }
+syn = { version = "^0.15.22", features = ["full", "extra-traits", "visit", "fold"] }
 proc-macro2 = "0.4"
 quote = "0.6"
 
@@ -16,4 +16,5 @@ quote = "0.6"
 jsonrpc-core = { version = "9.0", path = "../core" }
 jsonrpc-pubsub = { version = "9.0", path = "../pubsub" }
 jsonrpc-macros = { version = "9.0", path = "../macros" }
+jsonrpc-tcp-server = { version = "9.0", path = "../tcp" }
 serde_derive = "1.0"

@@ -12,7 +12,7 @@ pub trait Rpc {
 	fn protocol_version(&self) -> Result<String>;
 
 	/// Adds two numbers and returns a result
-	#[rpc(name = "add")]
+	#[rpc(name = "add", alias("callAsyncMetaAlias"))]
 	fn add(&self, u64, u64) -> Result<u64>;
 
 	/// Performs asynchronous operation
