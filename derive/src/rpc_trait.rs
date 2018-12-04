@@ -119,7 +119,7 @@ impl<'a> Fold for RpcTrait {
 
 impl RpcTrait {
 	fn generate_to_delegate_method(&self, trait_item: &syn::ItemTrait) -> syn::TraitItemMethod {
-		let add_methods: Vec<proc_macro2::TokenStream> = self.methods
+		let add_methods: Vec<_> = self.methods
 			.iter()
 			.map(|rpc| {
 				let rpc_name = &rpc.name;
@@ -141,6 +141,14 @@ impl RpcTrait {
 					syn::ReturnType::Type(_, ref output) => output,
 					syn::ReturnType::Default => panic!("Return type required for RPC method signature")
 				};
+				let add_aliases: Vec<_> = rpc.aliases
+					.iter()
+					.map(|alias| {
+						quote! {
+							del.add_alias(#alias, #rpc_name);
+						}
+					})
+					.collect();
 				quote! {
 					del.add_method(#rpc_name, move |base, params| {
 						_jsonrpc_macros::WrapAsync::wrap_rpc(
@@ -149,6 +157,7 @@ impl RpcTrait {
 							params
 						)
 					});
+					#(#add_aliases)*
 				}
 			})
 			.collect();
