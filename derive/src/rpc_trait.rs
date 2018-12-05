@@ -5,6 +5,7 @@ use syn::{
 	parse_quote, Token, punctuated::Punctuated,
 	fold::{self, Fold}, visit::{self, Visit},
 };
+use rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -12,115 +13,127 @@ fn ident(s: &str) -> syn::Ident {
 	syn::Ident::new(s, proc_macro2::Span::call_site())
 }
 
+enum RpcTraitMethods {
+	Standard(Vec<RpcMethod>),
+	PubSub {
+		name: String,
+		subscribe: RpcMethod,
+		unsubscribe: RpcMethod,
+	}
+}
+
+impl RpcTraitMethods {
+	fn generate_to_delegate_method(&self, trait_item: &syn::ItemTrait, has_metadata: bool) -> Result<syn::TraitItemMethod> {
+		let delegate_registration =
+			match self {
+				RpcTraitMethods::Standard(methods) => {
+					let add_methods: Vec<_> = methods
+						.iter()
+						.map(RpcMethod::generate_delegate_method_registration)
+						.collect();
+					quote! { #(#add_methods)* }
+				},
+				RpcTraitMethods::PubSub { name, subscribe, unsubscribe } => {
+					let sub_name = &subscribe.attr.name;
+					let sub_method = &subscribe.sig.ident;
+					let sub_arg_types = &subscribe.get_method_arg_types();
+
+					let unsub_name = &subscribe.attr.name;
+					let unsub_method = &subscribe.sig.ident;
+
+					quote! {
+						del.add_subscription(
+							#name,
+							(#sub_name, move |base, params, meta, subscriber| {
+								_jsonrpc_macros::WrapSubscribe::wrap_rpc(
+									&(Self::#sub_method as fn(&_, Self::Metadata #(, #sub_arg_types)*)),
+									base,
+									params,
+									meta,
+									subscriber,
+								)
+							}),
+							(#unsub_name, move |base, id| {
+								use _jsonrpc_core::futures::{IntoFuture, Future};
+								Self::#unsub_method(base, id).into_future()
+									.map(_jsonrpc_macros::to_value)
+								.map_err(Into::into)
+							}),
+						);
+					}
+
+					// todo: [AJ] add aliases
+//					$del.add_alias($sub_alias, $subscribe);
+//					$del.add_alias($unsub_alias, $unsubscribe);
+				},
+			};
+
+		let to_delegate_body =
+			quote! {
+				let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
+				#delegate_registration
+				del
+			};
+
+		// todo: [AJ] check that pubsub has metadata
+		let method: syn::TraitItemMethod =
+			if has_metadata {
+				parse_quote! {
+					fn to_delegate(self) -> _jsonrpc_macros::IoDelegate<Self, Self::Metadata>
+					{
+						#to_delegate_body
+					}
+				}
+			} else {
+				parse_quote! {
+					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
+					{
+						#to_delegate_body
+					}
+				}
+			};
+
+		let predicates = generate_where_clause_serialization_predicates(&trait_item);
+
+		let mut method = method.clone();
+		method.sig.decl.generics
+			.make_where_clause()
+			.predicates
+			.extend(predicates);
+		Ok(method)
+	}
+}
+
 #[derive(Clone, Debug)]
 struct RpcMethod {
-	rpc_attr: syn::Attribute,
+	attr: RpcMethodAttribute,
 	sig: syn::MethodSig,
-	name: String,
-	has_metadata: bool,
-	aliases: Vec<String>,
 }
 
 impl RpcMethod {
 	fn try_from_trait_item_method(trait_item: &syn::TraitItemMethod) -> Result<Option<RpcMethod>> {
-		#[derive(Default)]
-		struct VisitRpcAttribute {
-			attr: Option<syn::Attribute>,
-			name: Option<String>,
-			has_meta: bool,
-			aliases: Vec<String>,
-		}
-		impl<'a> Visit<'a> for VisitRpcAttribute {
-			fn visit_attribute(&mut self, attr: &syn::Attribute) {
-				match attr.parse_meta() {
-					Ok(ref meta) => {
-						// todo: [AJ] remove commented out line before PR
-//						println!("Attribute {:?}", meta);
-						if meta.name() == "rpc" {
-							self.attr = Some(attr.clone());
-							visit::visit_meta(self, meta);
-						}
-					},
-					// todo [AJ]: add to errors list instead of panicking?
-					Err(err) => panic!("Failed to parse attribute: {}", err)
-				}
-			}
-			fn visit_meta(&mut self, meta: &syn::Meta) {
-				if let syn::Meta::Word(w) = meta {
-					if w == "meta" {
-						self.has_meta = true;
-					}
-				}
-				visit::visit_meta(self, meta);
-			}
-			fn visit_meta_name_value(&mut self, name_value: &syn::MetaNameValue) {
-				if name_value.ident == ident("name") {
-					if let syn::Lit::Str(ref str) = name_value.lit {
-						self.name = Some(str.value())
-					}
-				}
-				visit::visit_meta_name_value(self, name_value);
-			}
-			fn visit_meta_list(&mut self, meta_list: &syn::MetaList) {
-				if meta_list.ident == ident("alias") {
-					self.aliases = meta_list.nested
-						.iter()
-						.filter_map(|nm| {
-							if let syn::NestedMeta::Literal(syn::Lit::Str(alias)) = nm {
-								Some(alias.value())
-							} else {
-								None
-							}
-						})
-						.collect();
-				}
-				visit::visit_meta_list(self,meta_list)
-			}
-		}
-		let mut visitor = VisitRpcAttribute::default();
-		visitor.visit_trait_item_method(trait_item);
+		let attr = RpcMethodAttribute::try_from_trait_item_method(trait_item);
 
-		match (visitor.attr, visitor.name) {
-			(Some(attr), Some(name)) => {
-				Ok(Some(RpcMethod {
-					rpc_attr: attr.clone(),
-					sig: trait_item.sig.clone(),
-					aliases: visitor.aliases,
-					has_metadata: visitor.has_meta,
-					name,
-				}))
-			},
-			(None, None) => Ok(None),
-			_ => Err("Expected rpc attribute with name argument".to_string())
-		}
+		attr.map(|a| a.map(|a|
+			RpcMethod { attr: a, sig: trait_item.sig.clone() }
+		))
 	}
 
 	fn generate_delegate_method_registration(&self) -> proc_macro2::TokenStream {
-		let rpc_name = &self.name;
+		let rpc_name = &self.attr.name;
 		let method = &self.sig.ident;
-		let arg_types = self.sig.decl.inputs
-			.iter()
-			.filter_map(|arg| {
-				let ty =
-					match arg {
-						syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
-						syn::FnArg::Ignored(ty) => Some(ty),
-						// todo: [AJ] what about Inferred?
-						_ => None,
-					};
-				ty.map(|t| quote! { #t })
-			});
+		let arg_types = self.get_method_arg_types();
 		let result = match self.sig.decl.output {
 			// todo: [AJ] require Result type?
 			syn::ReturnType::Type(_, ref output) => output,
 			syn::ReturnType::Default => panic!("Return type required for RPC method signature")
 		};
-		let add_aliases: Vec<_> = self.aliases
+		let add_aliases: Vec<_> = self.attr.aliases
 			.iter()
 			.map(|alias| quote! { del.add_alias(#alias, #rpc_name); })
 			.collect();
 		let add_method =
-			if self.has_metadata {
+			if self.attr.has_metadata {
 				quote! {
 					del.add_method_with_meta(#rpc_name, move |base, params, meta| {
 						_jsonrpc_macros::WrapMeta::wrap_rpc(
@@ -147,9 +160,24 @@ impl RpcMethod {
 			#(#add_aliases)*
 		}
 	}
+
+	fn get_method_arg_types(&self) -> Vec<&syn::Type> {
+		self.sig.decl.inputs
+			.iter()
+			.filter_map(|arg| {
+				match arg {
+					syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
+					syn::FnArg::Ignored(ty) => Some(&ty),
+					// todo: [AJ] what about Inferred?
+					_ => None,
+				}
+			})
+			.collect()
+	}
 }
 
 struct RpcTrait {
+	attr: RpcTraitAttribute,
 	methods: Vec<RpcMethod>,
 	has_metadata: bool,
 }
@@ -175,7 +203,7 @@ impl<'a> Fold for RpcTrait {
 			Ok(Some(rpc_method)) => {
 				self.methods.push(rpc_method.clone());
 				// remove the rpc attribute
-				method.attrs.retain(|a| *a != rpc_method.rpc_attr);
+				method.attrs.retain(|a| *a != rpc_method.attr.attr);
 			},
 			Ok(None) => (), // non rpc annotated trait method
 			Err(err) => panic!("Invalid rpc method attribute {}", err)
@@ -187,53 +215,15 @@ impl<'a> Fold for RpcTrait {
 		if ty.ident.to_string() == "Metadata" {
 			self.has_metadata = true;
 			let mut ty = ty.clone();
-			// todo [AJ] when implementing pub/sub change to $crate::jsonrpc_pubsub::PubSubMetadata
-			ty.bounds.push(parse_quote!(_jsonrpc_core::Metadata));
+			match self.attr {
+				RpcTraitAttribute::RpcTrait =>
+					ty.bounds.push(parse_quote!(_jsonrpc_core::Metadata)),
+				RpcTraitAttribute::PubSubTrait { name: _ } =>
+					ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata)),
+			}
 			return ty;
 		}
 		ty
-	}
-}
-
-impl RpcTrait {
-	fn generate_to_delegate_method(&self, trait_item: &syn::ItemTrait) -> syn::TraitItemMethod {
-		let add_methods: Vec<_> = self.methods
-			.iter()
-			.map(RpcMethod::generate_delegate_method_registration)
-			.collect();
-
-		let to_delegate_body =
-			quote! {
-				let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
-				#(#add_methods)*
-				del
-			};
-
-		let method: syn::TraitItemMethod =
-			if self.has_metadata {
-				parse_quote! {
-					fn to_delegate(self) -> _jsonrpc_macros::IoDelegate<Self, Self::Metadata>
-					{
-						#to_delegate_body
-					}
-				}
-			} else {
-				parse_quote! {
-					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
-					{
-						#to_delegate_body
-					}
-				}
-			};
-
-		let predicates = generate_where_clause_serialization_predicates(&trait_item);
-
-		let mut method = method.clone();
-		method.sig.decl.generics
-			.make_where_clause()
-			.predicates
-			.extend(predicates);
-		method
 	}
 }
 
@@ -304,24 +294,25 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 		.collect()
 }
 
-pub fn rpc_impl(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
+pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		_ => return Err("rpc_api trait only works with trait declarations".to_owned())
 	};
 
-	let mut visitor = RpcTrait { methods: Vec::new(), has_metadata: false };
+	let trait_attr = RpcTraitAttribute::try_from_trait_attribute(&args)?;
+	let mut visitor = RpcTrait { attr: trait_attr, methods: Vec::new(), has_metadata: false };
 	let rpc_trait = visitor.fold_item_trait(rpc_trait);
 
 	let name = rpc_trait.ident.clone();
-
 	let mod_name = format!("rpc_impl_{}", name.to_string());
 	let mod_name_ident = ident(&mod_name);
 
 	Ok(quote! {
 		mod #mod_name_ident {
 			extern crate jsonrpc_core as _jsonrpc_core;
-			extern crate jsonrpc_macros as _jsonrpc_macros;
+			extern crate jsonrpc_pubsub as _jsonrpc_pubsub;
+			extern crate jsonrpc_macros as _jsonrpc_macros; // todo: [AJ] remove/replace
 			extern crate serde as _serde;
 			use super::*;
 

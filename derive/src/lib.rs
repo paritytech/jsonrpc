@@ -6,6 +6,7 @@ extern crate syn;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
+mod rpc_attr;
 mod rpc_trait;
 
 // todo: [AJ] docs
