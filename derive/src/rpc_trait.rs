@@ -1,10 +1,9 @@
 use std::collections::HashSet;
 
-use proc_macro;
 use quote::quote;
 use syn::{
-	parse_macro_input, parse_quote, Token,
-	punctuated::Punctuated, fold::{self, Fold}, visit::{self, Visit},
+	parse_quote, Token, punctuated::Punctuated,
+	fold::{self, Fold}, visit::{self, Visit},
 };
 
 type Result<T> = std::result::Result<T, String>;
@@ -305,7 +304,7 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 		.collect()
 }
 
-fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
+pub fn rpc_impl(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		_ => return Err("rpc_api trait only works with trait declarations".to_owned())
@@ -330,16 +329,4 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 		}
 		pub use self::#mod_name_ident::#name;
 	})
-}
-
-pub fn build_rpc_trait_impl(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-	let args_toks = parse_macro_input!(args as syn::AttributeArgs);
-	let input_toks = parse_macro_input!(input as syn::Item);
-
-	let output = match impl_rpc(args_toks, input_toks) {
-		Ok(output) => output,
-		Err(err) => panic!("[rpc_api] encountered error: {}", err),
-	};
-
-	output.into()
 }

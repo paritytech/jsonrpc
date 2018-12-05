@@ -4,11 +4,20 @@ extern crate quote;
 extern crate syn;
 
 use proc_macro::TokenStream;
+use syn::parse_macro_input;
 
 mod rpc_trait;
 
 // todo: [AJ] docs
 #[proc_macro_attribute]
 pub fn rpc(args: TokenStream, input: TokenStream) -> TokenStream {
-	rpc_trait::build_rpc_trait_impl(args, input)
+	let args_toks = parse_macro_input!(args as syn::AttributeArgs);
+	let input_toks = parse_macro_input!(input as syn::Item);
+
+	let output = match rpc_trait::rpc_impl(args_toks, input_toks) {
+		Ok(output) => output,
+		Err(err) => panic!("[rpc] encountered error: {}", err),
+	};
+
+	output.into()
 }
