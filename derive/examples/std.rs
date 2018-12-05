@@ -5,7 +5,7 @@ extern crate jsonrpc_derive;
 use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};
 
-#[rpc_api]
+#[rpc]
 pub trait Rpc {
 	/// Returns a protocol version
 	#[rpc(name = "protocolVersion")]

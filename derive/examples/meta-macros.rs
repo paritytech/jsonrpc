@@ -13,7 +13,7 @@ use jsonrpc_core::futures::future::FutureResult;
 struct Meta(String);
 impl Metadata for Meta {}
 
-#[rpc_api]
+#[rpc]
 pub trait Rpc {
 	type Metadata;
 

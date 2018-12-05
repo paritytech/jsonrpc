@@ -11,7 +11,7 @@ use jsonrpc_core::futures::future::{self, FutureResult};
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
 // Two is only a parameter so only requires DeserializeOwned
 // Three is only a result so only requires Serialize
-#[rpc_api]
+#[rpc]
 pub trait Rpc<One, Two, Three>
 {
 	/// Get One type.

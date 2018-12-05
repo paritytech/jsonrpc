@@ -3,7 +3,7 @@ extern crate jsonrpc_core;
 
 //use jsonrpc_core::{IoHandler, Error, Result};
 
-#[rpc_api]
+#[rpc]
 pub trait Rpc {
 	/// Returns a protocol version
 	#[rpc(name = "protocolVersion")]
