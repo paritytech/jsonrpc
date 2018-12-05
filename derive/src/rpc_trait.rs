@@ -16,29 +16,46 @@ fn ident(s: &str) -> syn::Ident {
 #[derive(Clone, Debug)]
 struct RpcMethod {
 	rpc_attr: syn::Attribute,
-	method: syn::TraitItemMethod,
+	sig: syn::MethodSig,
 	name: String,
+	has_metadata: bool,
 	aliases: Vec<String>,
 }
 
 impl RpcMethod {
 	fn try_from_trait_item_method(trait_item: &syn::TraitItemMethod) -> Result<Option<RpcMethod>> {
+		#[derive(Default)]
 		struct VisitRpcAttribute {
 			attr: Option<syn::Attribute>,
 			name: Option<String>,
+			has_meta: bool,
 			aliases: Vec<String>,
 		}
 		impl<'a> Visit<'a> for VisitRpcAttribute {
 			fn visit_attribute(&mut self, attr: &syn::Attribute) {
-				if let Ok(ref meta) = attr.parse_meta() {
-					if meta.name() == "rpc" {
-						self.attr = Some(attr.clone());
-						visit::visit_meta(self, meta);
-					}
+				match attr.parse_meta() {
+					Ok(ref meta) => {
+						// todo: [AJ] remove commented out line before PR
+//						println!("Attribute {:?}", meta);
+						if meta.name() == "rpc" {
+							self.attr = Some(attr.clone());
+							visit::visit_meta(self, meta);
+						}
+					},
+					// todo [AJ]: add to errors list instead of panicking?
+					Err(err) => panic!("Failed to parse attribute: {}", err)
 				}
 			}
+			fn visit_meta(&mut self, meta: &syn::Meta) {
+				if let syn::Meta::Word(w) = meta {
+					if w == "meta" {
+						self.has_meta = true;
+					}
+				}
+				visit::visit_meta(self, meta);
+			}
 			fn visit_meta_name_value(&mut self, name_value: &syn::MetaNameValue) {
-				if name_value.ident.to_string() == "name" {
+				if name_value.ident == ident("name") {
 					if let syn::Lit::Str(ref str) = name_value.lit {
 						self.name = Some(str.value())
 					}
@@ -46,7 +63,7 @@ impl RpcMethod {
 				visit::visit_meta_name_value(self, name_value);
 			}
 			fn visit_meta_list(&mut self, meta_list: &syn::MetaList) {
-				if meta_list.ident.to_string() == "alias" {
+				if meta_list.ident == ident("alias") {
 					self.aliases = meta_list.nested
 						.iter()
 						.filter_map(|nm| {
@@ -61,19 +78,16 @@ impl RpcMethod {
 				visit::visit_meta_list(self,meta_list)
 			}
 		}
-		let mut visitor = VisitRpcAttribute {
-			attr: None,
-			name: None,
-			aliases: Vec::new(),
-		};
+		let mut visitor = VisitRpcAttribute::default();
 		visitor.visit_trait_item_method(trait_item);
 
 		match (visitor.attr, visitor.name) {
 			(Some(attr), Some(name)) => {
 				Ok(Some(RpcMethod {
 					rpc_attr: attr.clone(),
-					method: trait_item.clone(),
+					sig: trait_item.sig.clone(),
 					aliases: visitor.aliases,
+					has_metadata: visitor.has_meta,
 					name,
 				}))
 			},
@@ -85,6 +99,7 @@ impl RpcMethod {
 
 struct RpcTrait {
 	methods: Vec<RpcMethod>,
+	has_metadata: bool,
 }
 
 impl<'a> Fold for RpcTrait {
@@ -115,6 +130,17 @@ impl<'a> Fold for RpcTrait {
 		}
 		fold::fold_trait_item_method(self, method)
 	}
+
+	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
+		if ty.ident.to_string() == "Metadata" {
+			self.has_metadata = true;
+			let mut ty = ty.clone();
+			// todo [AJ] when implementing pub/sub change to $crate::jsonrpc_pubsub::PubSubMetadata
+			ty.bounds.push(parse_quote!(_jsonrpc_core::Metadata));
+			return ty;
+		}
+		ty
+	}
 }
 
 impl RpcTrait {
@@ -123,8 +149,8 @@ impl RpcTrait {
 			.iter()
 			.map(|rpc| {
 				let rpc_name = &rpc.name;
-				let method = &rpc.method.sig.ident;
-				let arg_types = rpc.method.sig.decl.inputs
+				let method = &rpc.sig.ident;
+				let arg_types = rpc.sig.decl.inputs
 					.iter()
 					.filter_map(|arg| {
 						let ty =
@@ -134,9 +160,10 @@ impl RpcTrait {
 								// todo: [AJ] what about Inferred?
 								_ => None,
 							};
+//						println!("ARG Type {:?}", ty);
 						ty.map(|t| quote! { #t })
 					});
-				let result = match rpc.method.sig.decl.output {
+				let result = match rpc.sig.decl.output {
 					// todo: [AJ] require Result type?
 					syn::ReturnType::Type(_, ref output) => output,
 					syn::ReturnType::Default => panic!("Return type required for RPC method signature")
@@ -149,26 +176,57 @@ impl RpcTrait {
 						}
 					})
 					.collect();
+				let add_method =
+					if rpc.has_metadata {
+						quote! {
+							del.add_method_with_meta(#rpc_name, move |base, params, meta| {
+								_jsonrpc_macros::WrapMeta::wrap_rpc(
+									&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
+									base,
+									params,
+									meta
+								)
+							});
+						}
+					} else {
+						quote! {
+							del.add_method(#rpc_name, move |base, params| {
+								_jsonrpc_macros::WrapAsync::wrap_rpc(
+									&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
+									base,
+									params
+								)
+							});
+						}
+					};
 				quote! {
-					del.add_method(#rpc_name, move |base, params| {
-						_jsonrpc_macros::WrapAsync::wrap_rpc(
-							&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
-							base,
-							params
-						)
-					});
+					#add_method
 					#(#add_aliases)*
 				}
 			})
 			.collect();
 
+		let to_delegate_body =
+			quote! {
+				let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
+				#(#add_methods)*
+				del
+			};
+
 		let method: syn::TraitItemMethod =
-			parse_quote! {
-				fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
-				{
-					let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
-					#(#add_methods)*
-					del
+			if self.has_metadata {
+				parse_quote! {
+					fn to_delegate(self) -> _jsonrpc_macros::IoDelegate<Self, Self::Metadata>
+					{
+						#to_delegate_body
+					}
+				}
+			} else {
+				parse_quote! {
+					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
+					{
+						#to_delegate_body
+					}
 				}
 			};
 
@@ -258,7 +316,7 @@ fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::
 		_ => return Err("rpc_api trait only works with trait declarations".to_owned())
 	};
 
-	let mut visitor = RpcTrait { methods: Vec::new() };
+	let mut visitor = RpcTrait { methods: Vec::new(), has_metadata: false };
 	let rpc_trait = visitor.fold_item_trait(rpc_trait);
 
 	let name = rpc_trait.ident.clone();
