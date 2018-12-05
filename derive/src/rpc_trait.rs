@@ -95,6 +95,59 @@ impl RpcMethod {
 			_ => Err("Expected rpc attribute with name argument".to_string())
 		}
 	}
+
+	fn generate_delegate_method_registration(&self) -> proc_macro2::TokenStream {
+		let rpc_name = &self.name;
+		let method = &self.sig.ident;
+		let arg_types = self.sig.decl.inputs
+			.iter()
+			.filter_map(|arg| {
+				let ty =
+					match arg {
+						syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
+						syn::FnArg::Ignored(ty) => Some(ty),
+						// todo: [AJ] what about Inferred?
+						_ => None,
+					};
+				ty.map(|t| quote! { #t })
+			});
+		let result = match self.sig.decl.output {
+			// todo: [AJ] require Result type?
+			syn::ReturnType::Type(_, ref output) => output,
+			syn::ReturnType::Default => panic!("Return type required for RPC method signature")
+		};
+		let add_aliases: Vec<_> = self.aliases
+			.iter()
+			.map(|alias| quote! { del.add_alias(#alias, #rpc_name); })
+			.collect();
+		let add_method =
+			if self.has_metadata {
+				quote! {
+					del.add_method_with_meta(#rpc_name, move |base, params, meta| {
+						_jsonrpc_macros::WrapMeta::wrap_rpc(
+							&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
+							base,
+							params,
+							meta
+						)
+					});
+				}
+			} else {
+				quote! {
+					del.add_method(#rpc_name, move |base, params| {
+						_jsonrpc_macros::WrapAsync::wrap_rpc(
+							&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
+							base,
+							params
+						)
+					});
+				}
+			};
+		quote! {
+			#add_method
+			#(#add_aliases)*
+		}
+	}
 }
 
 struct RpcTrait {
@@ -147,63 +200,7 @@ impl RpcTrait {
 	fn generate_to_delegate_method(&self, trait_item: &syn::ItemTrait) -> syn::TraitItemMethod {
 		let add_methods: Vec<_> = self.methods
 			.iter()
-			.map(|rpc| {
-				let rpc_name = &rpc.name;
-				let method = &rpc.sig.ident;
-				let arg_types = rpc.sig.decl.inputs
-					.iter()
-					.filter_map(|arg| {
-						let ty =
-							match arg {
-								syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
-								syn::FnArg::Ignored(ty) => Some(ty),
-								// todo: [AJ] what about Inferred?
-								_ => None,
-							};
-//						println!("ARG Type {:?}", ty);
-						ty.map(|t| quote! { #t })
-					});
-				let result = match rpc.sig.decl.output {
-					// todo: [AJ] require Result type?
-					syn::ReturnType::Type(_, ref output) => output,
-					syn::ReturnType::Default => panic!("Return type required for RPC method signature")
-				};
-				let add_aliases: Vec<_> = rpc.aliases
-					.iter()
-					.map(|alias| {
-						quote! {
-							del.add_alias(#alias, #rpc_name);
-						}
-					})
-					.collect();
-				let add_method =
-					if rpc.has_metadata {
-						quote! {
-							del.add_method_with_meta(#rpc_name, move |base, params, meta| {
-								_jsonrpc_macros::WrapMeta::wrap_rpc(
-									&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
-									base,
-									params,
-									meta
-								)
-							});
-						}
-					} else {
-						quote! {
-							del.add_method(#rpc_name, move |base, params| {
-								_jsonrpc_macros::WrapAsync::wrap_rpc(
-									&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
-									base,
-									params
-								)
-							});
-						}
-					};
-				quote! {
-					#add_method
-					#(#add_aliases)*
-				}
-			})
+			.map(RpcMethod::generate_delegate_method_registration)
 			.collect();
 
 		let to_delegate_body =
@@ -230,14 +227,18 @@ impl RpcTrait {
 				}
 			};
 
-		with_where_clause_serialization_bounds(&trait_item, &method)
+		let predicates = generate_where_clause_serialization_predicates(&trait_item);
+
+		let mut method = method.clone();
+		method.sig.decl.generics
+			.make_where_clause()
+			.predicates
+			.extend(predicates);
+		method
 	}
 }
 
-fn with_where_clause_serialization_bounds(
-	item_trait: &syn::ItemTrait,
-	method: &syn::TraitItemMethod,
-) -> syn::TraitItemMethod {
+fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -> Vec<syn::WherePredicate> {
 	struct FindTyParams {
 		trait_generics: HashSet<syn::Ident>,
 		serialize_type_params: HashSet<syn::Ident>,
@@ -281,7 +282,7 @@ fn with_where_clause_serialization_bounds(
 	};
 	visitor.visit_item_trait(item_trait);
 
-	let predicates = item_trait.generics
+	item_trait.generics
 		.type_params()
 		.map(|ty| {
 			let ty_path = syn::TypePath { qself: None, path: ty.ident.clone().into() };
@@ -300,14 +301,8 @@ fn with_where_clause_serialization_bounds(
 				colon_token: <Token![:]>::default(),
 				bounds,
 			})
-		});
-
-	let mut method = method.clone();
-	method.sig.decl.generics
-		.make_where_clause()
-		.predicates
-		.extend(predicates);
-	method
+		})
+		.collect()
 }
 
 fn impl_rpc(_args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
