@@ -42,10 +42,12 @@ impl RpcTraitMethods {
 
 					let sub_name = &subscribe.attr.name;
 					let sub_method = &subscribe.sig.ident;
+					let sub_aliases = subscribe.add_aliases();
 					let sub_arg_types = &subscribe.get_method_arg_types();
 
 					let unsub_name = &unsubscribe.attr.name;
 					let unsub_method = &unsubscribe.sig.ident;
+					let unsub_aliases = unsubscribe.add_aliases();
 
 					quote! {
 						del.add_subscription(
@@ -66,11 +68,9 @@ impl RpcTraitMethods {
 								.map_err(Into::into)
 							}),
 						);
+						#sub_aliases
+						#unsub_aliases
 					}
-
-					// todo: [AJ] add aliases
-//					$del.add_alias($sub_alias, $subscribe);
-//					$del.add_alias($unsub_alias, $unsubscribe);
 				},
 			};
 
@@ -134,10 +134,7 @@ impl RpcMethod {
 			syn::ReturnType::Type(_, ref output) => output,
 			syn::ReturnType::Default => panic!("Return type required for RPC method signature")
 		};
-		let add_aliases: Vec<_> = self.attr.aliases
-			.iter()
-			.map(|alias| quote! { del.add_alias(#alias, #rpc_name); })
-			.collect();
+		let add_aliases = self.add_aliases();
 		let add_method =
 			if self.attr.has_metadata {
 				quote! {
@@ -163,8 +160,17 @@ impl RpcMethod {
 			};
 		quote! {
 			#add_method
-			#(#add_aliases)*
+			#add_aliases
 		}
+	}
+
+	fn add_aliases(&self) -> proc_macro2::TokenStream {
+		let name = &self.attr.name;
+		let add_aliases: Vec<_> = self.attr.aliases
+			.iter()
+			.map(|alias| quote! { del.add_alias(#alias, #name); })
+			.collect();
+		quote!{ #(#add_aliases)* }
 	}
 
 	fn get_method_arg_types(&self) -> Vec<&syn::Type> {
