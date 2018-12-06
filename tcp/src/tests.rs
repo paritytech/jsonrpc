@@ -89,7 +89,7 @@ fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
 		})
 		.and_then(|(stream, _data)| {
 			stream.shutdown(Shutdown::Write).unwrap();
-			io::read_to_end(stream, vec![]).wait()
+			io::read_to_end(stream, vec![])
 		})
 		.and_then(move |(_stream, read_buf)| {
 			ret_tx.send(read_buf).map_err(|err| panic!("Unable to send {:?}", err))
