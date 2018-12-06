@@ -23,6 +23,7 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	session_stats: Option<Arc<SessionStats>>,
 	executor: UninitializedExecutor,
 	max_connections: usize,
+	max_payload_mb: usize,
 }
 
 impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
@@ -49,6 +50,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			session_stats: None,
 			executor: UninitializedExecutor::Unspawned,
 			max_connections: 100,
+			max_payload_mb: 5,
 		}
 	}
 
@@ -96,6 +98,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 		self
 	}
 
+	/// Maximal size of the payload (in MB)
+	/// Default: 5
+	pub fn max_payload(mut self, max_payload_mb: usize) -> Self {
+		self.max_payload_mb = max_payload_mb;
+		self
+	}
+
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
 	pub fn start(self, addr: &SocketAddr) -> Result<Server> {
@@ -109,6 +118,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.session_stats,
 			self.executor,
 			self.max_connections,
+			self.max_payload_mb,
 		)
 	}
 
