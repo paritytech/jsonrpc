@@ -1,4 +1,6 @@
 extern crate jsonrpc_core;
+extern crate jsonrpc_derive;
+extern crate jsonrpc_macros;
 extern crate jsonrpc_pubsub;
 extern crate jsonrpc_tcp_server;
 
@@ -8,6 +10,7 @@ use std::collections::HashMap;
 
 use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_core::futures::Future;
+use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId};
 
 use jsonrpc_macros::pubsub;

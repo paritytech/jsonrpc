@@ -23,7 +23,11 @@ enum RpcTraitMethods {
 }
 
 impl RpcTraitMethods {
-	fn generate_to_delegate_method(&self, trait_item: &syn::ItemTrait, has_metadata: bool) -> Result<syn::TraitItemMethod> {
+	fn generate_to_delegate_method(
+		&self,
+		trait_item: &syn::ItemTrait,
+		has_metadata: bool,
+	) -> Result<syn::TraitItemMethod> {
 		let delegate_registration =
 			match self {
 				RpcTraitMethods::Standard(methods) => {
@@ -34,19 +38,21 @@ impl RpcTraitMethods {
 					quote! { #(#add_methods)* }
 				},
 				RpcTraitMethods::PubSub { name, subscribe, unsubscribe } => {
+					let mod_name = rpc_wrapper_mod_name(&trait_item);
+
 					let sub_name = &subscribe.attr.name;
 					let sub_method = &subscribe.sig.ident;
 					let sub_arg_types = &subscribe.get_method_arg_types();
 
-					let unsub_name = &subscribe.attr.name;
-					let unsub_method = &subscribe.sig.ident;
+					let unsub_name = &unsubscribe.attr.name;
+					let unsub_method = &unsubscribe.sig.ident;
 
 					quote! {
 						del.add_subscription(
 							#name,
 							(#sub_name, move |base, params, meta, subscriber| {
 								_jsonrpc_macros::WrapSubscribe::wrap_rpc(
-									&(Self::#sub_method as fn(&_, Self::Metadata #(, #sub_arg_types)*)),
+									&(Self::#sub_method as fn(&_ #(, #sub_arg_types)*)),
 									base,
 									params,
 									meta,
@@ -54,7 +60,7 @@ impl RpcTraitMethods {
 								)
 							}),
 							(#unsub_name, move |base, id| {
-								use _jsonrpc_core::futures::{IntoFuture, Future};
+								use #mod_name::_jsonrpc_core::futures::{IntoFuture, Future};
 								Self::#unsub_method(base, id).into_future()
 									.map(_jsonrpc_macros::to_value)
 								.map_err(Into::into)
@@ -168,7 +174,6 @@ impl RpcMethod {
 				match arg {
 					syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
 					syn::FnArg::Ignored(ty) => Some(&ty),
-					// todo: [AJ] what about Inferred?
 					_ => None,
 				}
 			})
@@ -183,20 +188,6 @@ struct RpcTrait {
 }
 
 impl<'a> Fold for RpcTrait {
-	fn fold_item_trait(&mut self, item_trait: syn::ItemTrait) -> syn::ItemTrait {
-		// first visit the trait to collect the methods
-		let mut item_trait = fold::fold_item_trait(self, item_trait);
-
-		let to_delegate_method = self.generate_to_delegate_method(&item_trait);
-		item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
-
-		let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =
-			parse_quote!(Sized + Send + Sync + 'static);
-		item_trait.supertraits.extend(trait_bounds);
-
-		item_trait
-	}
-
 	fn fold_trait_item_method(&mut self, method: syn::TraitItemMethod) -> syn::TraitItemMethod {
 		let mut method = method.clone();
 		match RpcMethod::try_from_trait_item_method(&method) {
@@ -294,19 +285,76 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 		.collect()
 }
 
+fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
+	let trait_attr = RpcTraitAttribute::try_from_trait_attribute(&attr_args)?;
+	let mut visitor = RpcTrait { attr: trait_attr, methods: Vec::new(), has_metadata: false };
+
+	// first visit the trait to collect the methods
+	let mut item_trait = fold::fold_item_trait(&mut visitor, item_trait.clone());
+	let rpc_trait_methods =
+		match visitor.attr {
+			RpcTraitAttribute::RpcTrait => {
+				if !visitor.methods.is_empty() {
+					Ok(RpcTraitMethods::Standard(visitor.methods.clone()))
+				} else {
+					Err("No rpc annotated trait items found")
+				}
+			},
+			RpcTraitAttribute::PubSubTrait { name } => {
+				let method_name_contains = |m: &RpcMethod, s: &str| {
+					m.sig.ident.to_string().contains(s)
+				};
+				let subscribe = visitor.methods
+					.iter()
+					.find(|m| method_name_contains(m, "subscribe") && !method_name_contains(*m, "unsubscribe"));
+				let unsubscribe = visitor.methods
+					.iter()
+					.find(|m| method_name_contains(*m, "unsubscribe"));
+
+				match (subscribe, unsubscribe) {
+					(Some(sub), Some(unsub)) => {
+						// todo: [AJ] validate subscribe/unsubscribe args
+//						let sub_arg_types = sub.get_method_arg_types();
+
+						Ok(RpcTraitMethods::PubSub {
+							name,
+							subscribe: sub.clone(),
+							unsubscribe: unsub.clone()
+						})
+					},
+					(Some(_), None) => Err("Missing required subscribe method"),
+					(None, Some(_)) => Err("Missing required unsubscribe method"),
+					(None, None) => Err("Missing both subscribe and unsubscribe methods"),
+				}
+			}
+		}?;
+	let to_delegate_method =
+		rpc_trait_methods.generate_to_delegate_method(&item_trait, visitor.has_metadata)?;
+	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
+
+	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =
+		parse_quote!(Sized + Send + Sync + 'static);
+	item_trait.supertraits.extend(trait_bounds);
+
+	Ok(item_trait)
+}
+
+fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
+	let name = rpc_trait.ident.clone();
+	let mod_name = format!("rpc_impl_{}", name.to_string());
+	ident(&mod_name)
+}
+
 pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		_ => return Err("rpc_api trait only works with trait declarations".to_owned())
 	};
 
-	let trait_attr = RpcTraitAttribute::try_from_trait_attribute(&args)?;
-	let mut visitor = RpcTrait { attr: trait_attr, methods: Vec::new(), has_metadata: false };
-	let rpc_trait = visitor.fold_item_trait(rpc_trait);
+	let rpc_trait = generate_rpc_item_trait(&args, &rpc_trait)?;
 
 	let name = rpc_trait.ident.clone();
-	let mod_name = format!("rpc_impl_{}", name.to_string());
-	let mod_name_ident = ident(&mod_name);
+	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
 
 	Ok(quote! {
 		mod #mod_name_ident {
