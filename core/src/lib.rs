@@ -34,7 +34,6 @@ pub extern crate serde_json;
 
 mod calls;
 mod io;
-mod delegates;
 
 pub mod middleware;
 pub mod types;
@@ -47,6 +46,5 @@ pub type Result<T> = ::std::result::Result<T, Error>;
 
 pub use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
 pub use io::{Compatibility, IoHandler, MetaIoHandler, FutureOutput, FutureResult, FutureResponse, FutureRpcResult};
-pub use delegates::IoDelegate;
 pub use middleware::{Middleware, Noop as NoopMiddleware};
 pub use types::*;
