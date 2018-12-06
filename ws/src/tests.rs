@@ -96,9 +96,7 @@ fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 		.allowed_hosts(DomainsValidation::AllowOnly(vec![format!("127.0.0.1:{}", port).into()]))
 		.request_middleware(|req: &ws::Request| {
 			if req.resource() == "/intercepted" {
-				let mut res = ws::Response::new(200, "OK");
-				res.set_body("Hello World!".to_owned());
-				Some(res)
+				Some(ws::Response::new(200, "OK", b"Hello World!".to_vec()))
 			} else {
 				None
 			}
