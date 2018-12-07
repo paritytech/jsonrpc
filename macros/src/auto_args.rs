@@ -110,16 +110,19 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error: ty)* >;
+				fn $m_name: ident ( $( $p: tt )* ) -> $result: tt <$out: ty $(, $error: ty)* >;
 			)*
 		}
 	) => {
 		$(#[$t_attr])*
 		pub trait $name $(<$( $simple_generics ,)* $( $generics , )*>)* : Sized + Send + Sync + 'static {
-			$(
-				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result<$out $(, $error)* > ;
-			)*
+			build_rpc_trait!(
+				GENERATE_FUNCTIONS
+				$(
+					$(#[doc=$m_doc])*
+					fn $m_name ( $( $p )* ) -> $result <$out $(, $error) *>;
+				)*
+			);
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
@@ -133,7 +136,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out $(, $error)* >
+						fn $m_name ( $( $p )* ) -> $result <$out $(, $error)* >
 					);
 				)*
 				del
@@ -155,7 +158,7 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[ doc=$m_doc:expr ] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error_std: ty) *>;
+				fn $m_name: ident ( $( $p: tt )* ) -> $result: tt <$out: ty $(, $error_std: ty) *>;
 			)*
 
 			$(
@@ -178,10 +181,12 @@ macro_rules! build_rpc_trait {
 				$( $sub_name )*
 			);
 
-			$(
-				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result <$out $(, $error_std) *>;
-			)*
+			build_rpc_trait!(GENERATE_FUNCTIONS
+				$(
+					$(#[doc=$m_doc])*
+					fn $m_name ( $( $p )* ) -> $result <$out $(, $error_std) *>;
+				)*
+			);
 
 			$(
 				$(#[doc=$sub_doc])*
@@ -202,7 +207,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out $(, $error_std)* >
+						fn $m_name ( $( $p )* ) -> $result <$out $(, $error_std)* >
 					);
 				)*
 				$(
@@ -219,17 +224,15 @@ macro_rules! build_rpc_trait {
 		}
 	};
 
-	( WRAP $del: expr =>
-		(name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty $(, $error: ty)* >
-	) => {
-		$del.add_method($name, move |base, params| {
-			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out $(, $error)*>), base, params)
-		});
+	(GENERATE_FUNCTIONS
 		$(
-			$(
-				$del.add_alias($alias, $name);
-			)+
+			$( #[doc=$m_doc:expr] )*
+			fn $m_name: ident (&self $(, $p: ty)* ) -> $result: ty;
+		)*
+	) => {
+		$(
+			$(#[doc=$m_doc])*
+			fn $m_name (&self $(, _: $p )* ) -> $result;
 		)*
 	};
 
@@ -282,6 +285,20 @@ macro_rules! build_rpc_trait {
 			$(
 				$del.add_alias($unsub_alias, $unsubscribe);
 			)*
+		)*
+	};
+
+	( WRAP $del: expr =>
+		(name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
+		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty $(, $error: ty)* >
+	) => {
+		$del.add_method($name, move |base, params| {
+			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out $(, $error)*>), base, params)
+		});
+		$(
+			$(
+				$del.add_alias($alias, $name);
+			)+
 		)*
 	};
 }
@@ -684,4 +701,3 @@ wrap_with_trailing!(4, A, B, C, D);
 wrap_with_trailing!(3, A, B, C);
 wrap_with_trailing!(2, A, B);
 wrap_with_trailing!(1, A);
-
