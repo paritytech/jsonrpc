@@ -24,7 +24,7 @@ use jsonrpc_core::futures::Future;
 ///     jsonrpc: "2.0",
 ///     id: 1,
 ///     method: "subscribe_hello",
-///     params: [],
+///     params: null,
 ///   }));
 /// });
 ///
