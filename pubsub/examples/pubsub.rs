@@ -3,7 +3,7 @@ extern crate jsonrpc_pubsub;
 extern crate jsonrpc_tcp_server;
 
 use std::{time, thread};
-use std::sync::Arc;
+use std::sync::{Arc, atomic};
 
 use jsonrpc_core::*;
 use jsonrpc_pubsub::{PubSubHandler, Session, Subscriber, SubscriptionId};
@@ -24,9 +24,11 @@ fn main() {
 		Ok(Value::String("hello".to_string()))
 	});
 
+	let is_done = Arc::new(atomic::AtomicBool::default());
+	let is_done2 = is_done.clone();
 	io.add_subscription(
 		"hello",
-		("subscribe_hello", |params: Params, _, subscriber: Subscriber| {
+		("subscribe_hello", move |params: Params, _, subscriber: Subscriber| {
 			if params != Params::None {
 				subscriber.reject(Error {
 					code: ErrorCode::ParseError,
@@ -39,8 +41,13 @@ fn main() {
 			let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
 			// or subscriber.reject(Error {} );
 			// or drop(subscriber)
+			let is_done = is_done.clone();
 			thread::spawn(move || {
 				loop {
+					if is_done.load(atomic::Ordering::AcqRel) {
+						return;
+					}
+
 					thread::sleep(time::Duration::from_millis(100));
 					match sink.notify(Params::Array(vec![Value::Number(10.into())])).wait() {
 						Ok(_) => {},
@@ -52,8 +59,9 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| {
+		("remove_hello", move |_id: SubscriptionId, _| {
 			println!("Closing subscription");
+			is_done2.store(true, atomic::Ordering::AcqRel);
 			futures::future::ok(Value::Bool(true))
 		}),
 	);

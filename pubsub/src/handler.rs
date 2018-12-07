@@ -20,21 +20,21 @@ impl<M, F> SubscribeRpcMethod<M> for F where
 }
 
 /// Unsubscribe handler
-pub trait UnsubscribeRpcMethod: Send + Sync + 'static {
+pub trait UnsubscribeRpcMethod<M>: Send + Sync + 'static {
 	/// Output type
 	type Out: Future<Item = core::Value, Error = core::Error> + Send + 'static;
 	/// Called when client is requesting to cancel existing subscription.
-	fn call(&self, id: SubscriptionId) -> Self::Out;
+	fn call(&self, id: SubscriptionId, meta: M) -> Self::Out;
 }
 
-impl<F, I> UnsubscribeRpcMethod for F where
-	F: Fn(SubscriptionId) -> I + Send + Sync + 'static,
+impl<M, F, I> UnsubscribeRpcMethod<M> for F where
+	F: Fn(SubscriptionId, M) -> I + Send + Sync + 'static,
 	I: IntoFuture<Item = core::Value, Error = core::Error>,
 	I::Future: Send + 'static,
 {
 	type Out = I::Future;
-	fn call(&self, id: SubscriptionId) -> Self::Out {
-		(*self)(id).into_future()
+	fn call(&self, id: SubscriptionId, meta: M) -> Self::Out {
+		(*self)(id, meta).into_future()
 	}
 }
 
@@ -67,7 +67,7 @@ impl<T: PubSubMetadata, S: core::Middleware<T>> PubSubHandler<T, S> {
 		unsubscribe: (&str, G),
 	) where
 		F: SubscribeRpcMethod<T>,
-		G: UnsubscribeRpcMethod,
+		G: UnsubscribeRpcMethod<T>,
 	{
 		let (sub, unsub) = new_subscription(notification, subscribe.1, unsubscribe.1);
 		self.handler.add_method_with_meta(subscribe.0, sub);
@@ -130,7 +130,7 @@ mod tests {
 				assert_eq!(params, core::Params::None);
 				let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 			}),
-			("unsubscribe_hello", move |id| {
+			("unsubscribe_hello", move |id, _meta| {
 				// Should be called because session is dropped.
 				called2.store(true, Ordering::SeqCst);
 				assert_eq!(id, SubscriptionId::Number(5));

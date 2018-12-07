@@ -68,7 +68,7 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| -> BoxFuture<Value> {
+		("remove_hello", |_id: SubscriptionId, _meta| -> BoxFuture<Value> {
 			println!("Closing subscription");
 			Box::new(futures::future::ok(Value::Bool(true)))
 		}),
