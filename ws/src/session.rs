@@ -364,10 +364,7 @@ fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool
 
 
 fn forbidden(title: &str, message: &str) -> ws::Response {
-	let mut forbidden = ws::Response::new(403, "Forbidden");
-	forbidden.set_body(
-		format!("{}\n{}\n", title, message).as_bytes()
-	);
+	let mut forbidden = ws::Response::new(403, "Forbidden", format!("{}\n{}\n", title, message).into_bytes());
 	{
 		let headers = forbidden.headers_mut();
 		headers.push(("Connection".to_owned(), "close".as_bytes().to_vec()));
