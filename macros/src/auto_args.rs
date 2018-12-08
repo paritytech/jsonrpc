@@ -188,12 +188,14 @@ macro_rules! build_rpc_trait {
 				)*
 			);
 
-			$(
-				$(#[doc=$sub_doc])*
-				fn $sub_name ( $($sub_p)* );
-				$(#[doc=$unsub_doc])*
-				fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out $(, $error_unsub)* >;
-			)*
+			build_rpc_trait!(GENERATE_FUNCTIONS
+				$(
+					$(#[doc=$sub_doc])*
+					fn $sub_name ( $( $sub_p )* );
+					$(#[doc=$unsub_doc])*
+					fn $unsub_name ( $( $unsub_p )* ) -> $sub_result <$sub_out $(, $error_unsub) *>;
+				)*
+			);
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
@@ -227,12 +229,12 @@ macro_rules! build_rpc_trait {
 	(GENERATE_FUNCTIONS
 		$(
 			$( #[doc=$m_doc:expr] )*
-			fn $m_name: ident (&self $(, $p: ty)* ) -> $result: ty;
+			fn $m_name: ident (&self $(, $p: ty)* ) $( -> $result: ty)*;
 		)*
 	) => {
 		$(
 			$(#[doc=$m_doc])*
-			fn $m_name (&self $(, _: $p )* ) -> $result;
+			fn $m_name (&self $(, _: $p )* ) $( -> $result)*;
 		)*
 	};
 
