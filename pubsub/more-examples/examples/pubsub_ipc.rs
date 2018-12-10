@@ -52,7 +52,7 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| -> Result<Value> {
+		("remove_hello", |_id: SubscriptionId, _meta| -> Result<Value> {
 			println!("Closing subscription");
 			Ok(Value::Bool(true))
 		}),

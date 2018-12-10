@@ -52,7 +52,7 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| {
+		("remove_hello", |_id: SubscriptionId, _| {
 			println!("Closing subscription");
 			futures::future::ok(Value::Bool(true))
 		}),
