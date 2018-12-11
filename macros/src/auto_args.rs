@@ -48,7 +48,7 @@ use util::{invalid_params, expect_no_params, to_value};
 ///	  #[rpc(name = "hello_subscribe")]
 ///	  fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
 ///	  #[rpc(name = "hello_unsubscribe")]
-///	  fn unsubscribe(&self, SubscriptionId) -> Result<bool>;
+///	  fn unsubscribe(&self, Self::Metadata, SubscriptionId) -> Result<bool>;
 ///	}
 ///	```
 ///
@@ -110,16 +110,19 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[doc=$m_doc:expr] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error: ty)* >;
+				fn $m_name: ident ( $( $p: tt )* ) -> $result: tt <$out: ty $(, $error: ty)* >;
 			)*
 		}
 	) => {
 		$(#[$t_attr])*
 		pub trait $name $(<$( $simple_generics ,)* $( $generics , )*>)* : Sized + Send + Sync + 'static {
-			$(
-				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result<$out $(, $error)* > ;
-			)*
+			build_rpc_trait!(
+				GENERATE_FUNCTIONS
+				$(
+					$(#[doc=$m_doc])*
+					fn $m_name ( $( $p )* ) -> $result <$out $(, $error) *>;
+				)*
+			);
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
@@ -133,7 +136,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out $(, $error)* >
+						fn $m_name ( $( $p )* ) -> $result <$out $(, $error)* >
 					);
 				)*
 				del
@@ -155,7 +158,7 @@ macro_rules! build_rpc_trait {
 			$(
 				$( #[ doc=$m_doc:expr ] )*
 				#[ rpc( $($t:tt)* ) ]
-				fn $m_name: ident ( $($p: tt)* ) -> $result: tt <$out: ty $(, $error_std: ty) *>;
+				fn $m_name: ident ( $( $p: tt )* ) -> $result: tt <$out: ty $(, $error_std: ty) *>;
 			)*
 
 			$(
@@ -178,17 +181,21 @@ macro_rules! build_rpc_trait {
 				$( $sub_name )*
 			);
 
-			$(
-				$(#[doc=$m_doc])*
-				fn $m_name ( $($p)* ) -> $result <$out $(, $error_std) *>;
-			)*
+			build_rpc_trait!(GENERATE_FUNCTIONS
+				$(
+					$(#[doc=$m_doc])*
+					fn $m_name ( $( $p )* ) -> $result <$out $(, $error_std) *>;
+				)*
+			);
 
-			$(
-				$(#[doc=$sub_doc])*
-				fn $sub_name ( $($sub_p)* );
-				$(#[doc=$unsub_doc])*
-				fn $unsub_name ( $($unsub_p)* ) -> $sub_result <$sub_out $(, $error_unsub)* >;
-			)*
+			build_rpc_trait!(GENERATE_FUNCTIONS
+				$(
+					$(#[doc=$sub_doc])*
+					fn $sub_name ( $( $sub_p )* );
+					$(#[doc=$unsub_doc])*
+					fn $unsub_name ( $( $unsub_p )* ) -> $sub_result <$sub_out $(, $error_unsub) *>;
+				)*
+			);
 
 			/// Transform this into an `IoDelegate`, automatically wrapping
 			/// the parameters.
@@ -202,7 +209,7 @@ macro_rules! build_rpc_trait {
 				$(
 					build_rpc_trait!(WRAP del =>
 						( $($t)* )
-						fn $m_name ( $($p)* ) -> $result <$out $(, $error_std)* >
+						fn $m_name ( $( $p )* ) -> $result <$out $(, $error_std)* >
 					);
 				)*
 				$(
@@ -219,17 +226,15 @@ macro_rules! build_rpc_trait {
 		}
 	};
 
-	( WRAP $del: expr =>
-		(name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty $(, $error: ty)* >
-	) => {
-		$del.add_method($name, move |base, params| {
-			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out $(, $error)*>), base, params)
-		});
+	(GENERATE_FUNCTIONS
 		$(
-			$(
-				$del.add_alias($alias, $name);
-			)+
+			$( #[doc=$m_doc:expr] )*
+			fn $m_name: ident (&self $(, $p: ty)* ) $( -> $result: ty)*;
+		)*
+	) => {
+		$(
+			$(#[doc=$m_doc])*
+			fn $m_name (&self $(, _: $p )* ) $( -> $result)*;
 		)*
 	};
 
@@ -252,7 +257,7 @@ macro_rules! build_rpc_trait {
 		subscribe: (name = $subscribe: expr $(, alias = [ $( $sub_alias: expr, )+ ])*)
 		fn $sub_method: ident (&self, Self::Metadata $(, $sub_p: ty)+);
 		unsubscribe: (name = $unsubscribe: expr $(, alias = [ $( $unsub_alias: expr, )+ ])*)
-		fn $unsub_method: ident (&self $(, $unsub_p: ty)+) -> $result: tt <$out: ty $(, $error_unsub: ty)* >;
+		fn $unsub_method: ident (&self, Self::Metadata $(, $unsub_p: ty)+) -> $result: tt <$out: ty $(, $error_unsub: ty)* >;
 	) => {
 		$del.add_subscription(
 			$name,
@@ -265,9 +270,9 @@ macro_rules! build_rpc_trait {
 					subscriber,
 				)
 			}),
-			($unsubscribe, move |base, id| {
+			($unsubscribe, move |base, id, meta| {
 				use $crate::jsonrpc_core::futures::{IntoFuture, Future};
-				Self::$unsub_method(base, id).into_future()
+				Self::$unsub_method(base, meta, id).into_future()
 					.map($crate::to_value)
 					.map_err(Into::into)
 			}),
@@ -282,6 +287,20 @@ macro_rules! build_rpc_trait {
 			$(
 				$del.add_alias($unsub_alias, $unsubscribe);
 			)*
+		)*
+	};
+
+	( WRAP $del: expr =>
+		(name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
+		fn $method: ident (&self $(, $param: ty)*) -> $result: tt <$out: ty $(, $error: ty)* >
+	) => {
+		$del.add_method($name, move |base, params| {
+			$crate::WrapAsync::wrap_rpc(&(Self::$method as fn(&_ $(, $param)*) -> $result <$out $(, $error)*>), base, params)
+		});
+		$(
+			$(
+				$del.add_alias($alias, $name);
+			)+
 		)*
 	};
 }
@@ -684,4 +703,3 @@ wrap_with_trailing!(4, A, B, C, D);
 wrap_with_trailing!(3, A, B, C);
 wrap_with_trailing!(2, A, B);
 wrap_with_trailing!(1, A);
-

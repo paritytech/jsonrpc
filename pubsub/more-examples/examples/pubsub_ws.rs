@@ -24,7 +24,7 @@ use jsonrpc_core::futures::Future;
 ///     jsonrpc: "2.0",
 ///     id: 1,
 ///     method: "subscribe_hello",
-///     params: [],
+///     params: null,
 ///   }));
 /// });
 ///
@@ -68,7 +68,7 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId| -> BoxFuture<Value> {
+		("remove_hello", |_id: SubscriptionId, _meta| -> BoxFuture<Value> {
 			println!("Closing subscription");
 			Box::new(futures::future::ok(Value::Bool(true)))
 		}),
