@@ -70,6 +70,11 @@ pub struct Rpc {
 	pub options: Options,
 }
 
+pub enum Encoding {
+	Compact,
+	Pretty,
+}
+
 impl From<rpc::IoHandler> for Rpc {
 	fn from(io: rpc::IoHandler) -> Self {
 		Rpc { io, ..Default::default() }
@@ -86,14 +91,20 @@ impl Rpc {
 		io.into()
 	}
 
-	fn request_helper<T>(
+	/// Perform a single, synchronous method call and return pretty-printed value
+	pub fn request<T>(&self, method: &str, params: &T) -> String where
+		T: serde::Serialize,
+	{
+		self.make_request(method, params, Encoding::Pretty)
+	}
+
+	/// Perform a single, synchronous method call.
+	pub fn make_request<T>(
 		&self,
 		method: &str,
 		params: &T,
-		success_formatter: fn(&serde_json::Value) -> serde_json::Result<String>,
-		error_formatter: fn(&rpc::Error) -> serde_json::Result<String>,
-	) -> String
-	where
+		encoding: Encoding,
+	) -> String where
 		T: serde::Serialize,
 	{
 		use self::rpc::types::response;
@@ -110,31 +121,23 @@ impl Rpc {
 
 		// extract interesting part from the response
 		let extracted = match serde_json::from_str(&response).expect("We will always get a single output.") {
-			response::Output::Success(response::Success { result, .. }) => success_formatter(&result),
-			response::Output::Failure(response::Failure { error, .. }) => error_formatter(&error),
+			response::Output::Success(response::Success { result, .. }) => {
+				match encoding {
+					Encoding::Compact => serde_json::to_string(&result),
+					Encoding::Pretty => serde_json::to_string_pretty(&result),
+				}
+			},
+			response::Output::Failure(response::Failure { error, .. }) => {
+				match encoding {
+					Encoding::Compact => serde_json::to_string(&error),
+					Encoding::Pretty => serde_json::to_string_pretty(&error),
+				}
+			},
 		}.expect("Serialization is infallible; qed");
 
 		println!("\n{}\n --> {}\n", request, extracted);
 
 		extracted
-	}
-
-	/// Perform a single, synchronous method call and return pretty-printed value
-	pub fn request<T>(&self, method: &str, params: &T) -> String where
-		T: serde::Serialize,
-	{
-		let success_formatter = serde_json::to_string_pretty;
-		let error_formatter = serde_json::to_string_pretty;
-		self.request_helper(method, params, success_formatter, error_formatter)
-	}
-
-	/// Perform a single, synchronous method call.
-	pub fn make_request<T>(&self, method: &str, params: &T) -> String where
-		T: serde::Serialize,
-	{
-		let success_formatter = serde_json::to_string;
-		let error_formatter = serde_json::to_string;
-		self.request_helper(method, params, success_formatter, error_formatter)
 	}
 }
 
@@ -143,7 +146,7 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn should_test_simple_method() {
+	fn should_test_request_is_pretty() {
 		// given
 		let rpc = {
 			let mut io = rpc::IoHandler::new();
@@ -161,7 +164,7 @@ mod tests {
 	}
 
 	#[test]
-	fn should_test_make_request() {
+	fn should_test_make_request_compact() {
 		// given
 		let rpc = {
 			let mut io = rpc::IoHandler::new();
@@ -173,7 +176,7 @@ mod tests {
 
 		// when
 		assert_eq!(
-			rpc.make_request("test_method", &[5u64]),
+			rpc.make_request("test_method", &[5u64], Encoding::Compact),
 			"[5,10]"
 		);
 	}
