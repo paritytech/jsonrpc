@@ -29,7 +29,7 @@ build_rpc_trait! {
 
 			/// Unsubscribe from hello subscription.
 			#[rpc(name = "hello_unsubscribe")]
-			fn unsubscribe(&self, SubscriptionId) -> Result<bool>;
+			fn unsubscribe(&self, Self::Metadata, SubscriptionId) -> Result<bool>;
 		}
 	}
 }
@@ -44,7 +44,7 @@ impl Rpc for RpcImpl {
 		let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 	}
 
-	fn unsubscribe(&self, _id: SubscriptionId) -> Result<bool> {
+	fn unsubscribe(&self, _meta: Self::Metadata, _id: SubscriptionId) -> Result<bool> {
 		Ok(true)
 	}
 }
