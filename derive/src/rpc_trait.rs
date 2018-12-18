@@ -43,7 +43,7 @@ impl RpcTraitMethods {
 					let sub_name = &subscribe.attr.name;
 					let sub_method = &subscribe.sig.ident;
 					let sub_aliases = subscribe.add_aliases();
-					let sub_arg_types = &subscribe.get_method_arg_types();
+					let sub_arg_types = &subscribe.arg_types;
 
 					let unsub_name = &unsubscribe.attr.name;
 					let unsub_method = &unsubscribe.sig.ident;
@@ -114,53 +114,93 @@ impl RpcTraitMethods {
 struct RpcMethod {
 	attr: RpcMethodAttribute,
 	sig: syn::MethodSig,
+	arg_types: Vec<syn::Type>,
 }
 
 impl RpcMethod {
 	fn try_from_trait_item_method(trait_item: &syn::TraitItemMethod) -> Result<Option<RpcMethod>> {
 		let attr = RpcMethodAttribute::try_from_trait_item_method(trait_item);
 
-		attr.map(|a| a.map(|a|
-			RpcMethod { attr: a, sig: trait_item.sig.clone() }
-		))
+		let arg_types: Vec<_> =
+			trait_item.sig.decl.inputs
+				.iter()
+				.cloned()
+				.filter_map(|arg| {
+					match arg {
+						syn::FnArg::Captured(arg_captured) => Some(arg_captured.ty),
+						syn::FnArg::Ignored(ty) => Some(ty),
+						_ => None,
+					}
+				})
+				.collect();
+
+		attr.and_then(|attr|
+			match attr {
+				Some(a) => {
+					if a.has_metadata {
+						if let Some(self_arg) = arg_types.get(0) {
+							let metadata: syn::Type = parse_quote!("Self::Metadata");
+							if *self_arg != metadata {
+								return Err("Method with metadata expected Self::Metadata argument after self".into())
+							}
+						}
+					}
+					Ok(Some(RpcMethod { attr: a, sig: trait_item.sig.clone(), arg_types }))
+				},
+				None => Ok(None)
+			})
 	}
 
 	fn generate_delegate_method_registration(&self) -> proc_macro2::TokenStream {
 		let rpc_name = &self.attr.name;
 		let method = &self.sig.ident;
-		let arg_types = self.get_method_arg_types();
+		let arg_types = &self.arg_types;
+
+		let tuple_fields : &Vec<_> =
+			&(0..arg_types.len() as u8)
+				.map(|x| ident(&((x + 'a' as u8) as char).to_string()))
+				.collect();
+
 		let result = match self.sig.decl.output {
 			// todo: [AJ] require Result type?
 			syn::ReturnType::Type(_, ref output) => output,
 			syn::ReturnType::Default => panic!("Return type required for RPC method signature")
 		};
 		let add_aliases = self.add_aliases();
-		let add_method =
+
+		let (add_method, closure_args, method_sig, method_call) =
 			if self.attr.has_metadata {
-				quote! {
-					del.add_method_with_meta(#rpc_name, move |base, params, meta| {
-						_jsonrpc_macros::WrapMeta::wrap_rpc(
-							&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
-							base,
-							params,
-							meta
-						)
-					});
-				}
+				(
+					quote! { add_method_with_meta },
+					quote! { base, params, meta },
+					quote! { fn(&Self, Self::Metadata #(#arg_types), *) },
+					quote! { (base, meta, #(#tuple_fields), *) }
+				)
 			} else {
-				quote! {
-					del.add_method(#rpc_name, move |base, params| {
-						_jsonrpc_macros::WrapAsync::wrap_rpc(
-							&(Self::#method as fn(&_ #(, #arg_types)*) -> #result),
-							base,
-							params
-						)
-					});
-				}
+				(
+					quote! { add_method },
+					quote! { base, params },
+					quote! { fn(&Self, #(#arg_types), *) },
+					quote! { (base, #(#tuple_fields), *) }
+				)
 			};
+
+		let add_method =
+			quote! {
+				del.#add_method(#rpc_name,
+					move |#closure_args| {
+						let method = &(Self::#method as #method_sig -> #result);
+						match params.parse::<(#(#arg_types), *)>() {
+							Ok((#(#tuple_fields), *)) => Either::A(as_future((method)#method_call)),
+							Err(e) => Either::B(futures::failed(e)),
+						}
+					}
+				);
+			};
+		println!("{}", add_method);
 		quote! {
 			#add_method
-			#add_aliases
+//			#add_aliases
 		}
 	}
 
@@ -173,18 +213,18 @@ impl RpcMethod {
 		quote!{ #(#add_aliases)* }
 	}
 
-	fn get_method_arg_types(&self) -> Vec<&syn::Type> {
-		self.sig.decl.inputs
-			.iter()
-			.filter_map(|arg| {
-				match arg {
-					syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
-					syn::FnArg::Ignored(ty) => Some(&ty),
-					_ => None,
-				}
-			})
-			.collect()
-	}
+//	fn get_method_arg_types(&self) -> Vec<&syn::Type> {
+//		self.sig.decl.inputs
+//			.iter()
+//			.filter_map(|arg| {
+//				match arg {
+//					syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
+//					syn::FnArg::Ignored(ty) => Some(&ty),
+//					_ => None,
+//				}
+//			})
+//			.collect()
+//	}
 }
 
 struct RpcTrait {
@@ -369,6 +409,37 @@ pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro
 			extern crate jsonrpc_macros as _jsonrpc_macros; // todo: [AJ] remove/replace
 			extern crate serde as _serde;
 			use super::*;
+
+			// todo: [AJ] sort all these out, see to_delegate method
+			use std::sync::Arc;
+			use std::collections::HashMap;
+			use self::_jsonrpc_core::futures::future::{self, Either};
+			use self::_jsonrpc_core::futures::{self, Future, IntoFuture};
+			use self::_jsonrpc_core::{Error, Params, Value, Metadata, Result};
+
+			type WrappedFuture<F, OUT, E> = future::MapErr<
+				future::Map<F, fn(OUT) -> Value>,
+				fn(E) -> Error
+			>;
+			type WrapResult<F, OUT, E> = Either<
+				WrappedFuture<F, OUT, E>,
+				future::FutureResult<Value, Error>,
+			>;
+
+			fn to_value<T>(value: T) -> Value where T: _serde::Serialize {
+				_jsonrpc_core::to_value(value).expect("Expected always-serializable type.")
+			}
+
+			fn as_future<F, OUT, E, I>(el: I) -> WrappedFuture<F, OUT, E> where
+				OUT: _serde::Serialize,
+				E: Into<Error>,
+				F: Future<Item = OUT, Error = E>,
+				I: IntoFuture<Item = OUT, Error = E, Future = F>
+			{
+				el.into_future()
+					.map(to_value as fn(OUT) -> Value)
+					.map_err(Into::into as fn(E) -> Error)
+			}
 
 			#rpc_trait
 		}
