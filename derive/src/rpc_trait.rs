@@ -122,7 +122,7 @@ impl RpcMethod {
 	fn try_from_trait_item_method(trait_item: &syn::TraitItemMethod) -> Result<Option<RpcMethod>> {
 		let attr = RpcMethodAttribute::try_from_trait_item_method(trait_item);
 
-		let arg_types: Vec<_> =
+		let mut arg_types: Vec<_> =
 			trait_item.sig.decl.inputs
 				.iter()
 				.cloned()
@@ -145,12 +145,12 @@ impl RpcMethod {
 			match attr {
 				Some(attr) => {
 					if attr.has_metadata {
-						if let Some(self_arg) = arg_types.get(0) {
-							let metadata: syn::Type = parse_quote!("Self::Metadata");
-							if *self_arg != metadata {
-								return Err("Method with metadata expected Self::Metadata argument after self".into())
-							}
+						let metadata: &syn::Type = &parse_quote!(Self::Metadata);
+						if Some(metadata) != arg_types.get(0) {
+							return Err("Method with metadata expected Self::Metadata argument after self".into())
 						}
+						// remove Self::Metadata arg, it will be added again in the output
+						arg_types.retain(|arg| arg != metadata);
 					}
 					Ok(Some(RpcMethod { attr, sig: trait_item.sig.clone(), arg_types, return_type }))
 				},
@@ -176,7 +176,7 @@ impl RpcMethod {
 				(
 					quote! { add_method_with_meta },
 					quote! { base, params, meta },
-					quote! { fn(&Self, Self::Metadata #(#arg_types), *) },
+					quote! { fn(&Self, Self::Metadata, #(#arg_types), *) },
 					quote! { (base, meta, #(#tuple_fields), *) }
 				)
 			} else {
@@ -188,19 +188,25 @@ impl RpcMethod {
 				)
 			};
 
+		let params_method =
+			if !self.arg_types.is_empty() {
+				quote! { params.parse::<(#(#arg_types), *)>() }
+			} else {
+				quote! { params.expect_no_params() }
+			};
+
 		let add_method =
 			quote! {
 				del.#add_method(#rpc_name,
 					move |#closure_args| {
 						let method = &(Self::#method as #method_sig -> #result);
-						match params.parse::<(#(#arg_types), *)>() {
+						match #params_method {
 							Ok((#(#tuple_fields), *)) => Either::A(as_future((method)#method_call)),
 							Err(e) => Either::B(futures::failed(e)),
 						}
 					}
 				);
 			};
-//		println!("{}", add_method);
 		quote! {
 			#add_method
 //			#add_aliases
@@ -221,6 +227,7 @@ struct RpcTrait {
 	attr: RpcTraitAttribute,
 	methods: Vec<RpcMethod>,
 	has_metadata: bool,
+	errors: Vec<String>,
 }
 
 impl<'a> Fold for RpcTrait {
@@ -233,7 +240,7 @@ impl<'a> Fold for RpcTrait {
 				method.attrs.retain(|a| *a != rpc_method.attr.attr);
 			},
 			Ok(None) => (), // non rpc annotated trait method
-			Err(err) => panic!("Invalid rpc method attribute {}", err)
+			Err(err) => self.errors.push(format!("{}: Invalid rpc method attribute: {}", method.sig.ident, err))
 		}
 		fold::fold_trait_item_method(self, method)
 	}
@@ -323,10 +330,21 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 
 fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
 	let trait_attr = RpcTraitAttribute::try_from_trait_attribute(&attr_args)?;
-	let mut visitor = RpcTrait { attr: trait_attr, methods: Vec::new(), has_metadata: false };
+	let mut visitor = RpcTrait {
+		attr: trait_attr,
+		methods: Vec::new(),
+		has_metadata: false,
+		errors: Vec::new(),
+	};
 
 	// first visit the trait to collect the methods
 	let mut item_trait = fold::fold_item_trait(&mut visitor, item_trait.clone());
+
+	if !visitor.errors.is_empty() {
+		let errs = visitor.errors.join("\n  ");
+		return Err(format!("Invalid rpc trait:\n  {}", errs))
+	}
+
 	let rpc_trait_methods =
 		match visitor.attr {
 			RpcTraitAttribute::RpcTrait => {
@@ -364,6 +382,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 				}
 			}
 		}?;
+
 	let to_delegate_method =
 		rpc_trait_methods.generate_to_delegate_method(&item_trait, visitor.has_metadata)?;
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
@@ -405,30 +424,29 @@ pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro
 			use std::collections::HashMap;
 			use self::_jsonrpc_core::futures::future::{self, Either};
 			use self::_jsonrpc_core::futures::{self, Future, IntoFuture};
-			use self::_jsonrpc_core::{Error, Params, Value, Metadata, Result};
 
 			type WrappedFuture<F, OUT, E> = future::MapErr<
-				future::Map<F, fn(OUT) -> Value>,
+				future::Map<F, fn(OUT) -> _jsonrpc_core::Value>,
 				fn(E) -> Error
 			>;
 			type WrapResult<F, OUT, E> = Either<
 				WrappedFuture<F, OUT, E>,
-				future::FutureResult<Value, Error>,
+				future::FutureResult<_jsonrpc_core::Value, _jsonrpc_core::Error>,
 			>;
 
-			fn to_value<T>(value: T) -> Value where T: _serde::Serialize {
+			fn to_value<T>(value: T) -> _jsonrpc_core::Value where T: _serde::Serialize {
 				_jsonrpc_core::to_value(value).expect("Expected always-serializable type.")
 			}
 
 			fn as_future<F, OUT, E, I>(el: I) -> WrappedFuture<F, OUT, E> where
 				OUT: _serde::Serialize,
-				E: Into<Error>,
+				E: Into<_jsonrpc_core::Error>,
 				F: Future<Item = OUT, Error = E>,
 				I: IntoFuture<Item = OUT, Error = E, Future = F>
 			{
 				el.into_future()
-					.map(to_value as fn(OUT) -> Value)
-					.map_err(Into::into as fn(E) -> Error)
+					.map(to_value as fn(OUT) -> _jsonrpc_core::Value)
+					.map_err(Into::into as fn(E) -> _jsonrpc_core::Error)
 			}
 
 			#rpc_trait

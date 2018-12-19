@@ -31,6 +31,15 @@ impl Params {
 			Error::invalid_params(format!("Invalid params: {}.", e))
 		})
 	}
+
+	/// Check for no params, returns Err if any params
+	pub fn expect_no_params(self) -> Result<(), Error> {
+		match self {
+			Params::None => Ok(()),
+			Params::Array(ref v) if v.is_empty() => Ok(()),
+			p => Err(Error::invalid_params_with_details("No parameters were expected", p)),
+		}
+	}
 }
 
 #[cfg(test)]
