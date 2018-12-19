@@ -115,6 +115,7 @@ struct RpcMethod {
 	attr: RpcMethodAttribute,
 	sig: syn::MethodSig,
 	arg_types: Vec<syn::Type>,
+	trailing_arg: Option<syn::Type>,
 	return_type: syn::Type,
 }
 
@@ -135,6 +136,26 @@ impl RpcMethod {
 				})
 				.collect();
 
+		// if the last argument is an `Option` then it can be made a 'trailing' argument
+		let trailing_arg =
+			arg_types
+				.iter()
+				.last()
+				.and_then(|arg| {
+					if let syn::Type::Path(path) = arg {
+						path.path.segments
+							.first()
+							.and_then(|t| {
+								if t.value().ident == "Option" { Some(arg) } else { None }
+							})
+					} else {
+						None
+					}
+				})
+				.collect();
+
+		println!("Trailing {:?}", trailing_args);
+
 		let return_type = match trait_item.sig.decl.output {
 			// todo: [AJ] require Result type?
 			syn::ReturnType::Type(_, ref output) => Ok(*output.clone()),
@@ -152,7 +173,8 @@ impl RpcMethod {
 						// remove Self::Metadata arg, it will be added again in the output
 						arg_types.retain(|arg| arg != metadata);
 					}
-					Ok(Some(RpcMethod { attr, sig: trait_item.sig.clone(), arg_types, return_type }))
+					let sig = trait_item.sig.clone();
+					Ok(Some(RpcMethod { attr, sig, arg_types, trailing_args, return_type }))
 				},
 				None => Ok(None)
 			})
@@ -190,9 +212,34 @@ impl RpcMethod {
 
 		let params_method =
 			if !self.arg_types.is_empty() {
-				quote! { params.parse::<(#(#arg_types), *)>() }
+				let params =
+					if let Some(trailing) = self.trailing_arg {
+						quote! {
+//							let len = match require_len(&params, $num) {
+//								Ok(len) => len,
+//								Err(e) => return Either::B(futures::failed(e)),
+//							};
+//
+//							let params = match len - $num {
+//								0 => params.parse::<($($x,)+)>()
+//									.map(|($($x,)+)| ($($x,)+ None)).map_err(Into::into),
+//								1 => params.parse::<($($x,)+ TRAILING)>()
+//									.map(|($($x,)+ id)| ($($x,)+ Some(id))).map_err(Into::into),
+//								_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
+//							};
+//
+//							match params {
+//								Ok(($($x,)+ id)) => Either::A(as_future((self)(base, meta, $($x,)+ Trailing(id)))),
+//								Err(e) => Either::B(futures::failed(e)),
+//							}
+						}
+					} else {
+						quote! {
+							let params = params.parse::<(#(#arg_types), *)>();
+						}
+					};
 			} else {
-				quote! { params.expect_no_params() }
+				quote! { let params = params.expect_no_params(); }
 			};
 
 		let add_method =
@@ -200,7 +247,7 @@ impl RpcMethod {
 				del.#add_method(#rpc_name,
 					move |#closure_args| {
 						let method = &(Self::#method as #method_sig -> #result);
-						match #params_method {
+						match params {
 							Ok((#(#tuple_fields), *)) => Either::A(as_future((method)#method_call)),
 							Err(e) => Either::B(futures::failed(e)),
 						}

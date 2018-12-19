@@ -23,7 +23,7 @@ pub trait Rpc {
 
 	/// Multiplies two numbers. Second number is optional.
 	#[rpc(name = "mul")]
-	fn mul(&self, u64, jsonrpc_macros::Trailing<u64>) -> Result<u64>;
+	fn mul(&self, u64, Option<u64>) -> Result<u64>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "callAsync")]
@@ -42,7 +42,7 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-	fn mul(&self, a: u64, b: jsonrpc_macros::Trailing<u64>) -> Result<u64> {
+	fn mul(&self, a: u64, b: Option<u64>) -> Result<u64> {
 		Ok(a * b.unwrap_or(1))
 	}
 
