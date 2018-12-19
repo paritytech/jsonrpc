@@ -115,6 +115,7 @@ struct RpcMethod {
 	attr: RpcMethodAttribute,
 	sig: syn::MethodSig,
 	arg_types: Vec<syn::Type>,
+	return_type: syn::Type,
 }
 
 impl RpcMethod {
@@ -134,10 +135,16 @@ impl RpcMethod {
 				})
 				.collect();
 
+		let return_type = match trait_item.sig.decl.output {
+			// todo: [AJ] require Result type?
+			syn::ReturnType::Type(_, ref output) => Ok(*output.clone()),
+			syn::ReturnType::Default => Err("Return type required for RPC method signature".to_string())
+		}?;
+
 		attr.and_then(|attr|
 			match attr {
-				Some(a) => {
-					if a.has_metadata {
+				Some(attr) => {
+					if attr.has_metadata {
 						if let Some(self_arg) = arg_types.get(0) {
 							let metadata: syn::Type = parse_quote!("Self::Metadata");
 							if *self_arg != metadata {
@@ -145,7 +152,7 @@ impl RpcMethod {
 							}
 						}
 					}
-					Ok(Some(RpcMethod { attr: a, sig: trait_item.sig.clone(), arg_types }))
+					Ok(Some(RpcMethod { attr, sig: trait_item.sig.clone(), arg_types, return_type }))
 				},
 				None => Ok(None)
 			})
@@ -155,17 +162,13 @@ impl RpcMethod {
 		let rpc_name = &self.attr.name;
 		let method = &self.sig.ident;
 		let arg_types = &self.arg_types;
+		let result = &self.return_type;
 
 		let tuple_fields : &Vec<_> =
 			&(0..arg_types.len() as u8)
 				.map(|x| ident(&((x + 'a' as u8) as char).to_string()))
 				.collect();
 
-		let result = match self.sig.decl.output {
-			// todo: [AJ] require Result type?
-			syn::ReturnType::Type(_, ref output) => output,
-			syn::ReturnType::Default => panic!("Return type required for RPC method signature")
-		};
 		let add_aliases = self.add_aliases();
 
 		let (add_method, closure_args, method_sig, method_call) =
@@ -197,7 +200,7 @@ impl RpcMethod {
 					}
 				);
 			};
-		println!("{}", add_method);
+//		println!("{}", add_method);
 		quote! {
 			#add_method
 //			#add_aliases
@@ -212,19 +215,6 @@ impl RpcMethod {
 			.collect();
 		quote!{ #(#add_aliases)* }
 	}
-
-//	fn get_method_arg_types(&self) -> Vec<&syn::Type> {
-//		self.sig.decl.inputs
-//			.iter()
-//			.filter_map(|arg| {
-//				match arg {
-//					syn::FnArg::Captured(arg_captured) => Some(&arg_captured.ty),
-//					syn::FnArg::Ignored(ty) => Some(&ty),
-//					_ => None,
-//				}
-//			})
-//			.collect()
-//	}
 }
 
 struct RpcTrait {
