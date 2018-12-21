@@ -253,7 +253,7 @@ impl RpcMethod {
 			};
 		quote! {
 			#add_method
-//			#add_aliases
+			#add_aliases
 		}
 	}
 
