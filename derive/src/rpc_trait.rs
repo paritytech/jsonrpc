@@ -245,8 +245,14 @@ impl RpcMethod {
 						let method = &(Self::#method as #method_sig -> #result);
 						#parse_params
 						match params {
-							Ok((#(#tuple_fields), *)) => Either::A(as_future((method)#method_call)),
-							Err(e) => Either::B(futures::failed(e)),
+							Ok((#(#tuple_fields), *)) => {
+								let fut = (method)#method_call
+									.into_future()
+									.map(|value| _jsonrpc_core::to_value(value).expect("Expected always-serializable type; qed"))
+									.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
+								_jsonrpc_core::futures::future::Either::A(fut)
+							},
+							Err(e) => _jsonrpc_core::futures::future::Either::B(futures::failed(e)),
 						}
 					}
 				);
@@ -464,34 +470,7 @@ pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro
 			use super::*;
 
 			// todo: [AJ] sort all these out, see to_delegate method
-			use std::sync::Arc;
-			use std::collections::HashMap;
-			use self::_jsonrpc_core::futures::future::{self, Either};
-			use self::_jsonrpc_core::futures::{self, Future, IntoFuture};
-
-			type WrappedFuture<F, OUT, E> = future::MapErr<
-				future::Map<F, fn(OUT) -> _jsonrpc_core::Value>,
-				fn(E) -> Error
-			>;
-			type WrapResult<F, OUT, E> = Either<
-				WrappedFuture<F, OUT, E>,
-				future::FutureResult<_jsonrpc_core::Value, _jsonrpc_core::Error>,
-			>;
-
-			fn to_value<T>(value: T) -> _jsonrpc_core::Value where T: _serde::Serialize {
-				_jsonrpc_core::to_value(value).expect("Expected always-serializable type.")
-			}
-
-			fn as_future<F, OUT, E, I>(el: I) -> WrappedFuture<F, OUT, E> where
-				OUT: _serde::Serialize,
-				E: Into<_jsonrpc_core::Error>,
-				F: Future<Item = OUT, Error = E>,
-				I: IntoFuture<Item = OUT, Error = E, Future = F>
-			{
-				el.into_future()
-					.map(to_value as fn(OUT) -> _jsonrpc_core::Value)
-					.map_err(Into::into as fn(E) -> _jsonrpc_core::Error)
-			}
+			use self::_jsonrpc_core::futures::{Future, IntoFuture};
 
 			#rpc_trait
 		}
