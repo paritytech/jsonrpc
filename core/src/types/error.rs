@@ -126,10 +126,13 @@ impl Error {
 	}
 
 	/// Creates `InvalidParams` for given parameter, with details.
-	pub fn invalid_params_with_details<T>(param: &str, details: T) -> Error where T: fmt::Debug {
+	pub fn invalid_params_with_details<M, T>(message: M, details: T) -> Error where
+		M: Into<String>,
+		T: fmt::Debug
+	{
 		Error {
 			code: ErrorCode::InvalidParams,
-			message: format!("Couldn't parse parameters: {}", param),
+			message: format!("Invalid parameters: {}", message.into()),
 			data: Some(Value::String(format!("{:?}", details))),
 		}
 	}

@@ -146,15 +146,12 @@ impl RpcMethod {
 						path.path.segments
 							.first()
 							.and_then(|t| {
-								if t.value().ident == "Option" { Some(arg) } else { None }
+								if t.value().ident == "Option" { Some(arg.clone()) } else { None }
 							})
 					} else {
 						None
 					}
-				})
-				.collect();
-
-		println!("Trailing {:?}", trailing_args);
+				});
 
 		let return_type = match trait_item.sig.decl.output {
 			// todo: [AJ] require Result type?
@@ -170,11 +167,11 @@ impl RpcMethod {
 						if Some(metadata) != arg_types.get(0) {
 							return Err("Method with metadata expected Self::Metadata argument after self".into())
 						}
-						// remove Self::Metadata arg, it will be added again in the output
+						// remove Self::Metadata arg
 						arg_types.retain(|arg| arg != metadata);
 					}
 					let sig = trait_item.sig.clone();
-					Ok(Some(RpcMethod { attr, sig, arg_types, trailing_args, return_type }))
+					Ok(Some(RpcMethod { attr, sig, arg_types, trailing_arg, return_type }))
 				},
 				None => Ok(None)
 			})
@@ -184,6 +181,7 @@ impl RpcMethod {
 		let rpc_name = &self.attr.name;
 		let method = &self.sig.ident;
 		let arg_types = &self.arg_types;
+		let num = &self.arg_types.len();
 		let result = &self.return_type;
 
 		let tuple_fields : &Vec<_> =
@@ -192,6 +190,36 @@ impl RpcMethod {
 				.collect();
 
 		let add_aliases = self.add_aliases();
+
+		let parse_params =
+			if let Some(ref trailing) = self.trailing_arg {
+				let arg_types_no_trailing: &Vec<_> =
+					&arg_types.iter().filter(|arg| *arg != trailing).collect();
+				let tuple_fields_no_trailing: &Vec<_> =
+					&tuple_fields.iter().take(tuple_fields.len() - 1).collect();
+				quote! {
+					let params_len = match params {
+						_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
+						_jsonrpc_core::Params::None => Ok(0),
+						_ => Err(Error::invalid_params("`params` should be an array"))
+					};
+
+					let params = params_len.and_then(|len| {
+						match len - #num {
+							0 => params.parse::<(#(#arg_types_no_trailing), *)>()
+								.map( |(#(#tuple_fields_no_trailing), *)| (#(#tuple_fields_no_trailing, )* None)).map_err(Into::into),
+							1 => params.parse::<(#(#arg_types), *) > ()
+								.map( |(#(#tuple_fields_no_trailing, )* id)| (#(#tuple_fields_no_trailing, )* id)).map_err(Into::into),
+							x if x < 0 => Err(Error::invalid_params(format!("`params` should have at least {} argument(s)", #num))),
+							_ => Err(Error::invalid_params_with_details(format!("Expected {} or {} parameters.", #num, #num + 1), format!("Got: {}", len))),
+						}
+					});
+				}
+			} else if arg_types.is_empty() {
+				quote! { let params = params.expect_no_params(); }
+			} else {
+				quote! { let params = params.parse::<(#(#arg_types), *)>(); }
+			};
 
 		let (add_method, closure_args, method_sig, method_call) =
 			if self.attr.has_metadata {
@@ -210,43 +238,12 @@ impl RpcMethod {
 				)
 			};
 
-		let params_method =
-			if !self.arg_types.is_empty() {
-				let params =
-					if let Some(trailing) = self.trailing_arg {
-						quote! {
-//							let len = match require_len(&params, $num) {
-//								Ok(len) => len,
-//								Err(e) => return Either::B(futures::failed(e)),
-//							};
-//
-//							let params = match len - $num {
-//								0 => params.parse::<($($x,)+)>()
-//									.map(|($($x,)+)| ($($x,)+ None)).map_err(Into::into),
-//								1 => params.parse::<($($x,)+ TRAILING)>()
-//									.map(|($($x,)+ id)| ($($x,)+ Some(id))).map_err(Into::into),
-//								_ => Err(invalid_params(&format!("Expected {} or {} parameters.", $num, $num + 1), format!("Got: {}", len))),
-//							};
-//
-//							match params {
-//								Ok(($($x,)+ id)) => Either::A(as_future((self)(base, meta, $($x,)+ Trailing(id)))),
-//								Err(e) => Either::B(futures::failed(e)),
-//							}
-						}
-					} else {
-						quote! {
-							let params = params.parse::<(#(#arg_types), *)>();
-						}
-					};
-			} else {
-				quote! { let params = params.expect_no_params(); }
-			};
-
 		let add_method =
 			quote! {
 				del.#add_method(#rpc_name,
 					move |#closure_args| {
 						let method = &(Self::#method as #method_sig -> #result);
+						#parse_params
 						match params {
 							Ok((#(#tuple_fields), *)) => Either::A(as_future((method)#method_call)),
 							Err(e) => Either::B(futures::failed(e)),
