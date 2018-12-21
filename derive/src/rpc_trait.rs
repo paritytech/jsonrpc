@@ -13,7 +13,7 @@ fn ident(s: &str) -> syn::Ident {
 	syn::Ident::new(s, proc_macro2::Span::call_site())
 }
 
-enum RpcTraitMethods {
+enum ToDelegateFunction {
 	Standard(Vec<RpcMethod>),
 	PubSub {
 		name: String,
@@ -22,55 +22,83 @@ enum RpcTraitMethods {
 	}
 }
 
-impl RpcTraitMethods {
-	fn generate_to_delegate_method(
+impl ToDelegateFunction {
+	fn register_rpc_method(method: &RpcMethod) -> proc_macro2::TokenStream {
+		let rpc_name = &method.attr.name;
+
+		let (add_method, extra_args) =
+			if method.attr.has_metadata {
+				let meta_args = vec![(parse_quote!(Self::Metadata), ident("meta"))];
+				(ident("add_method_with_meta"), meta_args)
+			} else {
+				(ident("add_method"), Vec::new())
+			};
+
+		let closure = method.generate_delegate_closure(&extra_args);
+		let add_aliases = method.add_aliases();
+
+		quote! {
+			del.#add_method(#rpc_name, #closure);
+			#add_aliases
+		}
+	}
+
+	fn register_pubsub_methods(
+		name: &str,
+		subscribe: &RpcMethod,
+		unsubscribe: &RpcMethod,
+		mod_name: &syn::Ident,
+	) -> proc_macro2::TokenStream {
+		let sub_name = &subscribe.attr.name;
+		let sub_method = &subscribe.sig.ident;
+		let sub_aliases = subscribe.add_aliases();
+		let sub_arg_types = &subscribe.arg_types;
+
+		let unsub_name = &unsubscribe.attr.name;
+		let unsub_method = &unsubscribe.sig.ident;
+		let unsub_aliases = unsubscribe.add_aliases();
+
+		quote! {
+			del.add_subscription(
+				#name,
+				(#sub_name, move |base, params, meta, subscriber| {
+					_jsonrpc_macros::WrapSubscribe::wrap_rpc(
+						&(Self::#sub_method as fn(&_ #(, #sub_arg_types)*)),
+						base,
+						params,
+						meta,
+						subscriber,
+					)
+				}),
+				(#unsub_name, move |base, id| {
+					use #mod_name::_jsonrpc_core::futures::{IntoFuture, Future};
+					Self::#unsub_method(base, id).into_future()
+						.map(_jsonrpc_macros::to_value)
+					.map_err(Into::into)
+				}),
+			);
+			#sub_aliases
+			#unsub_aliases
+		}
+	}
+
+	fn quote(
 		&self,
 		trait_item: &syn::ItemTrait,
 		has_metadata: bool,
-	) -> Result<syn::TraitItemMethod> {
+	) -> syn::TraitItemMethod {
 		let delegate_registration =
 			match self {
-				RpcTraitMethods::Standard(methods) => {
+				ToDelegateFunction::Standard(methods) => {
 					let add_methods: Vec<_> = methods
 						.iter()
-						.map(RpcMethod::generate_delegate_method_registration)
+						.map(Self::register_rpc_method)
 						.collect();
 					quote! { #(#add_methods)* }
 				},
-				RpcTraitMethods::PubSub { name, subscribe, unsubscribe } => {
+				ToDelegateFunction::PubSub { name, subscribe, unsubscribe } => {
 					let mod_name = rpc_wrapper_mod_name(&trait_item);
-
-					let sub_name = &subscribe.attr.name;
-					let sub_method = &subscribe.sig.ident;
-					let sub_aliases = subscribe.add_aliases();
-					let sub_arg_types = &subscribe.arg_types;
-
-					let unsub_name = &unsubscribe.attr.name;
-					let unsub_method = &unsubscribe.sig.ident;
-					let unsub_aliases = unsubscribe.add_aliases();
-
-					quote! {
-						del.add_subscription(
-							#name,
-							(#sub_name, move |base, params, meta, subscriber| {
-								_jsonrpc_macros::WrapSubscribe::wrap_rpc(
-									&(Self::#sub_method as fn(&_ #(, #sub_arg_types)*)),
-									base,
-									params,
-									meta,
-									subscriber,
-								)
-							}),
-							(#unsub_name, move |base, id| {
-								use #mod_name::_jsonrpc_core::futures::{IntoFuture, Future};
-								Self::#unsub_method(base, id).into_future()
-									.map(_jsonrpc_macros::to_value)
-								.map_err(Into::into)
-							}),
-						);
-						#sub_aliases
-						#unsub_aliases
-					}
+					Self::register_pubsub_methods(name, subscribe, unsubscribe, &mod_name)
 				},
 			};
 
@@ -106,7 +134,7 @@ impl RpcTraitMethods {
 			.make_where_clause()
 			.predicates
 			.extend(predicates);
-		Ok(method)
+		method
 	}
 }
 
@@ -136,22 +164,20 @@ impl RpcMethod {
 				})
 				.collect();
 
+		let is_option = |arg: &syn::Type| {
+			if let syn::Type::Path(path) = arg {
+				path.path.segments
+					.first()
+					.and_then(|t| {
+						if t.value().ident == "Option" { Some(arg.clone()) } else { None }
+					})
+			} else {
+				None
+			}
+		};
+
 		// if the last argument is an `Option` then it can be made a 'trailing' argument
-		let trailing_arg =
-			arg_types
-				.iter()
-				.last()
-				.and_then(|arg| {
-					if let syn::Type::Path(path) = arg {
-						path.path.segments
-							.first()
-							.and_then(|t| {
-								if t.value().ident == "Option" { Some(arg.clone()) } else { None }
-							})
-					} else {
-						None
-					}
-				});
+		let trailing_arg = arg_types.iter().last().and_then(is_option);
 
 		let return_type = match trait_item.sig.decl.output {
 			// todo: [AJ] require Result type?
@@ -177,8 +203,10 @@ impl RpcMethod {
 			})
 	}
 
-	fn generate_delegate_method_registration(&self) -> proc_macro2::TokenStream {
-		let rpc_name = &self.attr.name;
+	fn generate_delegate_closure(
+		&self,
+		extra_args: &[(syn::Type, syn::Ident)]
+	) -> proc_macro2::TokenStream {
 		let method = &self.sig.ident;
 		let arg_types = &self.arg_types;
 		let num = &self.arg_types.len();
@@ -188,8 +216,6 @@ impl RpcMethod {
 			&(0..arg_types.len() as u8)
 				.map(|x| ident(&((x + 'a' as u8) as char).to_string()))
 				.collect();
-
-		let add_aliases = self.add_aliases();
 
 		let parse_params =
 			if let Some(ref trailing) = self.trailing_arg {
@@ -221,45 +247,28 @@ impl RpcMethod {
 				quote! { let params = params.parse::<(#(#arg_types), *)>(); }
 			};
 
-		let (add_method, closure_args, method_sig, method_call) =
-			if self.attr.has_metadata {
-				(
-					quote! { add_method_with_meta },
-					quote! { base, params, meta },
-					quote! { fn(&Self, Self::Metadata, #(#arg_types), *) },
-					quote! { (base, meta, #(#tuple_fields), *) }
-				)
-			} else {
-				(
-					quote! { add_method },
-					quote! { base, params },
-					quote! { fn(&Self, #(#arg_types), *) },
-					quote! { (base, #(#tuple_fields), *) }
-				)
-			};
+		let extra_method_types: &Vec<_> = &extra_args.iter().cloned().map(|arg| arg.0).collect();
+		let extra_closure_args: &Vec<_> = &extra_args.iter().cloned().map(|arg| arg.1).collect();
 
-		let add_method =
-			quote! {
-				del.#add_method(#rpc_name,
-					move |#closure_args| {
-						let method = &(Self::#method as #method_sig -> #result);
-						#parse_params
-						match params {
-							Ok((#(#tuple_fields), *)) => {
-								let fut = (method)#method_call
-									.into_future()
-									.map(|value| _jsonrpc_core::to_value(value).expect("Expected always-serializable type; qed"))
-									.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
-								_jsonrpc_core::futures::future::Either::A(fut)
-							},
-							Err(e) => _jsonrpc_core::futures::future::Either::B(futures::failed(e)),
-						}
-					}
-				);
-			};
+		let closure_args = quote! { base, params, #(#extra_closure_args), * };
+		let method_sig = quote! { fn(&Self, #(#extra_method_types, ) * #(#arg_types), *) };
+		let method_call = quote! { (base, #(#extra_closure_args, )* #(#tuple_fields), *) };
+
 		quote! {
-			#add_method
-			#add_aliases
+			move |#closure_args| {
+				let method = &(Self::#method as #method_sig -> #result);
+				#parse_params
+				match params {
+					Ok((#(#tuple_fields), *)) => {
+						let fut = (method)#method_call
+							.into_future()
+							.map(|value| _jsonrpc_core::to_value(value).expect("Expected always-serializable type; qed"))
+							.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
+						_jsonrpc_core::futures::future::Either::A(fut)
+					},
+					Err(e) => _jsonrpc_core::futures::future::Either::B(futures::failed(e)),
+				}
+			}
 		}
 	}
 
@@ -395,11 +404,11 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 		return Err(format!("Invalid rpc trait:\n  {}", errs))
 	}
 
-	let rpc_trait_methods =
+	let to_delegate =
 		match visitor.attr {
 			RpcTraitAttribute::RpcTrait => {
 				if !visitor.methods.is_empty() {
-					Ok(RpcTraitMethods::Standard(visitor.methods.clone()))
+					Ok(ToDelegateFunction::Standard(visitor.methods.clone()))
 				} else {
 					Err("No rpc annotated trait items found")
 				}
@@ -420,7 +429,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 						// todo: [AJ] validate subscribe/unsubscribe args
 //						let sub_arg_types = sub.get_method_arg_types();
 
-						Ok(RpcTraitMethods::PubSub {
+						Ok(ToDelegateFunction::PubSub {
 							name,
 							subscribe: sub.clone(),
 							unsubscribe: unsub.clone()
@@ -434,7 +443,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 		}?;
 
 	let to_delegate_method =
-		rpc_trait_methods.generate_to_delegate_method(&item_trait, visitor.has_metadata)?;
+		to_delegate.quote(&item_trait, visitor.has_metadata);
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
 
 	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =
