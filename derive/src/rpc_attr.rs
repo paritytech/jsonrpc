@@ -64,8 +64,6 @@ impl<'a> Visit<'a> for RpcAttributeVisitor {
 	fn visit_attribute(&mut self, attr: &syn::Attribute) {
 		match attr.parse_meta() {
 			Ok(ref meta) => {
-				// todo: [AJ] remove commented out line before PR
-//						println!("Attribute {:?}", meta);
 				if meta.name() == "rpc" {
 					self.attr = Some(attr.clone());
 					visit::visit_meta(self, meta);

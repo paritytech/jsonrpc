@@ -26,15 +26,14 @@ impl ToDelegateFunction {
 	fn register_rpc_method(method: &RpcMethod) -> proc_macro2::TokenStream {
 		let rpc_name = &method.attr.name;
 
-		let (add_method, extra_args) =
+		let add_method =
 			if method.attr.has_metadata {
-				let meta_args = vec![(parse_quote!(Self::Metadata), ident("meta"))];
-				(ident("add_method_with_meta"), meta_args)
+				ident("add_method_with_meta")
 			} else {
-				(ident("add_method"), Vec::new())
+				ident("add_method")
 			};
 
-		let closure = method.generate_delegate_closure(&extra_args);
+		let closure = method.generate_delegate_closure();
 		let add_aliases = method.add_aliases();
 
 		quote! {
@@ -142,7 +141,10 @@ impl ToDelegateFunction {
 struct RpcMethod {
 	attr: RpcMethodAttribute,
 	sig: syn::MethodSig,
-	arg_types: Vec<syn::Type>,
+	special_args: Vec<syn::Type>,
+	rpc_param_types: Vec<syn::Type>,
+	meta_arg: Option<syn::Type>,
+	subscriber_arg: Option<syn::Type>,
 	trailing_arg: Option<syn::Type>,
 	return_type: syn::Type,
 }
@@ -151,7 +153,7 @@ impl RpcMethod {
 	fn try_from_trait_item_method(trait_item: &syn::TraitItemMethod) -> Result<Option<RpcMethod>> {
 		let attr = RpcMethodAttribute::try_from_trait_item_method(trait_item);
 
-		let mut arg_types: Vec<_> =
+		let mut rpc_param_types: Vec<_> =
 			trait_item.sig.decl.inputs
 				.iter()
 				.cloned()
@@ -163,6 +165,29 @@ impl RpcMethod {
 					}
 				})
 				.collect();
+
+		let mut special_args = Vec::new();
+		let extract_special_arg = |pred| {
+			if let Some(arg) = arg_types.first() {
+				if pred(arg) {
+					arg_types.retain(|arg| arg != arg);
+					special_args.push(arg);
+					Some(arg)
+				} else {
+					None
+				}
+			}
+		};
+		let meta_arg = extract_special_arg(|t| t == parse_quote!(Self::Metadata));
+		let subscriber_arg = extract_special_arg(|t| {
+			if let syn::Type::Path(path) = t {
+				path.path.segments
+					.iter()
+					.any(|s| s.ident == "Subscriber")
+			} else {
+				false
+			}
+		});
 
 		let is_option = |arg: &syn::Type| {
 			if let syn::Type::Path(path) = arg {
@@ -176,7 +201,7 @@ impl RpcMethod {
 			}
 		};
 
-		// if the last argument is an `Option` then it can be made a 'trailing' argument
+		// if the last argument is an `Option` then it can be made an optional 'trailing' argument
 		let trailing_arg = arg_types.iter().last().and_then(is_option);
 
 		let return_type = match trait_item.sig.decl.output {
@@ -188,28 +213,36 @@ impl RpcMethod {
 		attr.and_then(|attr|
 			match attr {
 				Some(attr) => {
-					if attr.has_metadata {
-						let metadata: &syn::Type = &parse_quote!(Self::Metadata);
-						if Some(metadata) != arg_types.get(0) {
-							return Err("Method with metadata expected Self::Metadata argument after self".into())
-						}
-						// remove Self::Metadata arg
-						arg_types.retain(|arg| arg != metadata);
-					}
+//					if attr.has_metadata {
+//						let metadata: &syn::Type = &parse_quote!(Self::Metadata);
+//						if Some(metadata) != arg_types.get(0) {
+//							return Err("Method with metadata expected Self::Metadata argument after self".into())
+//						}
+//						special_args.push((ident("meta"), metadata));
+//						// remove Self::Metadata arg
+//						let mut rpc_param_types = arg_types;
+//						rpc_param_types.retain(|arg| arg != metadata);
+//					}
 					let sig = trait_item.sig.clone();
-					Ok(Some(RpcMethod { attr, sig, arg_types, trailing_arg, return_type }))
+					Ok(Some(RpcMethod {
+						attr,
+						sig,
+						special_args,
+						meta_arg,
+						subscriber_arg,
+						rpc_param_types,
+						trailing_arg,
+						return_type,
+					}))
 				},
 				None => Ok(None)
 			})
 	}
 
-	fn generate_delegate_closure(
-		&self,
-		extra_args: &[(syn::Type, syn::Ident)]
-	) -> proc_macro2::TokenStream {
+	fn generate_delegate_closure(&self) -> proc_macro2::TokenStream {
 		let method = &self.sig.ident;
-		let arg_types = &self.arg_types;
-		let num = &self.arg_types.len();
+		let arg_types = &self.rpc_param_types;
+		let num = &self.rpc_param_types.len();
 		let result = &self.return_type;
 
 		let tuple_fields : &Vec<_> =
@@ -247,8 +280,8 @@ impl RpcMethod {
 				quote! { let params = params.parse::<(#(#arg_types), *)>(); }
 			};
 
-		let extra_method_types: &Vec<_> = &extra_args.iter().cloned().map(|arg| arg.0).collect();
-		let extra_closure_args: &Vec<_> = &extra_args.iter().cloned().map(|arg| arg.1).collect();
+		let extra_closure_args: &Vec<_> = &self.special_args.iter().cloned().map(|arg| arg.0).collect();
+		let extra_method_types: &Vec<_> = &self.special_args.iter().cloned().map(|arg| arg.1).collect();
 
 		let closure_args = quote! { base, params, #(#extra_closure_args), * };
 		let method_sig = quote! { fn(&Self, #(#extra_method_types, ) * #(#arg_types), *) };
