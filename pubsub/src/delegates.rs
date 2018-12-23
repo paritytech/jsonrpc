@@ -1,71 +1,11 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use jsonrpc_core::{Params, Value, Error};
-use jsonrpc_core::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use jsonrpc_core::futures::IntoFuture;
+use types::{Params, Value, Error};
+use calls::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use futures::IntoFuture;
 
 use jsonrpc_pubsub::{self, SubscriptionId, Subscriber, PubSubMetadata};
-
-struct DelegateAsyncMethod<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F> where
-	M: Metadata,
-	F: Fn(&T, Params) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
-	T: Send + Sync + 'static,
-	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
-{
-	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value> {
-		let closure = &self.closure;
-		Box::new(closure(&self.delegate, params).into_future())
-	}
-}
-
-struct DelegateMethodWithMeta<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
-	M: Metadata,
-	F: Fn(&T, Params, M) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
-	T: Send + Sync + 'static,
-	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
-{
-	fn call(&self, params: Params, meta: M) -> BoxFuture<Value> {
-		let closure = &self.closure;
-		Box::new(closure(&self.delegate, params, meta).into_future())
-	}
-}
-
-struct DelegateNotification<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F> where
-	F: Fn(&T, Params) + 'static,
-	F: Send + Sync + 'static,
-	T: Send + Sync + 'static,
-	M: Metadata,
-{
-	fn execute(&self, params: Params, _meta: M) {
-		let closure = &self.closure;
-		closure(&self.delegate, params)
-	}
-}
-
-struct DelegateSubscribe<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
 
 impl<T, M, F> jsonrpc_pubsub::SubscribeRpcMethod<M> for DelegateSubscribe<T, F> where
 	M: PubSubMetadata,

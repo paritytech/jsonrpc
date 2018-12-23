@@ -37,6 +37,7 @@ mod io;
 
 pub mod middleware;
 pub mod types;
+pub mod delegates;
 
 /// A `Future` trait object.
 pub type BoxFuture<T> = Box<futures::Future<Item = T, Error = Error> + Send>;

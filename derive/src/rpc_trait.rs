@@ -87,7 +87,7 @@ impl ToDelegateFunction {
 
 		let to_delegate_body =
 			quote! {
-				let mut del = _jsonrpc_macros::IoDelegate::new(self.into());
+				let mut del = _jsonrpc_core::IoDelegate::new(self.into());
 				#delegate_registration
 				del
 			};
@@ -96,14 +96,14 @@ impl ToDelegateFunction {
 		let method: syn::TraitItemMethod =
 			if has_metadata {
 				parse_quote! {
-					fn to_delegate(self) -> _jsonrpc_macros::IoDelegate<Self, Self::Metadata>
+					fn to_delegate(self) -> _jsonrpc_core::IoDelegate<Self, Self::Metadata>
 					{
 						#to_delegate_body
 					}
 				}
 			} else {
 				parse_quote! {
-					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_macros::IoDelegate<Self, M>
+					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_core::IoDelegate<Self, M>
 					{
 						#to_delegate_body
 					}
@@ -494,7 +494,6 @@ pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro
 		mod #mod_name_ident {
 			extern crate jsonrpc_core as _jsonrpc_core;
 			extern crate jsonrpc_pubsub as _jsonrpc_pubsub;
-			extern crate jsonrpc_macros as _jsonrpc_macros; // todo: [AJ] remove/replace
 			extern crate serde as _serde;
 			use super::*;
 

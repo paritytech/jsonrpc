@@ -1,5 +1,4 @@
 extern crate jsonrpc_core;
-extern crate jsonrpc_macros;
 extern crate jsonrpc_tcp_server;
 #[macro_use]
 extern crate jsonrpc_derive;
