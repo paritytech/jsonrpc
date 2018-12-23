@@ -51,7 +51,7 @@ impl ToDelegateFunction {
 		let sub_name = &subscribe.attr.name;
 		let sub_method = &subscribe.sig.ident;
 		let sub_aliases = subscribe.add_aliases();
-		let sub_arg_types = &subscribe.arg_types;
+		let sub_arg_types = &subscribe.rpc_param_types;
 
 		let unsub_name = &unsubscribe.attr.name;
 		let unsub_method = &unsubscribe.sig.ident;
@@ -141,7 +141,7 @@ impl ToDelegateFunction {
 struct RpcMethod {
 	attr: RpcMethodAttribute,
 	sig: syn::MethodSig,
-	special_args: Vec<syn::Type>,
+	special_args: Vec<(syn::Ident, syn::Type)>,
 	rpc_param_types: Vec<syn::Type>,
 	meta_arg: Option<syn::Type>,
 	subscriber_arg: Option<syn::Type>,
@@ -166,28 +166,31 @@ impl RpcMethod {
 				})
 				.collect();
 
-		let mut special_args = Vec::new();
-		let extract_special_arg = |pred| {
-			if let Some(arg) = arg_types.first() {
-				if pred(arg) {
-					arg_types.retain(|arg| arg != arg);
-					special_args.push(arg);
-					Some(arg)
+		let meta_arg =
+			rpc_param_types.first().and_then(|ty|
+				if *ty == parse_quote!(Self::Metadata) { Some(ty.clone()) } else { None });
+
+		let subscriber_arg = rpc_param_types.iter().nth(1).and_then(|ty| {
+			if let syn::Type::Path(path) = ty {
+				if path.path.segments.iter().any(|s| s.ident == "Subscriber") {
+					Some(ty.clone())
 				} else {
 					None
 				}
-			}
-		};
-		let meta_arg = extract_special_arg(|t| t == parse_quote!(Self::Metadata));
-		let subscriber_arg = extract_special_arg(|t| {
-			if let syn::Type::Path(path) = t {
-				path.path.segments
-					.iter()
-					.any(|s| s.ident == "Subscriber")
 			} else {
-				false
+				None
 			}
 		});
+
+		let mut special_args = Vec::new();
+		if let Some(ref meta) = meta_arg {
+			rpc_param_types.retain(|ty| ty != meta );
+			special_args.push((ident("meta"), meta.clone()));
+		}
+		if let Some(ref subscriber) = subscriber_arg {
+			rpc_param_types.retain(|ty| ty != subscriber);
+			special_args.push((ident("subscriber"), subscriber.clone()));
+		}
 
 		let is_option = |arg: &syn::Type| {
 			if let syn::Type::Path(path) = arg {
@@ -202,7 +205,7 @@ impl RpcMethod {
 		};
 
 		// if the last argument is an `Option` then it can be made an optional 'trailing' argument
-		let trailing_arg = arg_types.iter().last().and_then(is_option);
+		let trailing_arg = rpc_param_types.iter().last().and_then(is_option);
 
 		let return_type = match trait_item.sig.decl.output {
 			// todo: [AJ] require Result type?
