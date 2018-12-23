@@ -46,35 +46,20 @@ impl ToDelegateFunction {
 		name: &str,
 		subscribe: &RpcMethod,
 		unsubscribe: &RpcMethod,
-		mod_name: &syn::Ident,
 	) -> proc_macro2::TokenStream {
 		let sub_name = &subscribe.attr.name;
-		let sub_method = &subscribe.sig.ident;
+		let sub_closure = subscribe.generate_delegate_closure();
 		let sub_aliases = subscribe.add_aliases();
-		let sub_arg_types = &subscribe.rpc_param_types;
 
 		let unsub_name = &unsubscribe.attr.name;
-		let unsub_method = &unsubscribe.sig.ident;
+		let unsub_closure = unsubscribe.generate_delegate_closure();
 		let unsub_aliases = unsubscribe.add_aliases();
 
 		quote! {
 			del.add_subscription(
 				#name,
-				(#sub_name, move |base, params, meta, subscriber| {
-					_jsonrpc_macros::WrapSubscribe::wrap_rpc(
-						&(Self::#sub_method as fn(&_ #(, #sub_arg_types)*)),
-						base,
-						params,
-						meta,
-						subscriber,
-					)
-				}),
-				(#unsub_name, move |base, id| {
-					use #mod_name::_jsonrpc_core::futures::{IntoFuture, Future};
-					Self::#unsub_method(base, id).into_future()
-						.map(_jsonrpc_macros::to_value)
-					.map_err(Into::into)
-				}),
+				(#sub_name, #sub_closure),
+				(#unsub_name, #unsub_closure),
 			);
 			#sub_aliases
 			#unsub_aliases
@@ -96,8 +81,7 @@ impl ToDelegateFunction {
 					quote! { #(#add_methods)* }
 				},
 				ToDelegateFunction::PubSub { name, subscribe, unsubscribe } => {
-					let mod_name = rpc_wrapper_mod_name(&trait_item);
-					Self::register_pubsub_methods(name, subscribe, unsubscribe, &mod_name)
+					Self::register_pubsub_methods(name, subscribe, unsubscribe)
 				},
 			};
 
