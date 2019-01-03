@@ -562,10 +562,49 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	/// Returns true if the `content_type` header indicates a valid JSON
 	/// message.
 	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
-		match content_type.and_then(|val| val.to_str().ok()) {
-			Some("application/json") => true,
-			Some("application/json; charset=utf-8") => true,
+		match content_type.and_then(|val| val.to_str().map(str::to_lowercase).ok()) {
+			Some(ref content)
+				if content.eq_ignore_ascii_case("application/json")
+					|| content.eq_ignore_ascii_case("application/json; charset=utf-8")
+					|| content.eq_ignore_ascii_case("application/json;charset=utf-8") =>
+			{
+				true
+			},
 			_ => false,
 		}
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::{hyper, RpcHandler};
+	use jsonrpc_core::middleware::Noop;
+
+	#[test]
+	fn test_case_insensitive_content_type() {
+		let request = hyper::Request::builder()
+			.header("content-type", "Application/Json; charset=UTF-8")
+			.body(())
+			.unwrap();
+
+		let request2 = hyper::Request::builder()
+			.header("content-type", "Application/Json;charset=UTF-8")
+			.body(())
+			.unwrap();
+
+
+		assert_eq!(
+			request.headers().get("content-type").unwrap(),
+			&"Application/Json; charset=UTF-8"
+		);
+
+		assert_eq!(
+			RpcHandler::<(), Noop>::is_json(request.headers().get("content-type")),
+			true
+		);
+		assert_eq!(
+			RpcHandler::<(), Noop>::is_json(request2.headers().get("content-type")),
+			true
+		);
 	}
 }
