@@ -564,8 +564,8 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
 		match content_type.and_then(|val| val.to_str().map(str::to_lowercase).ok()) {
 			Some(ref content)
-				if content == "application/json"
-					|| content == "application/json; charset=utf-8" =>
+				if content.eq_ignore_ascii_case("application/json")
+					|| content.replace(" " ,"").eq_ignore_ascii_case("application/json;charset=utf-8") =>
 			{
 				true
 			}
@@ -578,12 +578,6 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 mod test {
 	use super::{hyper, RpcHandler};
 	use jsonrpc_core::middleware::Noop;
-	use jsonrpc_core::Metadata;
-	
-	#[derive(Clone, Debug)]
-	struct Meta(usize);
-	
-	impl Metadata for Meta {}
 
 	#[test]
 	fn test_case_insensitive_content_type() {
@@ -599,7 +593,7 @@ mod test {
 		);
 
 		assert_eq!(
-			RpcHandler::<Meta, Noop>::is_json(request.headers().get("content-type")),
+			RpcHandler::<(), Noop>::is_json(request.headers().get("content-type")),
 			true
 		);
 	}
