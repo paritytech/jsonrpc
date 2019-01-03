@@ -1115,6 +1115,31 @@ fn should_handle_rest_request_with_params() {
 }
 
 #[test]
+fn should_handle_rest_request_with_case_insensitive_content_type() {
+	// given
+	let server = serve(id);
+	let addr = server.address().clone();
+
+	// when
+	let req = "";
+	let response = request(server,
+		&format!("\
+			POST /hello/5 HTTP/1.1\r\n\
+			Host: localhost:{}\r\n\
+			Connection: close\r\n\
+			Content-Type: Application/JSON; charset=UTF-8\r\n\
+			Content-Length: {}\r\n\
+			\r\n\
+			{}\r\n\
+		", addr.port(), req.as_bytes().len(), req)
+	);
+
+	// then
+	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
+	assert_eq!(response.body, world_5());
+}
+
+#[test]
 fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 	// given
 	let server = serve(|builder| builder.rest_api(RestApi::Unsecure));
