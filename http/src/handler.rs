@@ -562,7 +562,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	/// Returns true if the `content_type` header indicates a valid JSON
 	/// message.
 	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
-		match content_type.and_then(|val| val.to_str().ok()) {
+		match content_type.and_then(|val| val.to_str().ok().to_lowercase()) {
 			Some("application/json") => true,
 			Some("application/json; charset=utf-8") => true,
 			_ => false,
