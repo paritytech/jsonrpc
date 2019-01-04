@@ -13,7 +13,7 @@ error-chain = "0.12"
 jsonrpc-core = { version = "9.0", path = "../core" }
 jsonrpc-server-utils = { version = "9.0", path = "../server-utils" }
 log = "0.4"
-parking_lot = "0.6"
+parking_lot = "0.7"
 slab = "0.4"
 ws = { git = "https://github.com/tomusdrw/ws-rs" }
 
