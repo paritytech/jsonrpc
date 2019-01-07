@@ -1,9 +1,12 @@
+//! Delegate rpc calls
+
 use std::sync::Arc;
 use std::collections::HashMap;
 
 use types::{Params, Value, Error};
-use calls::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 use futures::IntoFuture;
+use BoxFuture;
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
@@ -58,16 +61,6 @@ impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F> where
 		let closure = &self.closure;
 		closure(&self.delegate, params)
 	}
-}
-
-struct DelegateSubscribe<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-struct DelegateUnsubscribe<T, F> {
-	delegate: Arc<T>,
-	closure: F,
 }
 
 /// A set of RPC methods and notifications tied to single `delegate` struct.

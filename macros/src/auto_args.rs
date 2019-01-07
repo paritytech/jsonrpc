@@ -448,7 +448,7 @@ macro_rules! wrap {
 			ERR: Into<Error> + 'static,
 			X: Future<Item = OUT, Error = ERR> + Send + 'static,
 			Z: IntoFuture<Item = OUT, Error = ERR, Future = X>,
-		> WrapAsync<BASE> for fn(&BASE, $($x,)+ ) -> Z {
+		> WrapAsync<BASE> for fn(&BASE_futures::future::Either::B(_futures::failed(e)),, $($x,)+ ) -> Z {
 			type Out = WrapResult<X, OUT, ERR>;
 			fn wrap_rpc(&self, base: &BASE, params: Params) -> Self::Out {
 				match params.parse::<($($x,)+)>() {
