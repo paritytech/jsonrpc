@@ -50,14 +50,16 @@ impl Server {
 		stats: Option<Arc<SessionStats>>,
 		executor: UninitializedExecutor,
 		max_connections: usize,
+		max_payload_bytes: usize,
 	) -> Result<Server> {
 		let config = {
 			let mut config = ws::Settings::default();
 			config.max_connections = max_connections;
+			// don't accept super large requests
+			config.max_in_buffer = max_payload_bytes;
 			// don't grow non-final fragments (to prevent DOS)
 			config.fragments_grow = false;
-			// don't accept super large requests
-			config.max_in_buffer = 5 * 1024 * 1024; // 5MB
+			config.fragments_capacity = max_payload_bytes / config.fragment_size;
 			// accept only handshakes beginning with GET
 			config.method_strict = true;
 			// require masking
