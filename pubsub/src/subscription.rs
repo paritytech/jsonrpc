@@ -244,7 +244,7 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 					transport: session.sender(),
 					sender: tx,
 				};
-				self.subscribe.call(params, meta.clone(), subscriber);
+				self.subscribe.call(params, meta, subscriber);
 
 				let unsub = self.unsubscribe.clone();
 				let notification = self.notification.clone();
@@ -254,7 +254,7 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 						futures::done(match result {
 							Ok(id) => {
 								session.add_subscription(&notification, &id, move |id| {
-									let _ = unsub.call(id, meta.clone()).wait();
+									let _ = unsub.call(id, None).wait();
 								});
 								Ok(id.into())
 							},
@@ -288,7 +288,7 @@ impl<M, G> core::RpcMethod<M> for Unsubscribe<G> where
 		match (meta.session(), id) {
 			(Some(session), Some(id)) => {
 				session.remove_subscription(&self.notification, &id);
-				Box::new(self.unsubscribe.call(id, meta))
+				Box::new(self.unsubscribe.call(id, Some(meta)))
 			},
 			(Some(_), None) => Box::new(future::err(core::Error::invalid_params("Expected subscription id."))),
 			_ => Box::new(future::err(subscriptions_unavailable())),

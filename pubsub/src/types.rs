@@ -12,6 +12,10 @@ pub type TransportError = mpsc::SendError<String>;
 pub type SinkResult = core::futures::sink::Send<TransportSender>;
 
 /// Metadata extension for pub-sub method handling.
+///
+/// NOTE storing `PubSubMetadata` (or rather storing `Arc<Session>`) in
+/// any other place outside of the handler will prevent `unsubscribe` methods
+/// to be called in case the `Session` is dropped (i.e. transport connection is closed).
 pub trait PubSubMetadata: core::Metadata {
 	/// Returns session object associated with given request/client.
 	/// `None` indicates that sessions are not supported on the used transport.
