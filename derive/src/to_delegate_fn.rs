@@ -16,7 +16,7 @@ pub enum ToDelegateFunction {
 }
 
 impl ToDelegateFunction {
-	pub fn quote(
+	pub fn generate_trait_item_method(
 		&self,
 		trait_item: &syn::ItemTrait,
 		has_metadata: bool,
@@ -82,6 +82,8 @@ impl ToDelegateFunction {
 
 		let closure = method.generate_delegate_closure(false);
 		let add_aliases = method.generate_add_aliases();
+
+//		println!("{}", closure);
 
 		quote! {
 			del.#add_method(#rpc_name, #closure);
@@ -192,7 +194,7 @@ impl RpcMethod {
 			}
 		};
 
-		println!("{:?}", &self.trait_item.sig.decl.output);
+//		println!("{:?}", &self.trait_item.sig.decl.output);
 
 //		let result = match &self.trait_item.sig.decl.output {
 //			// todo: [AJ] require Result type?
@@ -241,7 +243,7 @@ impl RpcMethod {
 				quote! { let params = params.parse::<(#(#param_types), *)>(); }
 			};
 
-		let name = &self.name;
+		let name = &self.trait_item.sig.ident;
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
 
@@ -250,10 +252,15 @@ impl RpcMethod {
 		let method_call = quote! { (base, #(#extra_closure_args, )* #(#tuple_fields), *) };
 		let on_error =
 			if is_subscribe {
-				quote! ( let _ = subscriber.reject(e) )
+				quote! ( {
+					let _ = subscriber.reject(e);
+					return
+				}, )
 			} else {
-				quote! ( _futures::future::Either::B(_futures::failed(e)) )
+				quote! ( _futures::future::Either::B(_futures::failed(e)), )
 			};
+
+//		println!("method sig: {}", method_sig);
 
 		quote! {
 			move |#closure_args| {
@@ -268,7 +275,7 @@ impl RpcMethod {
 							.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
 						_futures::future::Either::A(fut)
 					},
-					Err(e) => #on_error,
+					Err(e) => #on_error
 				}
 			}
 		}

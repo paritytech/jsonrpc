@@ -104,7 +104,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 		}?;
 
 	let to_delegate_method =
-		to_delegate.quote(&item_trait, visitor.has_metadata);
+		to_delegate.generate_trait_item_method(&item_trait, visitor.has_metadata);
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
 
 	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =
