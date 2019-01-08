@@ -91,6 +91,11 @@ impl<T, M> IoDelegate<T, M> where
 		self.inner.add_method_with_meta(subscribe.0, move |_, params, meta| sub.call(params, meta));
 		self.inner.add_method_with_meta(unsubscribe.0, move |_, params, meta| unsub.call(params, meta));
 	}
+
+	/// Adds an alias to existing method.
+	pub fn add_alias(&mut self, from: &str, to: &str) {
+		self.inner.add_alias(from, to)
+	}
 }
 
 impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M> where

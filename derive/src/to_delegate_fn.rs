@@ -21,21 +21,33 @@ impl ToDelegateFunction {
 		trait_item: &syn::ItemTrait,
 		has_metadata: bool,
 	) -> syn::TraitItemMethod {
-		let to_delegate_body =
+		let (io_delegate_type,to_delegate_body) =
 			match self {
 				ToDelegateFunction::Standard(methods) => {
+					let delegate_type = quote!(_jsonrpc_core::IoDelegate);
 					let add_methods: Vec<_> = methods
 						.iter()
 						.map(Self::delegate_rpc_method)
 						.collect();
-					quote! {
-						let mut del = _jsonrpc_core::IoDelegate::new(self.into());
-						#(#add_methods)*
-						del
-					}
+					let body =
+						quote! {
+							let mut del = #delegate_type::new(self.into());
+							#(#add_methods)*
+							del
+						};
+					(delegate_type, body)
 				},
 				ToDelegateFunction::PubSub { name, subscribe, unsubscribe } => {
-					Self::delegate_pubsub_methods(name, subscribe, unsubscribe)
+					let delegate_type = quote!(_jsonrpc_pubsub::IoDelegate);
+					let register_pub_sub =
+						Self::delegate_pubsub_methods(name, subscribe, unsubscribe);
+					let body =
+						quote! {
+							let mut del = #delegate_type::new(self.into());
+							#register_pub_sub
+							del
+						};
+					(delegate_type, body)
 				},
 			};
 
@@ -43,21 +55,24 @@ impl ToDelegateFunction {
 		let method: syn::TraitItemMethod =
 			if has_metadata {
 				parse_quote! {
-					fn to_delegate(self) -> _jsonrpc_core::IoDelegate<Self, Self::Metadata>
+					fn to_delegate(self)
+						-> #io_delegate_type<Self, Self::Metadata>
 					{
 						#to_delegate_body
 					}
 				}
 			} else {
 				parse_quote! {
-					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> _jsonrpc_core::IoDelegate<Self, M>
+					fn to_delegate<M: _jsonrpc_core::Metadata>(self)
+						-> #io_delegate_type<Self, M>
 					{
 						#to_delegate_body
 					}
 				}
 			};
 
-		let predicates = generate_where_clause_serialization_predicates(&trait_item);
+		let predicates =
+			generate_where_clause_serialization_predicates(&trait_item);
 
 		let mut method = method.clone();
 		method.sig.decl.generics
@@ -80,8 +95,6 @@ impl ToDelegateFunction {
 		let closure = method.generate_delegate_closure(false);
 		let add_aliases = method.generate_add_aliases();
 
-//		println!("{}", closure);
-
 		quote! {
 			del.#add_method(#rpc_name, #closure);
 			#add_aliases
@@ -102,7 +115,6 @@ impl ToDelegateFunction {
 		let unsub_aliases = unsubscribe.generate_add_aliases();
 
 		quote! {
-			let mut del = _jsonrpc_pubsub::IoDelegate::new(self.into());
 			del.add_subscription(
 				#name,
 				(#sub_name, #sub_closure),
@@ -110,7 +122,6 @@ impl ToDelegateFunction {
 			);
 			#sub_aliases
 			#unsub_aliases
-			del
 		}
 	}
 }
@@ -195,12 +206,6 @@ impl RpcMethod {
 
 //		println!("{:?}", &self.trait_item.sig.decl.output);
 
-//		let result = match &self.trait_item.sig.decl.output {
-//			// todo: [AJ] require Result type?
-//			syn::ReturnType::Type(_, ref output) => Ok(*output.clone()),
-//			// todo: [AJ] default
-//			syn::ReturnType::Default => Err("Return type required for RPC method signature".to_string())
-//		}?;
 		let result = &self.trait_item.sig.decl.output;
 
 		let tuple_fields : &Vec<_> =
@@ -213,29 +218,7 @@ impl RpcMethod {
 		let parse_params =
 			// if the last argument is an `Option` then it can be made an optional 'trailing' argument
 			if let Some(ref trailing) = param_types.iter().last().and_then(is_option) {
-				let num = param_types.len();
-				let param_types_no_trailing: Vec<_> =
-					param_types.iter().cloned().filter(|arg| arg != trailing).collect();
-				let tuple_fields_no_trailing: &Vec<_> =
-					&tuple_fields.iter().take(tuple_fields.len() - 1).collect();
-				quote! {
-					let params_len = match params {
-						_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
-						_jsonrpc_core::Params::None => Ok(0),
-						_ => Err(Error::invalid_params("`params` should be an array"))
-					};
-
-					let params = params_len.and_then(|len| {
-						match len - #num {
-							0 => params.parse::<(#(#param_types_no_trailing), *)>()
-								.map( |(#(#tuple_fields_no_trailing), *)| (#(#tuple_fields_no_trailing, )* None)).map_err(Into::into),
-							1 => params.parse::<(#(#param_types), *) > ()
-								.map( |(#(#tuple_fields_no_trailing, )* id)| (#(#tuple_fields_no_trailing, )* id)).map_err(Into::into),
-							x if x < 0 => Err(Error::invalid_params(format!("`params` should have at least {} argument(s)", #num))),
-							_ => Err(Error::invalid_params_with_details(format!("Expected {} or {} parameters.", #num, #num + 1), format!("Got: {}", len))),
-						}
-					});
-				}
+				self.params_with_trailing(trailing, param_types, tuple_fields)
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
 			} else {
@@ -249,34 +232,77 @@ impl RpcMethod {
 		let closure_args = quote! { base, params, #(#extra_closure_args), * };
 		let method_sig = quote! { fn(&Self, #(#extra_method_types, ) * #(#param_types), *) #result };
 		let method_call = quote! { (base, #(#extra_closure_args, )* #(#tuple_fields), *) };
-		let on_error =
+		let match_params =
 			if is_subscribe {
-				quote! ( {
-					let _ = subscriber.reject(e);
-					return
-				}, )
+				quote! {
+					Ok((#(#tuple_fields), *)) => (method)#method_call,
+					Err(e) => {
+						let _ = subscriber.reject(e);
+						return
+					}
+				}
 			} else {
-				quote! ( _futures::future::Either::B(_futures::failed(e)), )
+				quote! {
+					Ok((#(#tuple_fields), *)) => {
+						let fut = (method)#method_call
+							.into_future()
+							.map(|value| _jsonrpc_core::to_value(value)
+								.expect("Expected always-serializable type; qed"))
+							.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
+						_futures::future::Either::A(fut)
+					},
+					Err(e) => _futures::future::Either::B(_futures::failed(e)),
+				}
 			};
 
 //		println!("method sig: {}", method_sig);
 
 		quote! {
 			move |#closure_args| {
-//				let method = &(Self::#method as #method_sig -> #result);
 				let method = &(Self::#name as #method_sig);
 				#parse_params
 				match params {
-					Ok((#(#tuple_fields), *)) => {
-						let fut = (method)#method_call
-							.into_future()
-							.map(|value| _jsonrpc_core::to_value(value).expect("Expected always-serializable type; qed"))
-							.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
-						_futures::future::Either::A(fut)
-					},
-					Err(e) => #on_error
+					#match_params
 				}
 			}
+		}
+	}
+
+	fn params_with_trailing(
+		&self,
+		trailing: &syn::Type,
+		param_types: &[syn::Type],
+		tuple_fields: &[syn::Ident],
+	) -> proc_macro2::TokenStream {
+		let num = param_types.len();
+		let param_types_no_trailing: Vec<_> =
+			param_types.iter().cloned().filter(|arg| arg != trailing).collect();
+		let tuple_fields_no_trailing: &Vec<_> =
+			&tuple_fields.iter().take(tuple_fields.len() - 1).collect();
+		quote! {
+			let params_len = match params {
+				_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
+				_jsonrpc_core::Params::None => Ok(0),
+				_ => Err(Error::invalid_params("`params` should be an array"))
+			};
+
+			let params = params_len.and_then(|len| {
+				match len - #num {
+					0 => params.parse::<(#(#param_types_no_trailing), *)>()
+						.map( |(#(#tuple_fields_no_trailing), *)|
+							(#(#tuple_fields_no_trailing, )* None))
+						.map_err(Into::into),
+					1 => params.parse::<(#(#param_types), *) > ()
+						.map( |(#(#tuple_fields_no_trailing, )* id)|
+							(#(#tuple_fields_no_trailing, )* id))
+						.map_err(Into::into),
+					x if x < 0 => Err(Error::invalid_params(
+						format!("`params` should have at least {} argument(s)", #num))),
+					_ => Err(Error::invalid_params_with_details(
+						format!("Expected {} or {} parameters.", #num, #num + 1),
+						format!("Got: {}", len))),
+				}
+			});
 		}
 	}
 
