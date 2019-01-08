@@ -48,7 +48,7 @@ use util::{invalid_params, expect_no_params, to_value};
 ///	  #[rpc(name = "hello_subscribe")]
 ///	  fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
 ///	  #[rpc(name = "hello_unsubscribe")]
-///	  fn unsubscribe(&self, Self::Metadata, SubscriptionId) -> Result<bool>;
+///	  fn unsubscribe(&self, Option<Self::Metadata>, SubscriptionId) -> Result<bool>;
 ///	}
 ///	```
 ///
@@ -257,7 +257,7 @@ macro_rules! build_rpc_trait {
 		subscribe: (name = $subscribe: expr $(, alias = [ $( $sub_alias: expr, )+ ])*)
 		fn $sub_method: ident (&self, Self::Metadata $(, $sub_p: ty)+);
 		unsubscribe: (name = $unsubscribe: expr $(, alias = [ $( $unsub_alias: expr, )+ ])*)
-		fn $unsub_method: ident (&self, Self::Metadata $(, $unsub_p: ty)+) -> $result: tt <$out: ty $(, $error_unsub: ty)* >;
+		fn $unsub_method: ident (&self, Option < Self::Metadata > $(, $unsub_p: ty)+) -> $result: tt <$out: ty $(, $error_unsub: ty)* >;
 	) => {
 		$del.add_subscription(
 			$name,

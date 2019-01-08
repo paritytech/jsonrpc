@@ -86,14 +86,14 @@ struct DelegateUnsubscribe<T, F> {
 
 impl<M, T, F, I> jsonrpc_pubsub::UnsubscribeRpcMethod<M> for DelegateUnsubscribe<T, F> where
 	M: PubSubMetadata,
-	F: Fn(&T, SubscriptionId, M) -> I,
+	F: Fn(&T, SubscriptionId, Option<M>) -> I,
 	I: IntoFuture<Item = Value, Error = Error>,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 	I::Future: Send + 'static,
 {
 	type Out = I::Future;
-	fn call(&self, id: SubscriptionId, meta: M) -> Self::Out {
+	fn call(&self, id: SubscriptionId, meta: Option<M>) -> Self::Out {
 		let closure = &self.closure;
 		closure(&self.delegate, id, meta).into_future()
 	}
@@ -183,7 +183,7 @@ impl<T, M> IoDelegate<T, M> where
 	) where
 		Sub: Fn(&T, Params, M, Subscriber),
 		Sub: Send + Sync + 'static,
-		Unsub: Fn(&T, SubscriptionId, M) -> I,
+		Unsub: Fn(&T, SubscriptionId, Option<M>) -> I,
 		I: IntoFuture<Item = Value, Error = Error>,
 		Unsub: Send + Sync + 'static,
 		I::Future: Send + 'static,

@@ -24,16 +24,18 @@ pub trait UnsubscribeRpcMethod<M>: Send + Sync + 'static {
 	/// Output type
 	type Out: Future<Item = core::Value, Error = core::Error> + Send + 'static;
 	/// Called when client is requesting to cancel existing subscription.
-	fn call(&self, id: SubscriptionId, meta: M) -> Self::Out;
+	///
+	/// Metadata is not available if the session was closed without unsubscribing.
+	fn call(&self, id: SubscriptionId, meta: Option<M>) -> Self::Out;
 }
 
 impl<M, F, I> UnsubscribeRpcMethod<M> for F where
-	F: Fn(SubscriptionId, M) -> I + Send + Sync + 'static,
+	F: Fn(SubscriptionId, Option<M>) -> I + Send + Sync + 'static,
 	I: IntoFuture<Item = core::Value, Error = core::Error>,
 	I::Future: Send + 'static,
 {
 	type Out = I::Future;
-	fn call(&self, id: SubscriptionId, meta: M) -> Self::Out {
+	fn call(&self, id: SubscriptionId, meta: Option<M>) -> Self::Out {
 		(*self)(id, meta).into_future()
 	}
 }
@@ -108,13 +110,12 @@ mod tests {
 
 	use super::PubSubHandler;
 
-	#[derive(Clone, Default)]
-	struct Metadata;
+	#[derive(Clone)]
+	struct Metadata(Arc<Session>);
 	impl core::Metadata for Metadata {}
 	impl PubSubMetadata for Metadata {
 		fn session(&self) -> Option<Arc<Session>> {
-			let (tx, _rx) = mpsc::channel(1);
-			Some(Arc::new(Session::new(tx)))
+			Some(self.0.clone())
 		}
 	}
 
@@ -139,7 +140,8 @@ mod tests {
 		);
 
 		// when
-		let meta = Metadata;
+		let (tx, _rx) = mpsc::channel(1);
+		let meta = Metadata(Arc::new(Session::new(tx)));
 		let req = r#"{"jsonrpc":"2.0","id":1,"method":"subscribe_hello","params":null}"#;
 		let res = handler.handle_request_sync(req, meta);
 
