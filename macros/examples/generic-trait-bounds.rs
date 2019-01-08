@@ -14,7 +14,7 @@ build_rpc_trait! {
 		Three: Serialize,
 	{
 		/// Get Zero type.
-		#[rpc(name = "getOne")]
+		#[rpc(name = "getZero")]
 		fn zero(&self) -> Result<Zero>;
 
 		/// Get One type.
@@ -53,7 +53,7 @@ build_rpc_trait! {
 		type Metadata;
 
 		/// Get Zero type.
-		#[rpc(name = "getOne")]
+		#[rpc(name = "getZero")]
 		fn zero(&self) -> Result<Zero>;
 
 		/// Get One type.
