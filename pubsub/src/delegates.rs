@@ -1,13 +1,19 @@
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use types::{Params, Value, Error};
-use calls::{BoxFuture, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use futures::IntoFuture;
+use subscription::{Subscriber, new_subscription};
+use handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
+use types::{SubscriptionId, PubSubMetadata};
+use core::{self, Params, Value, Error, Metadata, RemoteProcedure, RpcMethod};
+use core::futures::IntoFuture;
 
-use jsonrpc_pubsub::{self, SubscriptionId, Subscriber, PubSubMetadata};
+struct DelegateSubscription<T, F> {
+	delegate: Arc<T>,
+	closure: F,
+}
 
-impl<T, M, F> jsonrpc_pubsub::SubscribeRpcMethod<M> for DelegateSubscribe<T, F> where
+impl<T, M, F> SubscribeRpcMethod<M> for DelegateSubscription<T, F> where
 	M: PubSubMetadata,
 	F: Fn(&T, Params, M, Subscriber),
 	T: Send + Sync + 'static,
@@ -19,12 +25,7 @@ impl<T, M, F> jsonrpc_pubsub::SubscribeRpcMethod<M> for DelegateSubscribe<T, F> 
 	}
 }
 
-struct DelegateUnsubscribe<T, F> {
-	delegate: Arc<T>,
-	closure: F,
-}
-
-impl<M, T, F, I> jsonrpc_pubsub::UnsubscribeRpcMethod<M> for DelegateUnsubscribe<T, F> where
+impl<M, T, F, I> UnsubscribeRpcMethod<M> for DelegateSubscription<T, F> where
 	M: PubSubMetadata,
 	F: Fn(&T, SubscriptionId, M) -> I,
 	I: IntoFuture<Item = Value, Error = Error>,
@@ -39,10 +40,29 @@ impl<M, T, F, I> jsonrpc_pubsub::UnsubscribeRpcMethod<M> for DelegateUnsubscribe
 	}
 }
 
+/// Wire up rpc subscriptions to `delegate` struct
+pub struct IoDelegate<T, M = ()> where
+	T: Send + Sync + 'static,
+	M: Metadata,
+{
+	inner: core::IoDelegate<T, M>,
+	delegate: Arc<T>,
+	_data: PhantomData<M>,
+}
+
 impl<T, M> IoDelegate<T, M> where
 	T: Send + Sync + 'static,
 	M: PubSubMetadata,
 {
+	/// Creates new `PubSubIoDelegate`, wrapping the core IoDelegate
+	pub fn new(delegate: Arc<T>) -> Self {
+		IoDelegate {
+			inner: core::IoDelegate::new(delegate.clone()),
+			delegate,
+			_data: PhantomData,
+		}
+	}
+
 	/// Adds subscription to the delegate.
 	pub fn add_subscription<Sub, Unsub, I>(
 		&mut self,
@@ -57,19 +77,19 @@ impl<T, M> IoDelegate<T, M> where
 		Unsub: Send + Sync + 'static,
 		I::Future: Send + 'static,
 	{
-		let (sub, unsub) = jsonrpc_pubsub::new_subscription(
+		let (sub, unsub) = new_subscription(
 			name,
-			DelegateSubscribe {
+			DelegateSubscription {
 				delegate: self.delegate.clone(),
 				closure: subscribe.1,
 			},
-			DelegateUnsubscribe {
+			DelegateSubscription {
 				delegate: self.delegate.clone(),
 				closure: unsubscribe.1,
 			}
 		);
-		self.add_method_with_meta(subscribe.0, move |_, params, meta| sub.call(params, meta));
-		self.add_method_with_meta(unsubscribe.0, move |_, params, meta| unsub.call(params, meta));
+		self.inner.add_method_with_meta(subscribe.0, move |_, params, meta| sub.call(params, meta));
+		self.inner.add_method_with_meta(unsubscribe.0, move |_, params, meta| unsub.call(params, meta));
 	}
 }
 
@@ -78,6 +98,6 @@ impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M> where
 	M: Metadata,
 {
 	fn into(self) -> HashMap<String, RemoteProcedure<M>> {
-		self.methods
+		self.inner.into()
 	}
 }

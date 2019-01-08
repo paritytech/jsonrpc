@@ -11,8 +11,7 @@ use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_core::futures::Future;
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId};
-
-use jsonrpc_macros::pubsub;
+use jsonrpc_pubsub::typed;
 
 #[rpc(pubsub, name = "hello")]
 pub trait Rpc {
@@ -20,7 +19,7 @@ pub trait Rpc {
 
 	/// Hello subscription
 	#[rpc(name = "hello_subscribe", alias("hello_sub"))]
-	fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
+	fn subscribe(&self, Self::Metadata, typed::Subscriber<String>, u64);
 
 	/// Unsubscribe from hello subscription.
 	#[rpc(name = "hello_unsubscribe")]
@@ -30,12 +29,12 @@ pub trait Rpc {
 #[derive(Default)]
 struct RpcImpl {
 	uid: atomic::AtomicUsize,
-	active: Arc<RwLock<HashMap<SubscriptionId, pubsub::Sink<String>>>>,
+	active: Arc<RwLock<HashMap<SubscriptionId, typed::Sink<String>>>>,
 }
 impl Rpc for RpcImpl {
 	type Metadata = Arc<Session>;
 
-	fn subscribe(&self, _meta: Self::Metadata, subscriber: pubsub::Subscriber<String>, param: u64) {
+	fn subscribe(&self, _meta: Self::Metadata, subscriber: typed::Subscriber<String>, param: u64) {
 		if param != 10 {
 			subscriber.reject(Error {
 				code: ErrorCode::InvalidParams,

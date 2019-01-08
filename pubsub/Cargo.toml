@@ -13,6 +13,7 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_pubsub/index.html"
 log = "0.4"
 parking_lot = "0.6"
 jsonrpc-core = { version = "9.0", path = "../core" }
+serde = "1.0"
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "9.0", path = "../tcp" }

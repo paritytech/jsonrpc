@@ -21,25 +21,22 @@ impl ToDelegateFunction {
 		trait_item: &syn::ItemTrait,
 		has_metadata: bool,
 	) -> syn::TraitItemMethod {
-		let delegate_registration =
+		let to_delegate_body =
 			match self {
 				ToDelegateFunction::Standard(methods) => {
 					let add_methods: Vec<_> = methods
 						.iter()
-						.map(Self::register_rpc_method)
+						.map(Self::delegate_rpc_method)
 						.collect();
-					quote! { #(#add_methods)* }
+					quote! {
+						let mut del = _jsonrpc_core::IoDelegate::new(self.into());
+						#(#add_methods)*
+						del
+					}
 				},
 				ToDelegateFunction::PubSub { name, subscribe, unsubscribe } => {
-					Self::register_pubsub_methods(name, subscribe, unsubscribe)
+					Self::delegate_pubsub_methods(name, subscribe, unsubscribe)
 				},
-			};
-
-		let to_delegate_body =
-			quote! {
-				let mut del = _jsonrpc_core::IoDelegate::new(self.into());
-				#delegate_registration
-				del
 			};
 
 		// todo: [AJ] check that pubsub has metadata
@@ -70,7 +67,7 @@ impl ToDelegateFunction {
 		method
 	}
 
-	fn register_rpc_method(method: &RpcMethod) -> proc_macro2::TokenStream {
+	fn delegate_rpc_method(method: &RpcMethod) -> proc_macro2::TokenStream {
 		let rpc_name = &method.name();
 
 		let add_method =
@@ -91,7 +88,7 @@ impl ToDelegateFunction {
 		}
 	}
 
-	fn register_pubsub_methods(
+	fn delegate_pubsub_methods(
 		name: &str,
 		subscribe: &RpcMethod,
 		unsubscribe: &RpcMethod,
@@ -105,6 +102,7 @@ impl ToDelegateFunction {
 		let unsub_aliases = unsubscribe.generate_add_aliases();
 
 		quote! {
+			let mut del = _jsonrpc_pubsub::IoDelegate::new(self.into());
 			del.add_subscription(
 				#name,
 				(#sub_name, #sub_closure),
@@ -112,6 +110,7 @@ impl ToDelegateFunction {
 			);
 			#sub_aliases
 			#unsub_aliases
+			del
 		}
 	}
 }
