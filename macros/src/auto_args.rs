@@ -91,7 +91,7 @@ macro_rules! build_rpc_trait {
 				$( $generics ,)*
 				@BOUNDS
 				// then specialised ones
-				$( $( $generics2 : $bounds $( + $morebounds )* )* )*
+				$( $( $generics2 : $bounds $( + $morebounds )* ),* )*
 			> )* {
 				$( $rest )+
 			}
