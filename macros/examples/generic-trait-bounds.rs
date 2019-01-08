@@ -9,10 +9,14 @@ use jsonrpc_core::futures::future::{self, FutureResult};
 
 // Two only requires DeserializeOwned
 build_rpc_trait! {
-	pub trait Rpc<One> where
+	pub trait Rpc<Zero, One> where
 		Two: DeserializeOwned,
 		Three: Serialize,
 	{
+		/// Get Zero type.
+		#[rpc(name = "getZero")]
+		fn zero(&self) -> Result<Zero>;
+
 		/// Get One type.
 		#[rpc(name = "getOne")]
 		fn one(&self) -> Result<One>;
@@ -41,11 +45,44 @@ build_rpc_trait! {
 	}
 }
 
+build_rpc_trait! {
+	pub trait Rpc3<Zero, One> where
+		Two: DeserializeOwned,
+		Three: Serialize,
+	{
+		type Metadata;
+
+		/// Get Zero type.
+		#[rpc(name = "getZero")]
+		fn zero(&self) -> Result<Zero>;
+
+		/// Get One type.
+		#[rpc(name = "getOne")]
+		fn one(&self) -> Result<One>;
+
+		/// Adds two numbers and returns a result
+		#[rpc(name = "setTwo")]
+		fn set_two(&self, Two) -> Result<()>;
+
+		/// Adds two numbers and returns a result
+		#[rpc(name = "getThree")]
+		fn three(&self) -> Result<Three>;
+
+		/// Performs asynchronous operation
+		#[rpc(name = "beFancy")]
+		fn call(&self, One) -> FutureResult<(One, u64), Error>;
+	}
+}
+
 struct RpcImpl;
 
-impl Rpc<u64, String, u32> for RpcImpl {
+impl Rpc<u8, u64, String, u32> for RpcImpl {
+	fn zero(&self) -> Result<u8> {
+		Ok(0)
+	}
+
 	fn one(&self) -> Result<u64> {
-		Ok(100)
+		Ok(1)
 	}
 
 	fn set_two(&self, x: String) -> Result<()> {
@@ -68,6 +105,30 @@ impl Rpc2<String> for RpcImpl {
 	}
 }
 
+impl Rpc3<u8, u64, String, u32> for RpcImpl {
+	type Metadata = ();
+
+	fn zero(&self) -> Result<u8> {
+		Ok(0)
+	}
+
+	fn one(&self) -> Result<u64> {
+		Ok(1)
+	}
+
+	fn set_two(&self, x: String) -> Result<()> {
+		println!("{}", x);
+		Ok(())
+	}
+
+	fn three(&self) -> Result<u32> {
+		Ok(3)
+	}
+
+	fn call(&self, num: u64) -> FutureResult<(u64, u64), Error> {
+		::future::finished((num + 999, num))
+	}
+}
 
 fn main() {
 	let mut io = IoHandler::new();

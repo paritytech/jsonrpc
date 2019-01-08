@@ -75,10 +75,11 @@ macro_rules! build_rpc_trait {
 	(
 		$(#[$t_attr: meta])*
 		pub trait $name:ident $(<$( $generics:ident ),*>
-		$(
-			where
-				$( $generics2:ident : $bounds:tt $( + $morebounds:tt )* ,)+
-		)* )*
+			$(
+				where
+					$( $generics2:ident : $bounds:tt $( + $morebounds:tt )* ,)+
+			)*
+		)*
 		{
 			$( $rest: tt )+
 		}
@@ -91,21 +92,19 @@ macro_rules! build_rpc_trait {
 				$( $generics ,)*
 				@BOUNDS
 				// then specialised ones
-				$( $( $generics2 : $bounds $( + $morebounds )* ),* )*
+				$( $( $generics2 : $bounds $( + $morebounds )* ,)* )*
 			> )* {
 				$( $rest )+
 			}
 		}
 	};
-
-	// entry-point. todo: make another for traits w/ bounds.
 	(
 		@WITH_BOUNDS
 		$(#[$t_attr: meta])*
 		pub trait $name:ident $(<
 			$( $simple_generics:ident ,)*
 			@BOUNDS
-			$( $generics:ident $(: $bounds:tt $( + $morebounds:tt )* )* ),*
+			$( $generics:ident : $bounds:tt $( + $morebounds:tt )* ,)*
 		>)* {
 			$(
 				$( #[doc=$m_doc:expr] )*
@@ -129,7 +128,7 @@ macro_rules! build_rpc_trait {
 			fn to_delegate<M: $crate::jsonrpc_core::Metadata>(self) -> $crate::IoDelegate<Self, M>
 				where $(
 					$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
-					$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
+					$($generics: Send + Sync + 'static + $bounds $( + $morebounds )* ,)*
 				)*
 			{
 				let mut del = $crate::IoDelegate::new(self.into());
@@ -151,7 +150,7 @@ macro_rules! build_rpc_trait {
 		pub trait $name: ident $(<
 			$( $simple_generics:ident ,)*
 			@BOUNDS
-			$($generics:ident $( : $bounds:tt $( + $morebounds:tt )* )* ),*
+			$( $generics:ident : $bounds:tt $( + $morebounds:tt )* ,)*
 		>)* {
 			type Metadata;
 
@@ -201,8 +200,8 @@ macro_rules! build_rpc_trait {
 			/// the parameters.
 			fn to_delegate(self) -> $crate::IoDelegate<Self, Self::Metadata>
 				where $(
-					$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ),*
-					$($generics: Send + Sync + 'static $( + $bounds $( + $morebounds )* )* ),*
+					$($simple_generics: Send + Sync + 'static + $crate::Serialize + $crate::DeserializeOwned ,)*
+					$($generics: Send + Sync + 'static + $bounds $( + $morebounds )* , )*
 				)*
 			{
 				let mut del = $crate::IoDelegate::new(self.into());
