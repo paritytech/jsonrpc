@@ -299,7 +299,7 @@ impl RpcMethod {
 			let params_len = match params {
 				_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
 				_jsonrpc_core::Params::None => Ok(0),
-				_ => Err(Error::invalid_params("`params` should be an array"))
+				_ => Err(_jsonrpc_core::Error::invalid_params("`params` should be an array"))
 			};
 
 			let params = params_len.and_then(|len| {
@@ -312,9 +312,9 @@ impl RpcMethod {
 						.map( |(#(#tuple_fields_no_trailing, )* id)|
 							(#(#tuple_fields_no_trailing, )* id))
 						.map_err(Into::into),
-					x if x < 0 => Err(Error::invalid_params(
+					x if x < 0 => Err(_jsonrpc_core::Error::invalid_params(
 						format!("`params` should have at least {} argument(s)", #num))),
-					_ => Err(Error::invalid_params_with_details(
+					_ => Err(_jsonrpc_core::Error::invalid_params_with_details(
 						format!("Expected {} or {} parameters.", #num, #num + 1),
 						format!("Got: {}", len))),
 				}
