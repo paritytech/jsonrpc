@@ -6,7 +6,7 @@ use syn::{
 	visit::{self, Visit},
 };
 
-pub enum ToDelegateFunction {
+pub enum ToDelegateMethod {
 	Standard(Vec<RpcMethod>),
 	PubSub {
 		name: String,
@@ -15,7 +15,7 @@ pub enum ToDelegateFunction {
 	}
 }
 
-impl ToDelegateFunction {
+impl ToDelegateMethod {
 	pub fn generate_trait_item_method(
 		&self,
 		trait_item: &syn::ItemTrait,
@@ -23,7 +23,7 @@ impl ToDelegateFunction {
 	) -> syn::TraitItemMethod {
 		let (io_delegate_type,to_delegate_body) =
 			match self {
-				ToDelegateFunction::Standard(methods) => {
+				ToDelegateMethod::Standard(methods) => {
 					let delegate_type = quote!(_jsonrpc_core::IoDelegate);
 					let add_methods: Vec<_> = methods
 						.iter()
@@ -37,7 +37,7 @@ impl ToDelegateFunction {
 						};
 					(delegate_type, body)
 				},
-				ToDelegateFunction::PubSub { name, subscribe, unsubscribe } => {
+				ToDelegateMethod::PubSub { name, subscribe, unsubscribe } => {
 					let delegate_type = quote!(_jsonrpc_pubsub::IoDelegate);
 					let register_pub_sub =
 						Self::delegate_pubsub_methods(name, subscribe, unsubscribe);

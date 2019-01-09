@@ -10,7 +10,7 @@ use syn::parse_macro_input;
 
 mod rpc_attr;
 mod rpc_trait;
-mod to_delegate_fn;
+mod to_delegate;
 
 // todo: [AJ] docs
 #[proc_macro_attribute]

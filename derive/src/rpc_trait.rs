@@ -4,7 +4,7 @@ use syn::{
 	fold::{self, Fold},
 };
 use rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
-use to_delegate_fn::{RpcMethod, ToDelegateFunction};
+use to_delegate::{RpcMethod, ToDelegateMethod};
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -72,7 +72,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 		match visitor.attr {
 			RpcTraitAttribute::RpcTrait => {
 				if !visitor.methods.is_empty() {
-					Ok(ToDelegateFunction::Standard(visitor.methods))
+					Ok(ToDelegateMethod::Standard(visitor.methods))
 				} else {
 					Err("No rpc annotated trait items found")
 				}
@@ -90,7 +90,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 						// todo: [AJ] validate subscribe/unsubscribe args
 //						let sub_arg_types = sub.get_method_arg_types();
 
-						Ok(ToDelegateFunction::PubSub {
+						Ok(ToDelegateMethod::PubSub {
 							name,
 							subscribe: sub.clone(),
 							unsubscribe: unsub.clone()
