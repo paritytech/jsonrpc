@@ -10,7 +10,7 @@ documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_tcp_server/index.h
 
 [dependencies]
 log = "0.4"
-parking_lot = "0.6"
+parking_lot = "0.7"
 tokio-service = "0.1"
 jsonrpc-core = { version = "9.0", path = "../core" }
 jsonrpc-server-utils = { version = "9.0", path = "../server-utils" }
