@@ -26,7 +26,7 @@ pub trait Rpc {
 	fn unsubscribe(&self, Self::Metadata, SubscriptionId) -> Result<bool>;
 }
 
-//#[derive(Default)]
+#[derive(Default)]
 struct RpcImpl {
 	uid: atomic::AtomicUsize,
 	active: Arc<RwLock<HashMap<SubscriptionId, typed::Sink<String>>>>,
@@ -66,28 +66,28 @@ impl Rpc for RpcImpl {
 
 
 fn main() {
-//	let mut io = PubSubHandler::default();
-//	let rpc = RpcImpl::default();
-//	let active_subscriptions = rpc.active.clone();
-//
-//	thread::spawn(move || {
-//		loop {
-//			{
-//				let subscribers = active_subscriptions.read().unwrap();
-//				for sink in subscribers.values() {
-//					let _ = sink.notify(Ok("Hello World!".into())).wait();
-//				}
-//			}
-//			thread::sleep(::std::time::Duration::from_secs(1));
-//		}
-//	});
-//
-//	io.extend_with(rpc.to_delegate());
-//
-//	let server = jsonrpc_tcp_server::ServerBuilder
-//		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| Arc::new(Session::new(context.sender.clone())))
-//		.start(&"0.0.0.0:3030".parse().unwrap())
-//		.expect("Server must start with no issues");
-//
-//	server.wait()
+	let mut io = PubSubHandler::default();
+	let rpc = RpcImpl::default();
+	let active_subscriptions = rpc.active.clone();
+
+	thread::spawn(move || {
+		loop {
+			{
+				let subscribers = active_subscriptions.read().unwrap();
+				for sink in subscribers.values() {
+					let _ = sink.notify(Ok("Hello World!".into())).wait();
+				}
+			}
+			thread::sleep(::std::time::Duration::from_secs(1));
+		}
+	});
+
+	io.extend_with(rpc.to_delegate());
+
+	let server = jsonrpc_tcp_server::ServerBuilder
+		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| Arc::new(Session::new(context.sender.clone())))
+		.start(&"0.0.0.0:3030".parse().unwrap())
+		.expect("Server must start with no issues");
+
+	server.wait()
 }
