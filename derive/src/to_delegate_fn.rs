@@ -106,12 +106,21 @@ impl ToDelegateFunction {
 		subscribe: &RpcMethod,
 		unsubscribe: &RpcMethod,
 	) -> proc_macro2::TokenStream {
-		let sub_name = &subscribe.name();
+		let sub_name = subscribe.name();
 		let sub_closure = subscribe.generate_delegate_closure(true);
 		let sub_aliases = subscribe.generate_add_aliases();
 
-		let unsub_name = &unsubscribe.name();
-		let unsub_closure = unsubscribe.generate_delegate_closure(false);
+		let unsub_name = unsubscribe.name();
+		let unsub_method_ident = unsubscribe.ident();
+		let unsub_closure =
+			quote! {
+				move |base, id, meta| {
+					Self::#unsub_method_ident(base, meta, id).into_future()
+						.map(|value| _jsonrpc_core::to_value(value)
+								.expect("Expected always-serializable type; qed"))
+						.map_err(Into::into)
+				}
+			};
 		let unsub_aliases = unsubscribe.generate_add_aliases();
 
 		quote! {
@@ -150,6 +159,10 @@ impl RpcMethod {
 
 	pub fn name(&self) -> &str {
 		&self.name
+	}
+
+	pub fn ident(&self) -> &syn::Ident {
+		&self.trait_item.sig.ident
 	}
 
 	fn generate_delegate_closure(&self, is_subscribe: bool) -> proc_macro2::TokenStream {
@@ -225,7 +238,7 @@ impl RpcMethod {
 				quote! { let params = params.parse::<(#(#param_types), *)>(); }
 			};
 
-		let name = &self.trait_item.sig.ident;
+		let method_ident = self.ident();
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
 
@@ -262,7 +275,7 @@ impl RpcMethod {
 
 		quote! {
 			move |#closure_args| {
-				let method = &(Self::#name as #method_sig);
+				let method = &(Self::#method_ident as #method_sig);
 				#parse_params
 				match params {
 					#match_params
