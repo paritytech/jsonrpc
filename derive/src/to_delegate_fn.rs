@@ -290,11 +290,11 @@ impl RpcMethod {
 		param_types: &[syn::Type],
 		tuple_fields: &[syn::Ident],
 	) -> proc_macro2::TokenStream {
-		let num = param_types.len();
 		let param_types_no_trailing: Vec<_> =
 			param_types.iter().cloned().filter(|arg| arg != trailing).collect();
 		let tuple_fields_no_trailing: &Vec<_> =
 			&tuple_fields.iter().take(tuple_fields.len() - 1).collect();
+		let num = param_types_no_trailing.len();
 		quote! {
 			let params_len = match params {
 				_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
@@ -303,16 +303,16 @@ impl RpcMethod {
 			};
 
 			let params = params_len.and_then(|len| {
-				match len - #num {
-					0 => params.parse::<(#(#param_types_no_trailing), *)>()
+				match len.checked_sub(#num) {
+					Some(0) => params.parse::<(#(#param_types_no_trailing), *)>()
 						.map( |(#(#tuple_fields_no_trailing), *)|
 							(#(#tuple_fields_no_trailing, )* None))
 						.map_err(Into::into),
-					1 => params.parse::<(#(#param_types), *) > ()
+					Some(1) => params.parse::<(#(#param_types), *) > ()
 						.map( |(#(#tuple_fields_no_trailing, )* id)|
 							(#(#tuple_fields_no_trailing, )* id))
 						.map_err(Into::into),
-					x if x < 0 => Err(_jsonrpc_core::Error::invalid_params(
+					None => Err(_jsonrpc_core::Error::invalid_params(
 						format!("`params` should have at least {} argument(s)", #num))),
 					_ => Err(_jsonrpc_core::Error::invalid_params_with_details(
 						format!("Expected {} or {} parameters.", #num, #num + 1),

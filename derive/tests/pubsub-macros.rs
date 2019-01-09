@@ -38,6 +38,7 @@ impl Rpc for RpcImpl {
 	type Metadata = Metadata;
 
 	fn subscribe(&self, _meta: Self::Metadata, subscriber: Subscriber<String>, _pre: u32, _trailing: Option<u64>) {
+		println!("subscribe!!!");
 		let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 	}
 
@@ -70,8 +71,7 @@ fn test_invalid_trailing_pubsub_params() {
 		"jsonrpc": "2.0",
 		"error": {
 			"code": -32602,
-			"message": "Couldn't parse parameters: `params` should have at least 1 argument(s)",
-			"data": "\"\""
+			"message": "`params` should have at least 1 argument(s)"
 		},
 		"id": 1
 	}"#;
