@@ -23,7 +23,7 @@ pub trait Rpc {
 
 	/// Unsubscribe from hello subscription.
 	#[rpc(name = "hello_unsubscribe")]
-	fn unsubscribe(&self, Self::Metadata, SubscriptionId) -> Result<bool>;
+	fn unsubscribe(&self, Option<Self::Metadata>, SubscriptionId) -> Result<bool>;
 }
 
 #[derive(Default)]
@@ -50,7 +50,7 @@ impl Rpc for RpcImpl {
 		self.active.write().unwrap().insert(sub_id, sink);
 	}
 
-	fn unsubscribe(&self, _meta: Self::Metadata, id: SubscriptionId) -> Result<bool> {
+	fn unsubscribe(&self, _meta: Option<Self::Metadata>, id: SubscriptionId) -> Result<bool> {
 		let removed = self.active.write().unwrap().remove(&id);
 		if removed.is_some() {
 			Ok(true)
