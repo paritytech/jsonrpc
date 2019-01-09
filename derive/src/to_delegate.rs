@@ -217,8 +217,6 @@ impl RpcMethod {
 			}
 		};
 
-//		println!("{:?}", &self.trait_item.sig.decl.output);
-
 		let result = &self.trait_item.sig.decl.output;
 
 		let tuple_fields : &Vec<_> =
@@ -270,8 +268,6 @@ impl RpcMethod {
 					Err(e) => _futures::future::Either::B(_futures::failed(e)),
 				}
 			};
-
-//		println!("method sig: {}", method_sig);
 
 		quote! {
 			move |#closure_args| {

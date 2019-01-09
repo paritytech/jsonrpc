@@ -38,7 +38,6 @@ impl Rpc for RpcImpl {
 	type Metadata = Metadata;
 
 	fn subscribe(&self, _meta: Self::Metadata, subscriber: Subscriber<String>, _pre: u32, _trailing: Option<u64>) {
-		println!("subscribe!!!");
 		let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 	}
 
