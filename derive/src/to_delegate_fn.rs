@@ -235,7 +235,10 @@ impl RpcMethod {
 		let match_params =
 			if is_subscribe {
 				quote! {
-					Ok((#(#tuple_fields), *)) => (method)#method_call,
+					Ok((#(#tuple_fields), *)) => {
+						let subscriber = _jsonrpc_pubsub::typed::Subscriber::new(subscriber);
+						(method)#method_call
+					},
 					Err(e) => {
 						let _ = subscriber.reject(e);
 						return
