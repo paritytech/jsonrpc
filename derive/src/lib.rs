@@ -1,3 +1,50 @@
+//! High level, typed wrapper for `jsonrpc_core`.
+//!
+//! Enables creation of "Service" objects grouping a set of RPC methods together in a typed manner.
+//!
+//! Example
+//!
+//! ```
+//! #[macro_use]
+//! extern crate jsonrpc_derive;
+//! use jsonrpc_core::{IoHandler, Error, Result};
+//! use jsonrpc_core::futures::future::{self, FutureResult};
+//!
+//! #[rpc]
+//! pub trait Rpc {
+//! 	#[rpc(name = "protocolVersion")]
+//! 	fn protocol_version(&self) -> Result<String>;
+//!
+//! 	#[rpc(name = "add")]
+//! 	fn add(&self, u64, u64) -> Result<u64>;
+//!
+//! 	#[rpc(name = "callAsync")]
+//! 	fn call(&self, u64) -> FutureResult<String, Error>;
+//! }
+//!
+//! struct RpcImpl;
+//! impl Rpc for RpcImpl {
+//! 	fn protocol_version(&self) -> Result<String> {
+//! 		Ok("version1".into())
+//! 	}
+//!
+//! 	fn add(&self, a: u64, b: u64) -> Result<u64> {
+//! 		Ok(a + b)
+//! 	}
+//!
+//! 	fn call(&self, _: u64) -> FutureResult<String, Error> {
+//! 		future::ok("OK".to_owned()).into()
+//! 	}
+//! }
+//!
+//! fn main() {
+//!	  let mut io = IoHandler::new();
+//!	  let rpc = RpcImpl;
+//!
+//!	  io.extend_with(rpc.to_delegate());
+//! }
+//! ```
+
 #![recursion_limit = "256"]
 
 extern crate proc_macro;
