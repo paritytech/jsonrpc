@@ -13,8 +13,12 @@ struct Meta(String);
 impl Metadata for Meta {}
 
 #[rpc]
-pub trait Rpc {
+pub trait Rpc<One> {
 	type Metadata;
+
+	/// Get One type.
+	#[rpc(name = "getOne")]
+	fn one(&self) -> Result<One>;
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add")]
@@ -34,8 +38,10 @@ pub trait Rpc {
 }
 
 struct RpcImpl;
-impl Rpc for RpcImpl {
+impl Rpc<u64> for RpcImpl {
 	type Metadata = Meta;
+
+	fn one(&self) -> Result<u64> { Ok(100) }
 
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)

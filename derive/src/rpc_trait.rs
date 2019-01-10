@@ -86,7 +86,6 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 				match (subscribe, unsubscribe) {
 					(Some(sub), Some(unsub)) => {
 						// todo: [AJ] validate subscribe/unsubscribe args
-						// todo: [AJ] use proc_macro_diagnostic for better span errors
 //						let sub_arg_types = sub.get_method_arg_types();
 
 						Ok(ToDelegateMethod::PubSub {
@@ -95,9 +94,9 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 							unsubscribe: unsub.clone()
 						})
 					},
-					(Some(_), None) => Err("Missing subscribe method, attribute should be marked `subscribe`"),
-					(None, Some(_)) => Err("Missing unsubscribe method, attribute should be marked `unsubscribe`"),
-					(None, None) => Err("Missing both subscribe and unsubscribe methods"),
+					(Some(_), None) => Err("Missing subscribe method, attribute should be annotated `subscribe`"),
+					(None, Some(_)) => Err("Missing unsubscribe method, attribute should be annotated `unsubscribe`"),
+					(None, None) => Err("Missing both subscribe and unsubscribe methods, should be annotated in attribute"),
 				}
 			}
 		}?;
