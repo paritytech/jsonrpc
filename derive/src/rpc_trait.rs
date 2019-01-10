@@ -21,9 +21,7 @@ impl<'a> Fold for RpcTrait {
 		match RpcMethodAttribute::try_from_trait_item_method(&method) {
 			Ok(Some(attr)) => {
 				self.methods.push(RpcMethod::new(
-					&attr.name,
-					attr.aliases.clone(),
-					attr.has_metadata,
+					attr.clone(),
 					method.clone(),
 				));
 				// remove the rpc attribute
@@ -80,14 +78,15 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 			RpcTraitAttribute::PubSubTrait { name } => {
 				let subscribe = visitor.methods
 					.iter()
-					.find(|m| m.name_contains("subscribe") && !m.name_contains("unsubscribe"));
+					.find(|m| m.attr().is_subscribe);
 				let unsubscribe = visitor.methods
 					.iter()
-					.find(|m| m.name_contains("unsubscribe"));
+					.find(|m| m.attr().is_unsubscribe);
 
 				match (subscribe, unsubscribe) {
 					(Some(sub), Some(unsub)) => {
 						// todo: [AJ] validate subscribe/unsubscribe args
+						// todo: [AJ] use proc_macro_diagnostic for better span errors
 //						let sub_arg_types = sub.get_method_arg_types();
 
 						Ok(ToDelegateMethod::PubSub {
@@ -96,8 +95,8 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 							unsubscribe: unsub.clone()
 						})
 					},
-					(Some(_), None) => Err("Missing required subscribe method"),
-					(None, Some(_)) => Err("Missing required unsubscribe method"),
+					(Some(_), None) => Err("Missing subscribe method, attribute should be marked `subscribe`"),
+					(None, Some(_)) => Err("Missing unsubscribe method, attribute should be marked `unsubscribe`"),
 					(None, None) => Err("Missing both subscribe and unsubscribe methods"),
 				}
 			}

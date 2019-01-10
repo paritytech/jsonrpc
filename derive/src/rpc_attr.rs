@@ -10,6 +10,8 @@ pub struct RpcMethodAttribute {
 	pub attr: syn::Attribute,
 	pub name: String,
 	pub has_metadata: bool,
+	pub is_subscribe: bool,
+	pub is_unsubscribe: bool,
 	pub aliases: Vec<String>,
 }
 
@@ -51,6 +53,8 @@ impl RpcMethodAttribute {
 					attr: attr.clone(),
 					aliases: visitor.aliases,
 					has_metadata: visitor.meta_words.contains(&"meta".to_string()),
+					is_subscribe: visitor.meta_words.contains(&"subscribe".to_string()),
+					is_unsubscribe: visitor.meta_words.contains(&"unsubscribe".to_string()),
 					name,
 				}))
 			},

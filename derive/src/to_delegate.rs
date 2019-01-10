@@ -5,6 +5,7 @@ use syn::{
 	parse_quote, Token, punctuated::Punctuated,
 	visit::{self, Visit},
 };
+use rpc_attr::RpcMethodAttribute;
 
 pub enum ToDelegateMethod {
 	Standard(Vec<RpcMethod>),
@@ -86,7 +87,7 @@ impl ToDelegateMethod {
 		let rpc_name = &method.name();
 
 		let add_method =
-			if method.has_metadata {
+			if method.has_metadata() {
 				ident("add_method_with_meta")
 			} else {
 				ident("add_method")
@@ -137,28 +138,26 @@ impl ToDelegateMethod {
 
 #[derive(Clone)]
 pub struct RpcMethod {
-	name: String,
-	aliases: Vec<String>,
-	has_metadata: bool,
+	attr: RpcMethodAttribute,
 	trait_item: syn::TraitItemMethod,
 }
 
 impl RpcMethod {
 	pub fn new(
-		name: &str,
-		aliases: Vec<String>,
-		has_metadata: bool,
+		attr: RpcMethodAttribute,
 		trait_item: syn::TraitItemMethod
 	) -> RpcMethod {
-		RpcMethod { name: name.to_string(), aliases, has_metadata, trait_item }
+		RpcMethod { attr, trait_item }
 	}
 
-	pub fn name_contains(&self, s: &str) -> bool {
-		self.name.contains(s)
+	pub fn attr(&self) -> &RpcMethodAttribute { &self.attr }
+
+	pub fn has_metadata(&self) -> bool {
+		self.attr.has_metadata
 	}
 
 	pub fn name(&self) -> &str {
-		&self.name
+		&self.attr.name
 	}
 
 	pub fn ident(&self) -> &syn::Ident {
@@ -319,8 +318,8 @@ impl RpcMethod {
 	}
 
 	fn generate_add_aliases(&self) -> proc_macro2::TokenStream {
-		let name = &self.name;
-		let add_aliases: Vec<_> = self.aliases
+		let name = self.name();
+		let add_aliases: Vec<_> = self.attr.aliases
 			.iter()
 			.map(|alias| quote! { del.add_alias(#alias, #name); })
 			.collect();
