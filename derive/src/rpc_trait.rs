@@ -143,10 +143,7 @@ pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro
 			extern crate jsonrpc_pubsub as _jsonrpc_pubsub;
 			extern crate serde as _serde;
 			use super::*;
-
-			// todo: [AJ] sort all these out, see to_delegate method
 			use self::_jsonrpc_core::futures as _futures;
-			use self::_futures::{Future, IntoFuture};
 
 			#rpc_trait
 		}
