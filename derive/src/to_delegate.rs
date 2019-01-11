@@ -178,56 +178,19 @@ impl RpcMethod {
 				})
 				.collect();
 
-		let meta_arg =
-			param_types.first().and_then(|ty|
-				if *ty == parse_quote!(Self::Metadata) { Some(ty.clone()) } else { None });
-
-		let subscriber_arg = param_types.iter().nth(1).and_then(|ty| {
-			if let syn::Type::Path(path) = ty {
-				if path.path.segments.iter().any(|s| s.ident == "Subscriber") {
-					Some(ty.clone())
-				} else {
-					None
-				}
-			} else {
-				None
-			}
-		});
-
-		let mut special_args = Vec::new();
-		if let Some(ref meta) = meta_arg {
-			param_types.retain(|ty| ty != meta );
-			special_args.push((ident("meta"), meta.clone()));
-		}
-		if let Some(ref subscriber) = subscriber_arg {
-			param_types.retain(|ty| ty != subscriber);
-			special_args.push((ident("subscriber"), subscriber.clone()));
-		}
-
-		let is_option = |arg: &syn::Type| {
-			if let syn::Type::Path(path) = arg {
-				path.path.segments
-					.first()
-					.and_then(|t| {
-						if t.value().ident == "Option" { Some(arg.clone()) } else { None }
-					})
-			} else {
-				None
-			}
-		};
-
-		let result = &self.trait_item.sig.decl.output;
+		// special args are those which are not passed directly via rpc params: metadata, subscriber
+		let special_args = Self::special_args(&param_types);
+		param_types.retain(|ty|
+			special_args.iter().find(|(_,sty)| sty == ty).is_none());
 
 		let tuple_fields : &Vec<_> =
 			&(0..param_types.len() as u8)
 				.map(|x| ident(&((x + 'a' as u8) as char).to_string()))
 				.collect();
-
 		let param_types = &param_types;
-
 		let parse_params =
 			// if the last argument is an `Option` then it can be made an optional 'trailing' argument
-			if let Some(ref trailing) = param_types.iter().last().and_then(is_option) {
+			if let Some(ref trailing) = param_types.iter().last().and_then(try_get_option) {
 				self.params_with_trailing(trailing, param_types, tuple_fields)
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
@@ -236,6 +199,7 @@ impl RpcMethod {
 			};
 
 		let method_ident = self.ident();
+		let result = &self.trait_item.sig.decl.output;
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
 
@@ -277,6 +241,32 @@ impl RpcMethod {
 				}
 			}
 		}
+	}
+
+	fn special_args(param_types: &[syn::Type]) -> Vec<(syn::Ident, syn::Type)> {
+		let meta_arg =
+			param_types.first().and_then(|ty|
+				if *ty == parse_quote!(Self::Metadata) { Some(ty.clone()) } else { None });
+		let subscriber_arg = param_types.iter().nth(1).and_then(|ty| {
+			if let syn::Type::Path(path) = ty {
+				if path.path.segments.iter().any(|s| s.ident == "Subscriber") {
+					Some(ty.clone())
+				} else {
+					None
+				}
+			} else {
+				None
+			}
+		});
+
+		let mut special_args = Vec::new();
+		if let Some(ref meta) = meta_arg {
+			special_args.push((ident("meta"), meta.clone()));
+		}
+		if let Some(ref subscriber) = subscriber_arg {
+			special_args.push((ident("subscriber"), subscriber.clone()));
+		}
+		special_args
 	}
 
 	fn params_with_trailing(
@@ -329,6 +319,18 @@ impl RpcMethod {
 
 fn ident(s: &str) -> syn::Ident {
 	syn::Ident::new(s, proc_macro2::Span::call_site())
+}
+
+fn try_get_option(ty: &syn::Type) -> Option<syn::Type> {
+	if let syn::Type::Path(path) = ty {
+		path.path.segments
+			.first()
+			.and_then(|t| {
+				if t.value().ident == "Option" { Some(ty.clone()) } else { None }
+			})
+	} else {
+		None
+	}
 }
 
 fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -> Vec<syn::WherePredicate> {
