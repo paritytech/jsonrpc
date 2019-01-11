@@ -459,7 +459,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 ) {
 	let (shutdown_signal, local_addr_tx) = signals;
 	executor.spawn(future::lazy(move || {
-		let handle = tokio::reactor::Handle::current();
+		let handle = tokio::reactor::Handle::default();
 
 		let bind = move || {
 			let listener = match addr {

@@ -107,20 +107,15 @@ impl RpcEventLoop {
 		}
 
 		let handle = tb.spawn(move || {
-			let mut tp_builder = tokio::executor::thread_pool::Builder::new();
-
-			let pool_size = match num_cpus::get_physical() {
+			let core_threads = match num_cpus::get_physical() {
 				1 => 1,
 				2...4 => 2,
 				_ => 3,
 			};
 
-			tp_builder
-				.pool_size(pool_size)
-				.name_prefix("jsonrpc-eventloop-");
-
 			let runtime = tokio::runtime::Builder::new()
-				.threadpool_builder(tp_builder)
+				.core_threads(core_threads)
+				.name_prefix("jsonrpc-eventloop-")
 				.build();
 
 			match runtime {
