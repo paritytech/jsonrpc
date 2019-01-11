@@ -1,0 +1,11 @@
+error: custom attribute panicked
+ --> $DIR/missing-both.rs:6:1
+  |
+6 | #[rpc(pubsub, name = "hello")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = help: message: [rpc] encountered error:
+          Can't find subscribe method, expected a method annotated with `subscribe` e.g. `#[rpc(subscribe, name = "hello_subscribe")]`
+          Can't find unsubscribe method, expected a method annotated with `unsubscribe` e.g. `#[rpc(unsubscribe, name = "hello_unsubscribe")]`
+
+error: aborting due to previous error

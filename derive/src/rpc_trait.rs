@@ -6,6 +6,14 @@ use syn::{
 use rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
 use to_delegate::{RpcMethod, ToDelegateMethod};
 
+const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
+	"Can't find subscribe method, expected a method annotated with `subscribe` \
+	e.g. `#[rpc(subscribe, name = \"hello_subscribe\")]`";
+
+const MISSING_UNSUBSCRIBE_METHOD_ERR: &'static str =
+	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
+	e.g. `#[rpc(unsubscribe, name = \"hello_unsubscribe\")]`";
+
 type Result<T> = std::result::Result<T, String>;
 
 struct RpcTrait {
@@ -72,7 +80,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 				if !visitor.methods.is_empty() {
 					Ok(ToDelegateMethod::Standard(visitor.methods))
 				} else {
-					Err("No rpc annotated trait items found")
+					Err("No rpc annotated trait items found".to_string())
 				}
 			},
 			RpcTraitAttribute::PubSubTrait { name } => {
@@ -94,9 +102,9 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 							unsubscribe: unsub.clone()
 						})
 					},
-					(Some(_), None) => Err("Missing subscribe method, attribute should be annotated `subscribe`"),
-					(None, Some(_)) => Err("Missing unsubscribe method, attribute should be annotated `unsubscribe`"),
-					(None, None) => Err("Missing both subscribe and unsubscribe methods, should be annotated in attribute"),
+					(Some(_), None) => Err(MISSING_UNSUBSCRIBE_METHOD_ERR.to_string()),
+					(None, Some(_)) => Err(MISSING_SUBSCRIBE_METHOD_ERR.to_string()),
+					(None, None) => Err(format!("\n{}\n{}", MISSING_SUBSCRIBE_METHOD_ERR, MISSING_UNSUBSCRIBE_METHOD_ERR)),
 				}
 			}
 		}?;
