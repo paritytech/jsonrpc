@@ -116,7 +116,7 @@ impl ToDelegateMethod {
 		let unsub_closure =
 			quote! {
 				move |base, id, meta| {
-					use self::_jsonrpc_core::futures::IntoFuture;
+					use self::_futures::{Future, IntoFuture};
 					Self::#unsub_method_ident(base, meta, id).into_future()
 						.map(|value| _jsonrpc_core::to_value(value)
 								.expect("Expected always-serializable type; qed"))
