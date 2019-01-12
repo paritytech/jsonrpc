@@ -90,7 +90,7 @@ impl From<Output> for CoreResult<Value> {
 }
 
 /// Synchronous response
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Response {
 	/// Single response
