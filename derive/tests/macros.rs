@@ -23,7 +23,7 @@ pub trait Rpc {
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add")]
-	fn add(&self, u64, u64) -> Result<u64>;
+	fn add(&self, _: u64, _: u64) -> Result<u64>;
 }
 
 #[derive(Default)]

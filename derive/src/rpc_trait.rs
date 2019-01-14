@@ -3,8 +3,8 @@ use syn::{
 	parse_quote, Token, punctuated::Punctuated,
 	fold::{self, Fold},
 };
-use rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
-use to_delegate::{RpcMethod, ToDelegateMethod};
+use crate::rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
+use crate::to_delegate::{RpcMethod, ToDelegateMethod};
 
 const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find subscribe method, expected a method annotated with `subscribe` \

@@ -13,11 +13,11 @@ pub trait Rpc {
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add", alias("callAsyncMetaAlias"))]
-	fn add(&self, u64, u64) -> Result<u64>;
+	fn add(&self, _: u64, _: u64) -> Result<u64>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "callAsync")]
-	fn call(&self, u64) -> FutureResult<String, Error>;
+	fn call(&self, _: u64) -> FutureResult<String, Error>;
 }
 
 struct RpcImpl;

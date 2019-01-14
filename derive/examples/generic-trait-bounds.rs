@@ -20,14 +20,14 @@ pub trait Rpc<One, Two, Three>
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "setTwo")]
-	fn set_two(&self, Two) -> Result<()>;
+	fn set_two(&self, _: Two) -> Result<()>;
 
 	#[rpc(name = "getThree")]
 	fn get_three(&self) -> Result<Three>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "beFancy")]
-	fn call(&self, One) -> FutureResult<(One, u64), Error>;
+	fn call(&self, _: One) -> FutureResult<(One, u64), Error>;
 }
 
 struct RpcImpl;
@@ -53,7 +53,7 @@ impl Rpc<InAndOut, In, Out> for RpcImpl {
 	}
 
 	fn call(&self, num: InAndOut) -> FutureResult<(InAndOut, u64), Error> {
-		::future::finished((InAndOut {foo: num.foo + 999}, num.foo))
+		crate::future::finished((InAndOut {foo: num.foo + 999}, num.foo))
 	}
 }
 

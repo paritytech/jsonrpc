@@ -22,19 +22,19 @@ pub trait Rpc<One> {
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add")]
-	fn add(&self, u64, u64) -> Result<u64>;
+	fn add(&self, _: u64, _: u64) -> Result<u64>;
 
 	/// Multiplies two numbers. Second number is optional.
 	#[rpc(name = "mul")]
-	fn mul(&self, u64, Option<u64>) -> Result<u64>;
+	fn mul(&self, _: u64, _: Option<u64>) -> Result<u64>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "callAsync")]
-	fn call(&self, u64) -> FutureResult<String, Error>;
+	fn call(&self, _: u64) -> FutureResult<String, Error>;
 
 	/// Performs asynchronous operation with meta
 	#[rpc(meta, name = "callAsyncMeta", alias("callAsyncMetaAlias"))]
-	fn call_meta(&self, Self::Metadata, BTreeMap<String, Value>) -> FutureResult<String, Error>;
+	fn call_meta(&self, _: Self::Metadata, _: BTreeMap<String, Value>) -> FutureResult<String, Error>;
 }
 
 struct RpcImpl;

@@ -5,7 +5,7 @@ use syn::{
 	parse_quote, Token, punctuated::Punctuated,
 	visit::{self, Visit},
 };
-use rpc_attr::RpcMethodAttribute;
+use crate::rpc_attr::RpcMethodAttribute;
 
 pub enum ToDelegateMethod {
 	Standard(Vec<RpcMethod>),
