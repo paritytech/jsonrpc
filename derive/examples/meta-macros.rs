@@ -1,12 +1,8 @@
-extern crate jsonrpc_core;
-extern crate jsonrpc_tcp_server;
-#[macro_use]
-extern crate jsonrpc_derive;
-
 use std::collections::BTreeMap;
 
 use jsonrpc_core::{futures, MetaIoHandler, Metadata, Error, Value, Result};
 use jsonrpc_core::futures::future::FutureResult;
+use jsonrpc_derive::rpc;
 
 #[derive(Clone)]
 struct Meta(String);

@@ -1,8 +1,3 @@
-extern crate jsonrpc_core;
-extern crate jsonrpc_derive;
-extern crate jsonrpc_pubsub;
-extern crate jsonrpc_tcp_server;
-
 use std::thread;
 use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;

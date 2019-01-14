@@ -1,12 +1,8 @@
-extern crate serde;
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_derive;
-#[macro_use]
-extern crate serde_derive;
+use serde_derive::{Serialize, Deserialize};
 
 use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};
+use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
 // Two is only a parameter so only requires DeserializeOwned

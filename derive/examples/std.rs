@@ -1,9 +1,6 @@
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_derive;
-
 use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};
+use jsonrpc_derive::rpc;
 
 #[rpc]
 pub trait Rpc {

@@ -49,9 +49,6 @@
 #![recursion_limit = "256"]
 
 extern crate proc_macro;
-extern crate proc_macro2;
-extern crate quote;
-extern crate syn;
 
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
