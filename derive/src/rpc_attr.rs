@@ -30,11 +30,11 @@ impl RpcTraitAttribute {
 			visitor.visit_nested_meta(nested_meta);
 		}
 
-		if visitor.meta_words.contains(&"pubsub".to_string()) {
+		if visitor.meta_words.contains(&"pubsub".into()) {
 			if let Some(name) = visitor.name {
 				Ok(RpcTraitAttribute::PubSubTrait { name })
 			} else {
-				Err("rpc pubsub trait attribute should have a name".to_string())
+				Err("rpc pubsub trait attribute should have a name".into())
 			}
 		} else {
 			Ok(RpcTraitAttribute::RpcTrait)
@@ -52,14 +52,14 @@ impl RpcMethodAttribute {
 				Ok(Some(RpcMethodAttribute {
 					attr: attr.clone(),
 					aliases: visitor.aliases,
-					has_metadata: visitor.meta_words.contains(&"meta".to_string()),
-					is_subscribe: visitor.meta_words.contains(&"subscribe".to_string()),
-					is_unsubscribe: visitor.meta_words.contains(&"unsubscribe".to_string()),
+					has_metadata: visitor.meta_words.contains(&"meta".into()),
+					is_subscribe: visitor.meta_words.contains(&"subscribe".into()),
+					is_unsubscribe: visitor.meta_words.contains(&"unsubscribe".into()),
 					name,
 				}))
 			},
 			(None, None) => Ok(None),
-			_ => Err("Expected rpc attribute with name argument".to_string())
+			_ => Err("Expected rpc attribute with name argument".into())
 		}
 	}
 }
