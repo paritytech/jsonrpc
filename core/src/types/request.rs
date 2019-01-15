@@ -3,7 +3,7 @@
 use super::{Id, Params, Version};
 
 /// Represents jsonrpc request which is a method call.
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MethodCall {
 	/// A String specifying the version of the JSON-RPC protocol.
@@ -21,7 +21,7 @@ pub struct MethodCall {
 }
 
 /// Represents jsonrpc request which is a notification.
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Notification {
 	/// A String specifying the version of the JSON-RPC protocol.
@@ -35,7 +35,7 @@ pub struct Notification {
 }
 
 /// Represents single jsonrpc call.
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Call {
 	/// Call method
@@ -71,7 +71,7 @@ impl From<Notification> for Call {
 }
 
 /// Represents jsonrpc request.
-#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Request {
 	/// Single request (call)
