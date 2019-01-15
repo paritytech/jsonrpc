@@ -6,6 +6,8 @@ use syn::{
 use crate::rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
 use crate::to_delegate::{RpcMethod, ToDelegateMethod};
 
+const METADATA_TYPE: &'static str = "Metadata";
+
 const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find subscribe method, expected a method annotated with `subscribe` \
 	e.g. `#[rpc(subscribe, name = \"hello_subscribe\")]`";
@@ -13,6 +15,8 @@ const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
 const MISSING_UNSUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
 	e.g. `#[rpc(unsubscribe, name = \"hello_unsubscribe\")]`";
+
+const RPC_MOD_NAME_PREFIX: &'static str = "rpc_impl_";
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -42,7 +46,7 @@ impl<'a> Fold for RpcTrait {
 	}
 
 	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
-		if ty.ident.to_string() == "Metadata" {
+		if ty.ident == METADATA_TYPE {
 			self.has_metadata = true;
 			let mut ty = ty.clone();
 			match self.attr {
@@ -80,7 +84,7 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 				if !visitor.methods.is_empty() {
 					Ok(ToDelegateMethod::Standard(visitor.methods))
 				} else {
-					Err("No rpc annotated trait items found".to_string())
+					Err("No rpc annotated trait items found".into())
 				}
 			},
 			RpcTraitAttribute::PubSubTrait { name } => {
@@ -102,8 +106,8 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 							unsubscribe: unsub.clone()
 						})
 					},
-					(Some(_), None) => Err(MISSING_UNSUBSCRIBE_METHOD_ERR.to_string()),
-					(None, Some(_)) => Err(MISSING_SUBSCRIBE_METHOD_ERR.to_string()),
+					(Some(_), None) => Err(MISSING_UNSUBSCRIBE_METHOD_ERR.into()),
+					(None, Some(_)) => Err(MISSING_SUBSCRIBE_METHOD_ERR.into()),
 					(None, None) => Err(format!("\n{}\n{}", MISSING_SUBSCRIBE_METHOD_ERR, MISSING_UNSUBSCRIBE_METHOD_ERR)),
 				}
 			}
@@ -122,14 +126,14 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 
 fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 	let name = rpc_trait.ident.clone();
-	let mod_name = format!("rpc_impl_{}", name.to_string());
+	let mod_name = format!("{}{}", RPC_MOD_NAME_PREFIX, name.to_string());
 	syn::Ident::new(&mod_name, proc_macro2::Span::call_site())
 }
 
 pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
-		_ => return Err("rpc_api trait only works with trait declarations".to_owned())
+		_ => return Err("rpc_api trait only works with trait declarations".into())
 	};
 
 	let rpc_trait = generate_rpc_item_trait(&args, &rpc_trait)?;

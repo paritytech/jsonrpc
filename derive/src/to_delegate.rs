@@ -16,13 +16,17 @@ pub enum ToDelegateMethod {
 	}
 }
 
+const SUBCRIBER_TYPE_IDENT: &'static str = "Subscriber";
+const METADATA_CLOSURE_ARG: &'static str = "meta";
+const SUBSCRIBER_CLOSURE_ARG: &'static str = "subscriber";
+
 impl ToDelegateMethod {
 	pub fn generate_trait_item_method(
 		&self,
 		trait_item: &syn::ItemTrait,
 		has_metadata: bool,
 	) -> syn::TraitItemMethod {
-		let (io_delegate_type,to_delegate_body) =
+		let (io_delegate_type, to_delegate_body) =
 			match self {
 				ToDelegateMethod::Standard(methods) => {
 					let delegate_type = quote!(_jsonrpc_core::IoDelegate);
@@ -56,25 +60,19 @@ impl ToDelegateMethod {
 		let method: syn::TraitItemMethod =
 			if has_metadata {
 				parse_quote! {
-					fn to_delegate(self)
-						-> #io_delegate_type<Self, Self::Metadata>
-					{
+					fn to_delegate(self) -> #io_delegate_type<Self, Self::Metadata> {
 						#to_delegate_body
 					}
 				}
 			} else {
 				parse_quote! {
-					fn to_delegate<M: _jsonrpc_core::Metadata>(self)
-						-> #io_delegate_type<Self, M>
-					{
+					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> #io_delegate_type<Self, M> {
 						#to_delegate_body
 					}
 				}
 			};
 
-		let predicates =
-			generate_where_clause_serialization_predicates(&trait_item);
-
+		let predicates = generate_where_clause_serialization_predicates(&trait_item);
 		let mut method = method.clone();
 		method.sig.decl.generics
 			.make_where_clause()
@@ -85,14 +83,12 @@ impl ToDelegateMethod {
 
 	fn delegate_rpc_method(method: &RpcMethod) -> proc_macro2::TokenStream {
 		let rpc_name = &method.name();
-
 		let add_method =
 			if method.has_metadata() {
 				ident("add_method_with_meta")
 			} else {
 				ident("add_method")
 			};
-
 		let closure = method.generate_delegate_closure(false);
 		let add_aliases = method.generate_add_aliases();
 
@@ -144,10 +140,7 @@ pub struct RpcMethod {
 }
 
 impl RpcMethod {
-	pub fn new(
-		attr: RpcMethodAttribute,
-		trait_item: syn::TraitItemMethod
-	) -> RpcMethod {
+	pub fn new(attr: RpcMethodAttribute, trait_item: syn::TraitItemMethod) -> RpcMethod {
 		RpcMethod { attr, trait_item }
 	}
 
@@ -251,7 +244,7 @@ impl RpcMethod {
 				if *ty == parse_quote!(Self::Metadata) { Some(ty.clone()) } else { None });
 		let subscriber_arg = param_types.iter().nth(1).and_then(|ty| {
 			if let syn::Type::Path(path) = ty {
-				if path.path.segments.iter().any(|s| s.ident == "Subscriber") {
+				if path.path.segments.iter().any(|s| s.ident == SUBCRIBER_TYPE_IDENT) {
 					Some(ty.clone())
 				} else {
 					None
@@ -263,10 +256,10 @@ impl RpcMethod {
 
 		let mut special_args = Vec::new();
 		if let Some(ref meta) = meta_arg {
-			special_args.push((ident("meta"), meta.clone()));
+			special_args.push((ident(METADATA_CLOSURE_ARG), meta.clone()));
 		}
 		if let Some(ref subscriber) = subscriber_arg {
-			special_args.push((ident("subscriber"), subscriber.clone()));
+			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber.clone()));
 		}
 		special_args
 	}
