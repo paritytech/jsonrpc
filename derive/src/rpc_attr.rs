@@ -1,8 +1,7 @@
 use syn::visit::{self, Visit};
 
-pub enum RpcTraitAttribute {
-	PubSubTrait { name: String },
-	RpcTrait,
+pub struct RpcTraitAttribute {
+	pub is_pubsub: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -10,14 +9,41 @@ pub struct RpcMethodAttribute {
 	pub attr: syn::Attribute,
 	pub name: String,
 	pub has_metadata: bool,
-	pub is_subscribe: bool,
-	pub is_unsubscribe: bool,
+	pub pubsub: Option<PubSubMethod>,
 	pub aliases: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PubSubMethod {
+	pub name: String,
+	pub kind: PubSubMethodKind,
+}
+
+impl PubSubMethod {
+	fn is_subscribe(&self) -> bool {
+		match self.kind {
+			PubSubMethodKind::Subscribe => true,
+			PubSubMethodKind::Unsubscribe => false,
+		}
+	}
+	fn is_unsubscribe(&self) -> bool {
+		match self.kind {
+			PubSubMethodKind::Subscribe => false,
+			PubSubMethodKind::Unsubscribe => true,
+		}
+	}
+}
+
+#[derive(Clone, Debug)]
+pub enum PubSubMethodKind {
+	Subscribe,
+	Unsubscribe,
 }
 
 #[derive(Default)]
 struct RpcAttributeVisitor {
 	attr: Option<syn::Attribute>,
+	pubsub: Option<String>,
 	name: Option<String>,
 	meta_words: Vec<String>,
 	aliases: Vec<String>,
@@ -31,22 +57,14 @@ const METADATA_META_WORD: &'static str = "meta";
 const SUBSCRIBE_META_WORD: &'static str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &'static str = "unsubscribe";
 
-impl RpcTraitAttribute {
-	pub fn try_from_trait_attribute(args: &syn::AttributeArgs) -> Result<RpcTraitAttribute, String> {
+impl From<syn::AttributeArgs> for RpcTraitAttribute {
+	fn from(args: syn::AttributeArgs) -> RpcTraitAttribute {
 		let mut visitor = RpcAttributeVisitor::default();
 		for nested_meta in args {
-			visitor.visit_nested_meta(nested_meta);
+			visitor.visit_nested_meta(&nested_meta);
 		}
-
-		if visitor.meta_words.contains(&PUB_SUB_META_WORD.into()) {
-			if let Some(name) = visitor.name {
-				Ok(RpcTraitAttribute::PubSubTrait { name })
-			} else {
-				Err("rpc pubsub trait attribute should have a name".into())
-			}
-		} else {
-			Ok(RpcTraitAttribute::RpcTrait)
-		}
+		let is_pubsub = visitor.meta_words.contains(&PUB_SUB_META_WORD.into());
+		RpcTraitAttribute { is_pubsub }
 	}
 }
 
@@ -57,18 +75,37 @@ impl RpcMethodAttribute {
 
 		match (visitor.attr, visitor.name) {
 			(Some(attr), Some(name)) => {
+				let pubsub =
+					visitor.pubsub.map(|pubsub| {
+						if visitor.meta_words.contains(&SUBSCRIBE_META_WORD.into()) {
+							Ok(PubSubMethod { name, kind: PubSubMethodKind::Subscribe })
+						} else if visitor.meta_words.contains(&UNSUBSCRIBE_META_WORD.into()) {
+							Ok(PubSubMethod { name, kind: PubSubMethodKind::Unsubscribe })
+						} else {
+							Err(format!("Rpc methods with `pubsub` should be annotated either `{}` or `{}`",
+								SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD))
+						}
+					});
+
 				Ok(Some(RpcMethodAttribute {
 					attr: attr.clone(),
 					aliases: visitor.aliases,
 					has_metadata: visitor.meta_words.contains(&METADATA_META_WORD.into()),
-					is_subscribe: visitor.meta_words.contains(&SUBSCRIBE_META_WORD.into()),
-					is_unsubscribe: visitor.meta_words.contains(&UNSUBSCRIBE_META_WORD.into()),
+					pubsub: pubsub.map_or(Ok(None), |r| r.map(Some))?,
 					name,
 				}))
 			},
 			(None, None) => Ok(None),
 			_ => Err("Expected rpc attribute with name argument".into())
 		}
+	}
+
+	pub fn is_subscribe(&self) -> bool {
+		self.attr.pubsub.map_or(false, PubSubMethod::is_subscribe)
+	}
+
+	pub fn is_unsubscribe(&self) -> bool {
+		self.attr.pubsub.map_or(false, PubSubMethod::is_unsubscribe)
 	}
 }
 

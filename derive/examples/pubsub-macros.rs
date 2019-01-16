@@ -8,16 +8,16 @@ use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId};
 use jsonrpc_pubsub::typed;
 
-#[rpc(pubsub, name = "hello")]
+#[rpc(pubsub)]
 pub trait Rpc {
 	type Metadata;
 
 	/// Hello subscription
-	#[rpc(subscribe, name = "hello_subscribe", alias("hello_sub"))]
+	#[rpc(pubsub = "hello", subscribe, name = "hello_subscribe", alias("hello_sub"))]
 	fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
 
 	/// Unsubscribe from hello subscription.
-	#[rpc(unsubscribe, name = "hello_unsubscribe")]
+	#[rpc(pubsub = "hello", unsubscribe, name = "hello_unsubscribe")]
 	fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
 }
 

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use quote::quote;
 use syn::{
 	parse_quote, Token, punctuated::Punctuated,
@@ -24,6 +25,7 @@ struct RpcTrait {
 	attr: RpcTraitAttribute,
 	methods: Vec<RpcMethod>,
 	has_metadata: bool,
+	associated_type: Option<syn::TraitItemType>,
 	errors: Vec<String>,
 }
 
@@ -48,25 +50,25 @@ impl<'a> Fold for RpcTrait {
 	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
 		if ty.ident == METADATA_TYPE {
 			self.has_metadata = true;
+			self.associated_type = Some(ty);
 			let mut ty = ty.clone();
-			match self.attr {
-				RpcTraitAttribute::RpcTrait =>
-					ty.bounds.push(parse_quote!(_jsonrpc_core::Metadata)),
-				RpcTraitAttribute::PubSubTrait { name: _ } =>
-					ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata)),
+			if self.attr.is_pubsub {
+				ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata))
+			} else {
+				ty.bounds.push(parse_quote!(_jsonrpc_core::Metadata))
 			}
-			return ty;
+			// return ty;
 		}
 		ty
 	}
 }
 
-fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
-	let trait_attr = RpcTraitAttribute::try_from_trait_attribute(&attr_args)?;
+fn generate_rpc_item_trait(attr_args: syn::AttributeArgs, item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
 	let mut visitor = RpcTrait {
-		attr: trait_attr,
+		attr: attr_args.into(),
 		methods: Vec::new(),
 		has_metadata: false,
+		associated_type: None,
 		errors: Vec::new(),
 	};
 
@@ -79,37 +81,44 @@ fn generate_rpc_item_trait(attr_args: &syn::AttributeArgs, item_trait: &syn::Ite
 	}
 
 	let to_delegate =
-		match visitor.attr {
-			RpcTraitAttribute::RpcTrait => {
-				if !visitor.methods.is_empty() {
-					Ok(ToDelegateMethod::Standard(visitor.methods))
-				} else {
-					Err("No rpc annotated trait items found".into())
-				}
-			},
-			RpcTraitAttribute::PubSubTrait { name } => {
-				let subscribe = visitor.methods
-					.iter()
-					.find(|m| m.attr().is_subscribe);
-				let unsubscribe = visitor.methods
-					.iter()
-					.find(|m| m.attr().is_unsubscribe);
+		if visitor.attr.is_pubsub {
+			if !visitor.methods.is_empty() {
+				Ok(ToDelegateMethod::Standard(visitor.methods))
+			} else {
+				Err("No rpc annotated trait items found".into())
+			}
+		} else {
+			let mut pubsubs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
+			for m in visitor.methods {
+				if let Some(pubsub) = m.pubsub {
 
-				match (subscribe, unsubscribe) {
-					(Some(sub), Some(unsub)) => {
-						// todo: [AJ] validate subscribe/unsubscribe args
+				}
+			}
+			let subscribe = visitor.methods
+				.iter()
+				.filter_map(|m|
+					m.pubsub.map(|ps| if ps.is_subscribe() { Some(m, ps.name) } else { None } ));
+			let unsubscribe = visitor.methods
+				.iter()
+				.filter_map(|m|
+					m.pubsub.map(|ps| if ps.is_unsubscribe() { Some(m, ps.name) } else { None } ));
+
+			match (subscribe, unsubscribe) {
+				(Some(sub, sub_name), Some(unsub, unsub_name)) if sub_name == unsub_name => {
+					// todo: [AJ] validate subscribe/unsubscribe args
 //						let sub_arg_types = sub.get_method_arg_types();
-
-						Ok(ToDelegateMethod::PubSub {
-							name,
-							subscribe: sub.clone(),
-							unsubscribe: unsub.clone()
-						})
-					},
-					(Some(_), None) => Err(MISSING_UNSUBSCRIBE_METHOD_ERR.into()),
-					(None, Some(_)) => Err(MISSING_SUBSCRIBE_METHOD_ERR.into()),
-					(None, None) => Err(format!("\n{}\n{}", MISSING_SUBSCRIBE_METHOD_ERR, MISSING_UNSUBSCRIBE_METHOD_ERR)),
-				}
+					Ok(ToDelegateMethod::PubSub {
+						name,
+						subscribe: sub.clone(),
+						unsubscribe: unsub.clone()
+					})
+				},
+				(Some(_, sub_name), Some(_, unsub_name)) => {
+					Err(format!(PUBSUB_NAME_MISMATCH.into()))
+				},
+				(Some(_), None) => Err(MISSING_UNSUBSCRIBE_METHOD_ERR.into()),
+				(None, Some(_)) => Err(MISSING_SUBSCRIBE_METHOD_ERR.into()),
+				(None, None) => Err(format!("\n{}\n{}", MISSING_SUBSCRIBE_METHOD_ERR, MISSING_UNSUBSCRIBE_METHOD_ERR)),
 			}
 		}?;
 
@@ -136,7 +145,7 @@ pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro
 		_ => return Err("rpc_api trait only works with trait declarations".into())
 	};
 
-	let rpc_trait = generate_rpc_item_trait(&args, &rpc_trait)?;
+	let rpc_trait = generate_rpc_item_trait(args, &rpc_trait)?;
 
 	let name = rpc_trait.ident.clone();
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
