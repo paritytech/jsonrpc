@@ -60,11 +60,10 @@ mod to_delegate;
 
 // todo: [AJ] docs
 #[proc_macro_attribute]
-pub fn rpc(args: TokenStream, input: TokenStream) -> TokenStream {
-	let args_toks = parse_macro_input!(args as syn::AttributeArgs);
+pub fn rpc(_args: TokenStream, input: TokenStream) -> TokenStream {
 	let input_toks = parse_macro_input!(input as syn::Item);
 
-	let output = match rpc_trait::rpc_impl(args_toks, input_toks) {
+	let output = match rpc_trait::rpc_impl( input_toks) {
 		Ok(output) => output,
 		Err(err) => panic!("[rpc] encountered error: {}", err),
 	};

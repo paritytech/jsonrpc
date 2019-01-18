@@ -19,21 +19,6 @@ pub struct PubSubMethod {
 	pub kind: PubSubMethodKind,
 }
 
-impl PubSubMethod {
-	fn is_subscribe(&self) -> bool {
-		match self.kind {
-			PubSubMethodKind::Subscribe => true,
-			PubSubMethodKind::Unsubscribe => false,
-		}
-	}
-	fn is_unsubscribe(&self) -> bool {
-		match self.kind {
-			PubSubMethodKind::Subscribe => false,
-			PubSubMethodKind::Unsubscribe => true,
-		}
-	}
-}
-
 #[derive(Clone, Debug)]
 pub enum PubSubMethodKind {
 	Subscribe,
@@ -75,12 +60,13 @@ impl RpcMethodAttribute {
 
 		match (visitor.attr, visitor.name) {
 			(Some(attr), Some(name)) => {
+				let meta_words = &visitor.meta_words;
 				let pubsub =
 					visitor.pubsub.map(|pubsub| {
-						if visitor.meta_words.contains(&SUBSCRIBE_META_WORD.into()) {
-							Ok(PubSubMethod { name, kind: PubSubMethodKind::Subscribe })
-						} else if visitor.meta_words.contains(&UNSUBSCRIBE_META_WORD.into()) {
-							Ok(PubSubMethod { name, kind: PubSubMethodKind::Unsubscribe })
+						if meta_words.contains(&SUBSCRIBE_META_WORD.into()) {
+							Ok(PubSubMethod { name: pubsub, kind: PubSubMethodKind::Subscribe })
+						} else if meta_words.contains(&UNSUBSCRIBE_META_WORD.into()) {
+							Ok(PubSubMethod { name: pubsub, kind: PubSubMethodKind::Unsubscribe })
 						} else {
 							Err(format!("Rpc methods with `pubsub` should be annotated either `{}` or `{}`",
 								SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD))
@@ -100,13 +86,13 @@ impl RpcMethodAttribute {
 		}
 	}
 
-	pub fn is_subscribe(&self) -> bool {
-		self.attr.pubsub.map_or(false, PubSubMethod::is_subscribe)
-	}
-
-	pub fn is_unsubscribe(&self) -> bool {
-		self.attr.pubsub.map_or(false, PubSubMethod::is_unsubscribe)
-	}
+//	pub fn is_subscribe(&self) -> bool {
+//		self.pubsub.map_or(false, PubSubMethod::is_subscribe)
+//	}
+//
+//	pub fn is_unsubscribe(&self) -> bool {
+//		self.attr.pubsub.map_or(false, PubSubMethod::is_unsubscribe)
+//	}
 }
 
 impl<'a> Visit<'a> for RpcAttributeVisitor {

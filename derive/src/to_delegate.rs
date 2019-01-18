@@ -7,8 +7,8 @@ use syn::{
 };
 use crate::rpc_attr::RpcMethodAttribute;
 
-pub enum ToDelegateMethod {
-	Standard(Vec<RpcMethod>),
+pub enum MethodRegistration {
+	Standard(RpcMethod),
 	PubSub {
 		name: String,
 		subscribe: RpcMethod,
@@ -16,127 +16,122 @@ pub enum ToDelegateMethod {
 	}
 }
 
-const SUBCRIBER_TYPE_IDENT: &'static str = "Subscriber";
-const METADATA_CLOSURE_ARG: &'static str = "meta";
-const SUBSCRIBER_CLOSURE_ARG: &'static str = "subscriber";
-
-impl ToDelegateMethod {
-	pub fn generate_trait_item_method(
-		&self,
-		trait_item: &syn::ItemTrait,
-		has_metadata: bool,
-	) -> syn::TraitItemMethod {
-		let (io_delegate_type, to_delegate_body) =
-			match self {
-				ToDelegateMethod::Standard(methods) => {
-					let delegate_type = quote!(_jsonrpc_core::IoDelegate);
-					let add_methods: Vec<_> = methods
-						.iter()
-						.map(Self::delegate_rpc_method)
-						.collect();
-					let body =
-						quote! {
-							let mut del = #delegate_type::new(self.into());
-							#(#add_methods)*
-							del
-						};
-					(delegate_type, body)
-				},
-				ToDelegateMethod::PubSub { name, subscribe, unsubscribe } => {
-					let delegate_type = quote!(_jsonrpc_pubsub::IoDelegate);
-					let register_pub_sub =
-						Self::delegate_pubsub_methods(name, subscribe, unsubscribe);
-					let body =
-						quote! {
-							let mut del = #delegate_type::new(self.into());
-							#register_pub_sub
-							del
-						};
-					(delegate_type, body)
-				},
-			};
-
-		// todo: [AJ] check that pubsub has metadata
-		let method: syn::TraitItemMethod =
-			if has_metadata {
-				parse_quote! {
-					fn to_delegate(self) -> #io_delegate_type<Self, Self::Metadata> {
-						#to_delegate_body
-					}
-				}
-			} else {
-				parse_quote! {
-					fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> #io_delegate_type<Self, M> {
-						#to_delegate_body
-					}
-				}
-			};
-
-		let predicates = generate_where_clause_serialization_predicates(&trait_item);
-		let mut method = method.clone();
-		method.sig.decl.generics
-			.make_where_clause()
-			.predicates
-			.extend(predicates);
-		method
-	}
-
-	fn delegate_rpc_method(method: &RpcMethod) -> proc_macro2::TokenStream {
-		let rpc_name = &method.name();
-		let add_method =
-			if method.has_metadata() {
-				ident("add_method_with_meta")
-			} else {
-				ident("add_method")
-			};
-		let closure = method.generate_delegate_closure(false);
-		let add_aliases = method.generate_add_aliases();
-
-		quote! {
-			del.#add_method(#rpc_name, #closure);
-			#add_aliases
+impl MethodRegistration {
+	fn is_pubsub(&self) -> bool {
+		match *self {
+			MethodRegistration::Standard(_) => false,
+			MethodRegistration::PubSub { .. } => true,
 		}
 	}
 
-	fn delegate_pubsub_methods(
-		name: &str,
-		subscribe: &RpcMethod,
-		unsubscribe: &RpcMethod,
-	) -> proc_macro2::TokenStream {
-		let sub_name = subscribe.name();
-		let sub_closure = subscribe.generate_delegate_closure(true);
-		let sub_aliases = subscribe.generate_add_aliases();
+	fn generate(&self) -> proc_macro2::TokenStream {
+		match self {
+			MethodRegistration::Standard(method) => {
+				let rpc_name = &method.name();
+				let add_method =
+					if method.has_metadata() {
+						ident("add_method_with_meta")
+					} else {
+						ident("add_method")
+					};
+				let closure = method.generate_delegate_closure(false);
+				let add_aliases = method.generate_add_aliases();
 
-		let unsub_name = unsubscribe.name();
-		let unsub_method_ident = unsubscribe.ident();
-		let unsub_closure =
-			quote! {
-				move |base, id, meta| {
-					use self::_futures::{Future, IntoFuture};
-					Self::#unsub_method_ident(base, meta, id).into_future()
-						.map(|value| _jsonrpc_core::to_value(value)
-								.expect("Expected always-serializable type; qed"))
-						.map_err(Into::into)
+				quote! {
+					del.#add_method(#rpc_name, #closure);
+					#add_aliases
 				}
-			};
-		let unsub_aliases = unsubscribe.generate_add_aliases();
+			},
+			MethodRegistration::PubSub { name, subscribe, unsubscribe } => {
+				let sub_name = subscribe.name();
+				let sub_closure = subscribe.generate_delegate_closure(true);
+				let sub_aliases = subscribe.generate_add_aliases();
 
-		quote! {
-			del.add_subscription(
-				#name,
-				(#sub_name, #sub_closure),
-				(#unsub_name, #unsub_closure),
-			);
-			#sub_aliases
-			#unsub_aliases
+				let unsub_name = unsubscribe.name();
+				let unsub_method_ident = unsubscribe.ident();
+				let unsub_closure =
+					quote! {
+						move |base, id, meta| {
+							use self::_futures::{Future, IntoFuture};
+							Self::#unsub_method_ident(base, meta, id).into_future()
+								.map(|value| _jsonrpc_core::to_value(value)
+										.expect("Expected always-serializable type; qed"))
+								.map_err(Into::into)
+						}
+					};
+				let unsub_aliases = unsubscribe.generate_add_aliases();
+
+				quote! {
+					del.add_subscription(
+						#name,
+						(#sub_name, #sub_closure),
+						(#unsub_name, #unsub_closure),
+					);
+					#sub_aliases
+					#unsub_aliases
+				}
+			},
 		}
 	}
 }
 
+const SUBCRIBER_TYPE_IDENT: &'static str = "Subscriber";
+const METADATA_CLOSURE_ARG: &'static str = "meta";
+const SUBSCRIBER_CLOSURE_ARG: &'static str = "subscriber";
+
+pub fn generate_trait_item_method(
+	methods: &[MethodRegistration],
+	trait_item: &syn::ItemTrait,
+	has_metadata: bool,
+) -> syn::TraitItemMethod {
+	let has_pubsub_methods =
+		methods.iter().any(MethodRegistration::is_pubsub);
+	let io_delegate_type =
+		if has_pubsub_methods {
+			quote!(_jsonrpc_pubsub::IoDelegate)
+		} else {
+			quote!(_jsonrpc_core::IoDelegate)
+		};
+	let add_methods: Vec<_> = methods
+		.iter()
+		.map(MethodRegistration::generate)
+		.collect();
+	let to_delegate_body =
+		quote! {
+			let mut del = #io_delegate_type::new(self.into());
+			#(#add_methods)*
+			del
+		};
+
+	// todo: [AJ] check that pubsub has metadata
+	let method: syn::TraitItemMethod =
+		if has_metadata {
+			parse_quote! {
+				fn to_delegate(self) -> #io_delegate_type<Self, Self::Metadata> {
+					#to_delegate_body
+				}
+			}
+		} else {
+			parse_quote! {
+				fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> #io_delegate_type<Self, M> {
+					#to_delegate_body
+				}
+			}
+		};
+
+	let predicates = generate_where_clause_serialization_predicates(&trait_item);
+	let mut method = method.clone();
+	method.sig.decl.generics
+		.make_where_clause()
+		.predicates
+		.extend(predicates);
+	method
+}
+
 #[derive(Clone)]
 pub struct RpcMethod {
-	attr: RpcMethodAttribute,
-	trait_item: syn::TraitItemMethod,
+	pub attr: RpcMethodAttribute,
+	pub trait_item: syn::TraitItemMethod,
 }
 
 impl RpcMethod {
@@ -156,6 +151,10 @@ impl RpcMethod {
 
 	pub fn ident(&self) -> &syn::Ident {
 		&self.trait_item.sig.ident
+	}
+
+	pub fn is_pubsub(&self) -> bool {
+		self.attr.pubsub.is_some()
 	}
 
 	fn generate_delegate_closure(&self, is_subscribe: bool) -> proc_macro2::TokenStream {

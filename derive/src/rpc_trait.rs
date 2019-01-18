@@ -4,126 +4,128 @@ use syn::{
 	parse_quote, Token, punctuated::Punctuated,
 	fold::{self, Fold},
 };
-use crate::rpc_attr::{RpcTraitAttribute, RpcMethodAttribute};
-use crate::to_delegate::{RpcMethod, ToDelegateMethod};
+use crate::rpc_attr::{RpcMethodAttribute, PubSubMethodKind};
+use crate::to_delegate::{self, RpcMethod, MethodRegistration};
 
 const METADATA_TYPE: &'static str = "Metadata";
 
 const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find subscribe method, expected a method annotated with `subscribe` \
-	e.g. `#[rpc(subscribe, name = \"hello_subscribe\")]`";
+	e.g. `#[rpc(pubsub = \"hello\", subscribe, name = \"hello_subscribe\")]`";
 
 const MISSING_UNSUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
-	e.g. `#[rpc(unsubscribe, name = \"hello_unsubscribe\")]`";
+	e.g. `#[rpc(pubsub = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
 
 const RPC_MOD_NAME_PREFIX: &'static str = "rpc_impl_";
 
 type Result<T> = std::result::Result<T, String>;
 
 struct RpcTrait {
-	attr: RpcTraitAttribute,
+	has_pubsub_methods: bool,
 	methods: Vec<RpcMethod>,
 	has_metadata: bool,
-	associated_type: Option<syn::TraitItemType>,
-	errors: Vec<String>,
 }
 
 impl<'a> Fold for RpcTrait {
 	fn fold_trait_item_method(&mut self, method: syn::TraitItemMethod) -> syn::TraitItemMethod {
 		let mut method = method.clone();
-		match RpcMethodAttribute::try_from_trait_item_method(&method) {
-			Ok(Some(attr)) => {
-				self.methods.push(RpcMethod::new(
-					attr.clone(),
-					method.clone(),
-				));
-				// remove the rpc attribute
-				method.attrs.retain(|a| *a != attr.attr);
-			},
-			Ok(None) => (), // non rpc annotated trait method
-			Err(err) => self.errors.push(format!("{}: Invalid rpc method attribute: {}", method.sig.ident, err))
-		}
+		let method_item = method.clone();
+		// strip rpc attributes
+		method.attrs.retain(|a| {
+			let rpc_method =
+				self.methods.iter().find(|m| m.trait_item == method_item);
+			rpc_method.map_or(true, |rpc| rpc.attr.attr != *a)
+		});
 		fold::fold_trait_item_method(self, method)
 	}
 
 	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
 		if ty.ident == METADATA_TYPE {
 			self.has_metadata = true;
-			self.associated_type = Some(ty);
 			let mut ty = ty.clone();
-			if self.attr.is_pubsub {
+			if self.has_pubsub_methods {
 				ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata))
 			} else {
 				ty.bounds.push(parse_quote!(_jsonrpc_core::Metadata))
 			}
-			// return ty;
+			return ty;
 		}
 		ty
 	}
 }
 
-fn generate_rpc_item_trait(attr_args: syn::AttributeArgs, item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
-	let mut visitor = RpcTrait {
-		attr: attr_args.into(),
-		methods: Vec::new(),
-		has_metadata: false,
-		associated_type: None,
-		errors: Vec::new(),
-	};
+fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
+	let methods_result: Result<Vec<_>> = item_trait.items
+		.iter()
+		.filter_map(|trait_item| {
+			if let syn::TraitItem::Method(method) = trait_item {
+				match RpcMethodAttribute::try_from_trait_item_method(&method) {
+					Ok(Some(attr)) =>
+						Some(Ok(RpcMethod::new(
+							attr.clone(),
+							method.clone(),
+						))),
+					Ok(None) => None, // non rpc annotated trait method
+					Err(err) => Some(Err(err)),
+				}
+			} else {
+				None
+			}
+		})
+		.collect();
+	let methods = methods_result?;
+	let has_pubsub_methods = methods.iter().any(RpcMethod::is_pubsub);
+	let mut rpc_trait = RpcTrait { methods: methods.clone(), has_pubsub_methods, has_metadata: false };
 
 	// first visit the trait to collect the methods
-	let mut item_trait = fold::fold_item_trait(&mut visitor, item_trait.clone());
+	let mut item_trait = fold::fold_item_trait(&mut rpc_trait, item_trait.clone());
 
-	if !visitor.errors.is_empty() {
-		let errs = visitor.errors.join("\n  ");
-		return Err(format!("Invalid rpc trait:\n  {}", errs))
-	}
+	let mut pubsub_method_pairs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
+	let mut method_registrations: Vec<MethodRegistration> = Vec::new();
 
-	let to_delegate =
-		if visitor.attr.is_pubsub {
-			if !visitor.methods.is_empty() {
-				Ok(ToDelegateMethod::Standard(visitor.methods))
-			} else {
-				Err("No rpc annotated trait items found".into())
+	for method in methods.iter() {
+		if let Some(ref pubsub) = method.attr().pubsub {
+			let (ref mut sub, ref mut unsub) = pubsub_method_pairs
+				.entry(pubsub.name.clone())
+				.or_insert((None, None));
+			match pubsub.kind {
+				PubSubMethodKind::Subscribe => {
+					if sub.is_none() {
+						*sub = Some(method.clone())
+					} else {
+						return Err(format!("Pubsub '{}' has more than one subscribe method", pubsub.name))
+					}
+				},
+				PubSubMethodKind::Unsubscribe => {
+					if unsub.is_none() {
+						*unsub = Some(method.clone())
+					} else {
+						return Err(format!("Pubsub '{}' has more than one unsubscribe method", pubsub.name))
+					}
+				},
 			}
 		} else {
-			let mut pubsubs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
-			for m in visitor.methods {
-				if let Some(pubsub) = m.pubsub {
+			method_registrations.push(MethodRegistration::Standard(method.clone()))
+		}
+	}
 
-				}
-			}
-			let subscribe = visitor.methods
-				.iter()
-				.filter_map(|m|
-					m.pubsub.map(|ps| if ps.is_subscribe() { Some(m, ps.name) } else { None } ));
-			let unsubscribe = visitor.methods
-				.iter()
-				.filter_map(|m|
-					m.pubsub.map(|ps| if ps.is_unsubscribe() { Some(m, ps.name) } else { None } ));
-
-			match (subscribe, unsubscribe) {
-				(Some(sub, sub_name), Some(unsub, unsub_name)) if sub_name == unsub_name => {
-					// todo: [AJ] validate subscribe/unsubscribe args
-//						let sub_arg_types = sub.get_method_arg_types();
-					Ok(ToDelegateMethod::PubSub {
-						name,
-						subscribe: sub.clone(),
-						unsubscribe: unsub.clone()
-					})
-				},
-				(Some(_, sub_name), Some(_, unsub_name)) => {
-					Err(format!(PUBSUB_NAME_MISMATCH.into()))
-				},
-				(Some(_), None) => Err(MISSING_UNSUBSCRIBE_METHOD_ERR.into()),
-				(None, Some(_)) => Err(MISSING_SUBSCRIBE_METHOD_ERR.into()),
-				(None, None) => Err(format!("\n{}\n{}", MISSING_SUBSCRIBE_METHOD_ERR, MISSING_UNSUBSCRIBE_METHOD_ERR)),
-			}
-		}?;
+	for (name, pair) in pubsub_method_pairs {
+		match pair {
+			(Some(subscribe), Some(unsubscribe)) =>
+				method_registrations.push(MethodRegistration::PubSub {
+					name: name.clone(),
+					subscribe: subscribe.clone(),
+					unsubscribe: unsubscribe.clone()
+				}),
+			(Some(_), None) => return Err(format!("Pubsub: {}. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR)),
+			(None, Some(_)) => return Err(format!("Pubsub: {}. {}", name, MISSING_SUBSCRIBE_METHOD_ERR)),
+			(None, None) => unreachable!(),
+		}
+	}
 
 	let to_delegate_method =
-		to_delegate.generate_trait_item_method(&item_trait, visitor.has_metadata);
+		to_delegate::generate_trait_item_method(&method_registrations, &item_trait, rpc_trait.has_metadata);
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
 
 	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =
@@ -139,13 +141,13 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 	syn::Ident::new(&mod_name, proc_macro2::Span::call_site())
 }
 
-pub fn rpc_impl(args: syn::AttributeArgs, input: syn::Item) -> Result<proc_macro2::TokenStream> {
+pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		_ => return Err("rpc_api trait only works with trait declarations".into())
 	};
 
-	let rpc_trait = generate_rpc_item_trait(args, &rpc_trait)?;
+	let rpc_trait = generate_rpc_item_trait(&rpc_trait)?;
 
 	let name = rpc_trait.ident.clone();
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
