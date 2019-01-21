@@ -29,6 +29,10 @@ pub trait Rpc {
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
 	fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
+
+	/// A regular rpc method alongside pubsub
+	#[rpc(name = "add")]
+	fn add(&self, _: u64, _: u64) -> Result<u64>;
 }
 
 #[derive(Default)]
@@ -43,6 +47,10 @@ impl Rpc for RpcImpl {
 
 	fn unsubscribe(&self, _meta: Option<Self::Metadata>, _id: SubscriptionId) -> Result<bool> {
 		Ok(true)
+	}
+
+	fn add(&self, a: u64, b: u64) -> Result<u64> {
+		Ok(a + b)
 	}
 }
 

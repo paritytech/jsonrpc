@@ -96,6 +96,34 @@ impl<T, M> IoDelegate<T, M> where
 	pub fn add_alias(&mut self, from: &str, to: &str) {
 		self.inner.add_alias(from, to)
 	}
+
+	/// Adds async method to the delegate.
+	pub fn add_method<F, I>(&mut self, name: &str, method: F) where
+		F: Fn(&T, Params) -> I,
+		I: IntoFuture<Item = Value, Error = Error>,
+		F: Send + Sync + 'static,
+		I::Future: Send + 'static,
+	{
+		self.inner.add_method(name, method)
+	}
+
+	/// Adds async method with metadata to the delegate.
+	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F) where
+		F: Fn(&T, Params, M) -> I,
+		I: IntoFuture<Item = Value, Error = Error>,
+		F: Send + Sync + 'static,
+		I::Future: Send + 'static,
+	{
+		self.inner.add_method_with_meta(name, method)
+	}
+
+	/// Adds notification to the delegate.
+	pub fn add_notification<F>(&mut self, name: &str, notification: F) where
+		F: Fn(&T, Params),
+		F: Send + Sync + 'static,
+	{
+		self.inner.add_notification(name, notification)
+	}
 }
 
 impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M> where
