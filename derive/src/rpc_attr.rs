@@ -31,55 +31,7 @@ impl RpcMethodAttribute {
 	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>, String> {
 		let attrs = method.attrs
 			.iter()
-			.filter_map(|attr| {
-				let parse_result = attr.parse_meta()
-					.map_err(|err| format!("Error parsing attribute: {}", err));
-				match parse_result {
-					Ok(ref meta) => {
-						let attr_kind =
-							match meta.name().to_string().as_ref() {
-								RPC_ATTR_NAME => {
-									let has_metadata = get_meta_list(meta)
-										.map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
-									Some(Ok(AttributeKind::Rpc { has_metadata }))
-								},
-								PUB_SUB_ATTR_NAME =>
-									get_meta_list(meta).map(|ml| {
-										get_name_value(SUBSCRIPTION_NAME_KEY, ml)
-											.map_or(Err("pubsub attribute should have a subscription name TODO".into()), |sub_name| {
-												let is_subscribe = has_meta_word(SUBSCRIBE_META_WORD, ml);
-												let is_unsubscribe = has_meta_word(UNSUBSCRIBE_META_WORD, ml);
-												let kind = match (is_subscribe, is_unsubscribe) {
-													(true, false) => Ok(PubSubMethodKind::Subscribe),
-													(false, true) => Ok(PubSubMethodKind::Unsubscribe),
-													(true, true) => Err("Has both TODO".into()),
-													(false, false) => Err("Has neither TODO".into()),
-												};
-
-												kind.map(|kind|
-													AttributeKind::PubSub { subscription_name: sub_name.into(), kind })
-											})
-									}),
-								_ => None,
-							};
-						attr_kind.map(|kind| kind.and_then(|kind| {
-							let name_value = get_meta_list(meta).and_then(|ml| get_name_value(RPC_NAME_KEY, ml));
-							name_value
-								.map_or(Err("rpc attribute should have a name e.g. `name = \"method_name\"`".into()), |name| {
-									let aliases = get_meta_list(meta)
-										.map_or(Vec::new(), |ml| get_aliases(ml));
-									Ok(RpcMethodAttribute {
-										attr: attr.clone(),
-										name: name.into(),
-										aliases,
-										kind
-									})
-								})
-						}))
-					},
-					Err(err) => Some(Err(err)),
-				}
-			})
+			.filter_map(Self::parse_meta)
 			.collect::<Result<Vec<_>, _>>()?;
 
 		if attrs.len() <= 1 {
@@ -87,6 +39,70 @@ impl RpcMethodAttribute {
 		} else {
 			Err(format!("Expected only a single rpc attribute per method. Found {}", attrs.len()))
 		}
+	}
+
+	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute, String>> {
+		let parse_result = attr.parse_meta()
+			.map_err(|err| format!("Error parsing attribute: {}", err));
+		match parse_result {
+			Ok(ref meta) => {
+				let attr_kind =
+					match meta.name().to_string().as_ref() {
+						RPC_ATTR_NAME => {
+							let has_metadata = get_meta_list(meta)
+								.map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
+							Some(Ok(AttributeKind::Rpc { has_metadata }))
+						},
+						PUB_SUB_ATTR_NAME => Some(Self::parse_pubsub(meta)),
+						_ => None,
+					};
+				attr_kind.map(|kind| kind.and_then(|kind| {
+					get_meta_list(meta)
+						.and_then(|ml| get_name_value(RPC_NAME_KEY, ml))
+						.map_or(
+							Err("rpc attribute should have a name e.g. `name = \"method_name\"`".into()),
+							|name| {
+								let aliases = get_meta_list(meta)
+									.map_or(Vec::new(), |ml| get_aliases(ml));
+								Ok(RpcMethodAttribute {
+									attr: attr.clone(),
+									name: name.into(),
+									aliases,
+									kind
+								})
+							})
+				}))
+			},
+			Err(err) => Some(Err(err)),
+		}
+	}
+
+	fn parse_pubsub(meta: &syn::Meta) -> Result<AttributeKind, String> {
+		let name_and_list = get_meta_list(meta)
+			.and_then(|ml|
+				get_name_value(SUBSCRIPTION_NAME_KEY, ml).map(|name| (name, ml))
+			);
+
+		name_and_list.map_or(
+			Err("pubsub attribute should have a subscription name".into()),
+			|(sub_name, ml)| {
+				let is_subscribe = has_meta_word(SUBSCRIBE_META_WORD, ml);
+				let is_unsubscribe = has_meta_word(UNSUBSCRIBE_META_WORD, ml);
+				let kind = match (is_subscribe, is_unsubscribe) {
+					(true, false) =>
+						Ok(PubSubMethodKind::Subscribe),
+					(false, true) =>
+						Ok(PubSubMethodKind::Unsubscribe),
+					(true, true) =>
+						Err("pubsub attribute annotated with both subscribe and unsubscribe".into()),
+					(false, false) =>
+						Err("pubsub attribute not annotated with either subscribe or unsubscribe".into()),
+				};
+				kind.map(|kind| AttributeKind::PubSub {
+					subscription_name: sub_name.into(),
+					kind,
+				})
+			})
 	}
 
 	pub fn is_pubsub(&self) -> bool {
@@ -108,7 +124,7 @@ fn get_meta_list(meta: &syn::Meta) -> Option<&syn::MetaList> {
 fn get_name_value(key: &str, ml: &syn::MetaList) -> Option<String> {
 	ml.nested
 		.iter()
-		.find_map(|nested| {
+		.find_map(|nested|
 			if let syn::NestedMeta::Meta(syn::Meta::NameValue(mnv)) = nested {
 				if mnv.ident == key {
 					if let syn::Lit::Str(ref lit) = mnv.lit {
@@ -122,25 +138,25 @@ fn get_name_value(key: &str, ml: &syn::MetaList) -> Option<String> {
 			} else {
 				None
 			}
-		})
+		)
 }
 
 fn has_meta_word(word: &str, ml: &syn::MetaList) -> bool {
 	ml.nested
 		.iter()
-		.any(|nested| {
+		.any(|nested|
 			if let syn::NestedMeta::Meta(syn::Meta::Word(w)) = nested {
 				word == w.to_string()
 			} else {
 				false
 			}
-		})
+		)
 }
 
 fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 	ml.nested
 		.iter()
-		.find_map(|nested| {
+		.find_map(|nested|
 			if let syn::NestedMeta::Meta(syn::Meta::List(list)) = nested {
 				if list.ident == ALIASES_KEY {
 					Some(list)
@@ -150,8 +166,8 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 			} else {
 				None
 			}
-		})
-		.map_or(Vec::new(), |list| {
+		)
+		.map_or(Vec::new(), |list|
 			list.nested
 				.iter()
 				.filter_map(|nm| {
@@ -162,5 +178,5 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 					}
 				})
 				.collect()
-		})
+		)
 }
