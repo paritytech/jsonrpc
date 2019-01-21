@@ -8,7 +8,10 @@ use syn::{
 use crate::rpc_attr::RpcMethodAttribute;
 
 pub enum MethodRegistration {
-	Standard(RpcMethod),
+	Standard {
+		method: RpcMethod,
+		has_metadata: bool
+	},
 	PubSub {
 		name: String,
 		subscribe: RpcMethod,
@@ -17,22 +20,15 @@ pub enum MethodRegistration {
 }
 
 impl MethodRegistration {
-	fn is_pubsub(&self) -> bool {
-		match *self {
-			MethodRegistration::Standard(_) => false,
-			MethodRegistration::PubSub { .. } => true,
-		}
-	}
-
 	fn generate(&self) -> proc_macro2::TokenStream {
 		match self {
-			MethodRegistration::Standard(method) => {
+			MethodRegistration::Standard { method, has_metadata } => {
 				let rpc_name = &method.name();
 				let add_method =
-					if method.has_metadata() {
-						ident("add_method_with_meta")
+					if *has_metadata {
+						quote!(add_method_with_meta)
 					} else {
-						ident("add_method")
+						quote!(add_method)
 					};
 				let closure = method.generate_delegate_closure(false);
 				let add_aliases = method.generate_add_aliases();
@@ -83,9 +79,8 @@ pub fn generate_trait_item_method(
 	methods: &[MethodRegistration],
 	trait_item: &syn::ItemTrait,
 	has_metadata: bool,
+	has_pubsub_methods: bool,
 ) -> syn::TraitItemMethod {
-	let has_pubsub_methods =
-		methods.iter().any(MethodRegistration::is_pubsub);
 	let io_delegate_type =
 		if has_pubsub_methods {
 			quote!(_jsonrpc_pubsub::IoDelegate)
@@ -141,10 +136,6 @@ impl RpcMethod {
 
 	pub fn attr(&self) -> &RpcMethodAttribute { &self.attr }
 
-	pub fn has_metadata(&self) -> bool {
-		self.attr.has_metadata
-	}
-
 	pub fn name(&self) -> &str {
 		&self.attr.name
 	}
@@ -154,7 +145,7 @@ impl RpcMethod {
 	}
 
 	pub fn is_pubsub(&self) -> bool {
-		self.attr.pubsub.is_some()
+		self.attr.is_pubsub()
 	}
 
 	fn generate_delegate_closure(&self, is_subscribe: bool) -> proc_macro2::TokenStream {

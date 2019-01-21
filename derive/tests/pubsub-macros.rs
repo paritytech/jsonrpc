@@ -18,16 +18,16 @@ impl From<MyError> for jsonrpc_core::Error {
 
 type Result<T> = ::std::result::Result<T, MyError>;
 
-#[rpc(pubsub, name = "hello")]
+#[rpc]
 pub trait Rpc {
 	type Metadata;
 
 	/// Hello subscription
-	#[rpc(subscribe, name = "hello_subscribe", alias("hello_sub"))]
+	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_sub"))]
 	fn subscribe(&self, _: Self::Metadata, _: Subscriber<String>, _: u32, _: Option<u64>);
 
 	/// Unsubscribe from hello subscription.
-	#[rpc(unsubscribe, name = "hello_unsubscribe")]
+	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
 	fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
 }
 

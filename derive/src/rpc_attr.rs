@@ -1,22 +1,15 @@
-use syn::visit::{self, Visit};
-
-pub struct RpcTraitAttribute {
-	pub is_pubsub: bool,
-}
-
 #[derive(Clone, Debug)]
 pub struct RpcMethodAttribute {
 	pub attr: syn::Attribute,
 	pub name: String,
-	pub has_metadata: bool,
-	pub pubsub: Option<PubSubMethod>,
 	pub aliases: Vec<String>,
+	pub kind: AttributeKind,
 }
 
 #[derive(Clone, Debug)]
-pub struct PubSubMethod {
-	pub name: String,
-	pub kind: PubSubMethodKind,
+pub enum AttributeKind {
+	Rpc { has_metadata: bool },
+	PubSub { subscription_name: String, kind: PubSubMethodKind }
 }
 
 #[derive(Clone, Debug)]
@@ -25,106 +18,141 @@ pub enum PubSubMethodKind {
 	Unsubscribe,
 }
 
-#[derive(Default)]
-struct RpcAttributeVisitor {
-	attr: Option<syn::Attribute>,
-	pubsub: Option<String>,
-	name: Option<String>,
-	meta_words: Vec<String>,
-	aliases: Vec<String>,
-}
-
 const RPC_ATTR_NAME: &'static str = "rpc";
 const RPC_NAME_KEY: &'static str = "name";
-const RPC_ALIASES_KEY: &'static str = "aliases";
-const PUB_SUB_META_WORD: &'static str = "pubsub";
+const SUBSCRIPTION_NAME_KEY: &'static str = "subscription";
+const ALIASES_KEY: &'static str = "aliases";
+const PUB_SUB_ATTR_NAME: &'static str = "pubsub";
 const METADATA_META_WORD: &'static str = "meta";
 const SUBSCRIBE_META_WORD: &'static str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &'static str = "unsubscribe";
 
-impl From<syn::AttributeArgs> for RpcTraitAttribute {
-	fn from(args: syn::AttributeArgs) -> RpcTraitAttribute {
-		let mut visitor = RpcAttributeVisitor::default();
-		for nested_meta in args {
-			visitor.visit_nested_meta(&nested_meta);
-		}
-		let is_pubsub = visitor.meta_words.contains(&PUB_SUB_META_WORD.into());
-		RpcTraitAttribute { is_pubsub }
-	}
-}
-
 impl RpcMethodAttribute {
-	pub fn try_from_trait_item_method(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>, String> {
-		let mut visitor = RpcAttributeVisitor::default();
-		visitor.visit_trait_item_method(method);
+	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>, String> {
+		let attrs = method.attrs
+			.iter()
+			.filter_map(|attr| {
+				let parse_result = attr.parse_meta()
+					.map_err(|err| format!("Error parsing attribute: {}", err));
+				match parse_result {
+					Ok(ref meta) => {
+						let attr_kind =
+							match meta.name().to_string().as_ref() {
+								RPC_ATTR_NAME => {
+									let has_metadata = get_meta_list(meta)
+										.map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
+									Some(Ok(AttributeKind::Rpc { has_metadata }))
+								},
+								PUB_SUB_ATTR_NAME =>
+									get_meta_list(meta).map(|ml| {
+										get_name_value(SUBSCRIPTION_NAME_KEY, ml)
+											.map_or(Err("pubsub attribute should have a subscription name TODO".into()), |sub_name| {
+												let is_subscribe = has_meta_word(SUBSCRIBE_META_WORD, ml);
+												let is_unsubscribe = has_meta_word(UNSUBSCRIBE_META_WORD, ml);
+												let kind = match (is_subscribe, is_unsubscribe) {
+													(true, false) => Ok(PubSubMethodKind::Subscribe),
+													(false, true) => Ok(PubSubMethodKind::Unsubscribe),
+													(true, true) => Err("Has both TODO".into()),
+													(false, false) => Err("Has neither TODO".into()),
+												};
 
-		match (visitor.attr, visitor.name) {
-			(Some(attr), Some(name)) => {
-				let meta_words = &visitor.meta_words;
-				let pubsub =
-					visitor.pubsub.map(|pubsub| {
-						if meta_words.contains(&SUBSCRIBE_META_WORD.into()) {
-							Ok(PubSubMethod { name: pubsub, kind: PubSubMethodKind::Subscribe })
-						} else if meta_words.contains(&UNSUBSCRIBE_META_WORD.into()) {
-							Ok(PubSubMethod { name: pubsub, kind: PubSubMethodKind::Unsubscribe })
-						} else {
-							Err(format!("Rpc methods with `pubsub` should be annotated either `{}` or `{}`",
-								SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD))
-						}
-					});
+												kind.map(|kind|
+													AttributeKind::PubSub { subscription_name: sub_name.into(), kind })
+											})
+									}),
+								_ => None,
+							};
+						attr_kind.map(|kind| kind.and_then(|kind| {
+							let name_value = get_meta_list(meta).and_then(|ml| get_name_value(RPC_NAME_KEY, ml));
+							name_value
+								.map_or(Err("rpc attribute should have a name e.g. `name = \"method_name\"`".into()), |name| {
+									let aliases = get_meta_list(meta)
+										.map_or(Vec::new(), |ml| get_aliases(ml));
+									Ok(RpcMethodAttribute {
+										attr: attr.clone(),
+										name: name.into(),
+										aliases,
+										kind
+									})
+								})
+						}))
+					},
+					Err(err) => Some(Err(err)),
+				}
+			})
+			.collect::<Result<Vec<_>, _>>()?;
 
-				Ok(Some(RpcMethodAttribute {
-					attr: attr.clone(),
-					aliases: visitor.aliases,
-					has_metadata: visitor.meta_words.contains(&METADATA_META_WORD.into()),
-					pubsub: pubsub.map_or(Ok(None), |r| r.map(Some))?,
-					name,
-				}))
-			},
-			(None, None) => Ok(None),
-			_ => Err("Expected rpc attribute with name argument".into())
+		if attrs.len() <= 1 {
+			Ok(attrs.first().cloned())
+		} else {
+			Err(format!("Expected only a single rpc attribute per method. Found {}", attrs.len()))
 		}
 	}
 
-//	pub fn is_subscribe(&self) -> bool {
-//		self.pubsub.map_or(false, PubSubMethod::is_subscribe)
-//	}
-//
-//	pub fn is_unsubscribe(&self) -> bool {
-//		self.attr.pubsub.map_or(false, PubSubMethod::is_unsubscribe)
-//	}
+	pub fn is_pubsub(&self) -> bool {
+		match self.kind {
+			AttributeKind::PubSub { .. } => true,
+			AttributeKind::Rpc { .. } => false,
+		}
+	}
 }
 
-impl<'a> Visit<'a> for RpcAttributeVisitor {
-	fn visit_attribute(&mut self, attr: &syn::Attribute) {
-		match attr.parse_meta() {
-			Ok(ref meta) => {
-				if meta.name() == RPC_ATTR_NAME {
-					self.attr = Some(attr.clone());
-					visit::visit_meta(self, meta);
+fn get_meta_list(meta: &syn::Meta) -> Option<&syn::MetaList> {
+	if let syn::Meta::List(ml) = meta {
+		Some(ml)
+	} else {
+		None
+	}
+}
+
+fn get_name_value(key: &str, ml: &syn::MetaList) -> Option<String> {
+	ml.nested
+		.iter()
+		.find_map(|nested| {
+			if let syn::NestedMeta::Meta(syn::Meta::NameValue(mnv)) = nested {
+				if mnv.ident == key {
+					if let syn::Lit::Str(ref lit) = mnv.lit {
+						Some(lit.value())
+					} else {
+						None
+					}
+				} else {
+					None
 				}
-			},
-			// todo [AJ]: add to errors list instead of panicking?
-			Err(err) => panic!("Failed to parse attribute: {}", err)
-		}
-	}
-	fn visit_meta(&mut self, meta: &syn::Meta) {
-		if let syn::Meta::Word(w) = meta {
-			self.meta_words.push(w.to_string())
-		}
-		visit::visit_meta(self, meta);
-	}
-	fn visit_meta_name_value(&mut self, name_value: &syn::MetaNameValue) {
-		if name_value.ident == RPC_NAME_KEY {
-			if let syn::Lit::Str(ref str) = name_value.lit {
-				self.name = Some(str.value())
+			} else {
+				None
 			}
-		}
-		visit::visit_meta_name_value(self, name_value);
-	}
-	fn visit_meta_list(&mut self, meta_list: &syn::MetaList) {
-		if meta_list.ident == RPC_ALIASES_KEY {
-			self.aliases = meta_list.nested
+		})
+}
+
+fn has_meta_word(word: &str, ml: &syn::MetaList) -> bool {
+	ml.nested
+		.iter()
+		.any(|nested| {
+			if let syn::NestedMeta::Meta(syn::Meta::Word(w)) = nested {
+				word == w.to_string()
+			} else {
+				false
+			}
+		})
+}
+
+fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
+	ml.nested
+		.iter()
+		.find_map(|nested| {
+			if let syn::NestedMeta::Meta(syn::Meta::List(list)) = nested {
+				if list.ident == ALIASES_KEY {
+					Some(list)
+				} else {
+					None
+				}
+			} else {
+				None
+			}
+		})
+		.map_or(Vec::new(), |list| {
+			list.nested
 				.iter()
 				.filter_map(|nm| {
 					if let syn::NestedMeta::Literal(syn::Lit::Str(alias)) = nm {
@@ -133,8 +161,6 @@ impl<'a> Visit<'a> for RpcAttributeVisitor {
 						None
 					}
 				})
-				.collect();
-		}
-		visit::visit_meta_list(self,meta_list)
-	}
+				.collect()
+		})
 }

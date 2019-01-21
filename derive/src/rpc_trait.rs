@@ -4,8 +4,8 @@ use syn::{
 	parse_quote, Token, punctuated::Punctuated,
 	fold::{self, Fold},
 };
-use crate::rpc_attr::{RpcMethodAttribute, PubSubMethodKind};
-use crate::to_delegate::{self, RpcMethod, MethodRegistration};
+use crate::rpc_attr::{RpcMethodAttribute, PubSubMethodKind, AttributeKind};
+use crate::to_delegate::{RpcMethod, MethodRegistration, generate_trait_item_method};
 
 const METADATA_TYPE: &'static str = "Metadata";
 
@@ -60,7 +60,7 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 		.iter()
 		.filter_map(|trait_item| {
 			if let syn::TraitItem::Method(method) = trait_item {
-				match RpcMethodAttribute::try_from_trait_item_method(&method) {
+				match RpcMethodAttribute::parse_attr(&method) {
 					Ok(Some(attr)) =>
 						Some(Ok(RpcMethod::new(
 							attr.clone(),
@@ -77,36 +77,39 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 	let methods = methods_result?;
 	let has_pubsub_methods = methods.iter().any(RpcMethod::is_pubsub);
 	let mut rpc_trait = RpcTrait { methods: methods.clone(), has_pubsub_methods, has_metadata: false };
-
-	// first visit the trait to collect the methods
 	let mut item_trait = fold::fold_item_trait(&mut rpc_trait, item_trait.clone());
 
 	let mut pubsub_method_pairs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
 	let mut method_registrations: Vec<MethodRegistration> = Vec::new();
 
 	for method in methods.iter() {
-		if let Some(ref pubsub) = method.attr().pubsub {
-			let (ref mut sub, ref mut unsub) = pubsub_method_pairs
-				.entry(pubsub.name.clone())
-				.or_insert((None, None));
-			match pubsub.kind {
-				PubSubMethodKind::Subscribe => {
-					if sub.is_none() {
-						*sub = Some(method.clone())
-					} else {
-						return Err(format!("Pubsub '{}' has more than one subscribe method", pubsub.name))
-					}
-				},
-				PubSubMethodKind::Unsubscribe => {
-					if unsub.is_none() {
-						*unsub = Some(method.clone())
-					} else {
-						return Err(format!("Pubsub '{}' has more than one unsubscribe method", pubsub.name))
-					}
-				},
-			}
-		} else {
-			method_registrations.push(MethodRegistration::Standard(method.clone()))
+		match &method.attr().kind {
+			AttributeKind::Rpc { has_metadata } =>
+				method_registrations.push(MethodRegistration::Standard {
+					method: method.clone(),
+					has_metadata: *has_metadata
+				}),
+			AttributeKind::PubSub { subscription_name, kind } => {
+				let (ref mut sub, ref mut unsub) = pubsub_method_pairs
+					.entry(subscription_name.clone())
+					.or_insert((None, None));
+				match kind {
+					PubSubMethodKind::Subscribe => {
+						if sub.is_none() {
+							*sub = Some(method.clone())
+						} else {
+							return Err(format!("Subscription '{}' has more than one subscribe method", subscription_name))
+						}
+					},
+					PubSubMethodKind::Unsubscribe => {
+						if unsub.is_none() {
+							*unsub = Some(method.clone())
+						} else {
+							return Err(format!("Subscription '{}' has more than one unsubscribe method", subscription_name))
+						}
+					},
+				}
+			},
 		}
 	}
 
@@ -125,7 +128,7 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 	}
 
 	let to_delegate_method =
-		to_delegate::generate_trait_item_method(&method_registrations, &item_trait, rpc_trait.has_metadata);
+		generate_trait_item_method(&method_registrations, &item_trait, rpc_trait.has_metadata, has_pubsub_methods);
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
 
 	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =
