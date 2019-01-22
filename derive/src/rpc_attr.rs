@@ -94,9 +94,9 @@ impl RpcMethodAttribute {
 					(false, true) =>
 						Ok(PubSubMethodKind::Unsubscribe),
 					(true, true) =>
-						Err("pubsub attribute annotated with both subscribe and unsubscribe".into()),
+						Err(format!("pubsub attribute for subscription '{}' annotated with both subscribe and unsubscribe", sub_name)),
 					(false, false) =>
-						Err("pubsub attribute not annotated with either subscribe or unsubscribe".into()),
+						Err(format!("pubsub attribute for subscription '{}' not annotated with either subscribe or unsubscribe", sub_name)),
 				};
 				kind.map(|kind| AttributeKind::PubSub {
 					subscription_name: sub_name.into(),
