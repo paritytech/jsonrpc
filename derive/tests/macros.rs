@@ -1,9 +1,5 @@
-
-extern crate serde_json;
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_derive;
-
+use serde_json;
+use jsonrpc_derive::rpc;
 use jsonrpc_core::{IoHandler, Response};
 
 pub enum MyError {}
@@ -28,10 +24,6 @@ pub trait Rpc {
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add")]
 	fn add(&self, _: u64, _: u64) -> Result<u64>;
-
-//	/// Adds up to four numbers and returns a result
-//	#[rpc(name = "add_multi")]
-//	fn add_multi(&self, _: u64, _: Option<u64>, _: Option<u64>, _: Option<u64>) -> Result<u64>;
 }
 
 #[derive(Default)]

@@ -179,7 +179,7 @@ impl RpcMethod {
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
 			} else {
-				quote! { let params = params.parse::<(#(#param_types), *)>(); }
+				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			};
 
 		let method_ident = self.ident();
@@ -193,7 +193,7 @@ impl RpcMethod {
 		let match_params =
 			if is_subscribe {
 				quote! {
-					Ok((#(#tuple_fields), *)) => {
+					Ok((#(#tuple_fields, )*)) => {
 						let subscriber = _jsonrpc_pubsub::typed::Subscriber::new(subscriber);
 						(method)#method_call
 					},
@@ -204,7 +204,7 @@ impl RpcMethod {
 				}
 			} else {
 				quote! {
-					Ok((#(#tuple_fields), *)) => {
+					Ok((#(#tuple_fields, )*)) => {
 						use self::_futures::{Future, IntoFuture};
 						let fut = (method)#method_call
 							.into_future()

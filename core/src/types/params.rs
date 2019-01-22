@@ -84,4 +84,10 @@ mod tests {
 		assert_eq!(err2.message, "Invalid params: invalid length 2, expected a tuple of size 3.");
 		assert_eq!(err2.data, None);
 	}
+
+	#[test]
+	fn single_param_parsed_as_tuple() {
+		let params: (u64,) = Params::Array(vec![Value::from(1)]).parse().unwrap();
+		assert_eq!(params, (1,));
+	}
 }
