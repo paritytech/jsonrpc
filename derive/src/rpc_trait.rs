@@ -11,11 +11,11 @@ const METADATA_TYPE: &'static str = "Metadata";
 
 const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find subscribe method, expected a method annotated with `subscribe` \
-	e.g. `#[rpc(pubsub = \"hello\", subscribe, name = \"hello_subscribe\")]`";
+	e.g. `#[pubsub(subscription = \"hello\", subscribe, name = \"hello_subscribe\")]`";
 
 const MISSING_UNSUBSCRIBE_METHOD_ERR: &'static str =
 	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
-	e.g. `#[rpc(pubsub = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
+	e.g. `#[pubsub(subscription = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
 
 const RPC_MOD_NAME_PREFIX: &'static str = "rpc_impl_";
 
@@ -121,8 +121,8 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 					subscribe: subscribe.clone(),
 					unsubscribe: unsubscribe.clone()
 				}),
-			(Some(_), None) => return Err(format!("Pubsub: {}. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR)),
-			(None, Some(_)) => return Err(format!("Pubsub: {}. {}", name, MISSING_SUBSCRIBE_METHOD_ERR)),
+			(Some(_), None) => return Err(format!("subscription '{}'. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR)),
+			(None, Some(_)) => return Err(format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR)),
 			(None, None) => unreachable!(),
 		}
 	}
