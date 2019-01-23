@@ -102,12 +102,14 @@ pub fn generate_trait_item_method(
 	let method: syn::TraitItemMethod =
 		if has_metadata {
 			parse_quote! {
+				/// Create an `IoDelegate`, wiring rpc calls to the trait methods.
 				fn to_delegate(self) -> #io_delegate_type<Self, Self::Metadata> {
 					#to_delegate_body
 				}
 			}
 		} else {
 			parse_quote! {
+				/// Create an `IoDelegate`, wiring rpc calls to the trait methods.
 				fn to_delegate<M: _jsonrpc_core::Metadata>(self) -> #io_delegate_type<Self, M> {
 					#to_delegate_body
 				}
