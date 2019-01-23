@@ -265,6 +265,20 @@ impl RpcMethod {
 		let tuple_fields_no_trailing: &Vec<_> =
 			&tuple_fields.iter().take(tuple_fields.len() - 1).collect();
 		let num = param_types_no_trailing.len();
+		let all_params_len = param_types.len();
+		let no_trailing_branch =
+			if all_params_len > 1 {
+				quote! {
+					params.parse::<(#(#param_types_no_trailing, )*)>()
+						.map( |(#(#tuple_fields_no_trailing, )*)|
+							(#(#tuple_fields_no_trailing, )* None))
+						.map_err(Into::into)
+				}
+			} else if all_params_len == 1 {
+				quote! ( Ok((None,)) )
+			} else {
+				panic!("Should be at least one trailing param; qed")
+			};
 		quote! {
 			let params_len = match params {
 				_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
@@ -274,13 +288,10 @@ impl RpcMethod {
 
 			let params = params_len.and_then(|len| {
 				match len.checked_sub(#num) {
-					Some(0) => params.parse::<(#(#param_types_no_trailing), *)>()
-						.map( |(#(#tuple_fields_no_trailing), *)|
-							(#(#tuple_fields_no_trailing, )* None))
-						.map_err(Into::into),
-					Some(1) => params.parse::<(#(#param_types), *) > ()
-						.map( |(#(#tuple_fields_no_trailing, )* id)|
-							(#(#tuple_fields_no_trailing, )* id))
+					Some(0) => #no_trailing_branch,
+					Some(1) => params.parse::<(#(#param_types, )*) > ()
+						.map( |(#(#tuple_fields_no_trailing, )* id,)|
+							(#(#tuple_fields_no_trailing, )* id,))
 						.map_err(Into::into),
 					None => Err(_jsonrpc_core::Error::invalid_params(
 						format!("`params` should have at least {} argument(s)", #num))),

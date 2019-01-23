@@ -8,11 +8,12 @@ pub trait Rpc {
 	#[rpc(name = "mul")]
 	fn mul(&self, _: u64, _: Option<u64>) -> Result<u64>;
 
+	/// Echos back the message, example of a single param trailing
 	#[rpc(name = "echo")]
 	fn echo(&self, _: Option<String>) -> Result<String>;
 }
 
-//#[derive(Default)]
+#[derive(Default)]
 struct RpcImpl;
 
 impl Rpc for RpcImpl {
@@ -85,7 +86,7 @@ fn should_accept_single_trailing_param() {
 	}"#).unwrap());
 
 	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
-	assert_eq!(result1, serde_json::from_str(r#"{
+	assert_eq!(result2, serde_json::from_str(r#"{
 		"jsonrpc": "2.0",
 		"result": "",
 		"id": 1
