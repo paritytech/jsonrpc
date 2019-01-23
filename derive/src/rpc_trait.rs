@@ -157,9 +157,9 @@ pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 
 	Ok(quote! {
 		mod #mod_name_ident {
-			extern crate jsonrpc_core as _jsonrpc_core;
-			extern crate jsonrpc_pubsub as _jsonrpc_pubsub;
-			extern crate serde as _serde;
+			use jsonrpc_core as _jsonrpc_core;
+			use jsonrpc_pubsub as _jsonrpc_pubsub;
+			use serde as _serde;
 			use super::*;
 			use self::_jsonrpc_core::futures as _futures;
 
