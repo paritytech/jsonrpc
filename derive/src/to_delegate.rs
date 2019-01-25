@@ -98,7 +98,6 @@ pub fn generate_trait_item_method(
 			del
 		};
 
-	// todo: [AJ] check that pubsub has metadata
 	let method: syn::TraitItemMethod =
 		if has_metadata {
 			parse_quote! {
