@@ -3,7 +3,6 @@
 use std::marker::PhantomData;
 
 use serde;
-//use util::Fn;
 use subscription;
 use types::{SubscriptionId, TransportError, SinkResult};
 

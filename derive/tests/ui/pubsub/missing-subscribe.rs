@@ -7,8 +7,7 @@ extern crate jsonrpc_pubsub;
 pub trait Rpc {
 	type Metadata;
 
-//	#[pubsub(subscription = "hello", name = "hello_subscribe", alias("hello_sub"))]
-//	fn subscribe(&self, Self::Metadata, typed::Subscriber<String>, u64);
+	// note that a subscribe method is missing
 
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
