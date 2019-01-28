@@ -13,11 +13,10 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 ## Sub-projects
 - [jsonrpc-core](./core) [![crates.io][core-image]][core-url]
 - [jsonrpc-http-server](./http) [![crates.io][http-server-image]][http-server-url]
-- [jsonrpc-minihttp-server](./minihttp)
-- [jsonrpc-ipc-server](./ipc)
+- [jsonrpc-ipc-server](./ipc) [![crates.io][ipc-server-image]][ipc-server-url]
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
-- [jsonrpc-ws-server](./ws)
-- [jsonrpc-stdio-server](./stdio)
+- [jsonrpc-ws-server](./ws) [![crates.io][ws-server-image]][ws-server-url]
+- [jsonrpc-stdio-server](./stdio) [![crates.io][stdio-server-image]][stdio-server-url]
 - [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url]
 - [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
 - [jsonrpc-pubsub](./pubsub) [![crates.io][pubsub-image]][pubsub-url]
@@ -26,8 +25,14 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 [core-url]: https://crates.io/crates/jsonrpc-core
 [http-server-image]: https://img.shields.io/crates/v/jsonrpc-http-server.svg
 [http-server-url]: https://crates.io/crates/jsonrpc-http-server
+[ipc-server-image]: https://img.shields.io/crates/v/jsonrpc-ipc-server.svg
+[ipc-server-url]: https://crates.io/crates/jsonrpc-ipc-server
 [tcp-server-image]: https://img.shields.io/crates/v/jsonrpc-tcp-server.svg
 [tcp-server-url]: https://crates.io/crates/jsonrpc-tcp-server
+[ws-server-image]: https://img.shields.io/crates/v/jsonrpc-ws-server.svg
+[ws-server-url]: https://crates.io/crates/jsonrpc-ws-server
+[stdio-server-image]: https://img.shields.io/crates/v/jsonrpc-stdio-server.svg
+[stdio-server-url]: https://crates.io/crates/jsonrpc-stdio-server
 [macros-image]: https://img.shields.io/crates/v/jsonrpc-macros.svg
 [macros-url]: https://crates.io/crates/jsonrpc-macros
 [server-utils-image]: https://img.shields.io/crates/v/jsonrpc-server-utils.svg
@@ -45,10 +50,10 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 ```rust
 extern crate jsonrpc_core;
-extern crate jsonrpc_minihttp_server;
+extern crate jsonrpc_http_server;
 
 use jsonrpc_core::{IoHandler, Value, Params};
-use jsonrpc_minihttp_server::{ServerBuilder};
+use jsonrpc_http_server::{ServerBuilder};
 
 fn main() {
 	let mut io = IoHandler::new();
