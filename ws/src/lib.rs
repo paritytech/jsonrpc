@@ -6,7 +6,7 @@ extern crate jsonrpc_server_utils as server_utils;
 extern crate parking_lot;
 extern crate slab;
 
-pub extern crate ws;
+pub extern crate parity_ws as ws;
 pub extern crate jsonrpc_core;
 
 #[macro_use]
