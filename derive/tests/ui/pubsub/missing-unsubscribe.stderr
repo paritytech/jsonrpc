@@ -1,0 +1,10 @@
+error: custom attribute panicked
+ --> $DIR/missing-unsubscribe.rs:6:1
+  |
+6 | #[rpc]
+  | ^^^^^^
+  |
+  = help: message: [rpc] encountered error: subscription 'hello'. Can't find unsubscribe method, expected a method annotated with `unsubscribe` e.g. `#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]`
+
+error: aborting due to previous error
+

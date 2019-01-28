@@ -4,6 +4,7 @@ members = [
 	"http",
 	"ipc",
 	"macros",
+	"derive",
 	"pubsub",
 	"pubsub/more-examples",
 	"server-utils",

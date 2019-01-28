@@ -17,7 +17,8 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
 - [jsonrpc-ws-server](./ws) [![crates.io][ws-server-image]][ws-server-url]
 - [jsonrpc-stdio-server](./stdio) [![crates.io][stdio-server-image]][stdio-server-url]
-- [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url]
+- [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url] *deprecated:* use `derive` instead
+- [jsonrpc-derive](./derive) [![crates.io][derive-image]][derive-url]
 - [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
 - [jsonrpc-pubsub](./pubsub) [![crates.io][pubsub-image]][pubsub-url]
 
@@ -35,6 +36,8 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 [stdio-server-url]: https://crates.io/crates/jsonrpc-stdio-server
 [macros-image]: https://img.shields.io/crates/v/jsonrpc-macros.svg
 [macros-url]: https://crates.io/crates/jsonrpc-macros
+[derive-image]: https://img.shields.io/crates/v/jsonrpc-derive.svg
+[derive-url]: https://crates.io/crates/jsonrpc-derive
 [server-utils-image]: https://img.shields.io/crates/v/jsonrpc-server-utils.svg
 [server-utils-url]: https://crates.io/crates/jsonrpc-server-utils
 [pubsub-image]: https://img.shields.io/crates/v/jsonrpc-pubsub.svg
@@ -43,15 +46,13 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 ## Examples
 
 - [core](./core/examples)
-- [macros](./macros/examples)
+- [derive](./derive/examples)
+- [macros](./macros/examples) *deprecated*
 - [pubsub](./pubsub/examples)
 
 ### Basic Usage (with HTTP transport)
 
 ```rust
-extern crate jsonrpc_core;
-extern crate jsonrpc_http_server;
-
 use jsonrpc_core::{IoHandler, Value, Params};
 use jsonrpc_http_server::{ServerBuilder};
 
@@ -70,21 +71,17 @@ fn main() {
 }
 ```
 
-### Basic usage with macros
+### Basic usage with derive
 
 ```rust
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_macros;
-
 use jsonrpc_core::Result;
+use jsonrpc_derive::rpc;
 
-build_rpc_trait! {
-	pub trait Rpc {
-		/// Adds two numbers and returns a result
-		#[rpc(name = "add")]
-		fn add(&self, u64, u64) -> Result<u64>;
-	}
+#[rpc]
+pub trait Rpc {
+	/// Adds two numbers and returns a result
+	#[rpc(name = "add")]
+	fn add(&self, u64, u64) -> Result<u64>;
 }
 
 pub struct RpcImpl;
@@ -93,7 +90,6 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 }
-
 
 fn main() {
 	let mut io = jsonrpc_core::IoHandler::new();

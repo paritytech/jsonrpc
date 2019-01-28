@@ -1,9 +1,5 @@
-
-extern crate serde_json;
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_macros;
-
+use serde_json;
+use jsonrpc_derive::rpc;
 use jsonrpc_core::{IoHandler, Response};
 
 pub enum MyError {}
@@ -15,20 +11,19 @@ impl From<MyError> for jsonrpc_core::Error {
 
 type Result<T> = ::std::result::Result<T, MyError>;
 
-build_rpc_trait! {
-	pub trait Rpc {
-		/// Returns a protocol version
-		#[rpc(name = "protocolVersion")]
-		fn protocol_version(&self) -> Result<String>;
+#[rpc]
+pub trait Rpc {
+	/// Returns a protocol version
+	#[rpc(name = "protocolVersion")]
+	fn protocol_version(&self) -> Result<String>;
 
-		/// Negates number and returns a result
-		#[rpc(name = "neg")]
-		fn neg(&self, i64) -> Result<i64>;
+	/// Negates number and returns a result
+	#[rpc(name = "neg")]
+	fn neg(&self, _: i64) -> Result<i64>;
 
-		/// Adds two numbers and returns a result
-		#[rpc(name = "add")]
-		fn add(&self, u64, u64) -> Result<u64>;
-	}
+	/// Adds two numbers and returns a result
+	#[rpc(name = "add")]
+	fn add(&self, _: u64, _: u64) -> Result<u64>;
 }
 
 #[derive(Default)]
