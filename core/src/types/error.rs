@@ -1,4 +1,5 @@
 //! jsonrpc errors
+use std::fmt;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
 use super::Value;
@@ -121,6 +122,18 @@ impl Error {
 			code: ErrorCode::InvalidParams,
 			message: message.into(),
 			data: None,
+		}
+	}
+
+	/// Creates `InvalidParams` for given parameter, with details.
+	pub fn invalid_params_with_details<M, T>(message: M, details: T) -> Error where
+		M: Into<String>,
+		T: fmt::Debug
+	{
+		Error {
+			code: ErrorCode::InvalidParams,
+			message: format!("Invalid parameters: {}", message.into()),
+			data: Some(Value::String(format!("{:?}", details))),
 		}
 	}
 

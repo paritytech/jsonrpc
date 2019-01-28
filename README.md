@@ -18,7 +18,8 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
 - [jsonrpc-ws-server](./ws)
 - [jsonrpc-stdio-server](./stdio)
-- [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url]
+- [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url] *deprecated:* use `derive` instead
+- [jsonrpc-derive](./derive)
 - [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
 - [jsonrpc-pubsub](./pubsub) [![crates.io][pubsub-image]][pubsub-url]
 
@@ -38,7 +39,8 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 ## Examples
 
 - [core](./core/examples)
-- [macros](./macros/examples)
+- [derive](./derive/examples)
+- [macros](./macros/examples) *deprecated*
 - [pubsub](./pubsub/examples)
 
 ### Basic Usage (with HTTP transport)
@@ -65,21 +67,17 @@ fn main() {
 }
 ```
 
-### Basic usage with macros
+### Basic usage with derive
 
 ```rust
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_macros;
-
 use jsonrpc_core::Result;
+use jsonrpc_derive::rpc;
 
-build_rpc_trait! {
-	pub trait Rpc {
-		/// Adds two numbers and returns a result
-		#[rpc(name = "add")]
-		fn add(&self, u64, u64) -> Result<u64>;
-	}
+#[rpc]
+pub trait Rpc {
+	/// Adds two numbers and returns a result
+	#[rpc(name = "add")]
+	fn add(&self, u64, u64) -> Result<u64>;
 }
 
 pub struct RpcImpl;
@@ -88,7 +86,6 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 }
-
 
 fn main() {
 	let mut io = jsonrpc_core::IoHandler::new();

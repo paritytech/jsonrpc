@@ -31,6 +31,15 @@ impl Params {
 			Error::invalid_params(format!("Invalid params: {}.", e))
 		})
 	}
+
+	/// Check for no params, returns Err if any params
+	pub fn expect_no_params(self) -> Result<(), Error> {
+		match self {
+			Params::None => Ok(()),
+			Params::Array(ref v) if v.is_empty() => Ok(()),
+			p => Err(Error::invalid_params_with_details("No parameters were expected", p)),
+		}
+	}
 }
 
 #[cfg(test)]
@@ -74,5 +83,11 @@ mod tests {
 		assert_eq!(err2.code, ErrorCode::InvalidParams);
 		assert_eq!(err2.message, "Invalid params: invalid length 2, expected a tuple of size 3.");
 		assert_eq!(err2.data, None);
+	}
+
+	#[test]
+	fn single_param_parsed_as_tuple() {
+		let params: (u64,) = Params::Array(vec![Value::from(1)]).parse().unwrap();
+		assert_eq!(params, (1,));
 	}
 }
