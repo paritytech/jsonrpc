@@ -540,7 +540,7 @@ fn configure_port(reuse: bool, tcp: &net2::TcpBuilder) -> io::Result<()> {
 	use net2::unix::*;
 
 	if reuse {
-		r#try!(tcp.reuse_port(true));
+		tcp.reuse_port(true)?;
 	}
 
 	Ok(())

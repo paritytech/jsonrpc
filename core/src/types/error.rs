@@ -65,7 +65,7 @@ impl From<i64> for ErrorCode {
 impl<'a> Deserialize<'a> for ErrorCode {
 	fn deserialize<D>(deserializer: D) -> Result<ErrorCode, D::Error>
 	where D: Deserializer<'a> {
-		let code: i64 = r#try!(Deserialize::deserialize(deserializer));
+		let code: i64 = Deserialize::deserialize(deserializer)?;
 		Ok(ErrorCode::from(code))
 	}
 }
