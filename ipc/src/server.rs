@@ -528,7 +528,7 @@ mod tests {
 		}
 
 		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
-			fn extract(&self, _context: &RequestContext<'_>) -> Arc<SessionEndMeta> {
+			fn extract(&self, _context: &RequestContext) -> Arc<SessionEndMeta> {
 				let (signal, receiver) = oneshot::channel();
 				self.drop_receivers.lock().try_send(receiver).unwrap();
 				let meta = SessionEndMeta {

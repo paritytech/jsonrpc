@@ -191,7 +191,7 @@ impl<M, F, G> fmt::Debug for RpcHandlerState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
 	G: Future<Item = Option<core::Output>, Error = ()>,
 {
-	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		use self::RpcHandlerState::*;
 
 		match *self {

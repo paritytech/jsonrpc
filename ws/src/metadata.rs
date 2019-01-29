@@ -88,7 +88,7 @@ impl RequestContext {
 }
 
 impl fmt::Debug for RequestContext {
-	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		fmt.debug_struct("RequestContext")
 			.field("session_id", &self.session_id)
 			.field("origin", &self.origin)

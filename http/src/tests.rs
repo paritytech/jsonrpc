@@ -85,7 +85,7 @@ struct Response {
 	body: String,
 }
 
-fn read_block(lines: &mut Lines<'_>) -> String {
+fn read_block(lines: &mut Lines) -> String {
 	let mut block = String::new();
 	loop {
 		let line = lines.next();

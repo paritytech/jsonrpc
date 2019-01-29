@@ -23,7 +23,7 @@ pub struct Server {
 }
 
 impl fmt::Debug for Server {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		f.debug_struct("Server")
 			.field("addr", &self.addr)
 			.field("handle", &self.handle)
