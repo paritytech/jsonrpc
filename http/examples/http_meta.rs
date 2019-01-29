@@ -1,6 +1,3 @@
-extern crate jsonrpc_http_server;
-extern crate unicase;
-
 use jsonrpc_http_server::{ServerBuilder, hyper, RestApi, cors::AccessControlAllowHeaders};
 use jsonrpc_http_server::jsonrpc_core::*;
 

@@ -23,12 +23,12 @@
 
 #![warn(missing_docs)]
 
-extern crate unicase;
-extern crate jsonrpc_server_utils as server_utils;
-extern crate net2;
 
-pub extern crate jsonrpc_core;
-pub extern crate hyper;
+use jsonrpc_server_utils as server_utils;
+use net2;
+
+pub use jsonrpc_core;
+pub use hyper;
 
 #[macro_use]
 extern crate log;
@@ -73,7 +73,7 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// a future for server response
-		response: Box<Future<Item=hyper::Response<Body>, Error=hyper::Error> + Send>,
+		response: Box<dyn Future<Item=hyper::Response<Body>, Error=hyper::Error> + Send>,
 	}
 }
 
@@ -157,7 +157,7 @@ pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::m
 	/// RPC Handler
 	pub handler: Arc<MetaIoHandler<M, S>>,
 	/// Metadata extractor
-	pub extractor: Arc<MetaExtractor<M>>,
+	pub extractor: Arc<dyn MetaExtractor<M>>,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
@@ -194,8 +194,8 @@ pub enum RestApi {
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	executor: UninitializedExecutor,
-	meta_extractor: Arc<MetaExtractor<M>>,
-	request_middleware: Arc<RequestMiddleware>,
+	meta_extractor: Arc<dyn MetaExtractor<M>>,
+	request_middleware: Arc<dyn RequestMiddleware>,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
 	allowed_headers: cors::AccessControlAllowHeaders,
@@ -448,7 +448,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
 	allowed_headers: cors::AccessControlAllowHeaders,
-	request_middleware: Arc<RequestMiddleware>,
+	request_middleware: Arc<dyn RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
 	rest_api: RestApi,

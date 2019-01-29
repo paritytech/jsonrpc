@@ -1,4 +1,4 @@
-extern crate jsonrpc_core;
+use jsonrpc_core;
 
 use std::str::Lines;
 use std::net::TcpStream;
@@ -85,7 +85,7 @@ struct Response {
 	body: String,
 }
 
-fn read_block(lines: &mut Lines) -> String {
+fn read_block(lines: &mut Lines<'_>) -> String {
 	let mut block = String::new();
 	loop {
 		let line = lines.next();

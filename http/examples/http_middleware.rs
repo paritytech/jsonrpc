@@ -1,5 +1,3 @@
-extern crate jsonrpc_http_server;
-
 use jsonrpc_http_server::{
 	hyper, ServerBuilder, DomainsValidation, AccessControlAllowOrigin, Response, RestApi
 };
