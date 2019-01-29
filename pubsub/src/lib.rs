@@ -2,9 +2,7 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_core as core;
-extern crate parking_lot;
-extern crate serde;
+use jsonrpc_core as core;
 
 #[macro_use]
 extern crate log;
