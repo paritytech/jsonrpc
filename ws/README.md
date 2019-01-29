@@ -9,7 +9,7 @@ WebSockets server for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-ws-server = { git = "https://github.com/paritytech/jsonrpc" }
+jsonrpc-ws-server = "10.0"
 ```
 
 `main.rs`

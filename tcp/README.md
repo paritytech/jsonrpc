@@ -9,7 +9,7 @@ TCP server for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-tcp-server = { git = "https://github.com/paritytech/jsonrpc" }
+jsonrpc-tcp-server = "10.0"
 ```
 
 `main.rs`

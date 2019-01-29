@@ -10,7 +10,7 @@ Takes one request per line and outputs each response on a new line.
 
 ```
 [dependencies]
-jsonrpc-stdio-server = { git = "https://github.com/paritytech/jsonrpc" }
+jsonrpc-stdio-server = "10.0"
 ```
 
 `main.rs`
