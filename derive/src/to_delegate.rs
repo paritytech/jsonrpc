@@ -173,15 +173,17 @@ impl RpcMethod {
 				.map(|x| ident(&((x + 'a' as u8) as char).to_string()))
 				.collect();
 		let param_types = &param_types;
-		let parse_params =
-			// if the last argument is an `Option` then it can be made an optional 'trailing' argument
-			if let Some(ref trailing) = param_types.iter().last().and_then(try_get_option) {
-				self.params_with_trailing(trailing, param_types, tuple_fields)
+		let parse_params = {
+			// last arguments that are `Option`-s are optional 'trailing' arguments
+			let trailing_args_num = param_types.iter().rev().take_while(|t| is_option_type(t)).count();
+			if trailing_args_num != 0 {
+				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
 			} else {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
-			};
+			}
+		};
 
 		let method_ident = self.ident();
 		let result = &self.trait_item.sig.decl.output;
@@ -257,48 +259,52 @@ impl RpcMethod {
 
 	fn params_with_trailing(
 		&self,
-		trailing: &syn::Type,
+		trailing_args_num: usize,
 		param_types: &[syn::Type],
 		tuple_fields: &[syn::Ident],
 	) -> proc_macro2::TokenStream {
-		let param_types_no_trailing: Vec<_> =
-			param_types.iter().cloned().filter(|arg| arg != trailing).collect();
-		let tuple_fields_no_trailing: &Vec<_> =
-			&tuple_fields.iter().take(tuple_fields.len() - 1).collect();
-		let num = param_types_no_trailing.len();
-		let all_params_len = param_types.len();
-		let no_trailing_branch =
-			if all_params_len > 1 {
-				quote! {
-					params.parse::<(#(#param_types_no_trailing, )*)>()
-						.map( |(#(#tuple_fields_no_trailing, )*)|
-							(#(#tuple_fields_no_trailing, )* None))
-						.map_err(Into::into)
+		let total_args_num = param_types.len();
+		let required_args_num = total_args_num - trailing_args_num;
+
+		let switch_branches = (0..trailing_args_num+1)
+			.map(|passed_trailing_args_num| {
+				let passed_args_num = required_args_num + passed_trailing_args_num;
+				let passed_param_types = &param_types[..passed_args_num];
+				let passed_tuple_fields = &tuple_fields[..passed_args_num];
+				let missed_args_num = total_args_num - passed_args_num;
+				let missed_params_values = ::std::iter::repeat(quote! { None }).take(missed_args_num).collect::<Vec<_>>();
+
+				if passed_args_num == 0 {
+					quote! {
+						#passed_args_num => params.expect_no_params()
+							.map(|_| (#(#missed_params_values, ) *))
+							.map_err(Into::into)
+					}
+				} else {
+					quote! {
+						#passed_args_num => params.parse::<(#(#passed_param_types, )*)>()
+							.map(|(#(#passed_tuple_fields,)*)|
+								(#(#passed_tuple_fields, )* #(#missed_params_values, )*))
+							.map_err(Into::into)
+					}
 				}
-			} else if all_params_len == 1 {
-				quote! ( Ok((None,)) )
-			} else {
-				panic!("Should be at least one trailing param; qed")
-			};
+			}).collect::<Vec<_>>();
+
 		quote! {
-			let params_len = match params {
+			let passed_args_num = match params {
 				_jsonrpc_core::Params::Array(ref v) => Ok(v.len()),
 				_jsonrpc_core::Params::None => Ok(0),
 				_ => Err(_jsonrpc_core::Error::invalid_params("`params` should be an array"))
 			};
 
-			let params = params_len.and_then(|len| {
-				match len.checked_sub(#num) {
-					Some(0) => #no_trailing_branch,
-					Some(1) => params.parse::<(#(#param_types, )*) > ()
-						.map( |(#(#tuple_fields_no_trailing, )* id,)|
-							(#(#tuple_fields_no_trailing, )* id,))
-						.map_err(Into::into),
-					None => Err(_jsonrpc_core::Error::invalid_params(
-						format!("`params` should have at least {} argument(s)", #num))),
+			let params = passed_args_num.and_then(|passed_args_num| {
+				match passed_args_num {
+					_ if passed_args_num < #required_args_num => Err(_jsonrpc_core::Error::invalid_params(
+						format!("`params` should have at least {} argument(s)", #required_args_num))),
+					#(#switch_branches),*,
 					_ => Err(_jsonrpc_core::Error::invalid_params_with_details(
-						format!("Expected {} or {} parameters.", #num, #num + 1),
-						format!("Got: {}", len))),
+						format!("Expected from {} to {} parameters.", #required_args_num, #total_args_num),
+						format!("Got: {}", passed_args_num))),
 				}
 			});
 		}
@@ -318,15 +324,14 @@ fn ident(s: &str) -> syn::Ident {
 	syn::Ident::new(s, proc_macro2::Span::call_site())
 }
 
-fn try_get_option(ty: &syn::Type) -> Option<syn::Type> {
+fn is_option_type(ty: &syn::Type) -> bool {
 	if let syn::Type::Path(path) = ty {
 		path.path.segments
 			.first()
-			.and_then(|t| {
-				if t.value().ident == "Option" { Some(ty.clone()) } else { None }
-			})
+			.map(|t| t.value().ident == "Option")
+			.unwrap_or(false)
 	} else {
-		None
+		false
 	}
 }
 
