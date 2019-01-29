@@ -1,6 +1,6 @@
 use hyper::{self, header};
 
-use server_utils::{cors, hosts};
+use crate::server_utils::{cors, hosts};
 
 /// Extracts string value of a single header in request.
 fn read_header<'a>(req: &'a hyper::Request<hyper::Body>, header_name: &str) -> Option<&'a str> {

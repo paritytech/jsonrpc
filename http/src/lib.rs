@@ -46,17 +46,17 @@ use std::thread;
 
 use hyper::{server, Body};
 use jsonrpc_core as jsonrpc;
-use jsonrpc::MetaIoHandler;
-use jsonrpc::futures::{self, Future, Stream, future};
-use jsonrpc::futures::sync::oneshot;
-use server_utils::reactor::{Executor, UninitializedExecutor};
+use crate::jsonrpc::MetaIoHandler;
+use crate::jsonrpc::futures::{self, Future, Stream, future};
+use crate::jsonrpc::futures::sync::oneshot;
+use crate::server_utils::reactor::{Executor, UninitializedExecutor};
 
-pub use server_utils::hosts::{Host, DomainsValidation};
-pub use server_utils::cors::{self, AccessControlAllowOrigin, Origin, AllowCors};
-pub use server_utils::{tokio, SuspendableStream};
-pub use handler::ServerHandler;
-pub use utils::{is_host_allowed, cors_allow_origin, cors_allow_headers};
-pub use response::Response;
+pub use crate::server_utils::hosts::{Host, DomainsValidation};
+pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, Origin, AllowCors};
+pub use crate::server_utils::{tokio, SuspendableStream};
+pub use crate::handler::ServerHandler;
+pub use crate::utils::{is_host_allowed, cors_allow_origin, cors_allow_headers};
+pub use crate::response::Response;
 
 /// Action undertaken by a middleware.
 pub enum RequestMiddlewareAction {
@@ -540,7 +540,7 @@ fn configure_port(reuse: bool, tcp: &net2::TcpBuilder) -> io::Result<()> {
 	use net2::unix::*;
 
 	if reuse {
-		try!(tcp.reuse_port(true));
+		r#try!(tcp.reuse_port(true));
 	}
 
 	Ok(())
