@@ -139,11 +139,11 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 	active: Arc<atomic::AtomicBool>,
 	context: metadata::RequestContext,
 	handler: Arc<core::MetaIoHandler<M, S>>,
-	meta_extractor: Arc<metadata::MetaExtractor<M>>,
+	meta_extractor: Arc<dyn metadata::MetaExtractor<M>>,
 	allowed_origins: Option<Vec<Origin>>,
 	allowed_hosts: Option<Vec<Host>>,
-	request_middleware: Option<Arc<RequestMiddleware>>,
-	stats: Option<Arc<SessionStats>>,
+	request_middleware: Option<Arc<dyn RequestMiddleware>>,
+	stats: Option<Arc<dyn SessionStats>>,
 	metadata: Option<M>,
 	executor: TaskExecutor,
 	task_slab: Arc<TaskSlab>,
@@ -277,22 +277,22 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 pub struct Factory<M: core::Metadata, S: core::Middleware<M>> {
 	session_id: SessionId,
 	handler: Arc<core::MetaIoHandler<M, S>>,
-	meta_extractor: Arc<metadata::MetaExtractor<M>>,
+	meta_extractor: Arc<dyn metadata::MetaExtractor<M>>,
 	allowed_origins: Option<Vec<Origin>>,
 	allowed_hosts: Option<Vec<Host>>,
-	request_middleware: Option<Arc<RequestMiddleware>>,
-	stats: Option<Arc<SessionStats>>,
+	request_middleware: Option<Arc<dyn RequestMiddleware>>,
+	stats: Option<Arc<dyn SessionStats>>,
 	executor: TaskExecutor,
 }
 
 impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	pub fn new(
 		handler: Arc<core::MetaIoHandler<M, S>>,
-		meta_extractor: Arc<metadata::MetaExtractor<M>>,
+		meta_extractor: Arc<dyn metadata::MetaExtractor<M>>,
 		allowed_origins: Option<Vec<Origin>>,
 		allowed_hosts: Option<Vec<Host>>,
-		request_middleware: Option<Arc<RequestMiddleware>>,
-		stats: Option<Arc<SessionStats>>,
+		request_middleware: Option<Arc<dyn RequestMiddleware>>,
+		stats: Option<Arc<dyn SessionStats>>,
 		executor: TaskExecutor,
 	) -> Self {
 		Factory {

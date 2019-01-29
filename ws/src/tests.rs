@@ -34,7 +34,7 @@ impl Response {
 		}
 	}
 
-	fn read_block(lines: &mut Lines) -> String {
+	fn read_block(lines: &mut Lines<'_>) -> String {
 		let mut block = String::new();
 		loop {
 			let line = lines.next();

@@ -23,7 +23,7 @@ pub struct Server {
 }
 
 impl fmt::Debug for Server {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		f.debug_struct("Server")
 			.field("addr", &self.addr)
 			.field("handle", &self.handle)
@@ -43,11 +43,11 @@ impl Server {
 	pub fn start<M: core::Metadata, S: core::Middleware<M>>(
 		addr: &SocketAddr,
 		handler: Arc<core::MetaIoHandler<M, S>>,
-		meta_extractor: Arc<metadata::MetaExtractor<M>>,
+		meta_extractor: Arc<dyn metadata::MetaExtractor<M>>,
 		allowed_origins: Option<Vec<Origin>>,
 		allowed_hosts: Option<Vec<Host>>,
-		request_middleware: Option<Arc<session::RequestMiddleware>>,
-		stats: Option<Arc<SessionStats>>,
+		request_middleware: Option<Arc<dyn session::RequestMiddleware>>,
+		stats: Option<Arc<dyn SessionStats>>,
 		executor: UninitializedExecutor,
 		max_connections: usize,
 		max_payload_bytes: usize,
