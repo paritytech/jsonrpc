@@ -109,7 +109,7 @@ impl RpcEventLoop {
 		let handle = tb.spawn(move || {
 			let core_threads = match num_cpus::get_physical() {
 				1 => 1,
-				2...4 => 2,
+				2..=4 => 2,
 				_ => 3,
 			};
 

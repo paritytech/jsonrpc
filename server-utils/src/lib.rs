@@ -8,13 +8,10 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-extern crate globset;
-extern crate jsonrpc_core as core;
-extern crate bytes;
-extern crate num_cpus;
+use jsonrpc_core as core;
 
-pub extern crate tokio;
-pub extern crate tokio_codec;
+pub use tokio;
+pub use tokio_codec;
 
 pub mod cors;
 pub mod hosts;

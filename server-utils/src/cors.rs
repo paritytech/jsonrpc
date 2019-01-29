@@ -1,5 +1,5 @@
 //! CORS handling utility functions
-extern crate unicase;
+use unicase;
 
 use std::{fmt, ops};
 use crate::hosts::{Host, Port};
@@ -115,7 +115,7 @@ pub enum AccessControlAllowOrigin {
 }
 
 impl fmt::Display for AccessControlAllowOrigin {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", match *self {
 			AccessControlAllowOrigin::Any => "*",
 			AccessControlAllowOrigin::Null => "null",
