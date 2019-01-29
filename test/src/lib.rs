@@ -1,20 +1,18 @@
 //! An utility package to test jsonrpc-core based projects.
 //!
 //! ```
-//! #[macro_use]
-//! extern crate jsonrpc_macros;
-//!
-//! extern crate jsonrpc_core as core;
-//! extern crate jsonrpc_test as test;
+//! use jsonrpc_derive::rpc;
+//! use jsonrpc_core as core;
+//! use jsonrpc_test as test;
 //!
 //! use core::Result;
 //!
-//! build_rpc_trait! {
-//!   pub trait Test {
-//!     #[rpc(name = "rpc_some_method")]
+//! #[rpc]
+//! pub trait Test {
+//! 	#[rpc(name = "rpc_some_method")]
 //!	    fn some_method(&self, u64) -> Result<u64>;
-//!   }
 //! }
+//!
 //!
 //! struct Dummy;
 //! impl Test for Dummy {

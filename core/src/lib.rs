@@ -3,8 +3,6 @@
 //! Right now it supports only server side handling requests.
 //!
 //! ```rust
-//! extern crate jsonrpc_core;
-//!
 //! use jsonrpc_core::*;
 //! use jsonrpc_core::futures::Future;
 //!
