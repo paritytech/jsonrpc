@@ -5,12 +5,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use parking_lot::Mutex;
 
-use core::{self, BoxFuture};
-use core::futures::{self, future, Sink as FuturesSink, Future};
-use core::futures::sync::{mpsc, oneshot};
+use crate::core::{self, BoxFuture};
+use crate::core::futures::{self, future, Sink as FuturesSink, Future};
+use crate::core::futures::sync::{mpsc, oneshot};
 
-use handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
-use types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, SinkResult};
+use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
+use crate::types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, SinkResult};
 
 /// RPC client session
 /// Keeps track of active subscriptions and unsubscribes from them upon dropping.
@@ -300,11 +300,11 @@ impl<M, G> core::RpcMethod<M> for Unsubscribe<G> where
 mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
-	use core;
-	use core::RpcMethod;
-	use core::futures::{Async, Future, Stream};
-	use core::futures::sync::{mpsc, oneshot};
-	use types::{SubscriptionId, PubSubMetadata};
+	use crate::core;
+	use crate::core::RpcMethod;
+	use crate::core::futures::{Async, Future, Stream};
+	use crate::core::futures::sync::{mpsc, oneshot};
+	use crate::types::{SubscriptionId, PubSubMetadata};
 
 	use super::{Session, Sink, Subscriber, new_subscription};
 

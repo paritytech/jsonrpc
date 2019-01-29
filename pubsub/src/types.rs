@@ -1,8 +1,8 @@
 use std::sync::Arc;
-use core;
-use core::futures::sync::mpsc;
+use crate::core;
+use crate::core::futures::sync::mpsc;
 
-use subscription::Session;
+use crate::subscription::Session;
 
 /// Raw transport sink for specific client.
 pub type TransportSender = mpsc::Sender<String>;
@@ -78,7 +78,7 @@ impl From<SubscriptionId> for core::Value {
 
 #[cfg(test)]
 mod tests {
-	use core::Value;
+	use crate::core::Value;
 	use super::SubscriptionId;
 
 	#[test]

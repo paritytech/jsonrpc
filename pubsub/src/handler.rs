@@ -1,8 +1,8 @@
-use core;
-use core::futures::{Future, IntoFuture};
+use crate::core;
+use crate::core::futures::{Future, IntoFuture};
 
-use types::{PubSubMetadata, SubscriptionId};
-use subscription::{Subscriber, new_subscription};
+use crate::types::{PubSubMetadata, SubscriptionId};
+use crate::subscription::{Subscriber, new_subscription};
 
 /// Subscribe handler
 pub trait SubscribeRpcMethod<M: PubSubMetadata>: Send + Sync + 'static {
@@ -102,11 +102,11 @@ mod tests {
 	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
 
-	use core;
-	use core::futures::future;
-	use core::futures::sync::mpsc;
-	use subscription::{Session, Subscriber};
-	use types::{PubSubMetadata, SubscriptionId};
+	use crate::core;
+	use crate::core::futures::future;
+	use crate::core::futures::sync::mpsc;
+	use crate::subscription::{Session, Subscriber};
+	use crate::types::{PubSubMetadata, SubscriptionId};
 
 	use super::PubSubHandler;
 

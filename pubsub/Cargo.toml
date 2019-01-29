@@ -8,6 +8,7 @@ version = "10.0.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_pubsub/index.html"
+edition = "2018"
 
 [dependencies]
 log = "0.4"

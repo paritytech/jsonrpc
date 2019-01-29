@@ -3,11 +3,11 @@
 use std::marker::PhantomData;
 
 use serde;
-use subscription;
-use types::{SubscriptionId, TransportError, SinkResult};
+use crate::subscription;
+use crate::types::{SubscriptionId, TransportError, SinkResult};
 
-use core::Value;
-use core::futures::{self, Sink as FuturesSink, sync};
+use crate::core::Value;
+use crate::core::futures::{self, Sink as FuturesSink, sync};
 
 /// New PUB-SUB subscriber.
 #[derive(Debug)]
