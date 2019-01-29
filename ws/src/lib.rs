@@ -4,8 +4,6 @@
 
 use jsonrpc_server_utils as server_utils;
 
-
-
 pub use parity_ws as ws;
 pub use jsonrpc_core;
 

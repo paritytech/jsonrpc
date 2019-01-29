@@ -30,7 +30,6 @@ pub use jsonrpc_core;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
 
-
 mod dispatch;
 mod meta;
 mod server;

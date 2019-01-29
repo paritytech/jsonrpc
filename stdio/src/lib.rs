@@ -18,10 +18,7 @@
 
 #![warn(missing_docs)]
 
-
 use tokio;
-
-
 use tokio_stdin_stdout;
 #[macro_use] extern crate log;
 
