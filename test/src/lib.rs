@@ -49,8 +49,8 @@
 #[warn(missing_docs)]
 
 extern crate jsonrpc_core as rpc;
-extern crate serde;
-extern crate serde_json;
+use serde;
+use serde_json;
 
 use std::collections::HashMap;
 
