@@ -21,7 +21,7 @@ use crate::service::Service;
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	executor: reactor::UninitializedExecutor,
 	handler: Arc<MetaIoHandler<M, S>>,
-	meta_extractor: Arc<dyn MetaExtractor<M>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
 	channels: Arc<SenderChannels>,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,

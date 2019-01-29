@@ -50,8 +50,8 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 /// IPC server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
-	meta_extractor: Arc<dyn MetaExtractor<M>>,
-	session_stats: Option<Arc<dyn session::SessionStats>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
+	session_stats: Option<Arc<session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,

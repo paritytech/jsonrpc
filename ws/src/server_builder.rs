@@ -16,11 +16,11 @@ use crate::session;
 /// Builder for `WebSockets` server
 pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	handler: Arc<core::MetaIoHandler<M, S>>,
-	meta_extractor: Arc<dyn MetaExtractor<M>>,
+	meta_extractor: Arc<MetaExtractor<M>>,
 	allowed_origins: Option<Vec<Origin>>,
 	allowed_hosts: Option<Vec<Host>>,
-	request_middleware: Option<Arc<dyn session::RequestMiddleware>>,
-	session_stats: Option<Arc<dyn SessionStats>>,
+	request_middleware: Option<Arc<session::RequestMiddleware>>,
+	session_stats: Option<Arc<SessionStats>>,
 	executor: UninitializedExecutor,
 	max_connections: usize,
 	max_payload_bytes: usize,

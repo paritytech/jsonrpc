@@ -41,9 +41,9 @@ pub trait RpcNotification<T: Metadata>: Send + Sync + 'static {
 #[derive(Clone)]
 pub enum RemoteProcedure<T: Metadata> {
 	/// A method call
-	Method(Arc<dyn RpcMethod<T>>),
+	Method(Arc<RpcMethod<T>>),
 	/// A notification
-	Notification(Arc<dyn RpcNotification<T>>),
+	Notification(Arc<RpcNotification<T>>),
 	/// An alias to other method,
 	Alias(String),
 }

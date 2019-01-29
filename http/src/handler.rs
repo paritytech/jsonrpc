@@ -21,7 +21,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
 	cors_allowed_headers: cors::AccessControlAllowHeaders,
-	middleware: Arc<dyn RequestMiddleware>,
+	middleware: Arc<RequestMiddleware>,
 	rest_api: RestApi,
 	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
@@ -36,7 +36,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		cors_max_age: Option<u32>,
 		cors_allowed_headers: cors::AccessControlAllowHeaders,
 		allowed_hosts: AllowedHosts,
-		middleware: Arc<dyn RequestMiddleware>,
+		middleware: Arc<RequestMiddleware>,
 		rest_api: RestApi,
 		health_api: Option<(String, String)>,
 		max_request_body_size: usize,
@@ -112,7 +112,7 @@ impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
 pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Rpc(RpcHandler<M, S>),
 	Error(Option<Response>),
-	Middleware(Box<dyn Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>),
+	Middleware(Box<Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>),
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
