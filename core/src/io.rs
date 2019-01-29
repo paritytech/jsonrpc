@@ -5,10 +5,10 @@ use std::ops::{Deref, DerefMut};
 use serde_json;
 use futures::{self, future, Future};
 
-use calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
-use middleware::{self, Middleware};
-use types::{Error, ErrorCode, Version};
-use types::{Request, Response, Call, Output};
+use crate::calls::{RemoteProcedure, Metadata, RpcMethodSimple, RpcMethod, RpcNotificationSimple, RpcNotification};
+use crate::middleware::{self, Middleware};
+use crate::types::{Error, ErrorCode, Version};
+use crate::types::{Request, Response, Call, Output};
 
 /// A type representing middleware or RPC response before serialization.
 pub type FutureResponse = Box<Future<Item=Option<Response>, Error=()> + Send>;
@@ -372,7 +372,7 @@ fn write_response(response: Response) -> String {
 #[cfg(test)]
 mod tests {
 	use futures;
-	use types::{Value};
+	use crate::types::{Value};
 	use super::{IoHandler, Compatibility};
 
 	#[test]

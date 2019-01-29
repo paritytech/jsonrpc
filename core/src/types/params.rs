@@ -46,7 +46,7 @@ impl Params {
 mod tests {
 	use serde_json;
 	use super::Params;
-	use types::{Value, Error, ErrorCode};
+	use crate::types::{Value, Error, ErrorCode};
 
 	#[test]
 	fn params_deserialization() {

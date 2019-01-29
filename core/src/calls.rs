@@ -1,8 +1,8 @@
 use std::fmt;
 use std::sync::Arc;
-use types::{Params, Value, Error};
+use crate::types::{Params, Value, Error};
 use futures::{Future, IntoFuture};
-use BoxFuture;
+use crate::BoxFuture;
 
 /// Metadata trait
 pub trait Metadata: Clone + Send + 'static {}

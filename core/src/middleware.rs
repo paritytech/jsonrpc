@@ -1,7 +1,7 @@
 //! `IoHandler` middlewares
 
-use calls::Metadata;
-use types::{Request, Response, Call, Output};
+use crate::calls::Metadata;
+use crate::types::{Request, Response, Call, Output};
 use futures::{future::Either, Future};
 
 /// RPC middleware
