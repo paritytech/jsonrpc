@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use tokio;
 use num_cpus;
 
-use core::futures::{self, Future};
+use crate::core::futures::{self, Future};
 
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]

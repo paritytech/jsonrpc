@@ -24,11 +24,11 @@ mod matcher;
 mod stream_codec;
 mod suspendable_stream;
 
-pub use suspendable_stream::SuspendableStream;
-pub use matcher::Pattern;
+pub use crate::suspendable_stream::SuspendableStream;
+pub use crate::matcher::Pattern;
 
 /// Codecs utilities
 pub mod codecs {
-    pub use stream_codec::{StreamCodec, Separator};
+    pub use crate::stream_codec::{StreamCodec, Separator};
 }
 

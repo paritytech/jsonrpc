@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use matcher::{Matcher, Pattern};
+use crate::matcher::{Matcher, Pattern};
 
 const SPLIT_PROOF: &'static str = "split always returns non-empty iterator.";
 
