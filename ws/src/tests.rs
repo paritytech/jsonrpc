@@ -6,13 +6,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
-use core;
-use core::futures::Future;
-use server_utils::hosts::DomainsValidation;
-use ws;
+use crate::core;
+use crate::core::futures::Future;
+use crate::server_utils::hosts::DomainsValidation;
+use crate::ws;
 
-use server::Server;
-use server_builder::ServerBuilder;
+use crate::server::Server;
+use crate::server_builder::ServerBuilder;
 
 struct Response {
 	status: String,
@@ -62,7 +62,7 @@ fn request(server: Server, request: &str) -> Response {
 
 fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 	use std::time::Duration;
-	use core::futures::sync::oneshot;
+	use crate::core::futures::sync::oneshot;
 
 	let pending = Arc::new(AtomicUsize::new(0));
 
@@ -193,7 +193,7 @@ fn should_intercept_in_middleware() {
 
 #[test]
 fn drop_session_should_cancel() {
-	use ws::{connect, CloseCode};
+	use crate::ws::{connect, CloseCode};
 
 	// given
 	let (_server, incomplete) = serve(30005);
