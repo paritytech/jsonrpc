@@ -2,17 +2,15 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_server_utils as server_utils;
-extern crate parity_tokio_ipc;
-extern crate tokio_service;
-extern crate parking_lot;
+use jsonrpc_server_utils as server_utils;
+use tokio_service;
 
-pub extern crate jsonrpc_core;
+pub use jsonrpc_core;
 
 #[macro_use] extern crate log;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
-#[cfg(test)] extern crate env_logger;
+
 #[cfg(test)] mod logger;
 
 mod server;

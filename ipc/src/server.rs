@@ -50,8 +50,8 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 /// IPC server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
-	meta_extractor: Arc<MetaExtractor<M>>,
-	session_stats: Option<Arc<session::SessionStats>>,
+	meta_extractor: Arc<dyn MetaExtractor<M>>,
+	session_stats: Option<Arc<dyn session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
@@ -309,7 +309,7 @@ impl CloseHandle {
 #[cfg(test)]
 #[cfg(not(windows))]
 mod tests {
-	extern crate tokio_uds;
+	use tokio_uds;
 
 	use std::thread;
 	use std::sync::Arc;
@@ -528,7 +528,7 @@ mod tests {
 		}
 
 		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
-			fn extract(&self, _context: &RequestContext) -> Arc<SessionEndMeta> {
+			fn extract(&self, _context: &RequestContext<'_>) -> Arc<SessionEndMeta> {
 				let (signal, receiver) = oneshot::channel();
 				self.drop_receivers.lock().try_send(receiver).unwrap();
 				let meta = SessionEndMeta {
