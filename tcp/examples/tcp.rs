@@ -1,5 +1,5 @@
-extern crate jsonrpc_tcp_server;
-extern crate env_logger;
+
+use env_logger;
 use jsonrpc_tcp_server::ServerBuilder;
 use jsonrpc_tcp_server::jsonrpc_core::*;
 

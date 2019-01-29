@@ -22,16 +22,14 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_server_utils as server_utils;
-extern crate parking_lot;
-extern crate tokio_service;
+use jsonrpc_server_utils as server_utils;
 
-pub extern crate jsonrpc_core;
+pub use jsonrpc_core;
 
 #[macro_use] extern crate log;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
-#[cfg(test)] extern crate env_logger;
+
 
 mod dispatch;
 mod meta;
