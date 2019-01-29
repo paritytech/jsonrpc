@@ -2,15 +2,14 @@
 //!
 //! ```
 //! use jsonrpc_derive::rpc;
-//! use jsonrpc_core as core;
 //! use jsonrpc_test as test;
 //!
-//! use core::Result;
+//! use jsonrpc_core::{Result, Error, IoHandler};
 //!
 //! #[rpc]
 //! pub trait Test {
 //! 	#[rpc(name = "rpc_some_method")]
-//!	    fn some_method(&self, u64) -> Result<u64>;
+//!	    fn some_method(&self, _: u64) -> Result<u64>;
 //! }
 //!
 //!
@@ -30,9 +29,9 @@
 //!
 //!   // You can also test RPC created without macros:
 //!   let rpc = {
-//!     let mut io = core::IoHandler::new();
+//!     let mut io = IoHandler::new();
 //!     io.add_method("rpc_test_method", |_| {
-//!		  Err(core::Error::internal_error())
+//!		  Err(Error::internal_error())
 //!		});
 //!     test::Rpc::from(io)
 //!   };
