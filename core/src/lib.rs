@@ -25,9 +25,8 @@
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate serde_derive;
-extern crate serde;
 
-pub extern crate futures;
+pub use futures;
 
 #[doc(hidden)]
 pub extern crate serde_json;
@@ -40,7 +39,7 @@ pub mod types;
 pub mod delegates;
 
 /// A `Future` trait object.
-pub type BoxFuture<T> = Box<futures::Future<Item = T, Error = Error> + Send>;
+pub type BoxFuture<T> = Box<dyn futures::Future<Item = T, Error = Error> + Send>;
 
 /// A Result type.
 pub type Result<T> = ::std::result::Result<T, Error>;

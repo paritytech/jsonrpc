@@ -41,15 +41,15 @@ pub trait RpcNotification<T: Metadata>: Send + Sync + 'static {
 #[derive(Clone)]
 pub enum RemoteProcedure<T: Metadata> {
 	/// A method call
-	Method(Arc<RpcMethod<T>>),
+	Method(Arc<dyn RpcMethod<T>>),
 	/// A notification
-	Notification(Arc<RpcNotification<T>>),
+	Notification(Arc<dyn RpcNotification<T>>),
 	/// An alias to other method,
 	Alias(String),
 }
 
 impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
-	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
 		use self::RemoteProcedure::*;
 		match *self {
 			Method(..) => write!(fmt, "<method>"),

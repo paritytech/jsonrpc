@@ -32,7 +32,7 @@ struct VersionVisitor;
 impl<'a> Visitor<'a> for VersionVisitor {
 	type Value = Version;
 
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		formatter.write_str("a string")
 	}
 
