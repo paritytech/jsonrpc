@@ -15,8 +15,6 @@ jsonrpc-ipc-server = "10.0"
 `main.rs`
 
 ```rust
-extern crate jsonrpc_ipc_server;
-
 use jsonrpc_ipc_server::Server;
 use jsonrpc_ipc_server::jsonrpc_core::*;
 

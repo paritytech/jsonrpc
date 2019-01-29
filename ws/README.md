@@ -15,8 +15,6 @@ jsonrpc-ws-server = "10.0"
 `main.rs`
 
 ```rust
-extern crate jsonrpc_ws_server;
-
 use jsonrpc_ws_server::*;
 use jsonrpc_ws_server::jsonrpc_core::*;
 
