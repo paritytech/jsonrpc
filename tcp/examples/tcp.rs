@@ -1,4 +1,3 @@
-
 use env_logger;
 use jsonrpc_tcp_server::ServerBuilder;
 use jsonrpc_tcp_server::jsonrpc_core::*;

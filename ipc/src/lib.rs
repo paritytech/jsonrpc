@@ -3,7 +3,6 @@
 #![warn(missing_docs)]
 
 use jsonrpc_server_utils as server_utils;
-use tokio_service;
 
 pub use jsonrpc_core;
 
