@@ -3,10 +3,10 @@
 use std::sync::Arc;
 use std::collections::HashMap;
 
-use types::{Params, Value, Error};
-use calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use crate::types::{Params, Value, Error};
+use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 use futures::IntoFuture;
-use BoxFuture;
+use crate::BoxFuture;
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,

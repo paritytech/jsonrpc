@@ -15,8 +15,6 @@ jsonrpc-http-server = "10.0"
 `main.rs`
 
 ```rust
-extern crate jsonrpc_http_server;
-
 use jsonrpc_http_server::*;
 use jsonrpc_http_server::jsonrpc_core::*;
 

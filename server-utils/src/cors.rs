@@ -1,9 +1,9 @@
 //! CORS handling utility functions
-extern crate unicase;
+use unicase;
 
 use std::{fmt, ops};
-use hosts::{Host, Port};
-use matcher::{Matcher, Pattern};
+use crate::hosts::{Host, Port};
+use crate::matcher::{Matcher, Pattern};
 use std::collections::HashSet;
 pub use self::unicase::Ascii;
 
@@ -303,7 +303,7 @@ mod tests {
 	use std::iter;
 
 	use super::*;
-	use hosts::Host;
+	use crate::hosts::Host;
 
 	#[test]
 	fn should_parse_origin() {

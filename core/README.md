@@ -19,8 +19,6 @@ jsonrpc-core = "4.0"
 `main.rs`
 
 ```rust
-extern crate jsonrpc_core;
-
 use jsonrpc_core::*;
 
 fn main() {
@@ -41,8 +39,6 @@ fn main() {
 `main.rs`
 
 ```rust
-extern crate jsonrpc_core;
-
 use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
 

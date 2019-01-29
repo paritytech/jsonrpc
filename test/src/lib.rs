@@ -1,20 +1,17 @@
 //! An utility package to test jsonrpc-core based projects.
 //!
 //! ```
-//! #[macro_use]
-//! extern crate jsonrpc_macros;
+//! use jsonrpc_derive::rpc;
+//! use jsonrpc_test as test;
 //!
-//! extern crate jsonrpc_core as core;
-//! extern crate jsonrpc_test as test;
+//! use jsonrpc_core::{Result, Error, IoHandler};
 //!
-//! use core::Result;
-//!
-//! build_rpc_trait! {
-//!   pub trait Test {
-//!     #[rpc(name = "rpc_some_method")]
-//!	    fn some_method(&self, u64) -> Result<u64>;
-//!   }
+//! #[rpc]
+//! pub trait Test {
+//! 	#[rpc(name = "rpc_some_method")]
+//!	    fn some_method(&self, _: u64) -> Result<u64>;
 //! }
+//!
 //!
 //! struct Dummy;
 //! impl Test for Dummy {
@@ -32,9 +29,9 @@
 //!
 //!   // You can also test RPC created without macros:
 //!   let rpc = {
-//!     let mut io = core::IoHandler::new();
+//!     let mut io = IoHandler::new();
 //!     io.add_method("rpc_test_method", |_| {
-//!		  Err(core::Error::internal_error())
+//!		  Err(Error::internal_error())
 //!		});
 //!     test::Rpc::from(io)
 //!   };
@@ -49,8 +46,8 @@
 #[warn(missing_docs)]
 
 extern crate jsonrpc_core as rpc;
-extern crate serde;
-extern crate serde_json;
+use serde;
+use serde_json;
 
 use std::collections::HashMap;
 

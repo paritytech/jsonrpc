@@ -2,12 +2,10 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_server_utils as server_utils;
-extern crate parking_lot;
-extern crate slab;
+use jsonrpc_server_utils as server_utils;
 
-pub extern crate parity_ws as ws;
-pub extern crate jsonrpc_core;
+pub use parity_ws as ws;
+pub use jsonrpc_core;
 
 #[macro_use]
 extern crate error_chain;

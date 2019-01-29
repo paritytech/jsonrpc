@@ -1,4 +1,4 @@
-extern crate jsonrpc_ipc_server;
+use jsonrpc_ipc_server;
 
 use jsonrpc_ipc_server::jsonrpc_core::*;
 

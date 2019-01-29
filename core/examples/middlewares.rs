@@ -1,5 +1,3 @@
-extern crate jsonrpc_core;
-
 use std::time::Instant;
 use std::sync::atomic::{self, AtomicUsize};
 use jsonrpc_core::*;

@@ -3,10 +3,10 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Instant, Duration};
 
-use jsonrpc::{MetaIoHandler, Value, Metadata};
-use jsonrpc::futures::{self, Future, future};
+use crate::jsonrpc::{MetaIoHandler, Value, Metadata};
+use crate::jsonrpc::futures::{self, Future, future};
 
-use server_utils::tokio::{
+use crate::server_utils::tokio::{
 	timer::Delay,
 	net::TcpStream,
 	io::{self},
@@ -15,9 +15,9 @@ use server_utils::tokio::{
 
 use parking_lot::Mutex;
 
-use ServerBuilder;
-use MetaExtractor;
-use RequestContext;
+use crate::ServerBuilder;
+use crate::MetaExtractor;
+use crate::RequestContext;
 
 fn casual_server() -> ServerBuilder {
 	let mut io = MetaIoHandler::<()>::default();
@@ -29,7 +29,7 @@ fn casual_server() -> ServerBuilder {
 
 #[test]
 fn doc_test() {
-	::logger::init_log();
+	crate::logger::init_log();
 
 	let mut io = MetaIoHandler::<()>::default();
 	io.add_method("say_hello", |_params| {
@@ -44,7 +44,7 @@ fn doc_test() {
 
 #[test]
 fn doc_test_connect() {
-	::logger::init_log();
+	crate::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17775".parse().unwrap();
 	let server = casual_server();
 	let _server = server.start(&addr).expect("Server must run with no issues");
@@ -60,7 +60,7 @@ fn doc_test_connect() {
 
 #[test]
 fn disconnect() {
-	::logger::init_log();
+	crate::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17777".parse().unwrap();
 	let server = casual_server();
 	let dispatcher = server.dispatcher();
@@ -106,7 +106,7 @@ fn dummy_request_str(addr: &SocketAddr, data: Vec<u8>) -> String {
 
 #[test]
 fn doc_test_handle() {
-	::logger::init_log();
+	crate::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17780".parse().unwrap();
 
 	let server = casual_server();
@@ -128,7 +128,7 @@ fn doc_test_handle() {
 fn req_parallel() {
 	use std::thread;
 
-	::logger::init_log();
+	crate::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17782".parse().unwrap();
 	let server = casual_server();
 	let _server = server.start(&addr).expect("Server must run with no issues");
@@ -202,7 +202,7 @@ fn meta_server() -> ServerBuilder<SocketMetadata> {
 
 #[test]
 fn peer_meta() {
-	::logger::init_log();
+	crate::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17785".parse().unwrap();
 	let server = meta_server();
 	let _server = server.start(&addr).expect("Server must run with no issues");
@@ -236,7 +236,7 @@ impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
 #[test]
 fn message() {
 	// MASSIVE SETUP
-	::logger::init_log();
+	crate::logger::init_log();
 	let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
 	io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {

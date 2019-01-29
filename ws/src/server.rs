@@ -3,16 +3,16 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use core;
-use server_utils::cors::Origin;
-use server_utils::hosts::{self, Host};
-use server_utils::reactor::{UninitializedExecutor, Executor};
-use server_utils::session::SessionStats;
-use ws;
+use crate::core;
+use crate::server_utils::cors::Origin;
+use crate::server_utils::hosts::{self, Host};
+use crate::server_utils::reactor::{UninitializedExecutor, Executor};
+use crate::server_utils::session::SessionStats;
+use crate::ws;
 
-use error::{Error, Result};
-use metadata;
-use session;
+use crate::error::{Error, Result};
+use crate::metadata;
+use crate::session;
 
 /// `WebSockets` server implementation.
 pub struct Server {

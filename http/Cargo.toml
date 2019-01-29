@@ -8,6 +8,7 @@ version = "10.0.0"
 authors = ["debris <marek.kotewicz@gmail.com>"]
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_http_server/index.html"
+edition = "2018"
 
 [dependencies]
 hyper = "0.12"

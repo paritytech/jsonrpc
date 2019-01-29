@@ -3,15 +3,15 @@
 use std::marker::PhantomData;
 
 use serde;
-use subscription;
-use types::{SubscriptionId, TransportError, SinkResult};
+use crate::subscription;
+use crate::types::{SubscriptionId, TransportError, SinkResult};
 
-use core::Value;
-use core::futures::{self, Sink as FuturesSink, sync};
+use crate::core::{self, Value, Params, Error};
+use crate::core::futures::{self, Sink as FuturesSink, sync};
 
 /// New PUB-SUB subscriber.
 #[derive(Debug)]
-pub struct Subscriber<T, E = core::Error> {
+pub struct Subscriber<T, E = Error> {
 	subscriber: subscription::Subscriber,
 	_data: PhantomData<(T, E)>,
 }
@@ -28,7 +28,7 @@ impl<T, E> Subscriber<T, E> {
 	/// Create new subscriber for tests.
 	pub fn new_test<M: Into<String>>(method: M) -> (
 		Self,
-		sync::oneshot::Receiver<Result<SubscriptionId, core::Error>>,
+		sync::oneshot::Receiver<Result<SubscriptionId, Error>>,
 		sync::mpsc::Receiver<String>,
 	) {
 		let (subscriber, id, subscription) = subscription::Subscriber::new_test(method);
@@ -36,7 +36,7 @@ impl<T, E> Subscriber<T, E> {
 	}
 
 	/// Reject subscription with given error.
-	pub fn reject(self, error: core::Error) -> Result<(), ()> {
+	pub fn reject(self, error: Error) -> Result<(), ()> {
 		self.subscriber.reject(error)
 	}
 
@@ -56,10 +56,10 @@ impl<T, E> Subscriber<T, E> {
 
 /// Subscriber sink.
 #[derive(Debug, Clone)]
-pub struct Sink<T, E = core::Error> {
+pub struct Sink<T, E = Error> {
 	sink: subscription::Sink,
 	id: SubscriptionId,
-	buffered: Option<core::Params>,
+	buffered: Option<Params>,
 	_data: PhantomData<(T, E)>,
 }
 
@@ -73,12 +73,12 @@ impl<T: serde::Serialize, E: serde::Serialize> Sink<T, E> {
 		core::to_value(value).expect("Expected always-serializable type.")
 	}
 
-	fn val_to_params(&self, val: Result<T, E>) -> core::Params {
+	fn val_to_params(&self, val: Result<T, E>) -> Params {
 
 		let id = self.id.clone().into();
 		let val = val.map(Self::to_value).map_err(Self::to_value);
 
-		core::Params::Map(vec![
+		Params::Map(vec![
 			("subscription".to_owned(), id),
 			match val {
 				Ok(val) => ("result".to_owned(), val),

@@ -16,8 +16,6 @@ jsonrpc-stdio-server = "10.0"
 `main.rs`
 
 ```rust
-extern crate jsonrpc_stdio_server;
-
 use jsonrpc_stdio_server::server;
 use jsonrpc_stdio_server::jsonrpc_core::*;
 

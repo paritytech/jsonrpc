@@ -2,7 +2,7 @@
 
 use std::io;
 
-use ws;
+use crate::ws;
 
 error_chain! {
 	foreign_links {

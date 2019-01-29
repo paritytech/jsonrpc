@@ -15,8 +15,6 @@ jsonrpc-tcp-server = "10.0"
 `main.rs`
 
 ```rust
-extern crate jsonrpc_tcp_server;
-
 use jsonrpc_tcp_server::*;
 use jsonrpc_tcp_server::jsonrpc_core::*;
 

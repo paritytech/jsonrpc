@@ -1,4 +1,4 @@
-extern crate jsonrpc_core;
+use jsonrpc_core;
 
 use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};

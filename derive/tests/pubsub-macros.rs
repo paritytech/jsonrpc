@@ -1,6 +1,6 @@
-extern crate serde_json;
-extern crate jsonrpc_core;
-extern crate jsonrpc_pubsub;
+use serde_json;
+use jsonrpc_core;
+use jsonrpc_pubsub;
 #[macro_use]
 extern crate jsonrpc_derive;
 

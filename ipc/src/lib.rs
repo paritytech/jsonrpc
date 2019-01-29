@@ -2,17 +2,14 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_server_utils as server_utils;
-extern crate parity_tokio_ipc;
-extern crate tokio_service;
-extern crate parking_lot;
+use jsonrpc_server_utils as server_utils;
 
-pub extern crate jsonrpc_core;
+pub use jsonrpc_core;
 
 #[macro_use] extern crate log;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
-#[cfg(test)] extern crate env_logger;
+
 #[cfg(test)] mod logger;
 
 mod server;
@@ -21,8 +18,8 @@ mod meta;
 
 use jsonrpc_core as jsonrpc;
 
-pub use meta::{MetaExtractor, NoopExtractor, RequestContext};
-pub use server::{Server, ServerBuilder, CloseHandle,SecurityAttributes};
+pub use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
+pub use crate::server::{Server, ServerBuilder, CloseHandle,SecurityAttributes};
 
 pub use self::server_utils::{tokio, codecs::Separator};
 pub use self::server_utils::session::{SessionStats, SessionId};

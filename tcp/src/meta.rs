@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 
-use jsonrpc::futures::sync::mpsc;
-use jsonrpc::Metadata;
+use crate::jsonrpc::futures::sync::mpsc;
+use crate::jsonrpc::Metadata;
 
 /// Request context
 pub struct RequestContext {

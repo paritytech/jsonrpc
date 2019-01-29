@@ -1,7 +1,3 @@
-extern crate jsonrpc_core;
-extern crate jsonrpc_pubsub;
-extern crate jsonrpc_tcp_server;
-
 use std::{time, thread};
 use std::sync::Arc;
 

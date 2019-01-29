@@ -1,5 +1,5 @@
-use jsonrpc::futures::{Poll, Async};
-use jsonrpc::futures::stream::{Stream, Fuse};
+use crate::jsonrpc::futures::{Poll, Async};
+use crate::jsonrpc::futures::stream::{Stream, Fuse};
 
 pub trait SelectWithWeakExt: Stream {
 	fn select_with_weak<S>(self, other: S) -> SelectWithWeak<Self, S>

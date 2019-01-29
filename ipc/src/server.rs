@@ -4,19 +4,19 @@ use std;
 use std::sync::Arc;
 
 use tokio_service::{self, Service as TokioService};
-use jsonrpc::futures::{future, Future, Stream, Sink};
-use jsonrpc::futures::sync::{mpsc, oneshot};
-use jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
+use crate::jsonrpc::futures::{future, Future, Stream, Sink};
+use crate::jsonrpc::futures::sync::{mpsc, oneshot};
+use crate::jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
 
-use server_utils::{
+use crate::server_utils::{
 	tokio_codec::Framed,
 	tokio::{self, runtime::TaskExecutor, reactor::Handle},
 	reactor, session, codecs,
 };
 use parking_lot::Mutex;
 
-use meta::{MetaExtractor, NoopExtractor, RequestContext};
-use select_with_weak::SelectWithWeakExt;
+use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
+use crate::select_with_weak::SelectWithWeakExt;
 use parity_tokio_ipc::Endpoint;
 pub use parity_tokio_ipc::SecurityAttributes;
 
@@ -309,24 +309,24 @@ impl CloseHandle {
 #[cfg(test)]
 #[cfg(not(windows))]
 mod tests {
-	extern crate tokio_uds;
+	use tokio_uds;
 
 	use std::thread;
 	use std::sync::Arc;
 	use std::time;
 	use std::time::{Instant, Duration};
 	use super::{ServerBuilder, Server};
-	use jsonrpc::{MetaIoHandler, Value};
-	use jsonrpc::futures::{Future, future, Stream, Sink};
-	use jsonrpc::futures::sync::{mpsc, oneshot};
+	use crate::jsonrpc::{MetaIoHandler, Value};
+	use crate::jsonrpc::futures::{Future, future, Stream, Sink};
+	use crate::jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
 	use parking_lot::Mutex;
-	use server_utils::{
+	use crate::server_utils::{
 		tokio_codec::Decoder,
 		tokio::{self, timer::Delay}
 	};
-	use server_utils::codecs;
-	use meta::{MetaExtractor, RequestContext, NoopExtractor};
+	use crate::server_utils::codecs;
+	use crate::meta::{MetaExtractor, RequestContext, NoopExtractor};
 	use super::SecurityAttributes;
 
 	fn server_builder() -> ServerBuilder {
@@ -364,7 +364,7 @@ mod tests {
 
 	#[test]
 	fn start() {
-		::logger::init_log();
+		crate::logger::init_log();
 
 		let mut io = MetaIoHandler::<()>::default();
 		io.add_method("say_hello", |_params| {
@@ -378,7 +378,7 @@ mod tests {
 
 	#[test]
 	fn connect() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-30000";
 		let _server = run(path);
 
@@ -387,7 +387,7 @@ mod tests {
 
 	#[test]
 	fn request() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
 		let server = run(path);
 		let (stop_signal, stop_receiver) = oneshot::channel();
@@ -413,7 +413,7 @@ mod tests {
 
 	#[test]
 	fn req_parallel() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
 		let server = run(path);
 		let (stop_signal, stop_receiver) = mpsc::channel(400);
@@ -451,7 +451,7 @@ mod tests {
 
 	#[test]
 	fn close() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-50000";
 		let server = run(path);
 		server.close();
@@ -478,7 +478,7 @@ mod tests {
 
 	#[test]
 	fn test_huge_response() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-60000";
 
 		let mut io = MetaIoHandler::<()>::default();
@@ -538,7 +538,7 @@ mod tests {
 			}
 		}
 
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-30009";
 		let (signal, receiver) = mpsc::channel(16);
 		let session_metadata_extractor = SessionEndExtractor {
@@ -561,7 +561,7 @@ mod tests {
 
 	#[test]
 	fn close_handle() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-90000";
 		let server = run(path);
 		let handle = server.close_handle();
@@ -571,7 +571,7 @@ mod tests {
 
 	#[test]
 	fn close_when_waiting() {
-		::logger::init_log();
+		crate::logger::init_log();
 		let path = "/tmp/test-ipc-70000";
 		let server = run(path);
 		let close_handle = server.close_handle();

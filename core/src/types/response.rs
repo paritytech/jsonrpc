@@ -1,6 +1,6 @@
 //! jsonrpc response
 use super::{Id, Value, Error, ErrorCode, Version};
-use {Result as CoreResult};
+use crate::{Result as CoreResult};
 
 /// Successful response
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]

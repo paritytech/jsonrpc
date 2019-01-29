@@ -1,4 +1,4 @@
-extern crate jsonrpc_core;
+use jsonrpc_core;
 
 use std::str::Lines;
 use std::net::TcpStream;

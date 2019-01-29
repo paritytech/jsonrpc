@@ -1,9 +1,6 @@
 //! jsonrpc server over tcp/ip
 //!
 //! ```no_run
-//! extern crate jsonrpc_core;
-//! extern crate jsonrpc_tcp_server;
-//!
 //! use jsonrpc_core::*;
 //! use jsonrpc_tcp_server::ServerBuilder;
 //!
@@ -22,16 +19,13 @@
 
 #![warn(missing_docs)]
 
-extern crate jsonrpc_server_utils as server_utils;
-extern crate parking_lot;
-extern crate tokio_service;
+use jsonrpc_server_utils as server_utils;
 
-pub extern crate jsonrpc_core;
+pub use jsonrpc_core;
 
 #[macro_use] extern crate log;
 
 #[cfg(test)] #[macro_use] extern crate lazy_static;
-#[cfg(test)] extern crate env_logger;
 
 mod dispatch;
 mod meta;
@@ -43,7 +37,7 @@ mod service;
 
 use jsonrpc_core as jsonrpc;
 
-pub use dispatch::{Dispatcher, PushMessageError};
-pub use meta::{MetaExtractor, RequestContext};
-pub use server::{ServerBuilder, Server};
+pub use crate::dispatch::{Dispatcher, PushMessageError};
+pub use crate::meta::{MetaExtractor, RequestContext};
+pub use crate::server::{ServerBuilder, Server};
 pub use self::server_utils::{tokio, codecs::Separator};
