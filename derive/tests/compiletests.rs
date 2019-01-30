@@ -9,7 +9,6 @@ fn run_mode(mode: &'static str) {
 	config.src_base = PathBuf::from(format!("tests/{}", mode));
 	config.target_rustcflags = Some(String::from(
 		"\
-			--edition=2018 \
 			-L ../target/debug/ \
 			-L ../target/debug/deps/ \
 	"));
