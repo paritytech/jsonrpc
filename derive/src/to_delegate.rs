@@ -336,12 +336,14 @@ fn is_option_type(ty: &syn::Type) -> bool {
 }
 
 fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -> Vec<syn::WherePredicate> {
+	#[derive(Default)]
 	struct FindTyParams {
 		trait_generics: HashSet<syn::Ident>,
 		serialize_type_params: HashSet<syn::Ident>,
 		deserialize_type_params: HashSet<syn::Ident>,
 		visiting_return_type: bool,
 		visiting_fn_arg: bool,
+		visiting_subscriber_arg: bool,
 	}
 	impl<'ast> Visit<'ast> for FindTyParams {
 		fn visit_type_param(&mut self, ty_param: &'ast syn::TypeParam) {
@@ -356,10 +358,14 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 			if self.visiting_return_type && self.trait_generics.contains(&segment.ident) {
 				self.serialize_type_params.insert(segment.ident.clone());
 			}
-			if self.visiting_fn_arg && self.trait_generics.contains(&segment.ident) {
+			if self.visiting_fn_arg &&
+				self.trait_generics.contains(&segment.ident) &&
+				!self.visiting_subscriber_arg {
 				self.deserialize_type_params.insert(segment.ident.clone());
 			}
-			visit::visit_path_segment(self, segment)
+			self.visiting_subscriber_arg = self.visiting_fn_arg && segment.ident == SUBCRIBER_TYPE_IDENT;
+			visit::visit_path_segment(self, segment);
+			self.visiting_subscriber_arg = false;
 		}
 		fn visit_fn_arg(&mut self, arg: &'ast syn::FnArg) {
 			self.visiting_fn_arg = true;
@@ -367,13 +373,7 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 			self.visiting_fn_arg = false;
 		}
 	}
-	let mut visitor = FindTyParams {
-		visiting_return_type: false,
-		visiting_fn_arg: false,
-		trait_generics: HashSet::new(),
-		serialize_type_params: HashSet::new(),
-		deserialize_type_params: HashSet::new(),
-	};
+	let mut visitor = FindTyParams::default();
 	visitor.visit_item_trait(item_trait);
 
 	item_trait.generics
