@@ -1,13 +1,13 @@
 [package]
-name = "jsonrpc-ws-server"
+authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebSockets server for JSON-RPC"
-version = "10.0.0"
-authors = ["tomusdrw <tomasz@parity.io>"]
-license = "MIT"
-homepage = "https://github.com/paritytech/jsonrpc"
-repository = "https://github.com/paritytech/jsonrpc"
-documentation = "https://paritytech.github.io/jsonrpc/json_ws_server/index.html"
+documentation = "https://docs.rs/jsonrpc-ws-server/"
 edition = "2018"
+homepage = "https://github.com/paritytech/jsonrpc"
+license = "MIT"
+name = "jsonrpc-ws-server"
+repository = "https://github.com/paritytech/jsonrpc"
+version = "10.0.1"
 
 [dependencies]
 error-chain = "0.12"
