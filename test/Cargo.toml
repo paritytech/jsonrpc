@@ -1,12 +1,11 @@
 [package]
 name = "jsonrpc-test"
 description = "Simple test framework for JSON-RPC."
-version = "10.0.0"
+version = "10.0.1"
 authors = ["Tomasz Drwięga <tomasz@parity.io>"]
 license = "MIT"
 homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
-documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_test/index.html"
 documentation = "https://docs.rs/jsonrpc-test/"
 edition = "2018"
 

@@ -7,7 +7,7 @@ homepage = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-stdio-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "10.0.0"
+version = "10.0.1"
 
 [dependencies]
 futures = "0.1.23"
