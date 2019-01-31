@@ -1,13 +1,13 @@
 [package]
-name = "jsonrpc-stdio-server"
+authors = ["Parity Technologies <admin@parity.io>"]
 description = "STDIN/STDOUT server for JSON-RPC"
-version = "10.0.0"
-authors = ["cmichi <mich@elmueller.net>"]
-license = "MIT"
-homepage = "https://github.com/paritytech/jsonrpc"
-repository = "https://github.com/paritytech/jsonrpc"
-documentation = "https://paritytech.github.io/jsonrpc/jsonrpc_stdio_server/index.html"
+documentation = "https://docs.rs/jsonrpc-stdio-server/"
 edition = "2018"
+homepage = "https://github.com/paritytech/jsonrpc"
+license = "MIT"
+name = "jsonrpc-stdio-server"
+repository = "https://github.com/paritytech/jsonrpc"
+version = "10.0.0"
 
 [dependencies]
 futures = "0.1.23"

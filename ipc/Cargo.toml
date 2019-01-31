@@ -1,13 +1,13 @@
 [package]
-name = "jsonrpc-ipc-server"
+authors = ["Parity Technologies <admin@parity.io>"]
 description = "IPC server for JSON-RPC"
-version = "10.0.0"
-authors = ["Nikolay Volf <nikvolf@gmail.com>"]
-license = "MIT"
-homepage = "https://github.com/paritytech/jsonrpc"
-repository = "https://github.com/paritytech/jsonrpc"
-documentation = "https://paritytech.github.io/jsonrpc/json_ipc_server/index.html"
+documentation = "https://docs.rs/jsonrpc-ipc-server/"
 edition = "2018"
+homepage = "https://github.com/paritytech/jsonrpc"
+license = "MIT"
+name = "jsonrpc-ipc-server"
+repository = "https://github.com/paritytech/jsonrpc"
+version = "10.0.0"
 
 [dependencies]
 log = "0.4"
