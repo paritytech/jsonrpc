@@ -23,7 +23,7 @@ pub trait Rpc {
 	type Metadata;
 
 	/// Hello subscription
-	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_sub"))]
+	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_alias"))]
 	fn subscribe(&self, _: Self::Metadata, _: Subscriber<String>, _: u32, _: Option<u64>);
 
 	/// Unsubscribe from hello subscription.
@@ -87,3 +87,25 @@ fn test_invalid_trailing_pubsub_params() {
 	let result: jsonrpc_core::Response = serde_json::from_str(&res.unwrap()).unwrap();
 	assert_eq!(expected, result);
 }
+
+#[test]
+fn test_subscribe_with_alias() {
+	let mut io = PubSubHandler::default();
+	let rpc = RpcImpl::default();
+	io.extend_with(rpc.to_delegate());
+
+	// when
+	let meta = Metadata;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_alias","params":[1]}"#;
+	let res = io.handle_request_sync(req, meta);
+	let expected = r#"{
+		"jsonrpc": "2.0",
+		"result": 5,
+		"id": 1
+	}"#;
+
+	let expected: jsonrpc_core::Response = serde_json::from_str(expected).unwrap();
+	let result: jsonrpc_core::Response = serde_json::from_str(&res.unwrap()).unwrap();
+	assert_eq!(expected, result);
+}
+
