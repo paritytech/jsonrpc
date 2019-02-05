@@ -21,7 +21,7 @@ pub enum PubSubMethodKind {
 const RPC_ATTR_NAME: &'static str = "rpc";
 const RPC_NAME_KEY: &'static str = "name";
 const SUBSCRIPTION_NAME_KEY: &'static str = "subscription";
-const ALIASES_KEY: &'static str = "aliases";
+const ALIASES_KEY: &'static str = "alias";
 const PUB_SUB_ATTR_NAME: &'static str = "pubsub";
 const METADATA_META_WORD: &'static str = "meta";
 const SUBSCRIBE_META_WORD: &'static str = "subscribe";

@@ -22,7 +22,7 @@ pub trait Rpc {
 	fn neg(&self, _: i64) -> Result<i64>;
 
 	/// Adds two numbers and returns a result
-	#[rpc(name = "add")]
+	#[rpc(name = "add", alias("add_alias1", "add_alias2"))]
 	fn add(&self, _: u64, _: u64) -> Result<u64>;
 }
 
@@ -114,3 +114,33 @@ fn should_accept_multiple_params() {
 		"id": 1
 	}"#).unwrap());
 }
+
+#[test]
+fn should_use_method_name_aliases() {
+	let mut io = IoHandler::new();
+	let rpc = RpcImpl::default();
+	io.extend_with(rpc.to_delegate());
+
+	// when
+	let req1 = r#"{"jsonrpc":"2.0","id":1,"method":"add_alias1","params":[1, 2]}"#;
+	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"add_alias2","params":[1, 2]}"#;
+
+	let res1 = io.handle_request_sync(req1);
+	let res2 = io.handle_request_sync(req2);
+
+	// then
+	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
+	assert_eq!(result1, serde_json::from_str(r#"{
+		"jsonrpc": "2.0",
+		"result": 3,
+		"id": 1
+	}"#).unwrap());
+
+	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
+	assert_eq!(result2, serde_json::from_str(r#"{
+		"jsonrpc": "2.0",
+		"result": 3,
+		"id": 1
+	}"#).unwrap());
+}
+
