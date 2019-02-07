@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use quote::quote;
 use syn::{
 	parse_quote, Token, punctuated::Punctuated,
-	fold::{self, Fold},
+	fold::{self, Fold}, Result,
 };
 use crate::rpc_attr::{RpcMethodAttribute, PubSubMethodKind, AttributeKind};
 use crate::to_delegate::{RpcMethod, MethodRegistration, generate_trait_item_method};
@@ -18,8 +18,6 @@ const MISSING_UNSUBSCRIBE_METHOD_ERR: &'static str =
 	e.g. `#[pubsub(subscription = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
 
 const RPC_MOD_NAME_PREFIX: &'static str = "rpc_impl_";
-
-type Result<T> = std::result::Result<T, String>;
 
 struct RpcTrait {
 	has_pubsub_methods: bool,
@@ -67,7 +65,7 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 							method.clone(),
 						))),
 					Ok(None) => None, // non rpc annotated trait method
-					Err(err) => Some(Err(err)),
+					Err(err) => Some(Err(syn::Error::new_spanned(method, err))),
 				}
 			} else {
 				None
@@ -98,14 +96,16 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 						if sub.is_none() {
 							*sub = Some(method.clone())
 						} else {
-							return Err(format!("Subscription '{}' has more than one subscribe method", subscription_name))
+							return Err(syn::Error::new_spanned(&method.trait_item,
+								format!("Subscription '{}' subscribe method is already defined", subscription_name)))
 						}
 					},
 					PubSubMethodKind::Unsubscribe => {
 						if unsub.is_none() {
 							*unsub = Some(method.clone())
 						} else {
-							return Err(format!("Subscription '{}' has more than one unsubscribe method", subscription_name))
+							return Err(syn::Error::new_spanned(&method.trait_item,
+								format!("Subscription '{}' unsubscribe method is already defined", subscription_name)))
 						}
 					},
 				}
@@ -121,8 +121,10 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 					subscribe: subscribe.clone(),
 					unsubscribe: unsubscribe.clone()
 				}),
-			(Some(_), None) => return Err(format!("subscription '{}'. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR)),
-			(None, Some(_)) => return Err(format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR)),
+			(Some(method), None) => return Err(syn::Error::new_spanned(&method.trait_item,
+				format!("subscription '{}'. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR))),
+			(None, Some(method)) => return Err(syn::Error::new_spanned(&method.trait_item,
+				format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR))),
 			(None, None) => unreachable!(),
 		}
 	}
@@ -147,7 +149,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
-		_ => return Err("rpc_api trait only works with trait declarations".into())
+		item @ _ => return Err(syn::Error::new_spanned(item, "rpc_api trait only works with trait declarations")),
 	};
 
 	let rpc_trait = generate_rpc_item_trait(&rpc_trait)?;
