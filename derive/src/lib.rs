@@ -144,10 +144,8 @@ mod to_delegate;
 pub fn rpc(_args: TokenStream, input: TokenStream) -> TokenStream {
 	let input_toks = parse_macro_input!(input as syn::Item);
 
-	let output = match rpc_trait::rpc_impl( input_toks) {
-		Ok(output) => output,
-		Err(err) => panic!("[rpc] encountered error: {}", err),
-	};
-
-	output.into()
+	match rpc_trait::rpc_impl( input_toks) {
+		Ok(output) => output.into(),
+		Err(err) => err.to_compile_error().into(),
+	}
 }
