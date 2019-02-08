@@ -53,7 +53,7 @@ impl<'a> Fold for RpcTrait {
 	}
 }
 
-fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait> {
+fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrait, bool)> {
 	let methods_result: Result<Vec<_>> = item_trait.items
 		.iter()
 		.filter_map(|trait_item| {
@@ -137,7 +137,7 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<syn::ItemTrait
 		parse_quote!(Sized + Send + Sync + 'static);
 	item_trait.supertraits.extend(trait_bounds);
 
-	Ok(item_trait)
+	Ok((item_trait, has_pubsub_methods))
 }
 
 fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
@@ -152,15 +152,22 @@ pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 		item @ _ => return Err(syn::Error::new_spanned(item, "The #[rpc] custom attribute only works with trait declarations")),
 	};
 
-	let rpc_trait = generate_rpc_item_trait(&rpc_trait)?;
+	let (rpc_trait, has_pubsub_methods) = generate_rpc_item_trait(&rpc_trait)?;
 
 	let name = rpc_trait.ident.clone();
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
 
+	let optional_pubsub_import =
+		if has_pubsub_methods {
+			quote!(use jsonrpc_pubsub as _jsonrpc_pubsub;)
+		} else {
+			quote!()
+		};
+
 	Ok(quote! {
 		mod #mod_name_ident {
 			use jsonrpc_core as _jsonrpc_core;
-			use jsonrpc_pubsub as _jsonrpc_pubsub;
+			#optional_pubsub_import
 			use serde as _serde;
 			use super::*;
 			use self::_jsonrpc_core::futures as _futures;
