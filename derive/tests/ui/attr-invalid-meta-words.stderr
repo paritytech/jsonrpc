@@ -1,0 +1,11 @@
+error: Invalid attribute parameter(s): 'Xmeta'. Expected 'meta'
+  --> $DIR/attr-invalid-meta-words.rs:10:2
+   |
+10 |       /// Returns a protocol version
+   |  _____^
+11 | |     #[rpc(name = "protocolVersion", Xmeta)]
+12 | |     fn protocol_version(&self) -> Result<String>;
+   | |_________________________________________________^
+
+error: aborting due to previous error
+

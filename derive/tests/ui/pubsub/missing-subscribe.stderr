@@ -4,8 +4,8 @@ error: subscription 'hello'. Can't find subscribe method, expected a method anno
 12 |       /// Unsubscribe from hello subscription.
    |  _____^
 13 | |     #[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
-14 | |     fn unsubscribe(&self, Option<Self::Metadata>, SubscriptionId) -> Result<bool>;
-   | |__________________________________________________________________________________^
+14 | |     fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
+   | |________________________________________________________________________________________^
 
 error: aborting due to previous error
 

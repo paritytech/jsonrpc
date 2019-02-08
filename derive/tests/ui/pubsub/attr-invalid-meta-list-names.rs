@@ -8,7 +8,7 @@ pub trait Rpc {
 	type Metadata;
 
 	/// Hello subscription
-	#[pubsub(Xsubscription = "hello", subscribe, Xname = "hello_subscribe", alias("hello_sub"))]
+	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", Xalias("hello_sub"))]
 	fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
 
 	/// Unsubscribe from hello subscription.

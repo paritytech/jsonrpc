@@ -9,7 +9,7 @@ pub trait Rpc {
 
 	/// Hello subscription
 	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_sub"))]
-	fn subscribe(&self, Self::Metadata, typed::Subscriber<String>, u64);
+	fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
 
 	// note that the unsubscribe method is missing
 }

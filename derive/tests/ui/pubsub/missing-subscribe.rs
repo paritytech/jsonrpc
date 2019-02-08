@@ -11,7 +11,7 @@ pub trait Rpc {
 
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
-	fn unsubscribe(&self, Option<Self::Metadata>, SubscriptionId) -> Result<bool>;
+	fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
 }
 
 fn main() {}
