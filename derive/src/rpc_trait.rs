@@ -149,7 +149,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
-		item @ _ => return Err(syn::Error::new_spanned(item, "rpc_api trait only works with trait declarations")),
+		item @ _ => return Err(syn::Error::new_spanned(item, "The #[rpc] custom attribute only works with trait declarations")),
 	};
 
 	let rpc_trait = generate_rpc_item_trait(&rpc_trait)?;
