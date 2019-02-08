@@ -36,7 +36,7 @@ use util::{invalid_params, expect_no_params, to_value};
 /// `fn foo(&self, Param1, Param2, Param3) -> BoxFuture<Out>;
 ///
 /// Asynchronous RPC functions with metadata must come in this form:
-/// `fn foo(&self, _: Self::Metadata, Param1, Param2, Param3) -> BoxFuture<Out>;
+/// `fn foo(&self, Self::Metadata, Param1, Param2, Param3) -> BoxFuture<Out>;
 ///
 /// Anything else will be rejected by the code generator.
 ///
@@ -46,9 +46,9 @@ use util::{invalid_params, expect_no_params, to_value};
 /// ```rust,ignore
 ///	#[pubsub(name = "hello")] {
 ///	  #[rpc(name = "hello_subscribe")]
-///	  fn subscribe(&self, _: Self::Metadata, pubsub::Subscriber<String>, u64);
+///	  fn subscribe(&self, Self::Metadata, pubsub::Subscriber<String>, u64);
 ///	  #[rpc(name = "hello_unsubscribe")]
-///	  fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
+///	  fn unsubscribe(&self, Option<Self::Metadata>, SubscriptionId) -> Result<bool>;
 ///	}
 ///	```
 ///
@@ -241,7 +241,7 @@ macro_rules! build_rpc_trait {
 
 	( WRAP $del: expr =>
 		(meta, name = $name: expr $(, alias = [ $( $alias: expr, )+ ])*)
-		fn $method: ident (&self, _: Self::Metadata $(, $param: ty)*) -> $result: tt <$out: ty $(, $error: ty)* >
+		fn $method: ident (&self, Self::Metadata $(, $param: ty)*) -> $result: tt <$out: ty $(, $error: ty)* >
 	) => {
 		$del.add_method_with_meta($name, move |base, params, meta| {
 			$crate::WrapMeta::wrap_rpc(&(Self::$method as fn(&_, Self::Metadata $(, $param)*) -> $result <$out $(, $error)* >), base, params, meta)
@@ -256,7 +256,7 @@ macro_rules! build_rpc_trait {
 	( WRAP $del: expr =>
 		pubsub: (name = $name: expr)
 		subscribe: (name = $subscribe: expr $(, alias = [ $( $sub_alias: expr, )+ ])*)
-		fn $sub_method: ident (&self, _: Self::Metadata $(, $sub_p: ty)+);
+		fn $sub_method: ident (&self, Self::Metadata $(, $sub_p: ty)+);
 		unsubscribe: (name = $unsubscribe: expr $(, alias = [ $( $unsub_alias: expr, )+ ])*)
 		fn $unsub_method: ident (&self, Option < Self::Metadata > $(, $unsub_p: ty)+) -> $result: tt <$out: ty $(, $error_unsub: ty)* >;
 	) => {
