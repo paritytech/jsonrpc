@@ -1,3 +1,5 @@
+use syn::{Error, Result};
+
 #[derive(Clone, Debug)]
 pub struct RpcMethodAttribute {
 	pub attr: syn::Attribute,
@@ -27,23 +29,28 @@ const METADATA_META_WORD: &'static str = "meta";
 const SUBSCRIBE_META_WORD: &'static str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &'static str = "unsubscribe";
 
+const MULTIPLE_RPC_ATTRIBUTES_ERR: &'static str = "Expected only a single rpc attribute per method";
+const MISSING_NAME_ERR: &'static str = "rpc attribute should have a name e.g. `name = \"method_name\"`";
+const MISSING_SUB_NAME_ERR: &'static str = "pubsub attribute should have a subscription name";
+const BOTH_SUB_AND_UNSUB_ERR: &'static str = "pubsub attribute annotated with both subscribe and unsubscribe";
+const NEITHER_SUB_OR_UNSUB_ERR: &'static str = "pubsub attribute not annotated with either subscribe or unsubscribe";
+
 impl RpcMethodAttribute {
-	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>, String> {
+	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>> {
 		let attrs = method.attrs
 			.iter()
 			.filter_map(Self::parse_meta)
-			.collect::<Result<Vec<_>, _>>()?;
+			.collect::<Result<Vec<_>>>()?;
 
 		if attrs.len() <= 1 {
 			Ok(attrs.first().cloned())
 		} else {
-			Err(format!("Expected only a single rpc attribute per method. Found {}", attrs.len()))
+			Err(Error::new_spanned(method, MULTIPLE_RPC_ATTRIBUTES_ERR))
 		}
 	}
 
-	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute, String>> {
-		let parse_result = attr.parse_meta()
-			.map_err(|err| format!("Error parsing attribute: {}", err));
+	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute>> {
+		let parse_result = attr.parse_meta();
 		match parse_result {
 			Ok(ref meta) => {
 				let attr_kind =
@@ -60,7 +67,7 @@ impl RpcMethodAttribute {
 					get_meta_list(meta)
 						.and_then(|ml| get_name_value(RPC_NAME_KEY, ml))
 						.map_or(
-							Err("rpc attribute should have a name e.g. `name = \"method_name\"`".into()),
+							Err(Error::new_spanned(attr,MISSING_NAME_ERR)),
 							|name| {
 								let aliases = get_meta_list(meta)
 									.map_or(Vec::new(), |ml| get_aliases(ml));
@@ -77,14 +84,14 @@ impl RpcMethodAttribute {
 		}
 	}
 
-	fn parse_pubsub(meta: &syn::Meta) -> Result<AttributeKind, String> {
+	fn parse_pubsub(meta: &syn::Meta) -> Result<AttributeKind> {
 		let name_and_list = get_meta_list(meta)
 			.and_then(|ml|
 				get_name_value(SUBSCRIPTION_NAME_KEY, ml).map(|name| (name, ml))
 			);
 
 		name_and_list.map_or(
-			Err("pubsub attribute should have a subscription name".into()),
+			Err(Error::new_spanned(meta, MISSING_SUB_NAME_ERR)),
 			|(sub_name, ml)| {
 				let is_subscribe = has_meta_word(SUBSCRIBE_META_WORD, ml);
 				let is_unsubscribe = has_meta_word(UNSUBSCRIBE_META_WORD, ml);
@@ -94,9 +101,9 @@ impl RpcMethodAttribute {
 					(false, true) =>
 						Ok(PubSubMethodKind::Unsubscribe),
 					(true, true) =>
-						Err(format!("pubsub attribute for subscription '{}' annotated with both subscribe and unsubscribe", sub_name)),
+						Err(Error::new_spanned(meta, BOTH_SUB_AND_UNSUB_ERR)),
 					(false, false) =>
-						Err(format!("pubsub attribute for subscription '{}' not annotated with either subscribe or unsubscribe", sub_name)),
+						Err(Error::new_spanned(meta,NEITHER_SUB_OR_UNSUB_ERR)),
 				};
 				kind.map(|kind| AttributeKind::PubSub {
 					subscription_name: sub_name.into(),
