@@ -67,7 +67,7 @@ impl RpcMethodAttribute {
 					get_meta_list(meta)
 						.and_then(|ml| get_name_value(RPC_NAME_KEY, ml))
 						.map_or(
-							Err(Error::new_spanned(attr,MISSING_NAME_ERR)),
+							Err(Error::new_spanned(attr, MISSING_NAME_ERR)),
 							|name| {
 								let aliases = get_meta_list(meta)
 									.map_or(Vec::new(), |ml| get_aliases(ml));
@@ -103,7 +103,7 @@ impl RpcMethodAttribute {
 					(true, true) =>
 						Err(Error::new_spanned(meta, BOTH_SUB_AND_UNSUB_ERR)),
 					(false, false) =>
-						Err(Error::new_spanned(meta,NEITHER_SUB_OR_UNSUB_ERR)),
+						Err(Error::new_spanned(meta, NEITHER_SUB_OR_UNSUB_ERR)),
 				};
 				kind.map(|kind| AttributeKind::PubSub {
 					subscription_name: sub_name.into(),
@@ -141,7 +141,6 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 
 	let mut visitor = Visitor::default();
 	visit::visit_meta(&mut visitor, &meta);
-
 
 	match meta.name().to_string().as_ref() {
 		RPC_ATTR_NAME => {
