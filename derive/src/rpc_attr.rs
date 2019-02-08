@@ -1,4 +1,4 @@
-use syn::{Error, Result};
+use syn::{Error, Result, visit::{self, Visit}};
 
 #[derive(Clone, Debug)]
 pub struct RpcMethodAttribute {
@@ -30,6 +30,7 @@ const SUBSCRIBE_META_WORD: &'static str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &'static str = "unsubscribe";
 
 const MULTIPLE_RPC_ATTRIBUTES_ERR: &'static str = "Expected only a single rpc attribute per method";
+const INVALID_ATTR_PARAM_NAMES_ERR: &'static str = "Invalid attribute parameter(s):";
 const MISSING_NAME_ERR: &'static str = "rpc attribute should have a name e.g. `name = \"method_name\"`";
 const MISSING_SUB_NAME_ERR: &'static str = "pubsub attribute should have a subscription name";
 const BOTH_SUB_AND_UNSUB_ERR: &'static str = "pubsub attribute annotated with both subscribe and unsubscribe";
@@ -50,8 +51,7 @@ impl RpcMethodAttribute {
 	}
 
 	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute>> {
-		let parse_result = attr.parse_meta();
-		match parse_result {
+		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
 				let attr_kind =
 					match meta.name().to_string().as_ref() {
@@ -117,6 +117,59 @@ impl RpcMethodAttribute {
 			AttributeKind::PubSub { .. } => true,
 			AttributeKind::Rpc { .. } => false,
 		}
+	}
+}
+
+fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
+	#[derive(Default)]
+	struct Visitor {
+		meta_words: Vec<String>,
+		name_value_names: Vec<String>,
+		meta_list_names: Vec<String>,
+	}
+	impl<'a> Visit<'a> for Visitor {
+		fn visit_meta(&mut self, meta: &syn::Meta) {
+			match meta {
+				syn::Meta::List(list) => {
+					self.meta_list_names.push(list.ident.to_string())
+				},
+				syn::Meta::Word(ident) => self.meta_words.push(ident.to_string()),
+				syn::Meta::NameValue(nv) => self.name_value_names.push(nv.ident.to_string())
+			}
+		}
+	}
+
+	let mut visitor = Visitor::default();
+	visit::visit_meta(&mut visitor, &meta);
+
+
+	match meta.name().to_string().as_ref() {
+		RPC_ATTR_NAME => {
+			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD])?;
+			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY])?;
+			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
+		},
+		PUB_SUB_ATTR_NAME => {
+			validate_idents(&meta, &visitor.meta_words, &[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD])?;
+			validate_idents(&meta, &visitor.name_value_names, &[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY])?;
+			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
+		},
+		_ => Ok(meta), // ignore other attributes - compiler will catch unknown ones
+	}
+}
+
+fn validate_idents(meta: &syn::Meta, attr_idents: &[String], valid: &[&str]) -> Result<syn::Meta> {
+	let invalid_meta_words: Vec<_> = attr_idents
+		.iter()
+		.cloned()
+		.filter(|w| !valid.iter().any(|v| v == w))
+		.collect();
+	if !invalid_meta_words.is_empty() {
+		let expected = format!("Expected '{}'", valid.join(", "));
+		let msg = format!("{} '{}'. {}", INVALID_ATTR_PARAM_NAMES_ERR, invalid_meta_words.join(", "), expected);
+		Err(Error::new_spanned(meta, msg))
+	} else {
+		Ok(meta.clone())
 	}
 }
 

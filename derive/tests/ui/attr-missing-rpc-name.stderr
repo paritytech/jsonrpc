@@ -1,5 +1,5 @@
 error: rpc attribute should have a name e.g. `name = "method_name"`
-  --> $DIR/attr-missing-name.rs:10:2
+  --> $DIR/attr-missing-rpc-name.rs:10:2
    |
 10 |       /// Returns a protocol version
    |  _____^
