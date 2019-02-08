@@ -30,7 +30,7 @@ build_rpc_trait! {
 
 		/// Performs asynchronous operation with meta
 		#[rpc(meta, name = "callAsyncMeta", alias = [ "callAsyncMetaAlias", ])]
-		fn call_meta(&self, _: Self::Metadata, BTreeMap<String, Value>) -> FutureResult<String, Error>;
+		fn call_meta(&self, Self::Metadata, BTreeMap<String, Value>) -> FutureResult<String, Error>;
 	}
 }
 
