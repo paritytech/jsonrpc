@@ -13,12 +13,4 @@ pub trait Rpc {
 	fn protocol_version(&self) -> Result<String>;
 }
 
-struct RpcImpl;
-
-impl Rpc for RpcImpl {
-	fn protocol_version(&self) -> Result<String> {
-		Ok("version1".into())
-	}
-}
-
 fn main() {}
