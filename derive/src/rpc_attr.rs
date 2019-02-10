@@ -130,9 +130,7 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	impl<'a> Visit<'a> for Visitor {
 		fn visit_meta(&mut self, meta: &syn::Meta) {
 			match meta {
-				syn::Meta::List(list) => {
-					self.meta_list_names.push(list.ident.to_string())
-				},
+				syn::Meta::List(list) => self.meta_list_names.push(list.ident.to_string()),
 				syn::Meta::Word(ident) => self.meta_words.push(ident.to_string()),
 				syn::Meta::NameValue(nv) => self.name_value_names.push(nv.ident.to_string())
 			}
