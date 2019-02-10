@@ -159,9 +159,9 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 
 fn validate_idents(meta: &syn::Meta, attr_idents: &[String], valid: &[&str]) -> Result<syn::Meta> {
 	let invalid_meta_words: Vec<_> = attr_idents
-		.iter()
-		.cloned()
+		.into_iter()
 		.filter(|w| !valid.iter().any(|v| v == w))
+		.cloned()
 		.collect();
 	if !invalid_meta_words.is_empty() {
 		let expected = format!("Expected '{}'", valid.join(", "));
