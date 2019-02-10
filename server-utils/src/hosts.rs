@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::net::SocketAddr;
 use crate::matcher::{Matcher, Pattern};
 
-const SPLIT_PROOF: &'static str = "split always returns non-empty iterator.";
+const SPLIT_PROOF: &str = "split always returns non-empty iterator.";
 
 /// Port pattern
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]

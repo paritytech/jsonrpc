@@ -555,7 +555,7 @@ pub struct Server {
 	close: Option<Vec<oneshot::Sender<()>>>,
 }
 
-const PROOF: &'static str = "Server is always Some until self is consumed.";
+const PROOF: &str = "Server is always Some until self is consumed.";
 impl Server {
 	/// Returns address of this server
 	pub fn address(&self) -> &SocketAddr {

@@ -20,21 +20,21 @@ pub enum PubSubMethodKind {
 	Unsubscribe,
 }
 
-const RPC_ATTR_NAME: &'static str = "rpc";
-const RPC_NAME_KEY: &'static str = "name";
-const SUBSCRIPTION_NAME_KEY: &'static str = "subscription";
-const ALIASES_KEY: &'static str = "alias";
-const PUB_SUB_ATTR_NAME: &'static str = "pubsub";
-const METADATA_META_WORD: &'static str = "meta";
-const SUBSCRIBE_META_WORD: &'static str = "subscribe";
-const UNSUBSCRIBE_META_WORD: &'static str = "unsubscribe";
+const RPC_ATTR_NAME: &str = "rpc";
+const RPC_NAME_KEY: &str = "name";
+const SUBSCRIPTION_NAME_KEY: &str = "subscription";
+const ALIASES_KEY: &str = "alias";
+const PUB_SUB_ATTR_NAME: &str = "pubsub";
+const METADATA_META_WORD: &str = "meta";
+const SUBSCRIBE_META_WORD: &str = "subscribe";
+const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 
-const MULTIPLE_RPC_ATTRIBUTES_ERR: &'static str = "Expected only a single rpc attribute per method";
-const INVALID_ATTR_PARAM_NAMES_ERR: &'static str = "Invalid attribute parameter(s):";
-const MISSING_NAME_ERR: &'static str = "rpc attribute should have a name e.g. `name = \"method_name\"`";
-const MISSING_SUB_NAME_ERR: &'static str = "pubsub attribute should have a subscription name";
-const BOTH_SUB_AND_UNSUB_ERR: &'static str = "pubsub attribute annotated with both subscribe and unsubscribe";
-const NEITHER_SUB_OR_UNSUB_ERR: &'static str = "pubsub attribute not annotated with either subscribe or unsubscribe";
+const MULTIPLE_RPC_ATTRIBUTES_ERR: &str = "Expected only a single rpc attribute per method";
+const INVALID_ATTR_PARAM_NAMES_ERR: &str = "Invalid attribute parameter(s):";
+const MISSING_NAME_ERR: &str = "rpc attribute should have a name e.g. `name = \"method_name\"`";
+const MISSING_SUB_NAME_ERR: &str = "pubsub attribute should have a subscription name";
+const BOTH_SUB_AND_UNSUB_ERR: &str = "pubsub attribute annotated with both subscribe and unsubscribe";
+const NEITHER_SUB_OR_UNSUB_ERR: &str = "pubsub attribute not annotated with either subscribe or unsubscribe";
 
 impl RpcMethodAttribute {
 	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>> {
