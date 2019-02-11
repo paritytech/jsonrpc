@@ -1,0 +1,11 @@
+error: Invalid attribute parameter(s): 'Xsubscribe'. Expected 'subscribe, unsubscribe'
+  --> $DIR/attr-invalid-meta-words.rs:10:2
+   |
+10 |       /// Hello subscription
+   |  _____^
+11 | |     #[pubsub(subscription = "hello", Xsubscribe, name = "hello_subscribe", alias("hello_sub"))]
+12 | |     fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
+   | |_________________________________________________________________________________^
+
+error: aborting due to previous error
+

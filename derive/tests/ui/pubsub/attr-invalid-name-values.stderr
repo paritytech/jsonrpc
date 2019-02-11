@@ -1,0 +1,11 @@
+error: Invalid attribute parameter(s): 'Xsubscription, Xname'. Expected 'subscription, name'
+  --> $DIR/attr-invalid-name-values.rs:10:2
+   |
+10 |       /// Hello subscription
+   |  _____^
+11 | |     #[pubsub(Xsubscription = "hello", subscribe, Xname = "hello_subscribe", alias("hello_sub"))]
+12 | |     fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
+   | |_________________________________________________________________________________^
+
+error: aborting due to previous error
+

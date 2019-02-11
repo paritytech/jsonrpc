@@ -1,0 +1,11 @@
+error: pubsub attribute annotated with both subscribe and unsubscribe
+  --> $DIR/attr-both-subscribe-and-unsubscribe.rs:10:2
+   |
+10 |       /// Hello subscription
+   |  _____^
+11 | |     #[pubsub(subscription = "hello", subscribe, unsubscribe, name = "hello_subscribe", alias("hello_sub"))]
+12 | |     fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
+   | |_________________________________________________________________________________^
+
+error: aborting due to previous error
+

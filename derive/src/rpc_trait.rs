@@ -7,17 +7,17 @@ use syn::{
 use crate::rpc_attr::{RpcMethodAttribute, PubSubMethodKind, AttributeKind};
 use crate::to_delegate::{RpcMethod, MethodRegistration, generate_trait_item_method};
 
-const METADATA_TYPE: &'static str = "Metadata";
+const METADATA_TYPE: &str = "Metadata";
 
-const MISSING_SUBSCRIBE_METHOD_ERR: &'static str =
+const MISSING_SUBSCRIBE_METHOD_ERR: &str =
 	"Can't find subscribe method, expected a method annotated with `subscribe` \
 	e.g. `#[pubsub(subscription = \"hello\", subscribe, name = \"hello_subscribe\")]`";
 
-const MISSING_UNSUBSCRIBE_METHOD_ERR: &'static str =
+const MISSING_UNSUBSCRIBE_METHOD_ERR: &str =
 	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
 	e.g. `#[pubsub(subscription = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
 
-const RPC_MOD_NAME_PREFIX: &'static str = "rpc_impl_";
+const RPC_MOD_NAME_PREFIX: &str = "rpc_impl_";
 
 struct RpcTrait {
 	has_pubsub_methods: bool,

@@ -1,0 +1,11 @@
+error: rpc attribute should have a name e.g. `name = "method_name"`
+  --> $DIR/attr-missing-rpc-name.rs:10:2
+   |
+10 |       /// Returns a protocol version
+   |  _____^
+11 | |     #[rpc]
+12 | |     fn protocol_version(&self) -> Result<String>;
+   | |_________________________________________________^
+
+error: aborting due to previous error
+

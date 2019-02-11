@@ -1,0 +1,12 @@
+error: Expected only a single rpc attribute per method
+  --> $DIR/multiple-rpc-attributes.rs:10:2
+   |
+10 |       /// Returns a protocol version
+   |  _____^
+11 | |     #[rpc(name = "protocolVersion")]
+12 | |     #[rpc(name = "protocolVersionAgain")]
+13 | |     fn protocol_version(&self) -> Result<String>;
+   | |_________________________________________________^
+
+error: aborting due to previous error
+

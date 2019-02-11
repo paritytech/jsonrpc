@@ -1,3 +1,5 @@
+use syn::{Error, Result, visit::{self, Visit}};
+
 #[derive(Clone, Debug)]
 pub struct RpcMethodAttribute {
 	pub attr: syn::Attribute,
@@ -18,33 +20,38 @@ pub enum PubSubMethodKind {
 	Unsubscribe,
 }
 
-const RPC_ATTR_NAME: &'static str = "rpc";
-const RPC_NAME_KEY: &'static str = "name";
-const SUBSCRIPTION_NAME_KEY: &'static str = "subscription";
-const ALIASES_KEY: &'static str = "alias";
-const PUB_SUB_ATTR_NAME: &'static str = "pubsub";
-const METADATA_META_WORD: &'static str = "meta";
-const SUBSCRIBE_META_WORD: &'static str = "subscribe";
-const UNSUBSCRIBE_META_WORD: &'static str = "unsubscribe";
+const RPC_ATTR_NAME: &str = "rpc";
+const RPC_NAME_KEY: &str = "name";
+const SUBSCRIPTION_NAME_KEY: &str = "subscription";
+const ALIASES_KEY: &str = "alias";
+const PUB_SUB_ATTR_NAME: &str = "pubsub";
+const METADATA_META_WORD: &str = "meta";
+const SUBSCRIBE_META_WORD: &str = "subscribe";
+const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
+
+const MULTIPLE_RPC_ATTRIBUTES_ERR: &str = "Expected only a single rpc attribute per method";
+const INVALID_ATTR_PARAM_NAMES_ERR: &str = "Invalid attribute parameter(s):";
+const MISSING_NAME_ERR: &str = "rpc attribute should have a name e.g. `name = \"method_name\"`";
+const MISSING_SUB_NAME_ERR: &str = "pubsub attribute should have a subscription name";
+const BOTH_SUB_AND_UNSUB_ERR: &str = "pubsub attribute annotated with both subscribe and unsubscribe";
+const NEITHER_SUB_OR_UNSUB_ERR: &str = "pubsub attribute not annotated with either subscribe or unsubscribe";
 
 impl RpcMethodAttribute {
-	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>, String> {
+	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>> {
 		let attrs = method.attrs
 			.iter()
 			.filter_map(Self::parse_meta)
-			.collect::<Result<Vec<_>, _>>()?;
+			.collect::<Result<Vec<_>>>()?;
 
 		if attrs.len() <= 1 {
 			Ok(attrs.first().cloned())
 		} else {
-			Err(format!("Expected only a single rpc attribute per method. Found {}", attrs.len()))
+			Err(Error::new_spanned(method, MULTIPLE_RPC_ATTRIBUTES_ERR))
 		}
 	}
 
-	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute, String>> {
-		let parse_result = attr.parse_meta()
-			.map_err(|err| format!("Error parsing attribute: {}", err));
-		match parse_result {
+	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute>> {
+		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
 				let attr_kind =
 					match meta.name().to_string().as_ref() {
@@ -60,7 +67,7 @@ impl RpcMethodAttribute {
 					get_meta_list(meta)
 						.and_then(|ml| get_name_value(RPC_NAME_KEY, ml))
 						.map_or(
-							Err("rpc attribute should have a name e.g. `name = \"method_name\"`".into()),
+							Err(Error::new_spanned(attr, MISSING_NAME_ERR)),
 							|name| {
 								let aliases = get_meta_list(meta)
 									.map_or(Vec::new(), |ml| get_aliases(ml));
@@ -77,14 +84,14 @@ impl RpcMethodAttribute {
 		}
 	}
 
-	fn parse_pubsub(meta: &syn::Meta) -> Result<AttributeKind, String> {
+	fn parse_pubsub(meta: &syn::Meta) -> Result<AttributeKind> {
 		let name_and_list = get_meta_list(meta)
 			.and_then(|ml|
 				get_name_value(SUBSCRIPTION_NAME_KEY, ml).map(|name| (name, ml))
 			);
 
 		name_and_list.map_or(
-			Err("pubsub attribute should have a subscription name".into()),
+			Err(Error::new_spanned(meta, MISSING_SUB_NAME_ERR)),
 			|(sub_name, ml)| {
 				let is_subscribe = has_meta_word(SUBSCRIBE_META_WORD, ml);
 				let is_unsubscribe = has_meta_word(UNSUBSCRIBE_META_WORD, ml);
@@ -94,9 +101,9 @@ impl RpcMethodAttribute {
 					(false, true) =>
 						Ok(PubSubMethodKind::Unsubscribe),
 					(true, true) =>
-						Err(format!("pubsub attribute for subscription '{}' annotated with both subscribe and unsubscribe", sub_name)),
+						Err(Error::new_spanned(meta, BOTH_SUB_AND_UNSUB_ERR)),
 					(false, false) =>
-						Err(format!("pubsub attribute for subscription '{}' not annotated with either subscribe or unsubscribe", sub_name)),
+						Err(Error::new_spanned(meta, NEITHER_SUB_OR_UNSUB_ERR)),
 				};
 				kind.map(|kind| AttributeKind::PubSub {
 					subscription_name: sub_name.into(),
@@ -110,6 +117,56 @@ impl RpcMethodAttribute {
 			AttributeKind::PubSub { .. } => true,
 			AttributeKind::Rpc { .. } => false,
 		}
+	}
+}
+
+fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
+	#[derive(Default)]
+	struct Visitor {
+		meta_words: Vec<String>,
+		name_value_names: Vec<String>,
+		meta_list_names: Vec<String>,
+	}
+	impl<'a> Visit<'a> for Visitor {
+		fn visit_meta(&mut self, meta: &syn::Meta) {
+			match meta {
+				syn::Meta::List(list) => self.meta_list_names.push(list.ident.to_string()),
+				syn::Meta::Word(ident) => self.meta_words.push(ident.to_string()),
+				syn::Meta::NameValue(nv) => self.name_value_names.push(nv.ident.to_string())
+			}
+		}
+	}
+
+	let mut visitor = Visitor::default();
+	visit::visit_meta(&mut visitor, &meta);
+
+	match meta.name().to_string().as_ref() {
+		RPC_ATTR_NAME => {
+			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD])?;
+			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY])?;
+			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
+		},
+		PUB_SUB_ATTR_NAME => {
+			validate_idents(&meta, &visitor.meta_words, &[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD])?;
+			validate_idents(&meta, &visitor.name_value_names, &[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY])?;
+			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
+		},
+		_ => Ok(meta), // ignore other attributes - compiler will catch unknown ones
+	}
+}
+
+fn validate_idents(meta: &syn::Meta, attr_idents: &[String], valid: &[&str]) -> Result<syn::Meta> {
+	let invalid_meta_words: Vec<_> = attr_idents
+		.into_iter()
+		.filter(|w| !valid.iter().any(|v| v == w))
+		.cloned()
+		.collect();
+	if !invalid_meta_words.is_empty() {
+		let expected = format!("Expected '{}'", valid.join(", "));
+		let msg = format!("{} '{}'. {}", INVALID_ATTR_PARAM_NAMES_ERR, invalid_meta_words.join(", "), expected);
+		Err(Error::new_spanned(meta, msg))
+	} else {
+		Ok(meta.clone())
 	}
 }
 

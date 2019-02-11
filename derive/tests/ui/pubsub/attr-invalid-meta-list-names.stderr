@@ -1,0 +1,11 @@
+error: Invalid attribute parameter(s): 'Xalias'. Expected 'alias'
+  --> $DIR/attr-invalid-meta-list-names.rs:10:2
+   |
+10 |       /// Hello subscription
+   |  _____^
+11 | |     #[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", Xalias("hello_sub"))]
+12 | |     fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
+   | |_________________________________________________________________________________^
+
+error: aborting due to previous error
+

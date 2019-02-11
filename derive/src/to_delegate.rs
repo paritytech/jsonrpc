@@ -71,9 +71,9 @@ impl MethodRegistration {
 	}
 }
 
-const SUBCRIBER_TYPE_IDENT: &'static str = "Subscriber";
-const METADATA_CLOSURE_ARG: &'static str = "meta";
-const SUBSCRIBER_CLOSURE_ARG: &'static str = "subscriber";
+const SUBCRIBER_TYPE_IDENT: &str = "Subscriber";
+const METADATA_CLOSURE_ARG: &str = "meta";
+const SUBSCRIBER_CLOSURE_ARG: &str = "subscriber";
 
 pub fn generate_trait_item_method(
 	methods: &[MethodRegistration],
