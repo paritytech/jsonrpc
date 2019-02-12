@@ -3,7 +3,7 @@ name = "jsonrpc-pubsub-examples"
 description = "Examples of Publish-Subscribe extension for jsonrpc."
 homepage = "https://github.com/paritytech/jsonrpc"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "10.0.1"
+version = "10.1.0"
 authors = ["tomusdrw <tomasz@parity.io>"]
 license = "MIT"
 
