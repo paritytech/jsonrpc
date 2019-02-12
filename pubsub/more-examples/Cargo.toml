@@ -8,7 +8,7 @@ authors = ["tomusdrw <tomasz@parity.io>"]
 license = "MIT"
 
 [dependencies]
-jsonrpc-core = { version = "10.0", path = "../../core" }
-jsonrpc-pubsub = { version = "10.0", path = "../" }
-jsonrpc-ws-server = { version = "10.0", path = "../../ws" }
-jsonrpc-ipc-server = { version = "10.0", path = "../../ipc" }
+jsonrpc-core = { version = "10.1", path = "../../core" }
+jsonrpc-pubsub = { version = "10.1", path = "../" }
+jsonrpc-ws-server = { version = "10.1", path = "../../ws" }
+jsonrpc-ipc-server = { version = "10.1", path = "../../ipc" }

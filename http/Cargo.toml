@@ -12,8 +12,8 @@ version = "10.1.0"
 
 [dependencies]
 hyper = "0.12"
-jsonrpc-core = { version = "10.0", path = "../core" }
-jsonrpc-server-utils = { version = "10.0", path = "../server-utils" }
+jsonrpc-core = { version = "10.1", path = "../core" }
+jsonrpc-server-utils = { version = "10.1", path = "../server-utils" }
 log = "0.4"
 net2 = "0.2"
 unicase = "2.0"
