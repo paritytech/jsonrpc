@@ -1,8 +1,9 @@
 use std::collections::HashMap;
+use proc_macro2::Span;
 use quote::quote;
 use syn::{
 	parse_quote, Token, punctuated::Punctuated,
-	fold::{self, Fold}, Result,
+	fold::{self, Fold}, Result, Error, Ident
 };
 use crate::rpc_attr::{RpcMethodAttribute, PubSubMethodKind, AttributeKind};
 use crate::to_delegate::{RpcMethod, MethodRegistration, generate_trait_item_method};
@@ -157,23 +158,33 @@ pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let name = rpc_trait.ident.clone();
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
 
+	let crate_name = |name| {
+		proc_macro_crate::crate_name(name)
+			.map(|name| Ident::new(&name, Span::call_site()))
+			.map_err(|e| Error::new(Span::call_site(), &e))
+	};
+
 	let optional_pubsub_import =
 		if has_pubsub_methods {
-			quote!(use jsonrpc_pubsub as _jsonrpc_pubsub;)
+			crate_name("jsonrpc-pubsub")
+				.map(|pubsub_name| quote!(use #pubsub_name as _jsonrpc_pubsub;))
 		} else {
-			quote!()
-		};
+			Ok(quote!())
+		}?;
 
-	Ok(quote! {
+	let core_name = crate_name("jsonrpc-core")?;
+	let serde_name = crate_name("serde")?;
+
+	Ok(quote!(
 		mod #mod_name_ident {
-			use jsonrpc_core as _jsonrpc_core;
+			use #core_name as _jsonrpc_core;
 			#optional_pubsub_import
-			use serde as _serde;
+			use #serde_name as _serde;
 			use super::*;
 			use self::_jsonrpc_core::futures as _futures;
 
 			#rpc_trait
 		}
 		pub use self::#mod_name_ident::#name;
-	})
+	))
 }
