@@ -171,7 +171,7 @@ impl RpcMethod {
 			special_args.iter().find(|(_,sty)| sty == ty).is_none());
 
 		let tuple_fields : &Vec<_> =
-			&(TUPLE_FIELD_NAMES[0..param_types.len()].iter().map(|name| ident(name)).collect());
+			&(TUPLE_FIELD_NAMES.iter().take(param_types.len()).map(|name| ident(name)).collect());
 		let param_types = &param_types;
 		let parse_params = {
 			// last arguments that are `Option`-s are optional 'trailing' arguments
