@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use quote::quote;
 use syn::{
 	parse_quote, Token, punctuated::Punctuated,
-	visit::{self, Visit},
+	visit::{self, Visit}, Result,
 };
 use crate::rpc_attr::RpcMethodAttribute;
 
@@ -20,7 +20,7 @@ pub enum MethodRegistration {
 }
 
 impl MethodRegistration {
-	fn generate(&self) -> proc_macro2::TokenStream {
+	fn generate(&self) -> Result<proc_macro2::TokenStream> {
 		match self {
 			MethodRegistration::Standard { method, has_metadata } => {
 				let rpc_name = &method.name();
@@ -30,17 +30,17 @@ impl MethodRegistration {
 					} else {
 						quote!(add_method)
 					};
-				let closure = method.generate_delegate_closure(false);
+				let closure = method.generate_delegate_closure(false)?;
 				let add_aliases = method.generate_add_aliases();
 
-				quote! {
+				Ok(quote! {
 					del.#add_method(#rpc_name, #closure);
 					#add_aliases
-				}
+				})
 			},
 			MethodRegistration::PubSub { name, subscribe, unsubscribe } => {
 				let sub_name = subscribe.name();
-				let sub_closure = subscribe.generate_delegate_closure(true);
+				let sub_closure = subscribe.generate_delegate_closure(true)?;
 				let sub_aliases = subscribe.generate_add_aliases();
 
 				let unsub_name = unsubscribe.name();
@@ -57,7 +57,7 @@ impl MethodRegistration {
 					};
 				let unsub_aliases = unsubscribe.generate_add_aliases();
 
-				quote! {
+				Ok(quote! {
 					del.add_subscription(
 						#name,
 						(#sub_name, #sub_closure),
@@ -65,7 +65,7 @@ impl MethodRegistration {
 					);
 					#sub_aliases
 					#unsub_aliases
-				}
+				})
 			},
 		}
 	}
@@ -75,24 +75,24 @@ const SUBCRIBER_TYPE_IDENT: &str = "Subscriber";
 const METADATA_CLOSURE_ARG: &str = "meta";
 const SUBSCRIBER_CLOSURE_ARG: &str = "subscriber";
 
-const TUPLE_FIELD_NAMES: [&str; 26] = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"];
+const TUPLE_FIELD_NAMES: [&str; 16] = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p"];
 
 pub fn generate_trait_item_method(
 	methods: &[MethodRegistration],
 	trait_item: &syn::ItemTrait,
 	has_metadata: bool,
 	has_pubsub_methods: bool,
-) -> syn::TraitItemMethod {
+) -> Result<syn::TraitItemMethod> {
 	let io_delegate_type =
 		if has_pubsub_methods {
 			quote!(_jsonrpc_pubsub::IoDelegate)
 		} else {
 			quote!(_jsonrpc_core::IoDelegate)
 		};
-	let add_methods: Vec<_> = methods
+	let add_methods = methods
 		.iter()
 		.map(MethodRegistration::generate)
-		.collect();
+		.collect::<Result<Vec<_>>>()?;
 	let to_delegate_body =
 		quote! {
 			let mut del = #io_delegate_type::new(self.into());
@@ -123,7 +123,7 @@ pub fn generate_trait_item_method(
 		.make_where_clause()
 		.predicates
 		.extend(predicates);
-	method
+	Ok(method)
 }
 
 #[derive(Clone)]
@@ -151,7 +151,7 @@ impl RpcMethod {
 		self.attr.is_pubsub()
 	}
 
-	fn generate_delegate_closure(&self, is_subscribe: bool) -> proc_macro2::TokenStream {
+	fn generate_delegate_closure(&self, is_subscribe: bool) -> Result<proc_macro2::TokenStream> {
 		let mut param_types: Vec<_> =
 			self.trait_item.sig.decl.inputs
 				.iter()
@@ -170,6 +170,12 @@ impl RpcMethod {
 		param_types.retain(|ty|
 			special_args.iter().find(|(_,sty)| sty == ty).is_none());
 
+		if param_types.len() > TUPLE_FIELD_NAMES.len() {
+			return Err(syn::Error::new_spanned(
+				&self.trait_item,
+				&format!("Maximum supported number of params is {}", TUPLE_FIELD_NAMES.len())
+			));
+		}
 		let tuple_fields : &Vec<_> =
 			&(TUPLE_FIELD_NAMES.iter().take(param_types.len()).map(|name| ident(name)).collect());
 		let param_types = &param_types;
@@ -220,7 +226,7 @@ impl RpcMethod {
 				}
 			};
 
-		quote! {
+		Ok(quote! {
 			move |#closure_args| {
 				let method = &(Self::#method_ident as #method_sig);
 				#parse_params
@@ -228,7 +234,7 @@ impl RpcMethod {
 					#match_params
 				}
 			}
-		}
+		})
 	}
 
 	fn special_args(param_types: &[syn::Type]) -> Vec<(syn::Ident, syn::Type)> {

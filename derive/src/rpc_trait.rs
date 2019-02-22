@@ -130,7 +130,7 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrai
 	}
 
 	let to_delegate_method =
-		generate_trait_item_method(&method_registrations, &item_trait, rpc_trait.has_metadata, has_pubsub_methods);
+		generate_trait_item_method(&method_registrations, &item_trait, rpc_trait.has_metadata, has_pubsub_methods)?;
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
 
 	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> =

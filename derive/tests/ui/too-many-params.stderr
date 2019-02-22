@@ -1,0 +1,14 @@
+error: Maximum supported number of params is 16
+  --> $DIR/too-many-params.rs:10:2
+   |
+10 |       /// Has too many params
+   |  _____^
+11 | |     #[rpc(name = "tooManyParams")]
+12 | |     fn to_many_params(
+13 | |         &self,
+14 | |         _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64,
+15 | |         _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64,
+16 | |     ) -> Result<String>;
+   | |________________________^
+
+error: aborting due to previous error
