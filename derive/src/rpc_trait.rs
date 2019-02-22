@@ -28,15 +28,14 @@ struct RpcTrait {
 
 impl<'a> Fold for RpcTrait {
 	fn fold_trait_item_method(&mut self, method: syn::TraitItemMethod) -> syn::TraitItemMethod {
-		let mut method = method.clone();
-		let method_item = method.clone();
+		let mut foldable_method = method.clone();
 		// strip rpc attributes
-		method.attrs.retain(|a| {
+		foldable_method.attrs.retain(|a| {
 			let rpc_method =
-				self.methods.iter().find(|m| m.trait_item == method_item);
+				self.methods.iter().find(|m| m.trait_item == method);
 			rpc_method.map_or(true, |rpc| rpc.attr.attr != *a)
 		});
-		fold::fold_trait_item_method(self, method)
+		fold::fold_trait_item_method(self, foldable_method)
 	}
 
 	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
@@ -59,10 +58,10 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrai
 		.iter()
 		.filter_map(|trait_item| {
 			if let syn::TraitItem::Method(method) = trait_item {
-				match RpcMethodAttribute::parse_attr(&method) {
+				match RpcMethodAttribute::parse_attr(method) {
 					Ok(Some(attr)) =>
 						Some(Ok(RpcMethod::new(
-							attr.clone(),
+							attr,
 							method.clone(),
 						))),
 					Ok(None) => None, // non rpc annotated trait method
@@ -150,7 +149,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
-		item @ _ => return Err(syn::Error::new_spanned(item, "The #[rpc] custom attribute only works with trait declarations")),
+		item => return Err(syn::Error::new_spanned(item, "The #[rpc] custom attribute only works with trait declarations")),
 	};
 
 	let (rpc_trait, has_pubsub_methods) = generate_rpc_item_trait(&rpc_trait)?;
