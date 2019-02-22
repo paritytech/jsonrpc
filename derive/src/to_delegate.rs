@@ -75,6 +75,8 @@ const SUBCRIBER_TYPE_IDENT: &str = "Subscriber";
 const METADATA_CLOSURE_ARG: &str = "meta";
 const SUBSCRIBER_CLOSURE_ARG: &str = "subscriber";
 
+const TUPLE_FIELD_NAMES: [&str; 26] = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"];
+
 pub fn generate_trait_item_method(
 	methods: &[MethodRegistration],
 	trait_item: &syn::ItemTrait,
@@ -169,9 +171,7 @@ impl RpcMethod {
 			special_args.iter().find(|(_,sty)| sty == ty).is_none());
 
 		let tuple_fields : &Vec<_> =
-			&(0..param_types.len() as u8)
-				.map(|x| ident(&((x + 'a' as u8) as char).to_string()))
-				.collect();
+			&(TUPLE_FIELD_NAMES[0..param_types.len()].iter().map(|name| ident(name)).collect());
 		let param_types = &param_types;
 		let parse_params = {
 			// last arguments that are `Option`-s are optional 'trailing' arguments
@@ -235,7 +235,7 @@ impl RpcMethod {
 		let meta_arg =
 			param_types.first().and_then(|ty|
 				if *ty == parse_quote!(Self::Metadata) { Some(ty.clone()) } else { None });
-		let subscriber_arg = param_types.iter().nth(1).and_then(|ty| {
+		let subscriber_arg = param_types.get(1).and_then(|ty| {
 			if let syn::Type::Path(path) = ty {
 				if path.path.segments.iter().any(|s| s.ident == SUBCRIBER_TYPE_IDENT) {
 					Some(ty.clone())
