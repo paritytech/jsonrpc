@@ -14,8 +14,8 @@ pub enum Version {
 impl Serialize for Version {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 	where S: Serializer {
-		match self {
-			&Version::V2 => serializer.serialize_str("2.0")
+		match *self {
+			Version::V2 => serializer.serialize_str("2.0")
 		}
 	}
 }

@@ -260,7 +260,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 			},
 			RpcHandlerState::WaitingForResponse(mut waiting) => {
 				match waiting.poll() {
-					Ok(Async::Ready(response)) => RpcPollState::Ready(RpcHandlerState::Writing(response.into())),
+					Ok(Async::Ready(response)) => RpcPollState::Ready(RpcHandlerState::Writing(response)),
 					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::WaitingForResponse(waiting)),
 					Err(e) => RpcPollState::Ready(RpcHandlerState::Writing(
 						Response::internal_error(format!("{:?}", e))
@@ -275,7 +275,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 							None => Response::ok(String::new()),
 							// Add new line to have nice output when using CLI clients (curl)
 							Some(result) => Response::ok(format!("{}\n", result)),
-						}.into()))
+						}))
 					},
 					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
 					Err(e) => RpcPollState::Ready(RpcHandlerState::Writing(
@@ -404,7 +404,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			id: Id::Num(1),
 		}));
 
-		return Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(
+		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(
 			future::Either::B(self.jsonrpc_handler.handler.handle_rpc_request(call, metadata))
 				.map(|res| match res {
 					Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
@@ -421,7 +421,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 					},
 					e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
 				})
-		)));
+		)))
 	}
 
 	fn process_rest(
@@ -452,12 +452,12 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			id: Id::Num(1),
 		}));
 
-		return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
+		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
 			future::Either::B(self.jsonrpc_handler.handler.handle_rpc_request(call, metadata))
 				.map(|res| res.map(|x| serde_json::to_string(&x)
 					.expect("Serialization of response is infallible;qed")
 				))
-		)));
+		)))
 	}
 
 	fn process_body(

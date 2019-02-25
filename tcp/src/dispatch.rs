@@ -66,11 +66,11 @@ impl Dispatcher {
 		match channels.get_mut(peer_addr) {
 			Some(channel) => {
 				// todo: maybe async here later?
-				channel.send(msg).wait().map_err(|e| PushMessageError::from(e))?;
+				channel.send(msg).wait().map_err(PushMessageError::from)?;
 				Ok(())
 			},
 			None => {
-				return Err(PushMessageError::NoSuchPeer);
+				Err(PushMessageError::NoSuchPeer)
 			}
 		}
 	}

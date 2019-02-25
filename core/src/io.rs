@@ -64,8 +64,8 @@ impl Default for Compatibility {
 }
 
 impl Compatibility {
-	fn is_version_valid(&self, version: Option<Version>) -> bool {
-		match (*self, version) {
+	fn is_version_valid(self, version: Option<Version>) -> bool {
+		match (self, version) {
 			(Compatibility::V1, None) |
 			(Compatibility::V2, Some(Version::V2)) |
 			(Compatibility::Both, _) => true,
@@ -73,8 +73,8 @@ impl Compatibility {
 		}
 	}
 
-	fn default_version(&self) -> Option<Version> {
-		match *self {
+	fn default_version(self) -> Option<Version> {
+		match self {
 			Compatibility::V1 => None,
 			Compatibility::V2 | Compatibility::Both => Some(Version::V2),
 		}

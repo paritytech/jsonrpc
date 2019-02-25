@@ -148,6 +148,6 @@ impl CloseHandle {
 	/// Closes the `Server`.
 	pub fn close(self) {
 		let _ = self.broadcaster.shutdown();
-		self.executor.lock().unwrap().take().map(|executor| executor.close());
+		if let Some(executor) = self.executor.lock().unwrap().take() { executor.close() }
 	}
 }

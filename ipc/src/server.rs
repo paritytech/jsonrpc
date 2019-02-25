@@ -167,7 +167,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				let session_id = id;
 				let session_stats = session_stats.clone();
 				trace!(target: "ipc", "Accepted incoming IPC connection: {}", session_id);
-				session_stats.as_ref().map(|stats| stats.open_session(session_id));
+				if let Some(stats) = session_stats.as_ref() { stats.open_session(session_id) }
 
 				let (sender, receiver) = mpsc::channel(16);
 				let meta = meta_extractor.extract(&RequestContext {
@@ -207,7 +207,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
-					session_stats.as_ref().map(|stats| stats.close_session(session_id));
+					if let Some(stats) = session_stats.as_ref() { stats.close_session(session_id) }
 					Ok(())
 				});
 
@@ -222,7 +222,6 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				server.select(stop)
 					.map(|_| {
 						let _ = wait_signal.send(());
-						()
 					})
 					.map_err(|_| ())
 			)
@@ -283,7 +282,7 @@ struct InnerHandles {
 impl InnerHandles {
 	pub fn close(&mut self) {
 		let _ = self.stop.take().map(|stop| stop.send(()));
-		self.executor.take().map(|executor| executor.close());
+		if let Some(executor) = self.executor.take() { executor.close() }
 		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }

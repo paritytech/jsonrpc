@@ -128,12 +128,12 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 					let peer_message_queue = {
 						let mut channels = channels.lock();
-						channels.insert(peer_addr.clone(), sender.clone());
+						channels.insert(peer_addr, sender.clone());
 
 						PeerMessageQueue::new(
 							responses,
 							receiver,
-							peer_addr.clone(),
+							peer_addr,
 						)
 					};
 
@@ -209,6 +209,6 @@ impl Server {
 impl Drop for Server {
 	fn drop(&mut self) {
 		let _ = self.stop.take().map(|sg| sg.send(()));
-		self.executor.take().map(|executor| executor.close());
+		if let Some(executor) = self.executor.take() { executor.close() }
 	}
 }

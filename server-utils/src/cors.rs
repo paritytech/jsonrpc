@@ -239,7 +239,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 		let are_all_allowed = headers
 			.all(|header| {
 				let name = &Ascii::new(header.as_ref());
-				only.iter().any(|h| &Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
+				only.iter().any(|h| Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
 			});
 
 		if !are_all_allowed {
@@ -259,7 +259,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 				.filter(|header| {
 					let name = &Ascii::new(header.as_ref());
 					filtered = true;
-					only.iter().any(|h| &Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
+					only.iter().any(|h| Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
 				})
 				.map(to_result)
 				.collect();
