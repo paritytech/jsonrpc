@@ -20,6 +20,8 @@
 
 #![warn(missing_docs)]
 
+// Don't allow Clippy to force us into changing our APIs
+#![allow(clippy::stutter)]
 
 use jsonrpc_server_utils as server_utils;
 use net2;
@@ -55,6 +57,9 @@ pub use crate::handler::ServerHandler;
 pub use crate::utils::{is_host_allowed, cors_allow_origin, cors_allow_headers};
 pub use crate::response::Response;
 
+// FIXME: There's a potential for allocation optimization here, by boxing `Proceed.request` field
+// This should be done with the next major release, since it breaks API compatibility
+#[allow(clippy::large_enum_variant)]
 /// Action undertaken by a middleware.
 pub enum RequestMiddlewareAction {
 	/// Proceed with standard RPC handling
@@ -159,7 +164,7 @@ pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::m
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 	fn clone(&self) -> Self {
-		Rpc {
+		Self {
 			handler: self.handler.clone(),
 			extractor: self.extractor.clone(),
 		}
@@ -227,7 +232,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M>,
 	{
-		ServerBuilder {
+		Self {
 			handler: Arc::new(handler.into()),
 			executor: UninitializedExecutor::Unspawned,
 			meta_extractor: Arc::new(extractor),
@@ -377,7 +382,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let req_max_size = self.max_request_body_size;
 		serve(
 			(shutdown_signal, local_addr_tx),
-			eloop.executor(),
+			&eloop.executor(),
 			addr.to_owned(),
 			cors_domains.clone(),
 			cors_max_age,
@@ -397,7 +402,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			let eloop = UninitializedExecutor::Unspawned.init_with_name(format!("http.worker{}", i + 1))?;
 			serve(
 				(shutdown_signal, local_addr_tx),
-				eloop.executor(),
+				&eloop.executor(),
 				addr.to_owned(),
 				cors_domains.clone(),
 				cors_max_age,
@@ -415,10 +420,10 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		}).collect::<io::Result<Vec<_>>>()?;
 
 		// Wait for server initialization
-		let local_addr = recv_address(local_addr_rx);
+		let local_addr = recv_address(&local_addr_rx);
 		// Wait for other threads as well.
 		let mut handles = handles.into_iter().map(|(eloop, close, local_addr_rx)| {
-			let _ = recv_address(local_addr_rx)?;
+			let _ = recv_address(&local_addr_rx)?;
 			Ok((eloop, close))
 		}).collect::<io::Result<(Vec<_>)>>()?;
 		handles.push((eloop, close));
@@ -432,15 +437,18 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	}
 }
 
-fn recv_address(local_addr_rx: mpsc::Receiver<io::Result<SocketAddr>>) -> io::Result<SocketAddr> {
+fn recv_address(local_addr_rx: &mpsc::Receiver<io::Result<SocketAddr>>) -> io::Result<SocketAddr> {
 	local_addr_rx.recv().map_err(|_| {
 		io::Error::new(io::ErrorKind::Interrupted, "")
 	})?
 }
 
+// `serve` function is only used twice, in this very file.
+// It's definitely ugly, but introducing Configuration object won't save us anything
+#[allow(clippy::too_many_arguments)]
 fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	signals: (oneshot::Receiver<()>, mpsc::Sender<io::Result<SocketAddr>>),
-	executor: tokio::runtime::TaskExecutor,
+	executor: &tokio::runtime::TaskExecutor,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
@@ -479,12 +487,11 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		let bind_result = match bind() {
 			Ok((listener, local_addr)) => {
 				// Send local address
-				match local_addr_tx.send(Ok(local_addr)) {
-					Ok(_) => futures::future::ok((listener, local_addr)),
-					Err(_) => {
-						warn!("Thread {:?} unable to reach receiver, closing server", thread::current().name());
-						futures::future::err(())
-					},
+				if local_addr_tx.send(Ok(local_addr)).is_ok() {
+					futures::future::ok((listener, local_addr))
+				} else {
+					warn!("Thread {:?} unable to reach receiver, closing server", thread::current().name());
+					futures::future::err(())
 				}
 			},
 			Err(err) => {

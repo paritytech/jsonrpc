@@ -127,6 +127,9 @@
 #![recursion_limit = "128"]
 #![warn(missing_docs)]
 
+// Don't allow Clippy to force us into changing our APIs
+#![allow(clippy::stutter)]
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
@@ -136,6 +139,8 @@ mod rpc_attr;
 mod rpc_trait;
 mod to_delegate;
 
+// We don't consume `_args` here, but still this is how API of `proc_macro-attribute` goes
+#[allow(clippy::needless_pass_by_value)]
 /// Apply `#[rpc]` to a trait, and a `to_delegate` method is generated which
 /// wires up methods decorated with `#[rpc]` or `#[pubsub]` attributes.
 /// Attach the delegate to an `IoHandler` and the methods are now callable

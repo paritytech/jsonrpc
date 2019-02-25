@@ -29,7 +29,7 @@ pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	/// Create new IPC server session with given handler and metadata.
 	pub fn new(handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
-		Service { handler, meta }
+		Self { handler, meta }
 	}
 }
 
@@ -61,7 +61,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 
 impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new IPC server build given the `IoHandler`.
-	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
+	pub fn new<T>(io_handler: T) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 	{
 		Self::with_meta_extractor(io_handler, NoopExtractor)
@@ -70,11 +70,11 @@ impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new IPC server build given the `IoHandler` and metadata extractor.
-	pub fn with_meta_extractor<T, E>(io_handler: T, extractor: E) -> ServerBuilder<M, S> where
+	pub fn with_meta_extractor<T, E>(io_handler: T, extractor: E) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M>,
 	{
-		ServerBuilder {
+		Self {
 			handler: Arc::new(io_handler.into()),
 			meta_extractor: Arc::new(extractor),
 			session_stats: None,
@@ -160,7 +160,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			};
 
-			let mut id = 0u64;
+			let mut id = 0_u64;
 
 			let server = connections.for_each(move |(io_stream, remote_id)| {
 				id = id.wrapping_add(1);
@@ -337,9 +337,7 @@ mod tests {
 	}
 
 	fn run(path: &str) -> Server {
-		let builder = server_builder();
-		let server = builder.start(path).expect("Server must run with no issues");
-		server
+		server_builder().start(path).expect("Server must run with no issues")
 	}
 
 	fn dummy_request_str(path: &str, data: &str) -> String {
@@ -347,15 +345,13 @@ mod tests {
 		let reply = stream_future.and_then(|stream| {
 			let stream = codecs::StreamCodec::stream_incoming()
 				.framed(stream);
-			let reply = stream
-				.send(data.to_owned())
+			stream.send(data.to_owned())
 				.and_then(move |stream| {
 					stream.into_future().map_err(|(err, _)| err)
 				})
 				.and_then(|(reply, _)| {
 					future::ok(reply.expect("there should be one reply"))
-				});
-			reply
+				})
 		});
 
 		reply.wait().expect("wait for reply")
@@ -419,13 +415,12 @@ mod tests {
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
-			let path = path.clone();
 			let mut stop_signal = stop_signal.clone();
 			handles.push(
 				thread::spawn(move || {
 					for _ in 0..100 {
 						let result = dummy_request_str(
-							&path,
+							path,
 							"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
 							);
 						stop_signal.try_send(result).unwrap();
@@ -491,7 +486,7 @@ mod tests {
 
 		let t = thread::spawn(move || {
 			let result = dummy_request_str(
-				&path,
+				path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_huge_hello\", \"params\": [], \"id\": 1}",
 			);
 

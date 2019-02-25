@@ -34,6 +34,8 @@ pub struct Notification {
 	pub params: Params,
 }
 
+// It's too late to change the public API
+#[allow(clippy::pub_enum_variant_names)]
 /// Represents single jsonrpc call.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -82,6 +84,10 @@ pub enum Request {
 
 #[cfg(test)]
 mod tests {
+
+	// Our tests here have repetitive patterns with repetitive variable names; it only makes code easier to read here
+	#![allow(clippy::shadow_unrelated)]
+
 	use super::*;
 	use serde_json::Value;
 

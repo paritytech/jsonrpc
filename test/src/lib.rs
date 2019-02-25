@@ -67,6 +67,7 @@ pub struct Rpc {
 	pub options: Options,
 }
 
+#[derive(Clone, Copy)]
 /// Encoding format.
 pub enum Encoding {
 	/// Encodes params using `serde::to_string`.
@@ -77,7 +78,7 @@ pub enum Encoding {
 
 impl From<rpc::IoHandler> for Rpc {
 	fn from(io: rpc::IoHandler) -> Self {
-		Rpc { io, ..Default::default() }
+		Self { io, ..Self::default() }
 	}
 }
 
@@ -158,7 +159,7 @@ mod tests {
 
 		// when
 		assert_eq!(
-			rpc.request("test_method", &[5u64]),
+			rpc.request("test_method", &[5_u64]),
 			"[\n  5,\n  10\n]"
 		);
 	}
@@ -176,7 +177,7 @@ mod tests {
 
 		// when
 		assert_eq!(
-			rpc.make_request("test_method", &[5u64], Encoding::Compact),
+			rpc.make_request("test_method", &[5_u64], Encoding::Compact),
 			"[5,10]"
 		);
 	}

@@ -109,7 +109,7 @@ impl LivenessPoll {
 			(index, rx)
 		};
 
-		LivenessPoll { task_slab, slab_handle: index, rx }
+		Self { task_slab, slab_handle: index, rx }
 	}
 }
 
@@ -169,27 +169,27 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 	}
 
 	fn verify_origin(&self, origin: Option<&[u8]>) -> Option<ws::Response> {
-		if !header_is_allowed(&self.allowed_origins, origin) {
+		if header_is_allowed(&self.allowed_origins, origin) {
+			None
+		} else {
 			warn!(
 				"Blocked connection to WebSockets server from untrusted origin: {:?}",
 				origin.and_then(|s| std::str::from_utf8(s).ok()),
 			);
 			Some(forbidden("URL Blocked", "Connection Origin has been rejected."))
-		} else {
-			None
 		}
 	}
 
 	fn verify_host(&self, req: &ws::Request) -> Option<ws::Response> {
 		let host = req.header("host").map(|x| &x[..]);
-		if !header_is_allowed(&self.allowed_hosts, host) {
+		if header_is_allowed(&self.allowed_hosts, host) {
+			None
+		} else {
 			warn!(
 				"Blocked connection to WebSockets server with untrusted host: {:?}",
 				host.and_then(|s| std::str::from_utf8(s).ok()),
 			);
 			Some(forbidden("URL Blocked", "Connection Host has been rejected."))
-		} else {
-			None
 		}
 	}
 }
@@ -220,8 +220,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 
 		self.context.origin = origin.and_then(|origin| ::std::str::from_utf8(origin).ok()).map(Into::into);
 		self.context.protocols = req.protocols().ok()
-			.map(|protos| protos.into_iter().map(Into::into).collect())
-			.unwrap_or_else(Vec::new);
+			.map_or_else(Vec::new, |protos| protos.into_iter().map(Into::into).collect());
 		self.metadata = Some(self.meta_extractor.extract(&self.context));
 
 		match action {
@@ -236,7 +235,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 	}
 
 	fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
-		let req = msg.as_text()?;
+		let request = msg.as_text()?;
 		let out = self.context.out.clone();
 		let metadata = self.metadata.clone().expect("Metadata is always set in on_request; qed");
 
@@ -246,7 +245,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let poll_liveness = LivenessPoll::create(self.task_slab.clone());
 
 		let active_lock = self.active.clone();
-		let future = self.handler.handle_request(req, metadata)
+		let future = self.handler.handle_request(request, metadata)
 			.map(move |response| {
 				if !active_lock.load(atomic::Ordering::SeqCst) {
 					return;
@@ -295,7 +294,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 		stats: Option<Arc<SessionStats>>,
 		executor: TaskExecutor,
 	) -> Self {
-		Factory {
+		Self {
 			session_id: 0,
 			handler,
 			meta_extractor,
@@ -338,6 +337,8 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 	}
 }
 
+// We want to verbosely document branches, even if they look similar
+#[allow(clippy::match_same_arms)]
 fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool where
 	T: Pattern,
 {

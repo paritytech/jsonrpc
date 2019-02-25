@@ -21,7 +21,7 @@ impl Response {
 
 	/// Create a response with given body and 200 OK status code.
 	pub fn ok<T: Into<String>>(response: T) -> Self {
-		Response {
+		Self {
 			code: StatusCode::OK,
 			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
 			content: response.into(),
@@ -30,7 +30,7 @@ impl Response {
 
 	/// Create a response for plaintext internal error.
 	pub fn internal_error<T: Into<String>>(msg: T) -> Self {
-		Response {
+		Self {
 			code: StatusCode::INTERNAL_SERVER_ERROR,
 			content_type: plain_text(),
 			content: format!("Internal Server Error: {}", msg.into()),
@@ -39,7 +39,7 @@ impl Response {
 
 	/// Create a json response for service unavailable.
 	pub fn service_unavailable<T: Into<String>>(msg: T) -> Self {
-		Response {
+		Self {
 			code: StatusCode::SERVICE_UNAVAILABLE,
 			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
 			content: msg.into(),
@@ -48,7 +48,7 @@ impl Response {
 
 	/// Create a response for not allowed hosts.
 	pub fn host_not_allowed() -> Self {
-		Response {
+		Self {
 			code: StatusCode::FORBIDDEN,
 			content_type: plain_text(),
 			content: "Provided Host header is not whitelisted.\n".to_owned(),
@@ -57,7 +57,7 @@ impl Response {
 
 	/// Create a response for unsupported content type.
 	pub fn unsupported_content_type() -> Self {
-		Response {
+		Self {
 			code: StatusCode::UNSUPPORTED_MEDIA_TYPE,
 			content_type: plain_text(),
 			content: "Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned(),
@@ -66,7 +66,7 @@ impl Response {
 
 	/// Create a response for disallowed method used.
 	pub fn method_not_allowed() -> Self {
-		Response {
+		Self {
 			code: StatusCode::METHOD_NOT_ALLOWED,
 			content_type: plain_text(),
 			content: "Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned(),
@@ -75,7 +75,7 @@ impl Response {
 
 	/// CORS invalid
 	pub fn invalid_allow_origin() -> Self {
-		Response {
+		Self {
 			code: StatusCode::FORBIDDEN,
 			content_type: plain_text(),
 			content: "Origin of the request is not whitelisted. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
@@ -84,7 +84,7 @@ impl Response {
 
 	/// CORS header invalid
 	pub fn invalid_allow_headers() -> Self {
-		Response {
+		Self {
 			code: StatusCode::FORBIDDEN,
 			content_type: plain_text(),
 			content: "Requested headers are not allowed for CORS. CORS headers would not be sent and any side-effects were cancelled as well.\n".to_owned(),
@@ -93,7 +93,7 @@ impl Response {
 
 	/// Create a response for bad request
 	pub fn bad_request<S: Into<String>>(msg: S) -> Self {
-		Response {
+		Self {
 			code: StatusCode::BAD_REQUEST,
 			content_type: plain_text(),
 			content: msg.into()
@@ -102,7 +102,7 @@ impl Response {
 
 	/// Create a response for too large (413)
 	pub fn too_large<S: Into<String>>(msg: S) -> Self {
-		Response {
+		Self {
 			code: StatusCode::PAYLOAD_TOO_LARGE,
 			content_type: plain_text(),
 			content: msg.into()
@@ -116,6 +116,10 @@ fn plain_text() -> HeaderValue {
 
 // TODO: Consider switching to a `TryFrom` conversion once it stabilizes.
 impl From<Response> for hyper::Response<Body> {
+
+	// There's a false positive when calling `::builder()` in `from(res: Response) -> Self`
+	#![allow(clippy::use_self)]
+
 	/// Converts from a jsonrpc `Response` to a `hyper::Response`
 	///
 	/// ## Panics
@@ -123,7 +127,7 @@ impl From<Response> for hyper::Response<Body> {
 	/// Panics if the response cannot be converted due to failure to parse
 	/// body content.
 	///
-	fn from(res: Response) -> hyper::Response<Body> {
+	fn from(res: Response) -> Self {
 		hyper::Response::builder()
 			.status(res.code)
 			.header("content-type", res.content_type)

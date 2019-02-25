@@ -12,10 +12,14 @@ use crate::core::futures::sync::{mpsc, oneshot};
 use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
 use crate::types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, SinkResult};
 
+pub type SubscriptionTuple = (SubscriptionId, String);
+pub type Callback = Box<Fn(SubscriptionId) + Send + 'static>;
+pub type SubscriptionsMap = Mutex<HashMap<SubscriptionTuple, Callback>>;
+
 /// RPC client session
 /// Keeps track of active subscriptions and unsubscribes from them upon dropping.
 pub struct Session {
-	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<Fn(SubscriptionId) + Send + 'static>>>,
+	active_subscriptions: SubscriptionsMap,
 	transport: TransportSender,
 	on_drop: Mutex<Vec<Box<FnMut() + Send>>>,
 }
@@ -30,11 +34,13 @@ impl fmt::Debug for Session {
 }
 
 impl Session {
+	// `on_drop` is a complex parametrized type, this Clippy heuristic is counterproductive here
+	#[allow(clippy::default_trait_access)]
 	/// Creates new session given transport raw send capabilities.
 	/// Session should be created as part of metadata, `sender` should be returned by transport.
 	pub fn new(sender: TransportSender) -> Self {
-		Session {
-			active_subscriptions: Default::default(),
+		Self {
+			active_subscriptions: SubscriptionsMap::default(),
 			transport: sender,
 			on_drop: Default::default(),
 		}
@@ -155,7 +161,7 @@ impl Subscriber {
 		let (sender, id_receiver) = oneshot::channel();
 		let (transport, transport_receiver) = mpsc::channel(1);
 
-		let subscriber = Subscriber {
+		let subscriber = Self {
 			notification: method.into(),
 			transport,
 			sender,
@@ -453,7 +459,7 @@ mod tests {
 		let called = Arc::new(AtomicBool::new(false));
 		let called2 = called.clone();
 		let (subscribe, _) = new_subscription(
-			"test".into(),
+			"test",
 			move |params, _meta, _subscriber| {
 				assert_eq!(params, core::Params::None);
 				called2.store(true, Ordering::SeqCst);

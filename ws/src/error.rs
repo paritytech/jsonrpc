@@ -22,7 +22,7 @@ impl From<ws::Error> for Error {
 	fn from(err: ws::Error) -> Self {
 		match err.kind {
 			ws::ErrorKind::Io(e) => e.into(),
-			_ => Error::with_chain(err, "WebSockets Error"),
+			_ => Self::with_chain(err, "WebSockets Error"),
 		}
 	}
 }

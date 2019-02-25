@@ -57,10 +57,10 @@ impl<S1, S2> Stream for SelectWithWeak<S1, S2>
 					},
 					Async::Ready(None) => return Ok(None.into()),
 					Async::NotReady => {
-						if !checked_strong {
-							self.use_strong = false;
-						} else {
+						if checked_strong {
 							return Ok(Async::NotReady)
+						} else {
+							self.use_strong = false;
 						}
 					}
 				}

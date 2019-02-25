@@ -21,13 +21,13 @@ struct Response {
 }
 
 impl Response {
-	pub fn parse(response: String) -> Self {
+	pub fn parse(response: &str) -> Self {
 		let mut lines = response.lines();
 		let status = lines.next().unwrap().to_owned();
 		let headers = Self::read_block(&mut lines);
 		let body = Self::read_block(&mut lines);
 
-		Response {
+		Self {
 			status,
 			_headers: headers,
 			body,
@@ -50,14 +50,14 @@ impl Response {
 	}
 }
 
-fn request(server: Server, request: &str) -> Response {
+fn request(server: &Server, request: &str) -> Response {
 	let mut req = TcpStream::connect(server.addr()).unwrap();
 	req.write_all(request.as_bytes()).unwrap();
 
 	let mut response = String::new();
 	req.read_to_string(&mut response).unwrap();
 
-	Response::parse(response)
+	Response::parse(&response)
 }
 
 fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
@@ -113,7 +113,7 @@ fn should_disallow_not_whitelisted_origins() {
 	let (server, _) = serve(30001);
 
 	// when
-	let response = request(server,
+	let response = request(&server,
 		"\
 			GET / HTTP/1.1\r\n\
 			Host: 127.0.0.1:30001\r\n\
@@ -134,7 +134,7 @@ fn should_disallow_not_whitelisted_hosts() {
 	let (server, _) = serve(30002);
 
 	// when
-	let response = request(server,
+	let response = request(&server,
 		"\
 			GET / HTTP/1.1\r\n\
 			Host: myhost:30002\r\n\
@@ -154,7 +154,7 @@ fn should_allow_whitelisted_origins() {
 	let (server, _) = serve(30003);
 
 	// when
-	let response = request(server,
+	let response = request(&server,
 		"\
 			GET / HTTP/1.1\r\n\
 			Host: 127.0.0.1:30003\r\n\
@@ -175,7 +175,7 @@ fn should_intercept_in_middleware() {
 	let (server, _) = serve(30004);
 
 	// when
-	let response = request(server,
+	let response = request(&server,
 		"\
 			GET /intercepted HTTP/1.1\r\n\
 			Host: 127.0.0.1:30004\r\n\

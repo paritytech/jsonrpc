@@ -46,7 +46,7 @@ pub enum SubscriptionId {
 
 impl SubscriptionId {
 	/// Parses `core::Value` into unique subscription id.
-	pub fn parse_value(val: &core::Value) -> Option<SubscriptionId> {
+	pub fn parse_value(val: &core::Value) -> Option<Self> {
 		match *val {
 			core::Value::String(ref val) => Some(SubscriptionId::String(val.clone())),
 			core::Value::Number(ref val) => val.as_u64().map(SubscriptionId::Number),

@@ -10,8 +10,8 @@ pub trait Pattern {
 #[derive(Clone)]
 pub struct Matcher(Option<GlobMatcher>, String);
 impl Matcher {
-	pub fn new(string: &str) -> Matcher {
-		Matcher(
+	pub fn new(string: &str) -> Self {
+		Self(
 			GlobBuilder::new(string)
 				.case_insensitive(true)
 				.build()
@@ -47,7 +47,7 @@ impl hash::Hash for Matcher {
 
 impl Eq for Matcher {}
 impl PartialEq for Matcher {
-	fn eq(&self, other: &Matcher) -> bool {
+	fn eq(&self, other: &Self) -> bool {
 		self.1.eq(&other.1)
 	}
 }

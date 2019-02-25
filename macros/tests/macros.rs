@@ -6,6 +6,7 @@ extern crate jsonrpc_macros;
 
 use jsonrpc_core::{IoHandler, Response};
 
+#[allow(clippy::empty_enum)]
 pub enum MyError {}
 impl From<MyError> for jsonrpc_core::Error {
 	fn from(_e: MyError) -> Self {

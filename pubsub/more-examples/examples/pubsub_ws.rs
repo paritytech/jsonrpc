@@ -58,12 +58,9 @@ fn main() {
 			thread::spawn(move || {
 				loop {
 					thread::sleep(time::Duration::from_millis(1000));
-					match sink.notify(Params::Array(vec![Value::Number(10.into())])).wait() {
-						Ok(_) => {},
-						Err(_) => {
-							println!("Subscription has ended, finishing.");
-							break;
-						}
+					if sink.notify(Params::Array(vec![Value::Number(10.into())])).wait().is_err() {
+						println!("Subscription has ended, finishing.");
+						break;
 					}
 				}
 			});

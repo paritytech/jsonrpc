@@ -81,7 +81,7 @@ impl Output {
 
 impl From<Output> for CoreResult<Value> {
 	/// Convert into a result. Will be `Ok` if it is a `Success` and `Err` if `Failure`.
-	fn from(output: Output) -> CoreResult<Value> {
+	fn from(output: Output) -> Self {
 		match output {
 			Output::Success(s) => Ok(s.result),
 			Output::Failure(f) => Err(f.error),

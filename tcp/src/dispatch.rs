@@ -22,7 +22,7 @@ impl<S: Stream> PeerMessageQueue<S> {
 		receiver: mpsc::Receiver<String>,
 		addr: SocketAddr,
 	) -> Self {
-		PeerMessageQueue {
+		Self {
 			up: response_stream,
 			receiver,
 			_addr: addr,
@@ -54,7 +54,7 @@ pub struct Dispatcher {
 impl Dispatcher {
 	/// Creates a new dispatcher
 	pub fn new(channels: Arc<SenderChannels>) -> Self {
-		Dispatcher {
+		Self {
 			channels,
 		}
 	}

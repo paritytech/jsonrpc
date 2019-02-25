@@ -56,7 +56,7 @@ impl<T, M> IoDelegate<T, M> where
 {
 	/// Creates new `PubSubIoDelegate`, wrapping the core IoDelegate
 	pub fn new(delegate: Arc<T>) -> Self {
-		IoDelegate {
+		Self {
 			inner: core::IoDelegate::new(delegate.clone()),
 			delegate,
 			_data: PhantomData,

@@ -19,7 +19,7 @@ pub struct Subscriber<T, E = Error> {
 impl<T, E> Subscriber<T, E> {
 	/// Wrap non-typed subscriber.
 	pub fn new(subscriber: subscription::Subscriber) -> Self {
-		Subscriber {
+		Self {
 			subscriber,
 			_data: PhantomData,
 		}
@@ -32,7 +32,7 @@ impl<T, E> Subscriber<T, E> {
 		sync::mpsc::Receiver<String>,
 	) {
 		let (subscriber, id, subscription) = subscription::Subscriber::new_test(method);
-		(Subscriber::new(subscriber), id, subscription)
+		(Self::new(subscriber), id, subscription)
 	}
 
 	/// Reject subscription with given error.

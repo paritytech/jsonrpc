@@ -9,6 +9,7 @@ use jsonrpc_core::futures::sync::mpsc;
 use jsonrpc_pubsub::{PubSubHandler, SubscriptionId, Session, PubSubMetadata};
 use jsonrpc_pubsub::typed::Subscriber;
 
+#[allow(clippy::empty_enum)]
 pub enum MyError {}
 impl From<MyError> for jsonrpc_core::Error {
 	fn from(_e: MyError) -> Self {

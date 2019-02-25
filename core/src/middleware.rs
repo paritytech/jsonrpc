@@ -100,6 +100,8 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>>
 	}
 }
 
+// `Future` and `CallFuture` types are quite complex here -- that's sort of the whole point
+#[allow(clippy::type_complexity)]
 impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>, D: Middleware<M>>
 	Middleware<M> for (A, B, C, D)
 {
@@ -133,6 +135,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>, D: Middl
 	}
 }
 
+#[allow(clippy::inline_always)]
 #[inline(always)]
 fn repack<A, B, X>(result: Either<A, Either<B, X>>) -> Either<Either<A, B>, X> {
 	match result {

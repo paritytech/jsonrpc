@@ -47,8 +47,8 @@ pub struct PubSubHandler<T: PubSubMetadata, S: core::Middleware<T> = core::middl
 
 impl<T: PubSubMetadata> Default for PubSubHandler<T> {
 	fn default() -> Self {
-		PubSubHandler {
-			handler: Default::default(),
+		Self {
+			handler: core::MetaIoHandler::default(),
 		}
 	}
 }
@@ -56,7 +56,7 @@ impl<T: PubSubMetadata> Default for PubSubHandler<T> {
 impl<T: PubSubMetadata, S: core::Middleware<T>> PubSubHandler<T, S> {
 	/// Creates new `PubSubHandler`
 	pub fn new(handler: core::MetaIoHandler<T, S>) -> Self {
-		PubSubHandler {
+		Self {
 			handler,
 		}
 	}

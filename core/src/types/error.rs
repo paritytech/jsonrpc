@@ -63,10 +63,10 @@ impl From<i64> for ErrorCode {
 }
 
 impl<'a> Deserialize<'a> for ErrorCode {
-	fn deserialize<D>(deserializer: D) -> Result<ErrorCode, D::Error>
+	fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
 	where D: Deserializer<'a> {
 		let code: i64 = Deserialize::deserialize(deserializer)?;
-		Ok(ErrorCode::from(code))
+		Ok(Self::from(code))
 	}
 }
 
@@ -92,7 +92,7 @@ pub struct Error {
 impl Error {
 	/// Wraps given `ErrorCode`
 	pub fn new(code: ErrorCode) -> Self {
-		Error {
+		Self {
 			message: code.description(),
 			code,
 			data: None
@@ -118,7 +118,7 @@ impl Error {
 	pub fn invalid_params<M>(message: M) -> Self where
 		M: Into<String>,
 	{
-		Error {
+		Self {
 			code: ErrorCode::InvalidParams,
 			message: message.into(),
 			data: None,
@@ -126,11 +126,11 @@ impl Error {
 	}
 
 	/// Creates `InvalidParams` for given parameter, with details.
-	pub fn invalid_params_with_details<M, T>(message: M, details: T) -> Error where
+	pub fn invalid_params_with_details<M, T>(message: M, details: T) -> Self where
 		M: Into<String>,
 		T: fmt::Debug
 	{
-		Error {
+		Self {
 			code: ErrorCode::InvalidParams,
 			message: format!("Invalid parameters: {}", message.into()),
 			data: Some(Value::String(format!("{:?}", details))),
@@ -144,7 +144,7 @@ impl Error {
 
 	/// Creates new `InvalidRequest` with invalid version description
 	pub fn invalid_version() -> Self {
-		Error {
+		Self {
 			code: ErrorCode::InvalidRequest,
 			message: "Unsupported JSON-RPC protocol version".to_owned(),
 			data: None,

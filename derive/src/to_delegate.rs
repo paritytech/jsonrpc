@@ -7,6 +7,8 @@ use syn::{
 };
 use crate::rpc_attr::RpcMethodAttribute;
 
+// TODO: This can be improved by boxing `PubSub.unsubscribe` to even out the variant sizes
+#[allow(clippy::large_enum_variant)]
 pub enum MethodRegistration {
 	Standard {
 		method: RpcMethod,
@@ -101,7 +103,7 @@ pub fn generate_trait_item_method(
 			del
 		};
 
-	let method: syn::TraitItemMethod =
+	let mut method: syn::TraitItemMethod =
 		if has_metadata {
 			parse_quote! {
 				/// Create an `IoDelegate`, wiring rpc calls to the trait methods.
@@ -118,8 +120,7 @@ pub fn generate_trait_item_method(
 			}
 		};
 
-	let predicates = generate_where_clause_serialization_predicates(&trait_item);
-	let mut method = method.clone();
+	let predicates = generate_where_clause_serialization_predicates(trait_item);
 	method.sig.decl.generics
 		.make_where_clause()
 		.predicates
@@ -134,8 +135,8 @@ pub struct RpcMethod {
 }
 
 impl RpcMethod {
-	pub fn new(attr: RpcMethodAttribute, trait_item: syn::TraitItemMethod) -> RpcMethod {
-		RpcMethod { attr, trait_item }
+	pub fn new(attr: RpcMethodAttribute, trait_item: syn::TraitItemMethod) -> Self {
+		Self { attr, trait_item }
 	}
 
 	pub fn attr(&self) -> &RpcMethodAttribute { &self.attr }
@@ -335,8 +336,7 @@ fn is_option_type(ty: &syn::Type) -> bool {
 	if let syn::Type::Path(path) = ty {
 		path.path.segments
 			.first()
-			.map(|t| t.value().ident == "Option")
-			.unwrap_or(false)
+			.map_or(false, |t| t.value().ident == "Option")
 	} else {
 		false
 	}

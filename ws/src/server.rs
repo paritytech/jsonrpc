@@ -38,6 +38,9 @@ impl Server {
 		&self.addr
 	}
 
+	// Yes it's indeed too many -- but this is how our API goes
+	// TODO: Let's refactor this into a ServerOptions struct for the next major release
+	#[allow(clippy::too_many_arguments)]
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
 	pub fn start<M: core::Metadata, S: core::Middleware<M>>(
@@ -51,7 +54,7 @@ impl Server {
 		executor: UninitializedExecutor,
 		max_connections: usize,
 		max_payload_bytes: usize,
-	) -> Result<Server> {
+	) -> Result<Self> {
 		let config = {
 			let mut config = ws::Settings::default();
 			config.max_connections = max_connections;
@@ -99,7 +102,7 @@ impl Server {
 		});
 
 		// Return a handle
-		Ok(Server {
+		Ok(Self {
 			addr: local_addr,
 			handle: Some(handle),
 			executor: Arc::new(Mutex::new(Some(eloop))),

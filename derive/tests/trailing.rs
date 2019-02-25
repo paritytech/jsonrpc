@@ -26,7 +26,7 @@ impl Rpc for RpcImpl {
 	}
 
 	fn echo(&self, x: Option<String>) -> Result<String> {
-		Ok(x.unwrap_or("".into()))
+		Ok(x.unwrap_or_else(|| "".into()))
 	}
 
 	fn add_multi(&self, a: Option<u64>, b: Option<u64>, c: Option<u64>) -> Result<u64> {

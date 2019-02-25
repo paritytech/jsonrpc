@@ -27,7 +27,7 @@ impl From<Option<u16>> for Port {
 }
 
 impl From<u16> for Port {
-	fn from(port: u16) -> Port {
+	fn from(port: u16) -> Self {
 		Port::Fixed(port)
 	}
 }
@@ -43,7 +43,7 @@ pub struct Host {
 
 impl<T: AsRef<str>> From<T> for Host {
 	fn from(string: T) -> Self {
-		Host::parse(string.as_ref())
+		Self::parse(string.as_ref())
 	}
 }
 
@@ -55,7 +55,7 @@ impl Host {
 		let string = Self::to_string(&hostname, &port);
 		let matcher = Matcher::new(&string);
 
-		Host {
+		Self {
 			hostname,
 			port,
 			as_string: string,
@@ -77,17 +77,14 @@ impl Host {
 			}
 		};
 
-		Host::new(host, port)
+		Self::new(host, port)
 	}
 
-	fn pre_process(host: &str) -> String {
+	fn pre_process(url: &str) -> String {
 		// Remove possible protocol definition
-		let mut it = host.split("://");
-		let protocol = it.next().expect(SPLIT_PROOF);
-		let host = match it.next() {
-			Some(data) => data,
-			None => protocol,
-		};
+		let mut it = url.split("://");
+		let maybe_protocol = it.next().expect(SPLIT_PROOF);
+		let host = if let Some(data) = it.next() { data } else { maybe_protocol };
 
 		let mut it = host.split('/');
 		it.next().expect(SPLIT_PROOF).to_lowercase()
@@ -149,14 +146,10 @@ impl<T> From<Option<Vec<T>>> for DomainsValidation<T> {
 
 /// Returns `true` when `Host` header is whitelisted in `allowed_hosts`.
 pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> bool {
-	match allowed_hosts.as_ref() {
-		None => true,
-		Some(ref allowed_hosts) => match host {
-			None => false,
-			Some(ref host) => {
-				allowed_hosts.iter().any(|h| h.matches(host))
-			}
-		}
+	match (host, allowed_hosts) {
+		(None, _) => false,
+		(_, None) => true,
+		(Some(host), Some(allowed_hosts)) => allowed_hosts.iter().any(|h| h.matches(host))
 	}
 }
 

@@ -21,9 +21,14 @@ matrix:
   allow_failures:
   - rust: nightly
 
+
+before_script:
+  - rustup component add clippy
+
 script:
   - cargo build --all
   - cargo test --all
+  - ./clippy.sh
 
 after_success: |
   [ $TRAVIS_OS_NAME == 'linux' ] &&

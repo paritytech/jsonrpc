@@ -94,7 +94,7 @@ impl Drop for RpcEventLoop {
 impl RpcEventLoop {
 	/// Spawns a new thread with the `EventLoop`.
 	pub fn spawn() -> io::Result<Self> {
-		RpcEventLoop::with_name(None)
+		Self::with_name(None)
 	}
 
 	/// Spawns a new named thread with the `EventLoop`.
@@ -135,7 +135,7 @@ impl RpcEventLoop {
 
 		let exec = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
-		exec.map(|executor| RpcEventLoop {
+		exec.map(|executor| Self {
 			executor,
 			close: Some(stop),
 			handle: Some(handle),

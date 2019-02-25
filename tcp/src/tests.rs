@@ -135,7 +135,6 @@ fn req_parallel() {
 
 	let mut handles = Vec::new();
 	for _ in 0..6 {
-		let addr = addr.clone();
 		handles.push(
 			thread::spawn(move || {
 				for _ in 0..100 {
@@ -166,7 +165,7 @@ pub struct SocketMetadata {
 
 impl Default for SocketMetadata {
 	fn default() -> Self {
-		SocketMetadata { addr: "0.0.0.0:0".parse().unwrap() }
+		Self { addr: "0.0.0.0:0".parse().unwrap() }
 	}
 }
 
@@ -179,8 +178,8 @@ impl SocketMetadata {
 impl Metadata for SocketMetadata { }
 
 impl From<SocketAddr> for SocketMetadata {
-	fn from(addr: SocketAddr) -> SocketMetadata {
-		SocketMetadata { addr: addr }
+	fn from(addr: SocketAddr) -> Self {
+		Self { addr }
 	}
 }
 
@@ -228,7 +227,7 @@ pub struct PeerListMetaExtractor {
 impl MetaExtractor<SocketMetadata> for PeerListMetaExtractor {
 	fn extract(&self, context: &RequestContext) -> SocketMetadata {
 		trace!(target: "tcp", "extracting to peer list...");
-		self.peers.lock().push(context.peer_addr.clone());
+		self.peers.lock().push(context.peer_addr);
 		context.peer_addr.into()
 	}
 }
@@ -265,7 +264,7 @@ fn message() {
 			future::ok(stream).join(delay)
 		})
 		.and_then(move |stream| {
-			let peer_addr = peer_list.lock()[0].clone();
+			let peer_addr = peer_list.lock()[0];
 			dispatcher.push_message(
 				&peer_addr,
 				message.to_owned(),
@@ -275,7 +274,7 @@ fn message() {
 		})
 		.and_then(move |(stream, _)| {
 			// Read message plus newline appended by codec.
-			io::read_exact(stream, vec![0u8; message.len() + 1])
+			io::read_exact(stream, vec![0_u8; message.len() + 1])
 		})
 		.and_then(move |(stream, read_buf)| {
 			trace!(target: "tcp", "Read ping message");

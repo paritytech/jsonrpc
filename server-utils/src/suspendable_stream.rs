@@ -4,13 +4,14 @@ use std::io;
 use tokio::prelude::*;
 
 /// `Incoming` is a stream of incoming sockets
-/// Polling the stream may return a temporary io::Error (for instance if we can't open the connection because of "too many open files" limit)
-/// we use for_each combinator which:
+/// Polling the stream may return a temporary `io::Error`
+/// (for instance if we can't open the connection because of "too many open files" limit)
+/// we use `for_each` combinator which:
 /// 1. Runs for every Ok(socket)
 /// 2. Stops on the FIRST Err()
-/// So any temporary io::Error will cause the entire server to terminate.
-/// This wrapper type for tokio::Incoming stops accepting new connections
-/// for a specified amount of time once an io::Error is encountered
+/// So any temporary `io::Error` will cause the entire server to terminate.
+/// This wrapper type for `tokio::Incoming` stops accepting new connections
+/// for a specified amount of time once an `io::Error` is encountered
 pub struct SuspendableStream<S> {
 	stream: S,
 	next_delay: Duration,
@@ -23,7 +24,7 @@ impl<S> SuspendableStream<S> {
 	/// construct a new Suspendable stream, given tokio::Incoming
 	/// and the amount of time to pause for.
 	pub fn new(stream: S) -> Self {
-		SuspendableStream {
+		Self {
 			stream,
 			next_delay: Duration::from_millis(20),
 			initial_delay: Duration::from_millis(10),

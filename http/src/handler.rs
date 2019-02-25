@@ -29,6 +29,8 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
+	// FIXME: We should consider moving to Options struct and builder pattern to simplify this
+	#[allow(clippy::too_many_arguments)]
 	/// Create new request handler.
 	pub fn new(
 		jsonrpc_handler: Rpc<M, S>,
@@ -42,7 +44,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		max_request_body_size: usize,
 		keep_alive: bool,
 	) -> Self {
-		ServerHandler {
+		Self {
 			jsonrpc_handler,
 			allowed_hosts,
 			cors_domains,
@@ -156,6 +158,8 @@ type FutureResponse<F, G> = future::Map<
 	fn(Option<core::Response>) -> Response,
 >;
 
+// TODO: It should be possible to refactor this into more balanced enum with boxing
+#[allow(clippy::large_enum_variant)]
 enum RpcHandlerState<M, F, G> where
 	F: Future<Item = Option<core::Response>, Error = ()>,
 	G: Future<Item = Option<core::Output>, Error = ()>,
@@ -253,7 +257,7 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> {
 				}
 			},
 			RpcHandlerState::ProcessRest { uri, metadata } => {
-				self.process_rest(uri, metadata)?
+				self.process_rest(&uri, metadata)?
 			},
 			RpcHandlerState::ProcessHealth { method, metadata } => {
 				self.process_health(method, metadata)?
@@ -324,7 +328,7 @@ enum BodyError {
 }
 
 impl From<hyper::Error> for BodyError {
-	fn from(e: hyper::Error) -> BodyError {
+	fn from(e: hyper::Error) -> Self {
 		BodyError::Hyper(e)
 	}
 }
@@ -351,10 +355,10 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			// Validate the ContentType header
 			// to prevent Cross-Origin XHRs with text/plain
 			Method::POST if Self::is_json(request.headers().get("content-type")) => {
-				let uri = if self.rest_api != RestApi::Disabled { Some(request.uri().clone()) } else { None };
+				let uri = if self.rest_api == RestApi::Disabled { None } else { Some(request.uri().clone()) };
 				RpcHandlerState::ReadingBody {
 					metadata,
-					request: Default::default(),
+					request: Vec::<u8>::default(),
 					uri,
 					body: request.into_body(),
 				}
@@ -426,7 +430,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 
 	fn process_rest(
 		&self,
-		uri: hyper::Uri,
+		uri: &hyper::Uri,
 		metadata: M,
 	) -> Result<RpcPollState<M, S::Future, S::CallFuture>, hyper::Error> {
 		use self::core::types::{Call, MethodCall, Version, Params, Request, Id, Value};
@@ -470,7 +474,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		loop {
 			match body.poll()? {
 				Async::Ready(Some(chunk)) => {
-					if request.len().checked_add(chunk.len()).map(|n| n > self.max_request_body_size).unwrap_or(true) {
+					if request.len().checked_add(chunk.len()).map_or(true, |n| n > self.max_request_body_size) {
 						return Err(BodyError::TooLarge)
 					}
 					request.extend_from_slice(&*chunk)
@@ -563,7 +567,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 	/// message.
 	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
 		match content_type.and_then(|val| val.to_str().ok()) {
-			Some(ref content)
+			Some(content)
 				if content.eq_ignore_ascii_case("application/json")
 					|| content.eq_ignore_ascii_case("application/json; charset=utf-8")
 					|| content.eq_ignore_ascii_case("application/json;charset=utf-8") =>

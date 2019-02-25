@@ -1,3 +1,6 @@
+// Clippy mistakes HTTP headers for class names
+#![allow(clippy::doc_markdown)]
+
 use hyper::{self, header};
 
 use crate::server_utils::{cors, hosts};
@@ -30,6 +33,8 @@ pub fn cors_allow_origin(
 	})
 }
 
+// In this case, chained maps are actually more readable than a single huge one
+#[allow(clippy::filter_map)]
 /// Returns the CORS AllowHeaders header that should be returned with that request.
 pub fn cors_allow_headers(
 	request: &hyper::Request<hyper::Body>,
@@ -62,12 +67,11 @@ pub fn keep_alive(
 	keep_alive: bool,
 ) -> bool {
 	read_header(request, "connection")
-		.map(|val| match (keep_alive, val) {
+		// if the client header is not present, close connection if we don't keep_alive
+		.map_or(keep_alive, |val| match (keep_alive, val) {
 			// indicate that connection should be closed
 			(false, _) | (_, "close") => false,
 			// don't include any headers otherwise
 			_ => true,
 		})
-		// if the client header is not present, close connection if we don't keep_alive
-		.unwrap_or(keep_alive)
 }

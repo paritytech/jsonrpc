@@ -41,7 +41,7 @@ impl<'a> Fold for RpcTrait {
 	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
 		if ty.ident == METADATA_TYPE {
 			self.has_metadata = true;
-			let mut ty = ty.clone();
+			let mut ty = ty;
 			if self.has_pubsub_methods {
 				ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata))
 			} else {
@@ -80,7 +80,7 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrai
 	let mut pubsub_method_pairs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
 	let mut method_registrations: Vec<MethodRegistration> = Vec::new();
 
-	for method in methods.iter() {
+	for method in &methods {
 		match &method.attr().kind {
 			AttributeKind::Rpc { has_metadata } =>
 				method_registrations.push(MethodRegistration::Standard {

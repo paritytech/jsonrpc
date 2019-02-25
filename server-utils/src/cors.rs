@@ -29,7 +29,7 @@ pub struct Origin {
 
 impl<T: AsRef<str>> From<T> for Origin {
 	fn from(string: T) -> Self {
-		Origin::parse(string.as_ref())
+		Self::parse(string.as_ref())
 	}
 }
 
@@ -38,7 +38,7 @@ impl Origin {
 		let string = Self::to_string(&protocol, &host);
 		let matcher = Matcher::new(&string);
 
-		Origin {
+		Self {
 			protocol,
 			host,
 			as_string: string,
@@ -74,7 +74,7 @@ impl Origin {
 			Some(other) => OriginProtocol::Custom(other),
 		};
 
-		Origin::with_host(protocol, hostname)
+		Self::with_host(protocol, hostname)
 	}
 
 	fn to_string(protocol: &OriginProtocol, host: &Host) -> String {
@@ -103,6 +103,9 @@ impl ops::Deref for Origin {
 	}
 }
 
+// FIXME: There's a potential for allocation optimization here, by moving to `Value(Box<Origin>)`
+// This should be done with the next major release, since it breaks API compatibility
+#[allow(clippy::large_enum_variant)]
 /// Origins allowed to access
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessControlAllowOrigin {
@@ -125,7 +128,7 @@ impl fmt::Display for AccessControlAllowOrigin {
 }
 
 impl<T: Into<String>> From<T> for AccessControlAllowOrigin {
-	fn from(s: T) -> AccessControlAllowOrigin {
+	fn from(s: T) -> Self {
 		match s.into().as_str() {
 			"all" | "*" | "any" => AccessControlAllowOrigin::Any,
 			"null" => AccessControlAllowOrigin::Null,
@@ -155,6 +158,10 @@ pub enum AllowCors<T> {
 }
 
 impl<T> AllowCors<T> {
+
+	// There's a Clippy misfire on `AllowCors<O>` in `map<F, O>` definition (which is not Self in this context)
+	#![allow(clippy::use_self)]
+
 	/// Maps `Ok` variant of `AllowCors`.
 	pub fn map<F, O>(self, f: F) -> AllowCors<O> where
 		F: FnOnce(T) -> O,
@@ -188,7 +195,7 @@ pub fn get_cors_allow_origin(
 ) -> AllowCors<AccessControlAllowOrigin> {
 	match origin {
 		None => AllowCors::NotRequired,
-		Some(ref origin) => {
+		Some(origin) => {
 			if let Some(host) = host {
 				// Request initiated from the same server.
 				if origin.ends_with(host) {
@@ -201,14 +208,13 @@ pub fn get_cors_allow_origin(
 			}
 
 			match allowed.as_ref() {
-				None if *origin == "null" => AllowCors::Ok(AccessControlAllowOrigin::Null),
+				None if origin == "null" => AllowCors::Ok(AccessControlAllowOrigin::Null),
 				None => AllowCors::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
-				Some(ref allowed) if *origin == "null" => {
+				Some(allowed) if origin == "null" => {
 					allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
-						.map(AllowCors::Ok)
-						.unwrap_or(AllowCors::Invalid)
+						.map_or(AllowCors::Invalid, AllowCors::Ok)
 				},
-				Some(ref allowed) => {
+				Some(allowed) => {
 					allowed.iter().find(|cors| {
 						match **cors {
 							AccessControlAllowOrigin::Any => true,
@@ -220,13 +226,15 @@ pub fn get_cors_allow_origin(
 						}
 					})
 					.map(|_| AccessControlAllowOrigin::Value(Origin::parse(origin)))
-					.map(AllowCors::Ok).unwrap_or(AllowCors::Invalid)
+					.map_or(AllowCors::Invalid, AllowCors::Ok)
 				},
 			}
 		},
 	}
 }
 
+// Filtering in AccessControlAllowedHeaders::Only branch looks better the way it is now
+#[allow(clippy::filter_map)]
 /// Validates if the `AccessControlAllowedHeaders` in the request are allowed.
 pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 	mut headers: impl Iterator<Item=T>,
@@ -411,7 +419,7 @@ mod tests {
 	#[test]
 	fn should_return_none_for_not_matching_origin() {
 		// given
-		let origin = Some("http://parity.io".into());
+		let origin = Some("http://parity.io");
 		let host = None;
 
 		// when
@@ -428,7 +436,7 @@ mod tests {
 	#[test]
 	fn should_return_specific_origin_if_we_allow_any() {
 		// given
-		let origin = Some("http://parity.io".into());
+		let origin = Some("http://parity.io");
 		let host = None;
 
 		// when
@@ -458,7 +466,7 @@ mod tests {
 	#[test]
 	fn should_return_null_if_origin_is_null() {
 		// given
-		let origin = Some("null".into());
+		let origin = Some("null");
 		let host = None;
 
 		// when
@@ -475,7 +483,7 @@ mod tests {
 	#[test]
 	fn should_return_specific_origin_if_there_is_a_match() {
 		// given
-		let origin = Some("http://parity.io".into());
+		let origin = Some("http://parity.io");
 		let host = None;
 
 		// when
@@ -492,9 +500,9 @@ mod tests {
 	#[test]
 	fn should_support_wildcards() {
 		// given
-		let origin1 = Some("http://parity.io".into());
-		let origin2 = Some("http://parity.iot".into());
-		let origin3 = Some("chrome-extension://test".into());
+		let origin1 = Some("http://parity.io");
+		let origin2 = Some("http://parity.iot");
+		let origin3 = Some("chrome-extension://test");
 		let host = None;
 		let allowed = Some(vec![
 		   AccessControlAllowOrigin::Value("http://*.io".into()),
@@ -522,7 +530,7 @@ mod tests {
 		let requested = vec!["x-not-allowed"];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| x);
+		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers, |x| x);
 
 		// then
 		assert_eq!(res, AllowCors::Invalid);
@@ -534,12 +542,12 @@ mod tests {
 		let allowed = vec![
 			"x-allowed".to_owned(),
 		];
-		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed.clone());
+		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed);
 		let headers = vec!["Access-Control-Request-Headers"];
 		let requested = vec!["x-allowed"];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| (*x).to_owned());
+		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers, |x| (*x).to_owned());
 
 		// then
 		let allowed = vec![
@@ -554,7 +562,7 @@ mod tests {
 		let allowed = vec![
 			"x-allowed".to_owned(),
 		];
-		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed.clone());
+		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed);
 		let headers: Vec<String> = vec![];
 
 		// when
@@ -571,7 +579,7 @@ mod tests {
 		let headers: Vec<String> = vec![];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), iter::empty(), &cors_allow_headers.into(), |x| x);
+		let res = get_cors_allow_headers(headers.iter(), iter::empty(), &cors_allow_headers, |x| x);
 
 		// then
 		assert_eq!(res, AllowCors::NotRequired);

@@ -37,7 +37,7 @@ struct Out {}
 
 impl Rpc<InAndOut, In, Out> for RpcImpl {
 	fn one(&self) -> Result<InAndOut> {
-		Ok(InAndOut { foo: 1u64 })
+		Ok(InAndOut { foo: 1_u64 })
 	}
 
 	fn set_two(&self, _x: In) -> Result<()> {

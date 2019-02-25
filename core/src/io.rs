@@ -93,14 +93,16 @@ pub struct MetaIoHandler<T: Metadata, S: Middleware<T> = middleware::Noop> {
 
 impl<T: Metadata> Default for MetaIoHandler<T> {
 	fn default() -> Self {
-		MetaIoHandler::with_compatibility(Default::default())
+		Self::with_compatibility(Compatibility::default())
 	}
 }
 
+//We operate on complex parametrized types here, makes sense to let compiler do the heavy typing excercises
+#[allow(clippy::default_trait_access)]
 impl<T: Metadata> MetaIoHandler<T> {
 	/// Creates new `MetaIoHandler` compatible with specified protocol version.
 	pub fn with_compatibility(compatibility: Compatibility) -> Self {
-		MetaIoHandler {
+		Self {
 			compatibility,
 			middleware: Default::default(),
 			methods: Default::default(),
@@ -110,18 +112,23 @@ impl<T: Metadata> MetaIoHandler<T> {
 
 
 impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
+
+	//We operate on complex parametrized types here, makes sense to let compiler do the heavy typing excercises
+	#[allow(clippy::default_trait_access)]
 	/// Creates new `MetaIoHandler`
 	pub fn new(compatibility: Compatibility, middleware: S) -> Self {
-		MetaIoHandler {
+		Self {
 			compatibility,
 			middleware,
 			methods: Default::default(),
 		}
 	}
 
+	//We operate on complex parametrized types here, makes sense to let compiler do the heavy typing excercises
+	#[allow(clippy::default_trait_access)]
 	/// Creates new `MetaIoHandler` with specified middleware.
 	pub fn with_middleware(middleware: S) -> Self {
-		MetaIoHandler {
+		Self {
 			compatibility: Default::default(),
 			middleware,
 			methods: Default::default(),
@@ -307,7 +314,7 @@ pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
 impl IoHandler {
 	/// Creates new `IoHandler` without any metadata.
 	pub fn new() -> Self {
-		IoHandler::default()
+		Self::default()
 	}
 
 	/// Creates new `IoHandler` without any metadata compatible with specified protocol version.
@@ -364,9 +371,10 @@ fn read_request(request_str: &str) -> Result<Request, Error> {
 	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
+// We use this function in `map` calls, those are more ergonomical if consuming an object
+#[allow(clippy::needless_pass_by_value)]
 fn write_response(response: Response) -> String {
-	// this should never fail
-	serde_json::to_string(&response).unwrap()
+	serde_json::to_string(&response).expect("Derived serialization for Response struct never fails; qed.")
 }
 
 #[cfg(test)]

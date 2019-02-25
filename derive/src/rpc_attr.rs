@@ -37,7 +37,7 @@ const BOTH_SUB_AND_UNSUB_ERR: &str = "pubsub attribute annotated with both subsc
 const NEITHER_SUB_OR_UNSUB_ERR: &str = "pubsub attribute not annotated with either subscribe or unsubscribe";
 
 impl RpcMethodAttribute {
-	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>> {
+	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<Self>> {
 		let attrs = method.attrs
 			.iter()
 			.filter_map(Self::parse_meta)
@@ -50,7 +50,7 @@ impl RpcMethodAttribute {
 		}
 	}
 
-	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute>> {
+	fn parse_meta(attr: &syn::Attribute) -> Option<Result<Self>> {
 		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
 				let attr_kind =
@@ -71,7 +71,7 @@ impl RpcMethodAttribute {
 							|name| {
 								let aliases = get_meta_list(meta)
 									.map_or(Vec::new(), |ml| get_aliases(ml));
-								Ok(RpcMethodAttribute {
+								Ok(Self {
 									attr: attr.clone(),
 									name,
 									aliases,

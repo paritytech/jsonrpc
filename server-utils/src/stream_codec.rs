@@ -29,12 +29,12 @@ pub struct StreamCodec {
 impl StreamCodec {
 	/// Default codec with streaming input data. Input can be both enveloped and not.
 	pub fn stream_incoming() -> Self {
-		StreamCodec::new(Separator::Empty, Default::default())
+		Self::new(Separator::Empty, Separator::default())
 	}
 
 	/// New custom stream codec
 	pub fn new(incoming_separator: Separator, outgoing_separator: Separator) -> Self {
-		StreamCodec {
+		Self {
 			incoming_separator,
 			outgoing_separator,
 		}
@@ -58,7 +58,7 @@ impl Decoder for StreamCodec {
 				let line = buf.split_to(i);
 				buf.split_to(1);
 
-				match str::from_utf8(&line.as_ref()) {
+				match str::from_utf8(line.as_ref()) {
 					Ok(s) => Ok(Some(s.to_string())),
 					Err(_) => Err(io::Error::new(io::ErrorKind::Other, "invalid UTF-8")),
 				}
@@ -98,10 +98,8 @@ impl Decoder for StreamCodec {
 
 				if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
 					let bts = buf.split_to(idx + 1);
-					match String::from_utf8(bts.as_ref().to_vec()) {
-						Ok(val) => { return Ok(Some(val)) },
-						Err(_) => { return Ok(None); } // skip non-utf requests (TODO: log error?)
-					};
+					// skip non-utf requests (TODO: log error?)
+					return Ok(String::from_utf8(bts.as_ref().to_vec()).ok());
 				}
 			}
 			Ok(None)

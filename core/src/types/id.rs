@@ -14,6 +14,10 @@ pub enum Id {
 
 #[cfg(test)]
 mod tests {
+
+	// Our tests here have repetitive patterns with repetitive variable names; it only makes code easier to read here
+	#![allow(clippy::shadow_unrelated)]
+
 	use super::*;
 	use serde_json;
 

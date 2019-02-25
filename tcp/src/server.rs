@@ -37,12 +37,15 @@ impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 }
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
+
+	// `Default::default()` is perfectly fine here, alternative is a really terrible nested type
+	#[allow(clippy::default_trait_access)]
 	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M> + 'static,
 	{
-		ServerBuilder {
+		Self {
 			executor: reactor::UninitializedExecutor::Unspawned,
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(extractor),
@@ -128,7 +131,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 					let peer_message_queue = {
 						let mut channels = channels.lock();
-						channels.insert(peer_addr, sender.clone());
+						channels.insert(peer_addr, sender);
 
 						PeerMessageQueue::new(
 							responses,

@@ -2,6 +2,9 @@
 
 #![warn(missing_docs)]
 
+// Don't allow Clippy to force us into changing our APIs
+#![allow(clippy::stutter)]
+
 use jsonrpc_server_utils as server_utils;
 
 pub use jsonrpc_core;

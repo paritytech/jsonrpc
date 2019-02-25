@@ -1,3 +1,6 @@
+// Clippy mistakes proper WebSocket spelling for a class name
+#![allow(clippy::doc_markdown)]
+
 use std::fmt;
 use std::sync::{atomic, Arc};
 
@@ -19,7 +22,7 @@ pub struct Sender {
 impl Sender {
 	/// Creates a new `Sender`.
 	pub fn new(out: ws::Sender, active: Arc<atomic::AtomicBool>) -> Self {
-		Sender {
+		Self {
 			out,
 			active,
 		}

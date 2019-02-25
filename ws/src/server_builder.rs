@@ -41,7 +41,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 		T: Into<core::MetaIoHandler<M, S>>,
 		E: MetaExtractor<M>,
 	{
-		ServerBuilder {
+		Self {
 			handler: Arc::new(handler.into()),
 			meta_extractor: Arc::new(extractor),
 			allowed_origins: None,

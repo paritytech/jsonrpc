@@ -36,7 +36,7 @@ pub struct ServerBuilder {
 impl ServerBuilder {
 	/// Returns a new server instance
 	pub fn new<T>(handler: T) -> Self where T: Into<IoHandler> {
-		ServerBuilder { handler: Arc::new(handler.into()) }
+		Self { handler: Arc::new(handler.into()) }
 	}
 
 	/// Will block until EOF is read or until an error occurs.
@@ -62,11 +62,11 @@ impl ServerBuilder {
 
 /// Process a request asynchronously
 fn process(io: &Arc<IoHandler>, input: String) -> impl Future<Item = String, Error = ()> + Send {
-	io.handle_request(&input).map(move |result| match result {
-		Some(res) => res,
-		None => {
-			info!("JSON RPC request produced no response: {:?}", input);
-			String::from("")
-		}
+	io.handle_request(&input).map(move |result|
+	if let Some(res) = result {
+		res
+	} else {
+		info!("JSON RPC request produced no response: {:?}", input);
+		String::from("")
 	})
 }
