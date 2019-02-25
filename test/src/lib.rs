@@ -43,7 +43,7 @@
 //! }
 //! ```
 
-#[warn(missing_docs)]
+#![warn(missing_docs)]
 
 extern crate jsonrpc_core as rpc;
 use serde;
@@ -67,8 +67,11 @@ pub struct Rpc {
 	pub options: Options,
 }
 
+/// Encoding format.
 pub enum Encoding {
+	/// Encodes params using `serde::to_string`.
 	Compact,
+	/// Encodes params using `serde::to_string_pretty`.
 	Pretty,
 }
 
