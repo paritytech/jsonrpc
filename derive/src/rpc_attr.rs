@@ -73,7 +73,7 @@ impl RpcMethodAttribute {
 									.map_or(Vec::new(), |ml| get_aliases(ml));
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
-									name: name.into(),
+									name: name,
 									aliases,
 									kind
 								})
@@ -106,7 +106,7 @@ impl RpcMethodAttribute {
 						Err(Error::new_spanned(meta, NEITHER_SUB_OR_UNSUB_ERR)),
 				};
 				kind.map(|kind| AttributeKind::PubSub {
-					subscription_name: sub_name.into(),
+					subscription_name: sub_name,
 					kind,
 				})
 			})
@@ -157,16 +157,16 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 
 fn validate_idents(meta: &syn::Meta, attr_idents: &[String], valid: &[&str]) -> Result<syn::Meta> {
 	let invalid_meta_words: Vec<_> = attr_idents
-		.into_iter()
+		.iter()
 		.filter(|w| !valid.iter().any(|v| v == w))
 		.cloned()
 		.collect();
-	if !invalid_meta_words.is_empty() {
+	if invalid_meta_words.is_empty() {
+		Ok(meta.clone())
+	} else {
 		let expected = format!("Expected '{}'", valid.join(", "));
 		let msg = format!("{} '{}'. {}", INVALID_ATTR_PARAM_NAMES_ERR, invalid_meta_words.join(", "), expected);
 		Err(Error::new_spanned(meta, msg))
-	} else {
-		Ok(meta.clone())
 	}
 }
 
@@ -203,7 +203,7 @@ fn has_meta_word(word: &str, ml: &syn::MetaList) -> bool {
 		.iter()
 		.any(|nested|
 			if let syn::NestedMeta::Meta(syn::Meta::Word(w)) = nested {
-				word == w.to_string()
+				w == word
 			} else {
 				false
 			}
