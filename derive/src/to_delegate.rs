@@ -75,6 +75,7 @@ const SUBCRIBER_TYPE_IDENT: &str = "Subscriber";
 const METADATA_CLOSURE_ARG: &str = "meta";
 const SUBSCRIBER_CLOSURE_ARG: &str = "subscriber";
 
+// tuples are limited to 16 fields: the maximum supported by `serde::Deserialize`
 const TUPLE_FIELD_NAMES: [&str; 16] = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p"];
 
 pub fn generate_trait_item_method(
