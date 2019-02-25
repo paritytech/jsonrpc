@@ -57,7 +57,7 @@ impl<T: PubSubMetadata, S: core::Middleware<T>> PubSubHandler<T, S> {
 	/// Creates new `PubSubHandler`
 	pub fn new(handler: core::MetaIoHandler<T, S>) -> Self {
 		PubSubHandler {
-			handler: handler,
+			handler,
 		}
 	}
 

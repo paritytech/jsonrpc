@@ -95,7 +95,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					let (sender, receiver) = mpsc::channel(65536);
 
 					let context = RequestContext {
-						peer_addr: peer_addr,
+						peer_addr,
 						sender: sender.clone(),
 					};
 

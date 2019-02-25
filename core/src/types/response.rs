@@ -41,14 +41,14 @@ impl Output {
 	pub fn from(result: CoreResult<Value>, id: Id, jsonrpc: Option<Version>) -> Self {
 		match result {
 			Ok(result) => Output::Success(Success {
-				id: id,
-				jsonrpc: jsonrpc,
-				result: result,
+				id,
+				jsonrpc,
+				result,
 			}),
 			Err(error) => Output::Failure(Failure {
-				id: id,
-				jsonrpc: jsonrpc,
-				error: error,
+				id,
+				jsonrpc,
+				error,
 			}),
 		}
 	}
@@ -56,8 +56,8 @@ impl Output {
 	/// Creates new failure output indicating malformed request.
 	pub fn invalid_request(id: Id, jsonrpc: Option<Version>) -> Self {
 		Output::Failure(Failure {
-			id: id,
-			jsonrpc: jsonrpc,
+			id,
+			jsonrpc,
 			error: Error::new(ErrorCode::InvalidRequest),
 		})
 	}
@@ -104,8 +104,8 @@ impl Response {
 	pub fn from(error: Error, jsonrpc: Option<Version>) -> Self {
 		Failure {
 			id: Id::Null,
-			jsonrpc: jsonrpc,
-			error: error,
+			jsonrpc,
+			error,
 		}.into()
 	}
 }

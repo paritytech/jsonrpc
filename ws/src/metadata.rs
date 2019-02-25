@@ -20,8 +20,8 @@ impl Sender {
 	/// Creates a new `Sender`.
 	pub fn new(out: ws::Sender, active: Arc<atomic::AtomicBool>) -> Self {
 		Sender {
-			out: out,
-			active: active,
+			out,
+			active,
 		}
 	}
 

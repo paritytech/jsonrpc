@@ -397,7 +397,7 @@ mod tests {
 		let (tx, mut rx) = oneshot::channel();
 		let subscriber = Subscriber {
 			notification: "test".into(),
-			transport: transport,
+			transport,
 			sender: tx,
 		};
 
@@ -419,7 +419,7 @@ mod tests {
 		let (tx, mut rx) = oneshot::channel();
 		let subscriber = Subscriber {
 			notification: "test".into(),
-			transport: transport,
+			transport,
 			sender: tx,
 		};
 		let error = core::Error {

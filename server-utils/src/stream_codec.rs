@@ -35,8 +35,8 @@ impl StreamCodec {
 	/// New custom stream codec
 	pub fn new(incoming_separator: Separator, outgoing_separator: Separator) -> Self {
 		StreamCodec {
-			incoming_separator: incoming_separator,
-			outgoing_separator: outgoing_separator,
+			incoming_separator,
+			outgoing_separator,
 		}
 	}
 }

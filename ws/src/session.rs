@@ -109,7 +109,7 @@ impl LivenessPoll {
 			(index, rx)
 		};
 
-		LivenessPoll { task_slab: task_slab, slab_handle: index, rx: rx }
+		LivenessPoll { task_slab, slab_handle: index, rx }
 	}
 }
 
@@ -297,13 +297,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	) -> Self {
 		Factory {
 			session_id: 0,
-			handler: handler,
-			meta_extractor: meta_extractor,
-			allowed_origins: allowed_origins,
-			allowed_hosts: allowed_hosts,
-			request_middleware: request_middleware,
-			stats: stats,
-			executor: executor,
+			handler,
+			meta_extractor,
+			allowed_origins,
+			allowed_hosts,
+			request_middleware,
+			stats,
+			executor,
 		}
 	}
 }

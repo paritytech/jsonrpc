@@ -39,10 +39,10 @@ impl Origin {
 		let matcher = Matcher::new(&string);
 
 		Origin {
-			protocol: protocol,
-			host: host,
+			protocol,
+			host,
 			as_string: string,
-			matcher: matcher,
+			matcher,
 		}
 	}
 

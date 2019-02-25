@@ -56,10 +56,10 @@ impl Host {
 		let matcher = Matcher::new(&string);
 
 		Host {
-			hostname: hostname,
-			port: port,
+			hostname,
+			port,
 			as_string: string,
-			matcher: matcher,
+			matcher,
 		}
 	}
 

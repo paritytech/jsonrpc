@@ -113,9 +113,9 @@ fn request(server: Server, request: &str) -> Response {
 	let body = read_block(&mut lines);
 
 	Response {
-		status: status,
-		headers: headers,
-		body: body,
+		status,
+		headers,
+		body,
 	}
 }
 

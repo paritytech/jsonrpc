@@ -28,9 +28,9 @@ impl Response {
 		let body = Self::read_block(&mut lines);
 
 		Response {
-			status: status,
+			status,
 			_headers: headers,
-			body: body,
+			body,
 		}
 	}
 

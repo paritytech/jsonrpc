@@ -24,7 +24,7 @@ impl<S: Stream> PeerMessageQueue<S> {
 	) -> Self {
 		PeerMessageQueue {
 			up: response_stream,
-			receiver: receiver,
+			receiver,
 			_addr: addr,
 		}
 	}
@@ -55,7 +55,7 @@ impl Dispatcher {
 	/// Creates a new dispatcher
 	pub fn new(channels: Arc<SenderChannels>) -> Self {
 		Dispatcher {
-			channels: channels,
+			channels,
 		}
 	}
 

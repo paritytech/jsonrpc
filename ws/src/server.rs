@@ -103,7 +103,7 @@ impl Server {
 			addr: local_addr,
 			handle: Some(handle),
 			executor: Arc::new(Mutex::new(Some(eloop))),
-			broadcaster: broadcaster,
+			broadcaster,
 		})
 	}
 }

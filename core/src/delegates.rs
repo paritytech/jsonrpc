@@ -79,7 +79,7 @@ impl<T, M> IoDelegate<T, M> where
 	/// Creates new `IoDelegate`
 	pub fn new(delegate: Arc<T>) -> Self {
 		IoDelegate {
-			delegate: delegate,
+			delegate,
 			methods: HashMap::new(),
 		}
 	}
