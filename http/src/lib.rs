@@ -321,7 +321,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 	/// Configure the CORS `AccessControlAllowHeaders` header which are allowed.
 	pub fn cors_allow_headers(mut self, allowed_headers: cors::AccessControlAllowHeaders) -> Self {
-		self.allowed_headers = allowed_headers.into();
+		self.allowed_headers = allowed_headers;
 		self
 	}
 
@@ -583,8 +583,8 @@ impl Server {
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.executor.take().map(|executors| {
+		if let Some(executors) = self.executor.take() {
 			for executor in executors { executor.close(); }
-		});
+		};
 	}
 }

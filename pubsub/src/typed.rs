@@ -20,7 +20,7 @@ impl<T, E> Subscriber<T, E> {
 	/// Wrap non-typed subscriber.
 	pub fn new(subscriber: subscription::Subscriber) -> Self {
 		Subscriber {
-			subscriber: subscriber,
+			subscriber,
 			_data: PhantomData,
 		}
 	}
@@ -46,8 +46,8 @@ impl<T, E> Subscriber<T, E> {
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T, E>, ()> {
 		let sink = self.subscriber.assign_id(id.clone())?;
 		Ok(Sink {
-			id: id,
-			sink: sink,
+			id,
+			sink,
 			buffered: None,
 			_data: PhantomData,
 		})

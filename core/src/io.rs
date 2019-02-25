@@ -64,8 +64,8 @@ impl Default for Compatibility {
 }
 
 impl Compatibility {
-	fn is_version_valid(&self, version: Option<Version>) -> bool {
-		match (*self, version) {
+	fn is_version_valid(self, version: Option<Version>) -> bool {
+		match (self, version) {
 			(Compatibility::V1, None) |
 			(Compatibility::V2, Some(Version::V2)) |
 			(Compatibility::Both, _) => true,
@@ -73,8 +73,8 @@ impl Compatibility {
 		}
 	}
 
-	fn default_version(&self) -> Option<Version> {
-		match *self {
+	fn default_version(self) -> Option<Version> {
+		match self {
 			Compatibility::V1 => None,
 			Compatibility::V2 | Compatibility::Both => Some(Version::V2),
 		}
@@ -101,7 +101,7 @@ impl<T: Metadata> MetaIoHandler<T> {
 	/// Creates new `MetaIoHandler` compatible with specified protocol version.
 	pub fn with_compatibility(compatibility: Compatibility) -> Self {
 		MetaIoHandler {
-			compatibility: compatibility,
+			compatibility,
 			middleware: Default::default(),
 			methods: Default::default(),
 		}
@@ -113,8 +113,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Creates new `MetaIoHandler`
 	pub fn new(compatibility: Compatibility, middleware: S) -> Self {
 		MetaIoHandler {
-			compatibility: compatibility,
-			middleware: middleware,
+			compatibility,
+			middleware,
 			methods: Default::default(),
 		}
 	}
@@ -123,7 +123,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	pub fn with_middleware(middleware: S) -> Self {
 		MetaIoHandler {
 			compatibility: Default::default(),
-			middleware: middleware,
+			middleware,
 			methods: Default::default(),
 		}
 	}

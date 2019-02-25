@@ -109,7 +109,7 @@ impl LivenessPoll {
 			(index, rx)
 		};
 
-		LivenessPoll { task_slab: task_slab, slab_handle: index, rx: rx }
+		LivenessPoll { task_slab, slab_handle: index, rx }
 	}
 }
 
@@ -152,7 +152,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
 		self.active.store(false, atomic::Ordering::SeqCst);
-		self.stats.as_ref().map(|stats| stats.close_session(self.context.session_id));
+		if let Some(stats) = self.stats.as_ref() { stats.close_session(self.context.session_id) }
 
 		// signal to all still-live tasks that the session has been dropped.
 		for (_index, task) in self.task_slab.lock().iter_mut() {
@@ -297,13 +297,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	) -> Self {
 		Factory {
 			session_id: 0,
-			handler: handler,
-			meta_extractor: meta_extractor,
-			allowed_origins: allowed_origins,
-			allowed_hosts: allowed_hosts,
-			request_middleware: request_middleware,
-			stats: stats,
-			executor: executor,
+			handler,
+			meta_extractor,
+			allowed_origins,
+			allowed_hosts,
+			request_middleware,
+			stats,
+			executor,
 		}
 	}
 }
@@ -313,7 +313,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 
 	fn connection_made(&mut self, sender: ws::Sender) -> Self::Handler {
 		self.session_id += 1;
-		self.stats.as_ref().map(|stats| stats.open_session(self.session_id));
+		if let Some(executor) = self.stats.as_ref() { executor.open_session(self.session_id) }
 		let active = Arc::new(atomic::AtomicBool::new(true));
 
 		Session {
@@ -367,7 +367,7 @@ fn forbidden(title: &str, message: &str) -> ws::Response {
 	let mut forbidden = ws::Response::new(403, "Forbidden", format!("{}\n{}\n", title, message).into_bytes());
 	{
 		let headers = forbidden.headers_mut();
-		headers.push(("Connection".to_owned(), "close".as_bytes().to_vec()));
+		headers.push(("Connection".to_owned(), b"close".to_vec()));
 	}
 	forbidden
 }

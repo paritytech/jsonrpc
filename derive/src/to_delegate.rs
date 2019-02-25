@@ -273,7 +273,7 @@ impl RpcMethod {
 		let total_args_num = param_types.len();
 		let required_args_num = total_args_num - trailing_args_num;
 
-		let switch_branches = (0..trailing_args_num+1)
+		let switch_branches = (0..=trailing_args_num)
 			.map(|passed_trailing_args_num| {
 				let passed_args_num = required_args_num + passed_trailing_args_num;
 				let passed_param_types = &param_types[..passed_args_num];

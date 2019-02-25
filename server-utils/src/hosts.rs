@@ -56,10 +56,10 @@ impl Host {
 		let matcher = Matcher::new(&string);
 
 		Host {
-			hostname: hostname,
-			port: port,
+			hostname,
+			port,
 			as_string: string,
-			matcher: matcher,
+			matcher,
 		}
 	}
 
@@ -71,7 +71,7 @@ impl Host {
 		let host = hostname.next().expect(SPLIT_PROOF);
 		let port = match hostname.next() {
 			None => Port::None,
-			Some(port) => match port.clone().parse::<u16>().ok() {
+			Some(port) => match port.parse::<u16>().ok() {
 				Some(num) => Port::Fixed(num),
 				None => Port::Pattern(port.into()),
 			}

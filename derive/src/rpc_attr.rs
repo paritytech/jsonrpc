@@ -73,7 +73,7 @@ impl RpcMethodAttribute {
 									.map_or(Vec::new(), |ml| get_aliases(ml));
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
-									name: name,
+									name,
 									aliases,
 									kind
 								})

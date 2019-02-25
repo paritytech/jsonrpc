@@ -103,7 +103,7 @@ impl Server {
 			addr: local_addr,
 			handle: Some(handle),
 			executor: Arc::new(Mutex::new(Some(eloop))),
-			broadcaster: broadcaster,
+			broadcaster,
 		})
 	}
 }
@@ -148,6 +148,6 @@ impl CloseHandle {
 	/// Closes the `Server`.
 	pub fn close(self) {
 		let _ = self.broadcaster.shutdown();
-		self.executor.lock().unwrap().take().map(|executor| executor.close());
+		if let Some(executor) = self.executor.lock().unwrap().take() { executor.close() }
 	}
 }

@@ -23,7 +23,7 @@ pub fn cors_allow_origin(
 	cors::get_cors_allow_origin(read_header(request, "origin"), read_header(request, "host"), cors_domains).map(|origin| {
 		use self::cors::AccessControlAllowOrigin::*;
 		match origin {
-			Value(ref val) => header::HeaderValue::from_str(val).unwrap_or(header::HeaderValue::from_static("null")),
+			Value(ref val) => header::HeaderValue::from_str(val).unwrap_or_else(|_| header::HeaderValue::from_static("null")),
 			Null => header::HeaderValue::from_static("null"),
 			Any => header::HeaderValue::from_static("*"),
 		}
@@ -42,12 +42,12 @@ pub fn cors_allow_headers(
 		.iter()
 		.filter_map(|val| val.to_str().ok())
 		.flat_map(|val| val.split(", "))
-		.flat_map(|val| val.split(","));
+		.flat_map(|val| val.split(','));
 
 	cors::get_cors_allow_headers(
 		headers,
 		requested_headers,
-		cors_allow_headers.into(),
+		cors_allow_headers,
 		|name| header::HeaderValue::from_str(name)
 			.unwrap_or_else(|_| header::HeaderValue::from_static("unknown"))
 	)

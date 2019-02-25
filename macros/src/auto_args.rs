@@ -515,13 +515,11 @@ fn require_len(params: &Params, required: usize) -> Result<usize> {
 
 fn parse_trailing_param<T: DeserializeOwned>(params: Params) -> Result<(Option<T>, )> {
 	let len = try!(params_len(&params));
-	let id = match len {
+	match len {
 		0 => Ok((None,)),
 		1 => params.parse::<(T,)>().map(|(x, )| (Some(x), )),
 		_ => Err(invalid_params("Expecting only one optional parameter.", "")),
-	};
-
-	id
+	}
 }
 
 // special impl for no parameters other than block parameter.

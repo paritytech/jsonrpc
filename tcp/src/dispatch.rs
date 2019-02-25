@@ -24,7 +24,7 @@ impl<S: Stream> PeerMessageQueue<S> {
 	) -> Self {
 		PeerMessageQueue {
 			up: response_stream,
-			receiver: receiver,
+			receiver,
 			_addr: addr,
 		}
 	}
@@ -55,7 +55,7 @@ impl Dispatcher {
 	/// Creates a new dispatcher
 	pub fn new(channels: Arc<SenderChannels>) -> Self {
 		Dispatcher {
-			channels: channels,
+			channels,
 		}
 	}
 
@@ -66,11 +66,11 @@ impl Dispatcher {
 		match channels.get_mut(peer_addr) {
 			Some(channel) => {
 				// todo: maybe async here later?
-				channel.send(msg).wait().map_err(|e| PushMessageError::from(e))?;
+				channel.send(msg).wait().map_err(PushMessageError::from)?;
 				Ok(())
 			},
 			None => {
-				return Err(PushMessageError::NoSuchPeer);
+				Err(PushMessageError::NoSuchPeer)
 			}
 		}
 	}
