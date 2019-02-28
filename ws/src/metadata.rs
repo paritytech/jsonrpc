@@ -29,7 +29,7 @@ impl Sender {
 		if self.active.load(atomic::Ordering::SeqCst) {
 			Ok(())
 		} else {
-			bail!(error::ErrorKind::ConnectionClosed)
+			Err(error::Error::ConnectionClosed)
 		}
 	}
 

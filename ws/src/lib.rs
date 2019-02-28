@@ -8,8 +8,6 @@ pub use ws;
 pub use jsonrpc_core;
 
 #[macro_use]
-extern crate error_chain;
-#[macro_use]
 extern crate log;
 
 mod error;
@@ -22,7 +20,7 @@ mod tests;
 
 use jsonrpc_core as core;
 
-pub use self::error::{Error, ErrorKind, Result};
+pub use self::error::{Error, Result};
 pub use self::metadata::{RequestContext, MetaExtractor, NoopExtractor};
 pub use self::session::{RequestMiddleware, MiddlewareAction};
 pub use self::server::{CloseHandle, Server};
