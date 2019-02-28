@@ -1,16 +1,19 @@
-#![allow(missing_docs)]
-
 use std::{io, error, fmt, result};
 
 use crate::ws;
 
+/// WebSockets Server Error
 #[derive(Debug)]
 pub enum Error {
+	/// Io Error
 	Io(io::Error),
+	/// WebSockets Error
 	WsError(ws::Error),
+	/// Connection Closed
 	ConnectionClosed,
 }
 
+/// WebSockets Server Result
 pub type Result<T> = result::Result<T, Error>;
 
 impl fmt::Display for Error {
