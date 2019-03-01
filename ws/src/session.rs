@@ -254,7 +254,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 				if let Some(result) = response {
 					let res = out.send(result);
 					match res {
-						Err(error::Error(error::ErrorKind::ConnectionClosed, _)) => {
+						Err(error::Error::ConnectionClosed) => {
 							active_lock.store(false, atomic::Ordering::SeqCst);
 						},
 						Err(e) => {

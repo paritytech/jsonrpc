@@ -10,7 +10,6 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "10.1.0"
 
 [dependencies]
-error-chain = "0.12"
 jsonrpc-core = { version = "10.1", path = "../core" }
 jsonrpc-server-utils = { version = "10.1", path = "../server-utils" }
 log = "0.4"
