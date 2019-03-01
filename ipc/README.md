@@ -15,7 +15,9 @@ jsonrpc-ipc-server = "10.0"
 `main.rs`
 
 ```rust
-use jsonrpc_ipc_server::Server;
+extern crate jsonrpc_ipc_server;
+
+use jsonrpc_ipc_server::ServerBuilder;
 use jsonrpc_ipc_server::jsonrpc_core::*;
 
 fn main() {
@@ -24,8 +26,9 @@ fn main() {
 		Ok(Value::String("hello".into()))
 	});
 
-	let server = Server::new("/tmp/json-ipc-test.ipc", io).unwrap();
-	::std::thread::spawn(move || server.run());
+	let builder = ServerBuilder::new(io);
+	let server = builder.start("/tmp/json-ipc-test.ipc").expect("Couldn't open socket");
+	server.wait();
 }
 ```
 
