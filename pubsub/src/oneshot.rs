@@ -14,8 +14,8 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
 	let (receipt_tx, receipt_rx) = oneshot::channel();
 
 	(
-		Sender { sender, receipt: receipt_tx },
-		Receiver { receiver, receipt: Some(receipt_rx) }
+		Sender { sender, receipt: receipt_rx },
+		Receiver { receiver, receipt: Some(receipt_tx) }
 	)
 }
 
@@ -23,7 +23,7 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
 #[derive(Debug)]
 pub struct Sender<T> {
 	sender: oneshot::Sender<T>,
-	receipt: oneshot::Sender<()>,
+	receipt: oneshot::Receiver<()>,
 }
 
 impl<T> Sender<T> {
@@ -41,16 +41,16 @@ impl<T> Sender<T> {
 	/// The returned future will resolve when the message is received
 	/// on the other end. Note that polling the future is actually not required
 	/// to send the message as that happens synchronously.
-	pub fn send_and_wait(self, t: T) -> impl Future<Item = (), Error = T> {
-		let Self { sender, mut receipt } = self;
+	/// The future resolves to error in case the receiving end was dropped before
+	/// being able to process the message.
+	pub fn send_and_wait(self, t: T) -> impl Future<Item = (), Error = ()> {
+		let Self { sender, receipt } = self;
 
-		if let Err(e) = sender.send(t) {
-			return future::Either::A(future::err(e))
+		if let Err(_) = sender.send(t) {
+			return future::Either::A(future::err(()))
 		}
 
-		future::Either::B(future::poll_fn(
-			move || Ok(receipt.poll_cancel().expect("poll_cancel never errors; qed"))
-		))
+		future::Either::B(receipt.map_err(|_| ()))
 	}
 }
 
@@ -78,13 +78,7 @@ impl<T> DerefMut for Sender<T> {
 #[derive(Debug)]
 pub struct Receiver<T> {
 	receiver: oneshot::Receiver<T>,
-	receipt: Option<oneshot::Receiver<()>>,
-}
-
-impl<T> AsMut<oneshot::Receiver<T>> for Receiver<T> {
-	fn as_mut(&mut self) -> &mut oneshot::Receiver<T> {
-		&mut self.receiver
-	}
+	receipt: Option<oneshot::Sender<()>>,
 }
 
 impl<T> Future for Receiver<T> {
@@ -94,7 +88,9 @@ impl<T> Future for Receiver<T> {
 	fn poll(&mut self) -> futures::Poll<Self::Item, Self::Error> {
 		match self.receiver.poll() {
 			Ok(futures::Async::Ready(r)) => {
-				self.receipt.take();
+				if let Some(receipt) = self.receipt.take() {
+					let _ = receipt.send(());
+				}
 				Ok(futures::Async::Ready(r))
 			},
 			e => e,
