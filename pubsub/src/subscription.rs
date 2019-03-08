@@ -7,7 +7,7 @@ use parking_lot::Mutex;
 
 use crate::core::{self, BoxFuture};
 use crate::core::futures::{self, future, Sink as FuturesSink, Future};
-use crate::core::futures::sync::{mpsc, oneshot};
+use crate::core::futures::sync::mpsc;
 
 use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
 use crate::types::{PubSubMetadata, SubscriptionId, TransportSender, TransportError, SinkResult};
@@ -140,7 +140,7 @@ impl FuturesSink for Sink {
 pub struct Subscriber {
 	notification: String,
 	transport: TransportSender,
-	sender: oneshot::Sender<Result<SubscriptionId, core::Error>>,
+	sender: crate::oneshot::Sender<Result<SubscriptionId, core::Error>>,
 }
 
 impl Subscriber {
@@ -149,10 +149,10 @@ impl Subscriber {
 	/// Should only be used for tests.
 	pub fn new_test<T: Into<String>>(method: T) -> (
 		Self,
-		oneshot::Receiver<Result<SubscriptionId, core::Error>>,
+		crate::oneshot::Receiver<Result<SubscriptionId, core::Error>>,
 		mpsc::Receiver<String>,
 	) {
-		let (sender, id_receiver) = oneshot::channel();
+		let (sender, id_receiver) = crate::oneshot::channel();
 		let (transport, transport_receiver) = mpsc::channel(1);
 
 		let subscriber = Subscriber {
@@ -165,21 +165,48 @@ impl Subscriber {
 	}
 
 	/// Consumes `Subscriber` and assigns unique id to a requestor.
-	/// Returns `Err` if request has already terminated.
+	///
+	/// The returned `Future` resolves when the subscriber receives subscription id.
+	/// Resolves to `Err` if request has already terminated.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink, ()> {
-		self.sender.send(Ok(id)).map_err(|_| ())?;
+		let Self { notification, transport, sender } = self;
+		sender.send(Ok(id))
+			.map(|_| Sink {
+				notification,
+				transport,
+			})
+			.map_err(|_| ())
+	}
 
-		Ok(Sink {
-			notification: self.notification,
-			transport: self.transport,
-		})
+	/// Consumes `Subscriber` and assigns unique id to a requestor.
+	///
+	/// The returned `Future` resolves when the subscriber receives subscription id.
+	/// Resolves to `Err` if request has already terminated.
+	pub fn assign_id_async(self, id: SubscriptionId) -> impl Future<Item = Sink, Error = ()> {
+		let Self { notification, transport, sender } = self;
+		sender.send_and_wait(Ok(id))
+			.map(|_| Sink {
+				notification,
+				transport,
+			})
+			.map_err(|_| ())
 	}
 
 	/// Rejects this subscription request with given error.
+	///
 	/// Returns `Err` if request has already terminated.
 	pub fn reject(self, error: core::Error) -> Result<(), ()> {
-		self.sender.send(Err(error)).map_err(|_| ())?;
-		Ok(())
+		self.sender.send(Err(error)).map_err(|_| ())
+	}
+
+	/// Rejects this subscription request with given error.
+	///
+	/// The returned `Future` resolves when the rejection is sent to the client.
+	/// Resolves to `Err` if request has already terminated.
+	pub fn reject_async(self, error: core::Error) -> impl Future<Item = (), Error = ()> {
+		self.sender.send_and_wait(Err(error))
+			.map(|_| ())
+			.map_err(|_| ())
 	}
 }
 
@@ -236,7 +263,7 @@ impl<M, F, G> core::RpcMethod<M> for Subscribe<F, G> where
 	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value> {
 		match meta.session() {
 			Some(session) => {
-				let (tx, rx) = oneshot::channel();
+				let (tx, rx) = crate::oneshot::channel();
 
 				// Register the subscription
 				let subscriber = Subscriber {
@@ -303,7 +330,7 @@ mod tests {
 	use crate::core;
 	use crate::core::RpcMethod;
 	use crate::core::futures::{Async, Future, Stream};
-	use crate::core::futures::sync::{mpsc, oneshot};
+	use crate::core::futures::sync::mpsc;
 	use crate::types::{SubscriptionId, PubSubMetadata};
 
 	use super::{Session, Sink, Subscriber, new_subscription};
@@ -394,7 +421,7 @@ mod tests {
 	fn should_assign_id() {
 		// given
 		let (transport, _) = mpsc::channel(1);
-		let (tx, mut rx) = oneshot::channel();
+		let (tx, mut rx) = crate::oneshot::channel();
 		let subscriber = Subscriber {
 			notification: "test".into(),
 			transport,
@@ -402,13 +429,14 @@ mod tests {
 		};
 
 		// when
-		let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
+		let sink = subscriber.assign_id_async(SubscriptionId::Number(5));
 
 		// then
 		assert_eq!(
 			rx.poll().unwrap(),
 			Async::Ready(Ok(SubscriptionId::Number(5)))
 		);
+		let sink = sink.wait().unwrap();
 		assert_eq!(sink.notification, "test".to_owned());
 	}
 
@@ -416,7 +444,7 @@ mod tests {
 	fn should_reject() {
 		// given
 		let (transport, _) = mpsc::channel(1);
-		let (tx, mut rx) = oneshot::channel();
+		let (tx, mut rx) = crate::oneshot::channel();
 		let subscriber = Subscriber {
 			notification: "test".into(),
 			transport,
@@ -429,13 +457,14 @@ mod tests {
 		};
 
 		// when
-		subscriber.reject(error.clone()).unwrap();
+		let reject = subscriber.reject_async(error.clone());
 
 		// then
 		assert_eq!(
 			rx.poll().unwrap(),
 			Async::Ready(Err(error))
 		);
+		reject.wait().unwrap();
 	}
 
 	#[derive(Clone, Default)]

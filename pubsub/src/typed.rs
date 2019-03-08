@@ -7,7 +7,7 @@ use crate::subscription;
 use crate::types::{SubscriptionId, TransportError, SinkResult};
 
 use crate::core::{self, Value, Params, Error};
-use crate::core::futures::{self, Sink as FuturesSink, sync};
+use crate::core::futures::{self, Sink as FuturesSink, Future, sync};
 
 /// New PUB-SUB subscriber.
 #[derive(Debug)]
@@ -28,7 +28,7 @@ impl<T, E> Subscriber<T, E> {
 	/// Create new subscriber for tests.
 	pub fn new_test<M: Into<String>>(method: M) -> (
 		Self,
-		sync::oneshot::Receiver<Result<SubscriptionId, Error>>,
+		crate::oneshot::Receiver<Result<SubscriptionId, Error>>,
 		sync::mpsc::Receiver<String>,
 	) {
 		let (subscriber, id, subscription) = subscription::Subscriber::new_test(method);
@@ -40,17 +40,37 @@ impl<T, E> Subscriber<T, E> {
 		self.subscriber.reject(error)
 	}
 
+	/// Reject subscription with given error.
+	///
+	/// The returned futuer will resolve when the response is sent to the client.
+	pub fn reject_async(self, error: Error) -> impl Future<Item = (), Error = ()> {
+		self.subscriber.reject_async(error)
+	}
+
 	/// Assign id to this subscriber.
 	/// This method consumes `Subscriber` and returns `Sink`
 	/// if the connection is still open or error otherwise.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T, E>, ()> {
-		let sink = self.subscriber.assign_id(id.clone())?;
-		Ok(Sink {
-			id,
-			sink,
-			buffered: None,
-			_data: PhantomData,
-		})
+		self.subscriber.assign_id(id.clone())
+			.map(|sink| Sink {
+				id,
+				sink,
+				buffered: None,
+				_data: PhantomData,
+			})
+	}
+
+	/// Assign id to this subscriber.
+	/// This method consumes `Subscriber` and resolves to `Sink`
+	/// if the connection is still open and the id has been sent or to error otherwise.
+	pub fn assign_id_async(self, id: SubscriptionId) -> impl Future<Item = Sink<T, E>, Error = ()> {
+		self.subscriber.assign_id_async(id.clone())
+			.map(|sink| Sink {
+				id,
+				sink,
+				buffered: None,
+				_data: PhantomData,
+			})
 	}
 }
 

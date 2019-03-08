@@ -52,10 +52,11 @@ fn main() {
 				return;
 			}
 
-			let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
-			// or subscriber.reject(Error {} );
-			// or drop(subscriber)
 			thread::spawn(move || {
+				let sink = subscriber.assign_id_async(SubscriptionId::Number(5)).wait().unwrap();
+				// or subscriber.reject(Error {} );
+				// or drop(subscriber)
+
 				loop {
 					thread::sleep(time::Duration::from_millis(1000));
 					match sink.notify(Params::Array(vec![Value::Number(10.into())])).wait() {
