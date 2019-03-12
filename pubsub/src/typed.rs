@@ -42,7 +42,7 @@ impl<T, E> Subscriber<T, E> {
 
 	/// Reject subscription with given error.
 	///
-	/// The returned futuer will resolve when the response is sent to the client.
+	/// The returned future will resolve when the response is sent to the client.
 	pub fn reject_async(self, error: Error) -> impl Future<Item = (), Error = ()> {
 		self.subscriber.reject_async(error)
 	}

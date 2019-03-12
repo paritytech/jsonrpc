@@ -166,8 +166,7 @@ impl Subscriber {
 
 	/// Consumes `Subscriber` and assigns unique id to a requestor.
 	///
-	/// The returned `Future` resolves when the subscriber receives subscription id.
-	/// Resolves to `Err` if request has already terminated.
+	/// Returns `Err` if request has already terminated.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink, ()> {
 		let Self { notification, transport, sender } = self;
 		sender.send(Ok(id))

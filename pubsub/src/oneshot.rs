@@ -3,7 +3,7 @@
 use std::ops::{Deref, DerefMut};
 use crate::core::futures::{self, Future, future, sync::oneshot};
 
-/// Create a new future-base rendezvouz channel.
+/// Create a new future-base rendezvous channel.
 ///
 /// The returned `Sender` and `Receiver` objects are wrapping
 /// the regular `futures::sync::oneshot` counterparts and have the same functionality.
