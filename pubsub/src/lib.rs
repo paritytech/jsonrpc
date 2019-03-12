@@ -11,6 +11,7 @@ mod delegates;
 mod handler;
 mod subscription;
 mod types;
+pub mod oneshot;
 pub mod typed;
 
 pub use self::handler::{PubSubHandler, SubscribeRpcMethod, UnsubscribeRpcMethod};

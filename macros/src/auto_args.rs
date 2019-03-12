@@ -70,6 +70,7 @@ macro_rules! metadata {
 	};
 }
 
+/// Build an RPC trait definition.
 #[macro_export]
 macro_rules! build_rpc_trait {
 	(

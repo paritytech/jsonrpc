@@ -7,7 +7,7 @@ use jsonrpc_pubsub as pubsub;
 use serde;
 use util::to_value;
 
-use self::core::futures::{self, Sink as FuturesSink, sync};
+use self::core::futures::{self, Future, Sink as FuturesSink, sync};
 
 pub use self::pubsub::SubscriptionId;
 
@@ -30,7 +30,7 @@ impl<T, E> Subscriber<T, E> {
 	/// Create new subscriber for tests.
 	pub fn new_test<M: Into<String>>(method: M) -> (
 		Self,
-		sync::oneshot::Receiver<Result<SubscriptionId, core::Error>>,
+		pubsub::oneshot::Receiver<Result<SubscriptionId, core::Error>>,
 		sync::mpsc::Receiver<String>,
 	) {
 		let (subscriber, id, subscription) = pubsub::Subscriber::new_test(method);
@@ -42,18 +42,37 @@ impl<T, E> Subscriber<T, E> {
 		self.subscriber.reject(error)
 	}
 
+	/// Reject subscription with given error.
+	pub fn reject_async(self, error: core::Error) -> impl Future<Item = (), Error = ()> {
+		self.subscriber.reject_async(error)
+	}
+
 	/// Assign id to this subscriber.
 	/// This method consumes `Subscriber` and returns `Sink`
 	/// if the connection is still open or error otherwise.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T, E>, ()> {
-		let sink = self.subscriber.assign_id(id.clone())?;
-		Ok(Sink {
-			id,
-			sink,
-			buffered: None,
-			_data: PhantomData,
-		})
+		self.subscriber.assign_id(id.clone())
+			.map(|sink| Sink {
+				id,
+				sink,
+				buffered: None,
+				_data: PhantomData,
+			})
 	}
+
+	/// Assign id to this subscriber.
+	/// This method consumes `Subscriber` and returns `Sink`
+	/// if the connection is still open or error otherwise.
+	pub fn assign_id_async(self, id: SubscriptionId) -> impl Future<Item = Sink<T, E>, Error = ()> {
+		self.subscriber.assign_id_async(id.clone())
+			.map(|sink| Sink {
+				id,
+				sink,
+				buffered: None,
+				_data: PhantomData,
+			})
+	}
+
 }
 
 /// Subscriber sink.

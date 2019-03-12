@@ -34,11 +34,12 @@ fn main() {
 				return;
 			}
 
-			let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
-			// or subscriber.reject(Error {} );
-			// or drop(subscriber)
 			let is_done = is_done.clone();
 			thread::spawn(move || {
+				let sink = subscriber.assign_id_async(SubscriptionId::Number(5)).wait().unwrap();
+				// or subscriber.reject(Error {} );
+				// or drop(subscriber)
+
 				loop {
 					if is_done.load(atomic::Ordering::AcqRel) {
 						return;
