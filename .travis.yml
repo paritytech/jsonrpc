@@ -21,9 +21,14 @@ matrix:
   allow_failures:
   - rust: nightly
 
+before_script:
+  - rustup component add rustfmt
+
 script:
   - cargo build --all
   - cargo test --all
+  - |
+    ([ $TRAVIS_RUST_VERSION = stable ] && cargo fmt --all -- --check) || true
 
 after_success: |
   [ $TRAVIS_OS_NAME == 'linux' ] &&
