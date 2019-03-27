@@ -1,7 +1,7 @@
 use jsonrpc_core;
 
-use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};
+use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
 #[rpc]
@@ -35,7 +35,6 @@ impl Rpc<u64, String> for RpcImpl {
 		crate::future::finished((num + 999, "hello".into()))
 	}
 }
-
 
 fn main() {
 	let mut io = IoHandler::new();

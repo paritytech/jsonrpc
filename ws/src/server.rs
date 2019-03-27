@@ -1,12 +1,12 @@
-use std::{cmp, fmt};
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::{cmp, fmt};
 
 use crate::core;
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::{self, Host};
-use crate::server_utils::reactor::{UninitializedExecutor, Executor};
+use crate::server_utils::reactor::{Executor, UninitializedExecutor};
 use crate::server_utils::session::SessionStats;
 use crate::ws;
 
@@ -23,13 +23,13 @@ pub struct Server {
 }
 
 impl fmt::Debug for Server {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		f.debug_struct("Server")
 			.field("addr", &self.addr)
 			.field("handle", &self.handle)
 			.field("executor", &self.executor)
 			.finish()
-    }
+	}
 }
 
 impl Server {
@@ -78,7 +78,13 @@ impl Server {
 
 		// Create WebSocket
 		let ws = ws::Builder::new().with_settings(config).build(session::Factory::new(
-			handler, meta_extractor, allowed_origins, allowed_hosts, request_middleware, stats, executor
+			handler,
+			meta_extractor,
+			allowed_origins,
+			allowed_hosts,
+			request_middleware,
+			stats,
+			executor,
 		))?;
 		let broadcaster = ws.broadcaster();
 
@@ -88,14 +94,12 @@ impl Server {
 		debug!("Bound to local address: {}", local_addr);
 
 		// Spawn a thread with event loop
-		let handle = thread::spawn(move || {
-			match ws.run().map_err(Error::from) {
-				Err(error) => {
-					error!("Error while running websockets server. Details: {:?}", error);
-					Err(error)
-				},
-				Ok(_server) => Ok(()),
+		let handle = thread::spawn(move || match ws.run().map_err(Error::from) {
+			Err(error) => {
+				error!("Error while running websockets server. Details: {:?}", error);
+				Err(error)
 			}
+			Ok(_server) => Ok(()),
 		});
 
 		// Return a handle
@@ -111,7 +115,11 @@ impl Server {
 impl Server {
 	/// Consumes the server and waits for completion
 	pub fn wait(mut self) -> Result<()> {
-		self.handle.take().expect("Handle is always Some at start.").join().expect("Non-panic exit")
+		self.handle
+			.take()
+			.expect("Handle is always Some at start.")
+			.join()
+			.expect("Non-panic exit")
 	}
 
 	/// Closes the server and waits for it to finish
@@ -136,7 +144,6 @@ impl Drop for Server {
 	}
 }
 
-
 /// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
 #[derive(Clone)]
 pub struct CloseHandle {
@@ -148,6 +155,8 @@ impl CloseHandle {
 	/// Closes the `Server`.
 	pub fn close(self) {
 		let _ = self.broadcaster.shutdown();
-		if let Some(executor) = self.executor.lock().unwrap().take() { executor.close() }
+		if let Some(executor) = self.executor.lock().unwrap().take() {
+			executor.close()
+		}
 	}
 }

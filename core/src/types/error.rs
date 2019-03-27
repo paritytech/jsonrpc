@@ -1,8 +1,8 @@
 //! jsonrpc errors
-use std::fmt;
+use super::Value;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
-use super::Value;
+use std::fmt;
 
 /// JSONRPC error code
 #[derive(Debug, PartialEq, Clone)]
@@ -19,7 +19,7 @@ pub enum ErrorCode {
 	/// Internal JSON-RPC error.
 	InternalError,
 	/// Reserved for implementation-defined server-errors.
-	ServerError(i64)
+	ServerError(i64),
 }
 
 impl ErrorCode {
@@ -31,7 +31,7 @@ impl ErrorCode {
 			ErrorCode::MethodNotFound => -32601,
 			ErrorCode::InvalidParams => -32602,
 			ErrorCode::InternalError => -32603,
-			ErrorCode::ServerError(code) => code
+			ErrorCode::ServerError(code) => code,
 		}
 	}
 
@@ -64,7 +64,9 @@ impl From<i64> for ErrorCode {
 
 impl<'a> Deserialize<'a> for ErrorCode {
 	fn deserialize<D>(deserializer: D) -> Result<ErrorCode, D::Error>
-	where D: Deserializer<'a> {
+	where
+		D: Deserializer<'a>,
+	{
 		let code: i64 = Deserialize::deserialize(deserializer)?;
 		Ok(ErrorCode::from(code))
 	}
@@ -72,7 +74,9 @@ impl<'a> Deserialize<'a> for ErrorCode {
 
 impl Serialize for ErrorCode {
 	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where S: Serializer {
+	where
+		S: Serializer,
+	{
 		serializer.serialize_i64(self.code())
 	}
 }
@@ -85,8 +89,8 @@ pub struct Error {
 	/// Message
 	pub message: String,
 	/// Optional data
-    #[serde(skip_serializing_if = "Option::is_none")]
-	pub data: Option<Value>
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub data: Option<Value>,
 }
 
 impl Error {
@@ -95,7 +99,7 @@ impl Error {
 		Error {
 			message: code.description(),
 			code,
-			data: None
+			data: None,
 		}
 	}
 
@@ -115,7 +119,8 @@ impl Error {
 	}
 
 	/// Creates new `InvalidParams`
-	pub fn invalid_params<M>(message: M) -> Self where
+	pub fn invalid_params<M>(message: M) -> Self
+	where
 		M: Into<String>,
 	{
 		Error {
@@ -126,9 +131,10 @@ impl Error {
 	}
 
 	/// Creates `InvalidParams` for given parameter, with details.
-	pub fn invalid_params_with_details<M, T>(message: M, details: T) -> Error where
+	pub fn invalid_params_with_details<M, T>(message: M, details: T) -> Error
+	where
 		M: Into<String>,
-		T: fmt::Debug
+		T: fmt::Debug,
 	{
 		Error {
 			code: ErrorCode::InvalidParams,

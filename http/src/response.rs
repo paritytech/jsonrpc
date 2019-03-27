@@ -1,6 +1,6 @@
 //! Basic Request/Response structures used internally.
 
-pub use hyper::{self, Method, Body, StatusCode, header::HeaderValue};
+pub use hyper::{self, header::HeaderValue, Body, Method, StatusCode};
 
 /// Simple server response structure
 #[derive(Debug)]
@@ -96,7 +96,7 @@ impl Response {
 		Response {
 			code: StatusCode::BAD_REQUEST,
 			content_type: plain_text(),
-			content: msg.into()
+			content: msg.into(),
 		}
 	}
 
@@ -105,7 +105,7 @@ impl Response {
 		Response {
 			code: StatusCode::PAYLOAD_TOO_LARGE,
 			content_type: plain_text(),
-			content: msg.into()
+			content: msg.into(),
 		}
 	}
 }

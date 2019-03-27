@@ -1,6 +1,6 @@
-use serde_json;
-use jsonrpc_derive::rpc;
 use jsonrpc_core::{IoHandler, Response, Result};
+use jsonrpc_derive::rpc;
+use serde_json;
 
 #[rpc]
 pub trait Rpc {
@@ -46,11 +46,17 @@ fn should_accept_trailing_param() {
 
 	// then
 	let result: Response = serde_json::from_str(&res.unwrap()).unwrap();
-	assert_eq!(result, serde_json::from_str(r#"{
+	assert_eq!(
+		result,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": 4,
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 }
 
 #[test]
@@ -65,11 +71,17 @@ fn should_accept_missing_trailing_param() {
 
 	// then
 	let result: Response = serde_json::from_str(&res.unwrap()).unwrap();
-	assert_eq!(result, serde_json::from_str(r#"{
+	assert_eq!(
+		result,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": 2,
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 }
 
 #[test]
@@ -87,18 +99,30 @@ fn should_accept_single_trailing_param() {
 
 	// then
 	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
-	assert_eq!(result1, serde_json::from_str(r#"{
+	assert_eq!(
+		result1,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": "hello",
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 
 	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
-	assert_eq!(result2, serde_json::from_str(r#"{
+	assert_eq!(
+		result2,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": "",
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 }
 
 #[test]
@@ -120,30 +144,54 @@ fn should_accept_multiple_trailing_params() {
 
 	// then
 	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
-	assert_eq!(result1, serde_json::from_str(r#"{
+	assert_eq!(
+		result1,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": 0,
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 
 	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
-	assert_eq!(result2, serde_json::from_str(r#"{
+	assert_eq!(
+		result2,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": 1,
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 
 	let result3: Response = serde_json::from_str(&res3.unwrap()).unwrap();
-	assert_eq!(result3, serde_json::from_str(r#"{
+	assert_eq!(
+		result3,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": 3,
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 
 	let result4: Response = serde_json::from_str(&res4.unwrap()).unwrap();
-	assert_eq!(result4, serde_json::from_str(r#"{
+	assert_eq!(
+		result4,
+		serde_json::from_str(
+			r#"{
 		"jsonrpc": "2.0",
 		"result": 6,
 		"id": 1
-	}"#).unwrap());
+	}"#
+		)
+		.unwrap()
+	);
 }

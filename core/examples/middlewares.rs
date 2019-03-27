@@ -1,8 +1,8 @@
-use std::time::Instant;
-use std::sync::atomic::{self, AtomicUsize};
-use jsonrpc_core::*;
-use jsonrpc_core::futures::Future;
 use jsonrpc_core::futures::future::Either;
+use jsonrpc_core::futures::Future;
+use jsonrpc_core::*;
+use std::sync::atomic::{self, AtomicUsize};
+use std::time::Instant;
 
 #[derive(Clone, Debug)]
 struct Meta(usize);
@@ -14,9 +14,10 @@ impl Middleware<Meta> for MyMiddleware {
 	type Future = FutureResponse;
 	type CallFuture = middleware::NoopCallFuture;
 
-	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> Either<Self::Future, X> where
+	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> Either<Self::Future, X>
+	where
 		F: FnOnce(Request, Meta) -> X + Send,
-		X: Future<Item=Option<Response>, Error=()> + Send + 'static,
+		X: Future<Item = Option<Response>, Error = ()> + Send + 'static,
 	{
 		let start = Instant::now();
 		let request_number = self.0.fetch_add(1, atomic::Ordering::SeqCst);

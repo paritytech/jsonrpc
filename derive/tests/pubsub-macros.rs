@@ -1,13 +1,13 @@
-use serde_json;
 use jsonrpc_core;
 use jsonrpc_pubsub;
+use serde_json;
 #[macro_use]
 extern crate jsonrpc_derive;
 
-use std::sync::Arc;
 use jsonrpc_core::futures::sync::mpsc;
-use jsonrpc_pubsub::{PubSubHandler, SubscriptionId, Session, PubSubMetadata};
 use jsonrpc_pubsub::typed::Subscriber;
+use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, SubscriptionId};
+use std::sync::Arc;
 
 pub enum MyError {}
 impl From<MyError> for jsonrpc_core::Error {
@@ -108,4 +108,3 @@ fn test_subscribe_with_alias() {
 	let result: jsonrpc_core::Response = serde_json::from_str(&res.unwrap()).unwrap();
 	assert_eq!(expected, result);
 }
-

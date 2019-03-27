@@ -1,6 +1,6 @@
 use env_logger;
-use jsonrpc_tcp_server::ServerBuilder;
 use jsonrpc_tcp_server::jsonrpc_core::*;
+use jsonrpc_tcp_server::ServerBuilder;
 
 fn main() {
 	env_logger::init();
@@ -16,4 +16,3 @@ fn main() {
 
 	server.wait()
 }
-

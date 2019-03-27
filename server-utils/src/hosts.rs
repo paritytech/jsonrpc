@@ -1,8 +1,8 @@
 //! Host header validation.
 
+use crate::matcher::{Matcher, Pattern};
 use std::collections::HashSet;
 use std::net::SocketAddr;
-use crate::matcher::{Matcher, Pattern};
 
 const SPLIT_PROOF: &str = "split always returns non-empty iterator.";
 
@@ -14,7 +14,7 @@ pub enum Port {
 	/// Port specified as a wildcard pattern
 	Pattern(String),
 	/// Fixed numeric port
-	Fixed(u16)
+	Fixed(u16),
 }
 
 impl From<Option<u16>> for Port {
@@ -74,7 +74,7 @@ impl Host {
 			Some(port) => match port.parse::<u16>().ok() {
 				Some(num) => Port::Fixed(num),
 				None => Port::Pattern(port.into()),
-			}
+			},
 		};
 
 		Host::new(host, port)
@@ -153,10 +153,8 @@ pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> b
 		None => true,
 		Some(ref allowed_hosts) => match host {
 			None => false,
-			Some(ref host) => {
-				allowed_hosts.iter().any(|h| h.matches(host))
-			}
-		}
+			Some(ref host) => allowed_hosts.iter().any(|h| h.matches(host)),
+		},
 	}
 }
 
@@ -173,15 +171,24 @@ pub fn update(hosts: Option<Vec<Host>>, address: &SocketAddr) -> Option<Vec<Host
 
 #[cfg(test)]
 mod tests {
-	use super::{Host, is_host_valid};
+	use super::{is_host_valid, Host};
 
 	#[test]
 	fn should_parse_host() {
 		assert_eq!(Host::parse("http://parity.io"), Host::new("parity.io", None));
-		assert_eq!(Host::parse("https://parity.io:8443"), Host::new("parity.io", Some(8443)));
-		assert_eq!(Host::parse("chrome-extension://124.0.0.1"), Host::new("124.0.0.1", None));
+		assert_eq!(
+			Host::parse("https://parity.io:8443"),
+			Host::new("parity.io", Some(8443))
+		);
+		assert_eq!(
+			Host::parse("chrome-extension://124.0.0.1"),
+			Host::new("124.0.0.1", None)
+		);
 		assert_eq!(Host::parse("parity.io/somepath"), Host::new("parity.io", None));
-		assert_eq!(Host::parse("127.0.0.1:8545/somepath"), Host::new("127.0.0.1", Some(8545)));
+		assert_eq!(
+			Host::parse("127.0.0.1:8545/somepath"),
+			Host::new("127.0.0.1", Some(8545))
+		);
 	}
 
 	#[test]
@@ -204,28 +211,19 @@ mod tests {
 
 	#[test]
 	fn should_accept_if_on_the_list() {
-		let valid = is_host_valid(
-			Some("parity.io"),
-			&Some(vec!["parity.io".into()]),
-		);
+		let valid = is_host_valid(Some("parity.io"), &Some(vec!["parity.io".into()]));
 		assert_eq!(valid, true);
 	}
 
 	#[test]
 	fn should_accept_if_on_the_list_with_port() {
-		let valid = is_host_valid(
-			Some("parity.io:443"),
-			&Some(vec!["parity.io:443".into()]),
-		);
+		let valid = is_host_valid(Some("parity.io:443"), &Some(vec!["parity.io:443".into()]));
 		assert_eq!(valid, true);
 	}
 
 	#[test]
 	fn should_support_wildcards() {
-		let valid = is_host_valid(
-			Some("parity.web3.site:8180"),
-			&Some(vec!["*.web3.site:*".into()]),
-		);
+		let valid = is_host_valid(Some("parity.web3.site:8180"), &Some(vec!["*.web3.site:*".into()]));
 		assert_eq!(valid, true);
 	}
 }

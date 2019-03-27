@@ -1,5 +1,5 @@
-use jsonrpc_core::*;
 use jsonrpc_core::futures::Future;
+use jsonrpc_core::*;
 
 fn main() {
 	let mut io = IoHandler::new();

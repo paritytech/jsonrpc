@@ -1,15 +1,14 @@
-use serde_derive::{Serialize, Deserialize};
+use serde_derive::{Deserialize, Serialize};
 
-use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};
+use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
 // Two is only a parameter so only requires DeserializeOwned
 // Three is only a result so only requires Serialize
 #[rpc]
-pub trait Rpc<One, Two, Three>
-{
+pub trait Rpc<One, Two, Three> {
 	/// Get One type.
 	#[rpc(name = "getOne")]
 	fn one(&self) -> Result<One>;
@@ -29,7 +28,9 @@ pub trait Rpc<One, Two, Three>
 struct RpcImpl;
 
 #[derive(Serialize, Deserialize)]
-struct InAndOut { foo: u64 }
+struct InAndOut {
+	foo: u64,
+}
 #[derive(Deserialize)]
 struct In {}
 #[derive(Serialize)]
@@ -49,7 +50,7 @@ impl Rpc<InAndOut, In, Out> for RpcImpl {
 	}
 
 	fn call(&self, num: InAndOut) -> FutureResult<(InAndOut, u64), Error> {
-		crate::future::finished((InAndOut {foo: num.foo + 999}, num.foo))
+		crate::future::finished((InAndOut { foo: num.foo + 999 }, num.foo))
 	}
 }
 
@@ -58,4 +59,3 @@ fn main() {
 
 	io.extend_with(Rpc::to_delegate(RpcImpl));
 }
-

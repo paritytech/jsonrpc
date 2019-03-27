@@ -2,17 +2,17 @@ use std;
 use std::sync::{atomic, Arc};
 
 use crate::core;
-use crate::core::futures::{Async, Future, Poll};
 use crate::core::futures::sync::oneshot;
+use crate::core::futures::{Async, Future, Poll};
 
 use parking_lot::Mutex;
 use slab::Slab;
 
-use crate::server_utils::Pattern;
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::Host;
 use crate::server_utils::session::{SessionId, SessionStats};
 use crate::server_utils::tokio::runtime::TaskExecutor;
+use crate::server_utils::Pattern;
 use crate::ws;
 
 use crate::error;
@@ -26,7 +26,8 @@ pub trait RequestMiddleware: Send + Sync + 'static {
 	fn process(&self, req: &ws::Request) -> MiddlewareAction;
 }
 
-impl<F> RequestMiddleware for F where
+impl<F> RequestMiddleware for F
+where
 	F: Fn(&ws::Request) -> Option<ws::Response> + Send + Sync + 'static,
 {
 	fn process(&self, req: &ws::Request) -> MiddlewareAction {
@@ -73,7 +74,11 @@ impl MiddlewareAction {
 impl From<Option<ws::Response>> for MiddlewareAction {
 	fn from(opt: Option<ws::Response>) -> Self {
 		match opt {
-			Some(res) => MiddlewareAction::Respond { response: res, validate_origin: true, validate_hosts: true },
+			Some(res) => MiddlewareAction::Respond {
+				response: res,
+				validate_origin: true,
+				validate_hosts: true,
+			},
 			None => MiddlewareAction::Proceed,
 		}
 	}
@@ -109,7 +114,11 @@ impl LivenessPoll {
 			(index, rx)
 		};
 
-		LivenessPoll { task_slab, slab_handle: index, rx }
+		LivenessPoll {
+			task_slab,
+			slab_handle: index,
+			rx,
+		}
 	}
 }
 
@@ -152,7 +161,9 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
 		self.active.store(false, atomic::Ordering::SeqCst);
-		if let Some(stats) = self.stats.as_ref() { stats.close_session(self.context.session_id) }
+		if let Some(stats) = self.stats.as_ref() {
+			stats.close_session(self.context.session_id)
+		}
 
 		// signal to all still-live tasks that the session has been dropped.
 		for (_index, task) in self.task_slab.lock().iter_mut() {
@@ -218,8 +229,12 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 			}
 		}
 
-		self.context.origin = origin.and_then(|origin| ::std::str::from_utf8(origin).ok()).map(Into::into);
-		self.context.protocols = req.protocols().ok()
+		self.context.origin = origin
+			.and_then(|origin| ::std::str::from_utf8(origin).ok())
+			.map(Into::into);
+		self.context.protocols = req
+			.protocols()
+			.ok()
 			.map(|protos| protos.into_iter().map(Into::into).collect())
 			.unwrap_or_else(Vec::new);
 		self.metadata = Some(self.meta_extractor.extract(&self.context));
@@ -238,7 +253,10 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 	fn on_message(&mut self, msg: ws::Message) -> ws::Result<()> {
 		let req = msg.as_text()?;
 		let out = self.context.out.clone();
-		let metadata = self.metadata.clone().expect("Metadata is always set in on_request; qed");
+		let metadata = self
+			.metadata
+			.clone()
+			.expect("Metadata is always set in on_request; qed");
 
 		// TODO: creation requires allocating a `oneshot` channel and acquiring a
 		// mutex. we could alternatively do this lazily upon first poll if
@@ -246,7 +264,9 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let poll_liveness = LivenessPoll::create(self.task_slab.clone());
 
 		let active_lock = self.active.clone();
-		let future = self.handler.handle_request(req, metadata)
+		let future = self
+			.handler
+			.handle_request(req, metadata)
 			.map(move |response| {
 				if !active_lock.load(atomic::Ordering::SeqCst) {
 					return;
@@ -256,11 +276,11 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 					match res {
 						Err(error::Error::ConnectionClosed) => {
 							active_lock.store(false, atomic::Ordering::SeqCst);
-						},
+						}
 						Err(e) => {
 							warn!("Error while sending response: {:?}", e);
-						},
-						_ => {},
+						}
+						_ => {}
 					}
 				}
 			})
@@ -313,7 +333,9 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 
 	fn connection_made(&mut self, sender: ws::Sender) -> Self::Handler {
 		self.session_id += 1;
-		if let Some(executor) = self.stats.as_ref() { executor.open_session(self.session_id) }
+		if let Some(executor) = self.stats.as_ref() {
+			executor.open_session(self.session_id)
+		}
 		let active = Arc::new(atomic::AtomicBool::new(true));
 
 		Session {
@@ -338,7 +360,8 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
 	}
 }
 
-fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool where
+fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool
+where
 	T: Pattern,
 {
 	let header = header.map(std::str::from_utf8);
@@ -352,16 +375,15 @@ fn header_is_allowed<T>(allowed: &Option<Vec<T>>, header: Option<&[u8]>) -> bool
 		(Some(Ok(val)), Some(values)) => {
 			for v in values {
 				if v.matches(val) {
-					return true
+					return true;
 				}
 			}
 			false
-		},
+		}
 		// Disallow in other cases
 		_ => false,
 	}
 }
-
 
 fn forbidden(title: &str, message: &str) -> ws::Response {
 	let mut forbidden = ws::Response::new(403, "Forbidden", format!("{}\n{}\n", title, message).into_bytes());

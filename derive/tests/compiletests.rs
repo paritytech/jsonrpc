@@ -9,9 +9,10 @@ fn run_mode(mode: &'static str) {
 	config.src_base = PathBuf::from(format!("tests/{}", mode));
 	config.target_rustcflags = Some(String::from(
 		"\
-			-L ../target/debug/ \
-			-L ../target/debug/deps/ \
-	"));
+		 -L ../target/debug/ \
+		 -L ../target/debug/deps/ \
+		 ",
+	));
 	config.clean_rmeta(); // If your tests import the parent crate, this helps with E0464
 
 	compiletest::run_tests(&config);

@@ -1,8 +1,8 @@
 use std::io::{Read, Write};
-use std::net::{TcpStream, Ipv4Addr};
+use std::net::{Ipv4Addr, TcpStream};
 use std::str::Lines;
-use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
@@ -43,7 +43,7 @@ impl Response {
 				Some(v) => {
 					block.push_str(v);
 					block.push_str("\n");
-				},
+				}
 			}
 		}
 		block
@@ -61,8 +61,8 @@ fn request(server: Server, request: &str) -> Response {
 }
 
 fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
-	use std::time::Duration;
 	use crate::core::futures::sync::oneshot;
+	use std::time::Duration;
 
 	let pending = Arc::new(AtomicUsize::new(0));
 
@@ -113,15 +113,16 @@ fn should_disallow_not_whitelisted_origins() {
 	let (server, _) = serve(30001);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:30001\r\n\
-			Origin: http://test.io\r\n\
-			Connection: close\r\n\
-			\r\n\
-			I shouldn't be read.\r\n\
-		"
+		 GET / HTTP/1.1\r\n\
+		 Host: 127.0.0.1:30001\r\n\
+		 Origin: http://test.io\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 I shouldn't be read.\r\n\
+		 ",
 	);
 
 	// then
@@ -134,14 +135,15 @@ fn should_disallow_not_whitelisted_hosts() {
 	let (server, _) = serve(30002);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET / HTTP/1.1\r\n\
-			Host: myhost:30002\r\n\
-			Connection: close\r\n\
-			\r\n\
-			I shouldn't be read.\r\n\
-		"
+		 GET / HTTP/1.1\r\n\
+		 Host: myhost:30002\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 I shouldn't be read.\r\n\
+		 ",
 	);
 
 	// then
@@ -154,15 +156,16 @@ fn should_allow_whitelisted_origins() {
 	let (server, _) = serve(30003);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:30003\r\n\
-			Origin: https://parity.io\r\n\
-			Connection: close\r\n\
-			\r\n\
-			{}\r\n\
-		"
+		 GET / HTTP/1.1\r\n\
+		 Host: 127.0.0.1:30003\r\n\
+		 Origin: https://parity.io\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 {}\r\n\
+		 ",
 	);
 
 	// then
@@ -175,15 +178,16 @@ fn should_intercept_in_middleware() {
 	let (server, _) = serve(30004);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET /intercepted HTTP/1.1\r\n\
-			Host: 127.0.0.1:30004\r\n\
-			Origin: https://parity.io\r\n\
-			Connection: close\r\n\
-			\r\n\
-			{}\r\n\
-		"
+		 GET /intercepted HTTP/1.1\r\n\
+		 Host: 127.0.0.1:30004\r\n\
+		 Origin: https://parity.io\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 {}\r\n\
+		 ",
 	);
 
 	// then
@@ -200,15 +204,18 @@ fn drop_session_should_cancel() {
 
 	// when
 	connect("ws://127.0.0.1:30005", |out| {
-    	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 1}"#).unwrap();
+		out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 1}"#)
+			.unwrap();
 
 		let incomplete = incomplete.clone();
-    	move |_| {
+		move |_| {
 			assert_eq!(incomplete.load(Ordering::SeqCst), 0);
-	    	out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 2}"#).unwrap();
+			out.send(r#"{"jsonrpc":"2.0", "method":"record_pending", "params": [], "id": 2}"#)
+				.unwrap();
 			out.close(CloseCode::Normal)
 		}
-	}).unwrap();
+	})
+	.unwrap();
 
 	// then
 	let mut i = 0;
@@ -217,7 +224,6 @@ fn drop_session_should_cancel() {
 		i += 1;
 	}
 	assert_eq!(incomplete.load(Ordering::SeqCst), 1);
-
 }
 
 #[test]
@@ -240,6 +246,8 @@ fn close_handle_makes_wait_return() {
 	thread::sleep(Duration::from_secs(1));
 	close_handle.close();
 
-	let result = rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
+	let result = rx
+		.recv_timeout(Duration::from_secs(10))
+		.expect("Expected server to close");
 	assert!(result.is_ok());
 }

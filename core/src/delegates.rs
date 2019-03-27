@@ -1,19 +1,20 @@
 //! Delegate rpc calls
 
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::types::{Params, Value, Error};
 use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use futures::IntoFuture;
+use crate::types::{Error, Params, Value};
 use crate::BoxFuture;
+use futures::IntoFuture;
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
 	closure: F,
 }
 
-impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F> where
+impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F>
+where
 	M: Metadata,
 	F: Fn(&T, Params) -> I,
 	I: IntoFuture<Item = Value, Error = Error>,
@@ -32,7 +33,8 @@ struct DelegateMethodWithMeta<T, F> {
 	closure: F,
 }
 
-impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F> where
+impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F>
+where
 	M: Metadata,
 	F: Fn(&T, Params, M) -> I,
 	I: IntoFuture<Item = Value, Error = Error>,
@@ -51,7 +53,8 @@ struct DelegateNotification<T, F> {
 	closure: F,
 }
 
-impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F> where
+impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F>
+where
 	F: Fn(&T, Params) + 'static,
 	F: Send + Sync + 'static,
 	T: Send + Sync + 'static,
@@ -64,7 +67,8 @@ impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F> where
 }
 
 /// A set of RPC methods and notifications tied to single `delegate` struct.
-pub struct IoDelegate<T, M = ()> where
+pub struct IoDelegate<T, M = ()>
+where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {
@@ -72,7 +76,8 @@ pub struct IoDelegate<T, M = ()> where
 	methods: HashMap<String, RemoteProcedure<M>>,
 }
 
-impl<T, M> IoDelegate<T, M> where
+impl<T, M> IoDelegate<T, M>
+where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {
@@ -91,50 +96,57 @@ impl<T, M> IoDelegate<T, M> where
 	}
 
 	/// Adds async method to the delegate.
-	pub fn add_method<F, I>(&mut self, name: &str, method: F) where
+	pub fn add_method<F, I>(&mut self, name: &str, method: F)
+	where
 		F: Fn(&T, Params) -> I,
 		I: IntoFuture<Item = Value, Error = Error>,
 		F: Send + Sync + 'static,
 		I::Future: Send + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
-			DelegateAsyncMethod {
+		self.methods.insert(
+			name.into(),
+			RemoteProcedure::Method(Arc::new(DelegateAsyncMethod {
 				delegate: self.delegate.clone(),
 				closure: method,
-			}
-		)));
+			})),
+		);
 	}
 
 	/// Adds async method with metadata to the delegate.
-	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F) where
+	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
+	where
 		F: Fn(&T, Params, M) -> I,
 		I: IntoFuture<Item = Value, Error = Error>,
 		F: Send + Sync + 'static,
 		I::Future: Send + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Method(Arc::new(
-			DelegateMethodWithMeta {
+		self.methods.insert(
+			name.into(),
+			RemoteProcedure::Method(Arc::new(DelegateMethodWithMeta {
 				delegate: self.delegate.clone(),
 				closure: method,
-			}
-		)));
+			})),
+		);
 	}
 
 	/// Adds notification to the delegate.
-	pub fn add_notification<F>(&mut self, name: &str, notification: F) where
+	pub fn add_notification<F>(&mut self, name: &str, notification: F)
+	where
 		F: Fn(&T, Params),
 		F: Send + Sync + 'static,
 	{
-		self.methods.insert(name.into(), RemoteProcedure::Notification(Arc::new(
-			DelegateNotification {
+		self.methods.insert(
+			name.into(),
+			RemoteProcedure::Notification(Arc::new(DelegateNotification {
 				delegate: self.delegate.clone(),
 				closure: notification,
-			}
-		)));
+			})),
+		);
 	}
 }
 
-impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M> where
+impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M>
+where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {

@@ -1,16 +1,16 @@
 use jsonrpc_core::*;
-use serde_derive::{Deserialize};
+use serde_derive::Deserialize;
 
 #[derive(Deserialize)]
 struct HelloParams {
-	name:String,
+	name: String,
 }
 
 fn main() {
 	let mut io = IoHandler::new();
 
 	io.add_method("say_hello", |params: Params| {
-    let parsed: HelloParams = params.parse().unwrap();
+		let parsed: HelloParams = params.parse().unwrap();
 		Ok(Value::String(format!("hello, {}", parsed.name)))
 	});
 

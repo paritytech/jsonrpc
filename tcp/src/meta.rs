@@ -12,12 +12,13 @@ pub struct RequestContext {
 }
 
 /// Metadata extractor (per session)
-pub trait MetaExtractor<M: Metadata> : Send + Sync {
+pub trait MetaExtractor<M: Metadata>: Send + Sync {
 	/// Extracts metadata from request context
 	fn extract(&self, context: &RequestContext) -> M;
 }
 
-impl<M, F> MetaExtractor<M> for F where
+impl<M, F> MetaExtractor<M> for F
+where
 	M: Metadata,
 	F: Fn(&RequestContext) -> M + Send + Sync,
 {
@@ -29,5 +30,7 @@ impl<M, F> MetaExtractor<M> for F where
 /// Noop-extractor
 pub struct NoopExtractor;
 impl<M: Metadata + Default> MetaExtractor<M> for NoopExtractor {
-	fn extract(&self, _context: &RequestContext) -> M { M::default() }
+	fn extract(&self, _context: &RequestContext) -> M {
+		M::default()
+	}
 }

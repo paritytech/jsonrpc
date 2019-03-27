@@ -1,7 +1,7 @@
 //! A futures oneshot channel that can be used for rendezvous.
 
+use crate::core::futures::{self, future, sync::oneshot, Future};
 use std::ops::{Deref, DerefMut};
-use crate::core::futures::{self, Future, future, sync::oneshot};
 
 /// Create a new future-base rendezvous channel.
 ///
@@ -14,8 +14,14 @@ pub fn channel<T>() -> (Sender<T>, Receiver<T>) {
 	let (receipt_tx, receipt_rx) = oneshot::channel();
 
 	(
-		Sender { sender, receipt: receipt_rx },
-		Receiver { receiver, receipt: Some(receipt_tx) }
+		Sender {
+			sender,
+			receipt: receipt_rx,
+		},
+		Receiver {
+			receiver,
+			receipt: Some(receipt_tx),
+		},
 	)
 }
 
@@ -47,7 +53,7 @@ impl<T> Sender<T> {
 		let Self { sender, receipt } = self;
 
 		if let Err(_) = sender.send(t) {
-			return future::Either::A(future::err(()))
+			return future::Either::A(future::err(()));
 		}
 
 		future::Either::B(receipt.map_err(|_| ()))
@@ -92,7 +98,7 @@ impl<T> Future for Receiver<T> {
 					let _ = receipt.send(());
 				}
 				Ok(futures::Async::Ready(r))
-			},
+			}
 			e => e,
 		}
 	}

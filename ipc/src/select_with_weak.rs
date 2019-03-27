@@ -1,14 +1,22 @@
-use crate::jsonrpc::futures::{Poll, Async};
-use crate::jsonrpc::futures::stream::{Stream, Fuse};
+use crate::jsonrpc::futures::stream::{Fuse, Stream};
+use crate::jsonrpc::futures::{Async, Poll};
 
 pub trait SelectWithWeakExt: Stream {
 	fn select_with_weak<S>(self, other: S) -> SelectWithWeak<Self, S>
-	where S: Stream<Item = Self::Item, Error = Self::Error>, Self: Sized;
+	where
+		S: Stream<Item = Self::Item, Error = Self::Error>,
+		Self: Sized;
 }
 
-impl<T> SelectWithWeakExt for T where T: Stream {
+impl<T> SelectWithWeakExt for T
+where
+	T: Stream,
+{
 	fn select_with_weak<S>(self, other: S) -> SelectWithWeak<Self, S>
-	where S: Stream<Item = Self::Item, Error = Self::Error>, Self: Sized {
+	where
+		S: Stream<Item = Self::Item, Error = Self::Error>,
+		Self: Sized,
+	{
 		new(self, other)
 	}
 }
@@ -29,8 +37,9 @@ pub struct SelectWithWeak<S1, S2> {
 }
 
 fn new<S1, S2>(stream1: S1, stream2: S2) -> SelectWithWeak<S1, S2>
-	where S1: Stream,
-		  S2: Stream<Item = S1::Item, Error = S1::Error>
+where
+	S1: Stream,
+	S2: Stream<Item = S1::Item, Error = S1::Error>,
 {
 	SelectWithWeak {
 		strong: stream1.fuse(),
@@ -40,8 +49,9 @@ fn new<S1, S2>(stream1: S1, stream2: S2) -> SelectWithWeak<S1, S2>
 }
 
 impl<S1, S2> Stream for SelectWithWeak<S1, S2>
-	where S1: Stream,
-		  S2: Stream<Item = S1::Item, Error = S1::Error>
+where
+	S1: Stream,
+	S2: Stream<Item = S1::Item, Error = S1::Error>,
 {
 	type Item = S1::Item;
 	type Error = S1::Error;
@@ -53,14 +63,14 @@ impl<S1, S2> Stream for SelectWithWeak<S1, S2>
 				match self.strong.poll()? {
 					Async::Ready(Some(item)) => {
 						self.use_strong = false;
-						return Ok(Some(item).into())
-					},
+						return Ok(Some(item).into());
+					}
 					Async::Ready(None) => return Ok(None.into()),
 					Async::NotReady => {
 						if !checked_strong {
 							self.use_strong = false;
 						} else {
-							return Ok(Async::NotReady)
+							return Ok(Async::NotReady);
 						}
 					}
 				}

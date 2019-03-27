@@ -1,8 +1,8 @@
+use crate::types::{Error, Params, Value};
+use crate::BoxFuture;
+use futures::{Future, IntoFuture};
 use std::fmt;
 use std::sync::Arc;
-use crate::types::{Params, Value, Error};
-use futures::{Future, IntoFuture};
-use crate::BoxFuture;
 
 /// Metadata trait
 pub trait Metadata: Clone + Send + 'static {}
@@ -54,12 +54,13 @@ impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
 		match *self {
 			Method(..) => write!(fmt, "<method>"),
 			Notification(..) => write!(fmt, "<notification>"),
-			Alias(ref alias) => write!(fmt, "alias => {:?}", alias)
+			Alias(ref alias) => write!(fmt, "alias => {:?}", alias),
 		}
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F where
+impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F
+where
 	F: Fn(Params) -> I,
 	X: Future<Item = Value, Error = Error>,
 	I: IntoFuture<Item = Value, Error = Error, Future = X>,
@@ -70,7 +71,8 @@ impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F where
 	}
 }
 
-impl<F: Send + Sync + 'static> RpcNotificationSimple for F where
+impl<F: Send + Sync + 'static> RpcNotificationSimple for F
+where
 	F: Fn(Params),
 {
 	fn execute(&self, params: Params) {
@@ -78,7 +80,8 @@ impl<F: Send + Sync + 'static> RpcNotificationSimple for F where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F where
+impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F
+where
 	T: Metadata,
 	F: Fn(Params, T) -> I,
 	I: IntoFuture<Item = Value, Error = Error, Future = X>,
@@ -89,7 +92,8 @@ impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F where
 	}
 }
 
-impl<F: Send + Sync + 'static, T> RpcNotification<T> for F where
+impl<F: Send + Sync + 'static, T> RpcNotification<T> for F
+where
 	T: Metadata,
 	F: Fn(Params, T),
 {
