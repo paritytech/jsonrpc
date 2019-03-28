@@ -58,7 +58,7 @@ impl Future for RpcFuture {
 	type Error = RpcError;
 
 	fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-		// TODO should timeout
+		// TODO should timeout (#410)
 		match self.recv.poll() {
 			Ok(Async::Ready(Ok(value))) => Ok(Async::Ready(value)),
 			Ok(Async::Ready(Err(error))) => Err(RpcError::JsonRpcError(error)),
