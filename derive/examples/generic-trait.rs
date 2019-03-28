@@ -12,11 +12,11 @@ pub trait Rpc<One, Two> {
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "setTwo")]
-	fn set_two(&self, _: Two) -> Result<()>;
+	fn set_two(&self, a: Two) -> Result<()>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "beFancy")]
-	fn call(&self, _: One) -> FutureResult<(One, Two), Error>;
+	fn call(&self, a: One) -> FutureResult<(One, Two), Error>;
 }
 
 struct RpcImpl;

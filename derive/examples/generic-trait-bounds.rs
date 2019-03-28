@@ -15,14 +15,14 @@ pub trait Rpc<One, Two, Three> {
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "setTwo")]
-	fn set_two(&self, _: Two) -> Result<()>;
+	fn set_two(&self, a: Two) -> Result<()>;
 
 	#[rpc(name = "getThree")]
 	fn get_three(&self) -> Result<Three>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "beFancy")]
-	fn call(&self, _: One) -> FutureResult<(One, u64), Error>;
+	fn call(&self, a: One) -> FutureResult<(One, u64), Error>;
 }
 
 struct RpcImpl;
