@@ -280,8 +280,8 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 	}
 }
 
-/// Returns headers which are always allowed.
 lazy_static! {
+	/// Returns headers which are always allowed.
 	static ref ALWAYS_ALLOWED_HEADERS: HashSet<Ascii<&'static str>> = {
 		let mut hs = HashSet::new();
 		hs.insert(Ascii::new("Accept"));

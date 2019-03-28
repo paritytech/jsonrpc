@@ -80,7 +80,7 @@ impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
 
 		// Validate host
 		if should_validate_hosts && !is_host_allowed {
-			return Handler::Error(Some(Response::host_not_allowed()));
+			return Handler::Err(Some(Response::host_not_allowed()));
 		}
 
 		// Replace response with the one returned by middleware.
@@ -113,7 +113,7 @@ impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> {
 
 pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Rpc(RpcHandler<M, S>),
-	Error(Option<Response>),
+	Err(Option<Response>),
 	Middleware(Box<Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>),
 }
 
@@ -125,7 +125,7 @@ impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
 		match *self {
 			Handler::Rpc(ref mut handler) => handler.poll(),
 			Handler::Middleware(ref mut middleware) => middleware.poll(),
-			Handler::Error(ref mut response) => Ok(Async::Ready(
+			Handler::Err(ref mut response) => Ok(Async::Ready(
 				response
 					.take()
 					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
