@@ -2,7 +2,7 @@
 
 set -exu
 
-ORDER=(core server-utils tcp ws http ipc stdio pubsub macros derive test)
+ORDER=(core client server-utils tcp ws http ipc stdio pubsub macros derive test)
 
 for crate in ${ORDER[@]}; do
 	cd $crate
