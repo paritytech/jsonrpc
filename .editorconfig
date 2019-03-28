@@ -9,8 +9,16 @@ trim_trailing_whitespace=true
 max_line_length=120
 insert_final_newline=true
 
-[.travis.yml]
+[{.travis.yml,appveyor.yml}]
 indent_style=space
 indent_size=2
 tab_width=8
 end_of_line=lf
+
+[*.stderr]
+indent_style=none
+indent_size=none
+end_of_line=none
+charset=none
+trim_trailing_whitespace=none
+insert_final_newline=none
