@@ -124,7 +124,7 @@
 //! # fn main() {}
 //! ```
 
-#![recursion_limit = "128"]
+#![recursion_limit = "256"]
 #![warn(missing_docs)]
 
 extern crate proc_macro;
@@ -134,6 +134,7 @@ use syn::parse_macro_input;
 
 mod rpc_attr;
 mod rpc_trait;
+mod to_client;
 mod to_delegate;
 
 /// Apply `#[rpc]` to a trait, and a `to_delegate` method is generated which

@@ -1,4 +1,5 @@
 use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
+use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
 use proc_macro2::Span;
 use quote::quote;
@@ -54,7 +55,7 @@ impl<'a> Fold for RpcTrait {
 	}
 }
 
-fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrait, bool)> {
+fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrait, proc_macro2::TokenStream, bool)> {
 	let methods_result: Result<Vec<_>> = item_trait
 		.items
 		.iter()
@@ -156,12 +157,15 @@ fn generate_rpc_item_trait(item_trait: &syn::ItemTrait) -> Result<(syn::ItemTrai
 		rpc_trait.has_metadata,
 		has_pubsub_methods,
 	)?;
+
+	let rpc_client_module = generate_client_module(&method_registrations, &item_trait)?;
+
 	item_trait.items.push(syn::TraitItem::Method(to_delegate_method));
 
 	let trait_bounds: Punctuated<syn::TypeParamBound, Token![+]> = parse_quote!(Sized + Send + Sync + 'static);
 	item_trait.supertraits.extend(trait_bounds);
 
-	Ok((item_trait, has_pubsub_methods))
+	Ok((item_trait, rpc_client_module, has_pubsub_methods))
 }
 
 fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
@@ -181,7 +185,8 @@ pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 		}
 	};
 
-	let (rpc_trait, has_pubsub_methods) = generate_rpc_item_trait(&rpc_trait)?;
+	let (rpc_server_trait, rpc_client_module, has_pubsub_methods) =
+		generate_rpc_item_trait(&rpc_trait)?;
 
 	let name = rpc_trait.ident.clone();
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
@@ -203,14 +208,22 @@ pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 
 	Ok(quote!(
 		mod #mod_name_ident {
-			use #core_name as _jsonrpc_core;
-			#optional_pubsub_import
 			use #serde_name as _serde;
+			use #core_name as _jsonrpc_core;
 			use super::*;
-			use self::_jsonrpc_core::futures as _futures;
 
-			#rpc_trait
+			/// The generated server module.
+			pub mod gen_server {
+				#optional_pubsub_import
+				use self::_jsonrpc_core::futures as _futures;
+				use super::*;
+
+				#rpc_server_trait
+			}
+
+			#rpc_client_module
 		}
-		pub use self::#mod_name_ident::#name;
+		pub use self::#mod_name_ident::gen_server::#name;
+		pub use self::#mod_name_ident::gen_client;
 	))
 }
