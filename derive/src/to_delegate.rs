@@ -121,7 +121,7 @@ pub fn generate_trait_item_method(
 		}
 	};
 
-	let predicates = generate_where_clause_serialization_predicates(&trait_item);
+	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
 	let mut method = method.clone();
 	method
 		.sig
@@ -362,7 +362,10 @@ fn is_option_type(ty: &syn::Type) -> bool {
 	}
 }
 
-fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -> Vec<syn::WherePredicate> {
+pub fn generate_where_clause_serialization_predicates(
+	item_trait: &syn::ItemTrait,
+	client: bool,
+) -> Vec<syn::WherePredicate> {
 	#[derive(Default)]
 	struct FindTyParams {
 		trait_generics: HashSet<syn::Ident>,
@@ -411,11 +414,20 @@ fn generate_where_clause_serialization_predicates(item_trait: &syn::ItemTrait) -
 			};
 			let mut bounds: Punctuated<syn::TypeParamBound, Token![+]> = parse_quote!(Send + Sync + 'static);
 			// add json serialization trait bounds
-			if visitor.serialize_type_params.contains(&ty.ident) {
-				bounds.push(parse_quote!(_serde::Serialize))
-			}
-			if visitor.deserialize_type_params.contains(&ty.ident) {
-				bounds.push(parse_quote!(_serde::de::DeserializeOwned))
+			if client {
+				if visitor.serialize_type_params.contains(&ty.ident) {
+					bounds.push(parse_quote!(_serde::de::DeserializeOwned))
+				}
+				if visitor.deserialize_type_params.contains(&ty.ident) {
+					bounds.push(parse_quote!(_serde::Serialize))
+				}
+			} else {
+				if visitor.serialize_type_params.contains(&ty.ident) {
+					bounds.push(parse_quote!(_serde::Serialize))
+				}
+				if visitor.deserialize_type_params.contains(&ty.ident) {
+					bounds.push(parse_quote!(_serde::de::DeserializeOwned))
+				}
 			}
 			syn::WherePredicate::Type(syn::PredicateType {
 				lifetimes: None,
