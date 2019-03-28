@@ -19,11 +19,11 @@ pub trait Rpc {
 
 	/// Negates number and returns a result
 	#[rpc(name = "neg")]
-	fn neg(&self, _: i64) -> Result<i64>;
+	fn neg(&self, a: i64) -> Result<i64>;
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add", alias("add_alias1", "add_alias2"))]
-	fn add(&self, _: u64, _: u64) -> Result<u64>;
+	fn add(&self, a: u64, b: u64) -> Result<u64>;
 }
 
 #[derive(Default)]

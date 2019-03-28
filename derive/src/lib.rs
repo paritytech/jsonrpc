@@ -15,10 +15,10 @@
 //! 	fn protocol_version(&self) -> Result<String>;
 //!
 //! 	#[rpc(name = "add")]
-//! 	fn add(&self, _: u64, _: u64) -> Result<u64>;
+//! 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 //!
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, _: u64) -> FutureResult<String, Error>;
+//! 	fn call(&self, a: u64) -> FutureResult<String, Error>;
 //! }
 //!
 //! struct RpcImpl;
