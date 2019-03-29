@@ -132,6 +132,7 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
+mod options;
 mod rpc_attr;
 mod rpc_trait;
 mod to_client;
@@ -142,10 +143,15 @@ mod to_delegate;
 /// Attach the delegate to an `IoHandler` and the methods are now callable
 /// via JSON-RPC.
 #[proc_macro_attribute]
-pub fn rpc(_args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn rpc(args: TokenStream, input: TokenStream) -> TokenStream {
 	let input_toks = parse_macro_input!(input as syn::Item);
 
-	match rpc_trait::rpc_impl(input_toks) {
+	let options = match options::DeriveOptions::try_from(args) {
+		Ok(options) => options,
+		Err(error) => return error.to_compile_error().into(),
+	};
+
+	match rpc_trait::rpc_impl(input_toks, options) {
 		Ok(output) => output.into(),
 		Err(err) => err.to_compile_error().into(),
 	}

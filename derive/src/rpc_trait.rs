@@ -1,3 +1,4 @@
+use crate::options::DeriveOptions;
 use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
 use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
@@ -174,7 +175,10 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 	syn::Ident::new(&mod_name, proc_macro2::Span::call_site())
 }
 
-pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
+pub fn rpc_impl(
+	input: syn::Item,
+	options: DeriveOptions,
+) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		item => {
@@ -206,24 +210,39 @@ pub fn rpc_impl(input: syn::Item) -> Result<proc_macro2::TokenStream> {
 	let core_name = crate_name("jsonrpc-core")?;
 	let serde_name = crate_name("serde")?;
 
+	let rpc_server_module = quote! {
+		/// The generated server module.
+		pub mod gen_server {
+			#optional_pubsub_import
+			use self::_jsonrpc_core::futures as _futures;
+			use super::*;
+
+			#rpc_server_trait
+		}
+	};
+
+	let mut submodules = Vec::new();
+	let mut exports = Vec::new();
+	if options.enable_client {
+		submodules.push(rpc_client_module);
+		exports.push(quote! {
+			pub use self::#mod_name_ident::gen_client;
+		});
+	}
+	if options.enable_server {
+		submodules.push(rpc_server_module);
+		exports.push(quote! {
+			pub use self::#mod_name_ident::gen_server::#name;
+		});
+	}
 	Ok(quote!(
 		mod #mod_name_ident {
 			use #serde_name as _serde;
 			use #core_name as _jsonrpc_core;
 			use super::*;
 
-			/// The generated server module.
-			pub mod gen_server {
-				#optional_pubsub_import
-				use self::_jsonrpc_core::futures as _futures;
-				use super::*;
-
-				#rpc_server_trait
-			}
-
-			#rpc_client_module
+			#(#submodules)*
 		}
-		pub use self::#mod_name_ident::gen_server::#name;
-		pub use self::#mod_name_ident::gen_client;
+		#(#exports)*
 	))
 }

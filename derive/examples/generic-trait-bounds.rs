@@ -7,7 +7,7 @@ use jsonrpc_derive::rpc;
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
 // Two is only a parameter so only requires DeserializeOwned
 // Three is only a result so only requires Serialize
-#[rpc]
+#[rpc(server)]
 pub trait Rpc<One, Two, Three> {
 	/// Get One type.
 	#[rpc(name = "getOne")]
