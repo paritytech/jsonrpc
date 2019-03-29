@@ -3,7 +3,6 @@ members = [
 	"core",
 	"http",
 	"ipc",
-	"macros",
 	"derive",
 	"pubsub",
 	"pubsub/more-examples",

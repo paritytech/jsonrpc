@@ -20,7 +20,6 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
 - [jsonrpc-ws-server](./ws) [![crates.io][ws-server-image]][ws-server-url]
 - [jsonrpc-stdio-server](./stdio) [![crates.io][stdio-server-image]][stdio-server-url]
-- [jsonrpc-macros](./macros) [![crates.io][macros-image]][macros-url] *deprecated:* use `derive` instead
 - [jsonrpc-derive](./derive) [![crates.io][derive-image]][derive-url]
 - [jsonrpc-server-utils](./server-utils) [![crates.io][server-utils-image]][server-utils-url]
 - [jsonrpc-pubsub](./pubsub) [![crates.io][pubsub-image]][pubsub-url]
@@ -37,8 +36,6 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 [ws-server-url]: https://crates.io/crates/jsonrpc-ws-server
 [stdio-server-image]: https://img.shields.io/crates/v/jsonrpc-stdio-server.svg
 [stdio-server-url]: https://crates.io/crates/jsonrpc-stdio-server
-[macros-image]: https://img.shields.io/crates/v/jsonrpc-macros.svg
-[macros-url]: https://crates.io/crates/jsonrpc-macros
 [derive-image]: https://img.shields.io/crates/v/jsonrpc-derive.svg
 [derive-url]: https://crates.io/crates/jsonrpc-derive
 [server-utils-image]: https://img.shields.io/crates/v/jsonrpc-server-utils.svg
@@ -50,7 +47,6 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 - [core](./core/examples)
 - [derive](./derive/examples)
-- [macros](./macros/examples) *deprecated*
 - [pubsub](./pubsub/examples)
 
 ### Basic Usage (with HTTP transport)
