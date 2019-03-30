@@ -1,29 +1,22 @@
-use std::net::{SocketAddr, Shutdown};
+use std::net::{Shutdown, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
-use crate::jsonrpc::{MetaIoHandler, Value, Metadata};
-use crate::jsonrpc::futures::{self, Future, future};
+use crate::jsonrpc::futures::{self, future, Future};
+use crate::jsonrpc::{MetaIoHandler, Metadata, Value};
 
-use crate::server_utils::tokio::{
-	timer::Delay,
-	net::TcpStream,
-	io::{self},
-	self,
-};
+use crate::server_utils::tokio::{self, io, net::TcpStream, timer::Delay};
 
 use parking_lot::Mutex;
 
-use crate::ServerBuilder;
 use crate::MetaExtractor;
 use crate::RequestContext;
+use crate::ServerBuilder;
 
 fn casual_server() -> ServerBuilder {
 	let mut io = MetaIoHandler::<()>::default();
-	io.add_method("say_hello", |_params| {
-		Ok(Value::String("hello".to_string()))
-	});
+	io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 	ServerBuilder::new(io)
 }
 
@@ -32,12 +25,11 @@ fn doc_test() {
 	crate::logger::init_log();
 
 	let mut io = MetaIoHandler::<()>::default();
-	io.add_method("say_hello", |_params| {
-		Ok(Value::String("hello".to_string()))
-	});
+	io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 	let server = ServerBuilder::new(io);
 
-	server.start(&SocketAddr::from_str("0.0.0.0:17770").unwrap())
+	server
+		.start(&SocketAddr::from_str("0.0.0.0:17770").unwrap())
 		.expect("Server must run with no issues")
 		.close()
 }
@@ -50,9 +42,7 @@ fn doc_test_connect() {
 	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	let stream = TcpStream::connect(&addr)
-		.and_then(move |_stream| {
-			Ok(())
-		})
+		.and_then(move |_stream| Ok(()))
 		.map_err(|err| panic!("Server connection error: {:?}", err));
 
 	tokio::run(stream);
@@ -84,16 +74,12 @@ fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
 	let (ret_tx, ret_rx) = futures::sync::oneshot::channel();
 
 	let stream = TcpStream::connect(addr)
-		.and_then(move |stream| {
-			io::write_all(stream, data)
-		})
+		.and_then(move |stream| io::write_all(stream, data))
 		.and_then(|(stream, _data)| {
 			stream.shutdown(Shutdown::Write).unwrap();
 			io::read_to_end(stream, vec![])
 		})
-		.and_then(move |(_stream, read_buf)| {
-			ret_tx.send(read_buf).map_err(|err| panic!("Unable to send {:?}", err))
-		})
+		.and_then(move |(_stream, read_buf)| ret_tx.send(read_buf).map_err(|err| panic!("Unable to send {:?}", err)))
 		.map_err(|err| panic!("Error connecting or closing connection: {:?}", err));;
 
 	tokio::run(stream);
@@ -115,13 +101,12 @@ fn doc_test_handle() {
 	let result = dummy_request_str(
 		&addr,
 		b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"[..].to_owned(),
-		);
+	);
 
 	assert_eq!(
-		result,
-		"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+		result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
 		"Response does not exactly much the expected response",
-		);
+	);
 }
 
 #[test]
@@ -136,22 +121,20 @@ fn req_parallel() {
 	let mut handles = Vec::new();
 	for _ in 0..6 {
 		let addr = addr.clone();
-		handles.push(
-			thread::spawn(move || {
-				for _ in 0..100 {
-					let result = dummy_request_str(
-						&addr,
-						b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"[..].to_owned(),
-						);
+		handles.push(thread::spawn(move || {
+			for _ in 0..100 {
+				let result = dummy_request_str(
+					&addr,
+					b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"[..]
+						.to_owned(),
+				);
 
-					assert_eq!(
-						result,
-						"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
-						"Response does not exactly much the expected response",
-						);
-				}
-			})
-		);
+				assert_eq!(
+					result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
+					"Response does not exactly much the expected response",
+				);
+			}
+		}));
 	}
 
 	for handle in handles.drain(..) {
@@ -166,7 +149,9 @@ pub struct SocketMetadata {
 
 impl Default for SocketMetadata {
 	fn default() -> Self {
-		SocketMetadata { addr: "0.0.0.0:0".parse().unwrap() }
+		SocketMetadata {
+			addr: "0.0.0.0:0".parse().unwrap(),
+		}
 	}
 }
 
@@ -176,7 +161,7 @@ impl SocketMetadata {
 	}
 }
 
-impl Metadata for SocketMetadata { }
+impl Metadata for SocketMetadata {}
 
 impl From<SocketAddr> for SocketMetadata {
 	fn from(addr: SocketAddr) -> SocketMetadata {
@@ -209,15 +194,13 @@ fn peer_meta() {
 
 	let result = dummy_request_str(
 		&addr,
-		b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"[..].to_owned()
-		);
+		b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n"[..].to_owned(),
+	);
 
 	println!("{}", result);
 
 	// contains random port, so just smoky comparing response length
-	assert!(
-		result.len() == 58 || result.len() == 59
-	);
+	assert!(result.len() == 58 || result.len() == 59);
 }
 
 #[derive(Default)]
@@ -244,14 +227,12 @@ fn message() {
 	});
 	let extractor = PeerListMetaExtractor::default();
 	let peer_list = extractor.peers.clone();
-	let server = ServerBuilder::new(io)
-		.session_meta_extractor(extractor);
+	let server = ServerBuilder::new(io).session_meta_extractor(extractor);
 	let dispatcher = server.dispatcher();
 
 	let _server = server.start(&addr).expect("Server must run with no issues");
 
-	let delay = Delay::new(Instant::now() + Duration::from_millis(500))
-		.map_err(|err| panic!("{:?}", err));
+	let delay = Delay::new(Instant::now() + Duration::from_millis(500)).map_err(|err| panic!("{:?}", err));
 
 	let message = "ping";
 	let executed_dispatch = Arc::new(Mutex::new(false));
@@ -261,15 +242,12 @@ fn message() {
 
 	// CLIENT RUN
 	let stream = TcpStream::connect(&addr)
-		.and_then(|stream| {
-			future::ok(stream).join(delay)
-		})
+		.and_then(|stream| future::ok(stream).join(delay))
 		.and_then(move |stream| {
 			let peer_addr = peer_list.lock()[0].clone();
-			dispatcher.push_message(
-				&peer_addr,
-				message.to_owned(),
-				).expect("Should be sent with no errors");
+			dispatcher
+				.push_message(&peer_addr, message.to_owned())
+				.expect("Should be sent with no errors");
 			trace!(target: "tcp", "Dispatched message for {}", peer_addr);
 			future::ok(stream)
 		})
@@ -285,7 +263,7 @@ fn message() {
 				format!("{}\n", message),
 				String::from_utf8(ping_signal).expect("String should be utf-8"),
 				"Sent request does not match received by the peer",
-				);
+			);
 			// ensure that the above assert was actually triggered
 			*executed_dispatch_move.lock() = true;
 
@@ -307,7 +285,7 @@ fn message() {
 				"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
 				String::from_utf8(response_signal).expect("String should be utf-8"),
 				"Response does not match the expected handling",
-				);
+			);
 			*executed_request_move.lock() = true;
 
 			future::ok(())

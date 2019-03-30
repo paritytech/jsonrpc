@@ -1,5 +1,5 @@
-use jsonrpc_http_server::{ServerBuilder, hyper, RestApi, cors::AccessControlAllowHeaders};
 use jsonrpc_http_server::jsonrpc_core::*;
+use jsonrpc_http_server::{cors::AccessControlAllowHeaders, hyper, RestApi, ServerBuilder};
 
 #[derive(Default, Clone)]
 struct Meta {
@@ -16,20 +16,20 @@ fn main() {
 		if auth.as_str() == "let-me-in" {
 			Ok(Value::String("Hello World!".to_owned()))
 		} else {
-			Ok(Value::String("Please send a valid Bearer token in Authorization header.".to_owned()))
+			Ok(Value::String(
+				"Please send a valid Bearer token in Authorization header.".to_owned(),
+			))
 		}
 	});
 
 	let server = ServerBuilder::new(io)
-		.cors_allow_headers(AccessControlAllowHeaders::Only(
-			vec![
-				"Authorization".to_owned(),
-			])
-		)
+		.cors_allow_headers(AccessControlAllowHeaders::Only(vec!["Authorization".to_owned()]))
 		.rest_api(RestApi::Unsecure)
 		// You can also implement `MetaExtractor` trait and pass a struct here.
 		.meta_extractor(|req: &hyper::Request<hyper::Body>| {
-			let auth = req.headers().get(hyper::header::AUTHORIZATION)
+			let auth = req
+				.headers()
+				.get(hyper::header::AUTHORIZATION)
 				.map(|h| h.to_str().unwrap_or("").to_owned());
 
 			Meta { auth }
@@ -39,4 +39,3 @@ fn main() {
 
 	server.wait();
 }
-

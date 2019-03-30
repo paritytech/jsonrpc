@@ -1,7 +1,7 @@
-use std::time::{Duration, Instant};
-use tokio::timer::Delay;
 use std::io;
+use std::time::{Duration, Instant};
 use tokio::prelude::*;
+use tokio::timer::Delay;
 
 /// `Incoming` is a stream of incoming sockets
 /// Polling the stream may return a temporary io::Error (for instance if we can't open the connection because of "too many open files" limit)
@@ -34,7 +34,8 @@ impl<S> SuspendableStream<S> {
 }
 
 impl<S, I> Stream for SuspendableStream<S>
-	where S: Stream<Item=I, Error=io::Error>
+where
+	S: Stream<Item = I, Error = io::Error>,
 {
 	type Item = I;
 	type Error = ();
@@ -61,12 +62,12 @@ impl<S, I> Stream for SuspendableStream<S>
 					if self.next_delay > self.initial_delay {
 						self.next_delay = self.initial_delay;
 					}
-					return Ok(item)
+					return Ok(item);
 				}
 				Err(ref err) => {
 					if connection_error(err) {
 						warn!("Connection Error: {:?}", err);
-						continue
+						continue;
 					}
 					self.next_delay = if self.next_delay < self.max_delay {
 						self.next_delay * 2
@@ -82,11 +83,9 @@ impl<S, I> Stream for SuspendableStream<S>
 	}
 }
 
-
 /// assert that the error was a connection error
 fn connection_error(e: &io::Error) -> bool {
-	e.kind() == io::ErrorKind::ConnectionRefused ||
-		e.kind() == io::ErrorKind::ConnectionAborted ||
-		e.kind() == io::ErrorKind::ConnectionReset
+	e.kind() == io::ErrorKind::ConnectionRefused
+		|| e.kind() == io::ErrorKind::ConnectionAborted
+		|| e.kind() == io::ErrorKind::ConnectionReset
 }
-

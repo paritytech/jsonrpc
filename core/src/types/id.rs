@@ -33,12 +33,22 @@ mod tests {
 
 		let s = r#"[null, 0, 2, "3"]"#;
 		let deserialized: Vec<Id> = serde_json::from_str(s).unwrap();
-		assert_eq!(deserialized, vec![Id::Null, Id::Num(0), Id::Num(2), Id::Str("3".into())]);
+		assert_eq!(
+			deserialized,
+			vec![Id::Null, Id::Num(0), Id::Num(2), Id::Str("3".into())]
+		);
 	}
 
 	#[test]
 	fn id_serialization() {
-		let d = vec![Id::Null, Id::Num(0), Id::Num(2), Id::Num(3), Id::Str("3".to_owned()), Id::Str("test".to_owned())];
+		let d = vec![
+			Id::Null,
+			Id::Num(0),
+			Id::Num(2),
+			Id::Num(3),
+			Id::Str("3".to_owned()),
+			Id::Str("test".to_owned()),
+		];
 		let serialized = serde_json::to_string(&d).unwrap();
 		assert_eq!(serialized, r#"[null,0,2,3,"3","test"]"#);
 	}

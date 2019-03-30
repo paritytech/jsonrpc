@@ -4,17 +4,13 @@ use std::sync::Arc;
 
 use tokio_service::Service as TokioService;
 
-use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use crate::jsonrpc::futures::{future, Future, Stream, Sink};
 use crate::jsonrpc::futures::sync::{mpsc, oneshot};
-use crate::server_utils::{
-	tokio_codec::Framed,
-	tokio, reactor, codecs,
-	SuspendableStream
-};
+use crate::jsonrpc::futures::{future, Future, Sink, Stream};
+use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
+use crate::server_utils::{codecs, reactor, tokio, tokio_codec::Framed, SuspendableStream};
 
-use crate::dispatch::{Dispatcher, SenderChannels, PeerMessageQueue};
-use crate::meta::{MetaExtractor, RequestContext, NoopExtractor};
+use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
+use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 use crate::service::Service;
 
 /// TCP server builder
@@ -29,7 +25,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 
 impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` wih given `IoHandler`
-	pub fn new<T>(handler: T) -> Self where
+	pub fn new<T>(handler: T) -> Self
+	where
 		T: Into<MetaIoHandler<M, S>>,
 	{
 		Self::with_meta_extractor(handler, NoopExtractor)
@@ -38,7 +35,8 @@ impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 
 impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder` wih given `IoHandler`
-	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
+	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self
+	where
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M> + 'static,
 	{
@@ -102,39 +100,33 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					let meta = meta_extractor.extract(&context);
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
 					let (writer, reader) = Framed::new(
-		                socket,
-		                codecs::StreamCodec::new(
-		                    incoming_separator.clone(),
-		                    outgoing_separator.clone(),
-		                ),
-		            ).split();
+						socket,
+						codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
+					)
+					.split();
 
-					let responses = reader.and_then(
-						move |req| service.call(req).then(|response| match response {
+					let responses = reader.and_then(move |req| {
+						service.call(req).then(|response| match response {
 							Err(e) => {
 								warn!(target: "tcp", "Error while processing request: {:?}", e);
 								future::ok(String::new())
-							},
+							}
 							Ok(None) => {
 								trace!(target: "tcp", "JSON RPC request produced no response");
 								future::ok(String::new())
-							},
+							}
 							Ok(Some(response_data)) => {
 								trace!(target: "tcp", "Sent response: {}", &response_data);
 								future::ok(response_data)
 							}
 						})
-					);
+					});
 
 					let peer_message_queue = {
 						let mut channels = channels.lock();
 						channels.insert(peer_addr, sender.clone());
 
-						PeerMessageQueue::new(
-							responses,
-							receiver,
-							peer_addr,
-						)
+						PeerMessageQueue::new(responses, receiver, peer_addr)
 					};
 
 					let shared_channels = channels.clone();
@@ -157,19 +149,16 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 			match start() {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
-					future::Either::A(server.select(stop)
-						.map(|_| ())
-						.map_err(|(e, _)| {
-							error!("Error while executing the server: {:?}", e);
-						}))
-				},
+					future::Either::A(server.select(stop).map(|_| ()).map_err(|(e, _)| {
+						error!("Error while executing the server: {:?}", e);
+					}))
+				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");
-					future::Either::B(stop
-						.map_err(|e| {
-							error!("Error while executing the server: {:?}", e);
-						}))
-				},
+					future::Either::B(stop.map_err(|e| {
+						error!("Error while executing the server: {:?}", e);
+					}))
+				}
 			}
 		}));
 
@@ -209,6 +198,8 @@ impl Server {
 impl Drop for Server {
 	fn drop(&mut self) {
 		let _ = self.stop.take().map(|sg| sg.send(()));
-		if let Some(executor) = self.executor.take() { executor.close() }
+		if let Some(executor) = self.executor.take() {
+			executor.close()
+		}
 	}
 }

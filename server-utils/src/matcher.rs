@@ -1,4 +1,4 @@
-use globset::{GlobMatcher, GlobBuilder};
+use globset::{GlobBuilder, GlobMatcher};
 use std::{fmt, hash};
 
 /// Pattern that can be matched to string.
@@ -18,7 +18,7 @@ impl Matcher {
 				.map(|g| g.compile_matcher())
 				.map_err(|e| warn!("Invalid glob pattern for {}: {:?}", string, e))
 				.ok(),
-			string.into()
+			string.into(),
 		)
 	}
 }
@@ -40,7 +40,10 @@ impl fmt::Debug for Matcher {
 }
 
 impl hash::Hash for Matcher {
-	fn hash<H>(&self, state: &mut H) where H: hash::Hasher {
+	fn hash<H>(&self, state: &mut H)
+	where
+		H: hash::Hasher,
+	{
 		self.1.hash(state)
 	}
 }

@@ -1,4 +1,4 @@
-use std::{io, error, fmt, result};
+use std::{error, fmt, io, result};
 
 use crate::ws;
 

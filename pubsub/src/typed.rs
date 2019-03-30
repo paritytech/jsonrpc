@@ -2,12 +2,12 @@
 
 use std::marker::PhantomData;
 
-use serde;
 use crate::subscription;
-use crate::types::{SubscriptionId, TransportError, SinkResult};
+use crate::types::{SinkResult, SubscriptionId, TransportError};
+use serde;
 
-use crate::core::{self, Value, Params, Error};
-use crate::core::futures::{self, Sink as FuturesSink, Future, sync};
+use crate::core::futures::{self, sync, Future, Sink as FuturesSink};
+use crate::core::{self, Error, Params, Value};
 
 /// New PUB-SUB subscriber.
 #[derive(Debug)]
@@ -26,7 +26,9 @@ impl<T, E> Subscriber<T, E> {
 	}
 
 	/// Create new subscriber for tests.
-	pub fn new_test<M: Into<String>>(method: M) -> (
+	pub fn new_test<M: Into<String>>(
+		method: M,
+	) -> (
 		Self,
 		crate::oneshot::Receiver<Result<SubscriptionId, Error>>,
 		sync::mpsc::Receiver<String>,
@@ -51,26 +53,24 @@ impl<T, E> Subscriber<T, E> {
 	/// This method consumes `Subscriber` and returns `Sink`
 	/// if the connection is still open or error otherwise.
 	pub fn assign_id(self, id: SubscriptionId) -> Result<Sink<T, E>, ()> {
-		self.subscriber.assign_id(id.clone())
-			.map(|sink| Sink {
-				id,
-				sink,
-				buffered: None,
-				_data: PhantomData,
-			})
+		self.subscriber.assign_id(id.clone()).map(|sink| Sink {
+			id,
+			sink,
+			buffered: None,
+			_data: PhantomData,
+		})
 	}
 
 	/// Assign id to this subscriber.
 	/// This method consumes `Subscriber` and resolves to `Sink`
 	/// if the connection is still open and the id has been sent or to error otherwise.
 	pub fn assign_id_async(self, id: SubscriptionId) -> impl Future<Item = Sink<T, E>, Error = ()> {
-		self.subscriber.assign_id_async(id.clone())
-			.map(|sink| Sink {
-				id,
-				sink,
-				buffered: None,
-				_data: PhantomData,
-			})
+		self.subscriber.assign_id_async(id.clone()).map(|sink| Sink {
+			id,
+			sink,
+			buffered: None,
+			_data: PhantomData,
+		})
 	}
 }
 
@@ -89,22 +89,28 @@ impl<T: serde::Serialize, E: serde::Serialize> Sink<T, E> {
 		self.sink.notify(self.val_to_params(val))
 	}
 
-	fn to_value<V>(value: V) -> Value where V: serde::Serialize {
+	fn to_value<V>(value: V) -> Value
+	where
+		V: serde::Serialize,
+	{
 		core::to_value(value).expect("Expected always-serializable type.")
 	}
 
 	fn val_to_params(&self, val: Result<T, E>) -> Params {
-
 		let id = self.id.clone().into();
 		let val = val.map(Self::to_value).map_err(Self::to_value);
 
-		Params::Map(vec![
-			("subscription".to_owned(), id),
-			match val {
-				Ok(val) => ("result".to_owned(), val),
-				Err(err) => ("error".to_owned(), err),
-			},
-		].into_iter().collect())
+		Params::Map(
+			vec![
+				("subscription".to_owned(), id),
+				match val {
+					Ok(val) => ("result".to_owned(), val),
+					Err(err) => ("error".to_owned(), err),
+				},
+			]
+			.into_iter()
+			.collect(),
+		)
 	}
 
 	fn poll(&mut self) -> futures::Poll<(), TransportError> {

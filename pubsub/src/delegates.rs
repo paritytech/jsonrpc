@@ -1,19 +1,20 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use std::collections::HashMap;
 
-use crate::subscription::{Subscriber, new_subscription};
-use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
-use crate::types::{SubscriptionId, PubSubMetadata};
-use crate::core::{self, Params, Value, Error, Metadata, RemoteProcedure, RpcMethod};
 use crate::core::futures::IntoFuture;
+use crate::core::{self, Error, Metadata, Params, RemoteProcedure, RpcMethod, Value};
+use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
+use crate::subscription::{new_subscription, Subscriber};
+use crate::types::{PubSubMetadata, SubscriptionId};
 
 struct DelegateSubscription<T, F> {
 	delegate: Arc<T>,
 	closure: F,
 }
 
-impl<T, M, F> SubscribeRpcMethod<M> for DelegateSubscription<T, F> where
+impl<T, M, F> SubscribeRpcMethod<M> for DelegateSubscription<T, F>
+where
 	M: PubSubMetadata,
 	F: Fn(&T, Params, M, Subscriber),
 	T: Send + Sync + 'static,
@@ -25,7 +26,8 @@ impl<T, M, F> SubscribeRpcMethod<M> for DelegateSubscription<T, F> where
 	}
 }
 
-impl<M, T, F, I> UnsubscribeRpcMethod<M> for DelegateSubscription<T, F> where
+impl<M, T, F, I> UnsubscribeRpcMethod<M> for DelegateSubscription<T, F>
+where
 	M: PubSubMetadata,
 	F: Fn(&T, SubscriptionId, Option<M>) -> I,
 	I: IntoFuture<Item = Value, Error = Error>,
@@ -41,7 +43,8 @@ impl<M, T, F, I> UnsubscribeRpcMethod<M> for DelegateSubscription<T, F> where
 }
 
 /// Wire up rpc subscriptions to `delegate` struct
-pub struct IoDelegate<T, M = ()> where
+pub struct IoDelegate<T, M = ()>
+where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {
@@ -50,7 +53,8 @@ pub struct IoDelegate<T, M = ()> where
 	_data: PhantomData<M>,
 }
 
-impl<T, M> IoDelegate<T, M> where
+impl<T, M> IoDelegate<T, M>
+where
 	T: Send + Sync + 'static,
 	M: PubSubMetadata,
 {
@@ -64,12 +68,8 @@ impl<T, M> IoDelegate<T, M> where
 	}
 
 	/// Adds subscription to the delegate.
-	pub fn add_subscription<Sub, Unsub, I>(
-		&mut self,
-		name: &str,
-		subscribe: (&str, Sub),
-		unsubscribe: (&str, Unsub),
-	) where
+	pub fn add_subscription<Sub, Unsub, I>(&mut self, name: &str, subscribe: (&str, Sub), unsubscribe: (&str, Unsub))
+	where
 		Sub: Fn(&T, Params, M, Subscriber),
 		Sub: Send + Sync + 'static,
 		Unsub: Fn(&T, SubscriptionId, Option<M>) -> I,
@@ -86,10 +86,12 @@ impl<T, M> IoDelegate<T, M> where
 			DelegateSubscription {
 				delegate: self.delegate.clone(),
 				closure: unsubscribe.1,
-			}
+			},
 		);
-		self.inner.add_method_with_meta(subscribe.0, move |_, params, meta| sub.call(params, meta));
-		self.inner.add_method_with_meta(unsubscribe.0, move |_, params, meta| unsub.call(params, meta));
+		self.inner
+			.add_method_with_meta(subscribe.0, move |_, params, meta| sub.call(params, meta));
+		self.inner
+			.add_method_with_meta(unsubscribe.0, move |_, params, meta| unsub.call(params, meta));
 	}
 
 	/// Adds an alias to existing method.
@@ -98,7 +100,8 @@ impl<T, M> IoDelegate<T, M> where
 	}
 
 	/// Adds async method to the delegate.
-	pub fn add_method<F, I>(&mut self, name: &str, method: F) where
+	pub fn add_method<F, I>(&mut self, name: &str, method: F)
+	where
 		F: Fn(&T, Params) -> I,
 		I: IntoFuture<Item = Value, Error = Error>,
 		F: Send + Sync + 'static,
@@ -108,7 +111,8 @@ impl<T, M> IoDelegate<T, M> where
 	}
 
 	/// Adds async method with metadata to the delegate.
-	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F) where
+	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
+	where
 		F: Fn(&T, Params, M) -> I,
 		I: IntoFuture<Item = Value, Error = Error>,
 		F: Send + Sync + 'static,
@@ -118,7 +122,8 @@ impl<T, M> IoDelegate<T, M> where
 	}
 
 	/// Adds notification to the delegate.
-	pub fn add_notification<F>(&mut self, name: &str, notification: F) where
+	pub fn add_notification<F>(&mut self, name: &str, notification: F)
+	where
 		F: Fn(&T, Params),
 		F: Send + Sync + 'static,
 	{
@@ -126,7 +131,8 @@ impl<T, M> IoDelegate<T, M> where
 	}
 }
 
-impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M> where
+impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M>
+where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {

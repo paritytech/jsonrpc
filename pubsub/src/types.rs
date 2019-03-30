@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::core;
 use crate::core::futures::sync::mpsc;
+use std::sync::Arc;
 
 use crate::subscription::Session;
 
@@ -78,8 +78,8 @@ impl From<SubscriptionId> for core::Value {
 
 #[cfg(test)]
 mod tests {
-	use crate::core::Value;
 	use super::SubscriptionId;
+	use crate::core::Value;
 
 	#[test]
 	fn should_convert_between_value_and_subscription_id() {

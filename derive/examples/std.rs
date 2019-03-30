@@ -1,5 +1,5 @@
-use jsonrpc_core::{IoHandler, Error, Result};
 use jsonrpc_core::futures::future::{self, FutureResult};
+use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
 #[rpc]

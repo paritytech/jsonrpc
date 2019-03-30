@@ -1,5 +1,5 @@
-use jsonrpc_http_server::{ServerBuilder, DomainsValidation, AccessControlAllowOrigin};
 use jsonrpc_http_server::jsonrpc_core::*;
+use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, ServerBuilder};
 
 fn main() {
 	let mut io = IoHandler::default();
@@ -14,4 +14,3 @@ fn main() {
 
 	server.wait();
 }
-

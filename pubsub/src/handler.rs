@@ -1,8 +1,8 @@
 use crate::core;
 use crate::core::futures::{Future, IntoFuture};
 
+use crate::subscription::{new_subscription, Subscriber};
 use crate::types::{PubSubMetadata, SubscriptionId};
-use crate::subscription::{Subscriber, new_subscription};
 
 /// Subscribe handler
 pub trait SubscribeRpcMethod<M: PubSubMetadata>: Send + Sync + 'static {
@@ -10,7 +10,8 @@ pub trait SubscribeRpcMethod<M: PubSubMetadata>: Send + Sync + 'static {
 	fn call(&self, params: core::Params, meta: M, subscriber: Subscriber);
 }
 
-impl<M, F> SubscribeRpcMethod<M> for F where
+impl<M, F> SubscribeRpcMethod<M> for F
+where
 	F: Fn(core::Params, M, Subscriber) + Send + Sync + 'static,
 	M: PubSubMetadata,
 {
@@ -29,7 +30,8 @@ pub trait UnsubscribeRpcMethod<M>: Send + Sync + 'static {
 	fn call(&self, id: SubscriptionId, meta: Option<M>) -> Self::Out;
 }
 
-impl<M, F, I> UnsubscribeRpcMethod<M> for F where
+impl<M, F, I> UnsubscribeRpcMethod<M> for F
+where
 	F: Fn(SubscriptionId, Option<M>) -> I + Send + Sync + 'static,
 	I: IntoFuture<Item = core::Value, Error = core::Error>,
 	I::Future: Send + 'static,
@@ -56,18 +58,12 @@ impl<T: PubSubMetadata> Default for PubSubHandler<T> {
 impl<T: PubSubMetadata, S: core::Middleware<T>> PubSubHandler<T, S> {
 	/// Creates new `PubSubHandler`
 	pub fn new(handler: core::MetaIoHandler<T, S>) -> Self {
-		PubSubHandler {
-			handler,
-		}
+		PubSubHandler { handler }
 	}
 
 	/// Adds new subscription.
-	pub fn add_subscription<F, G>(
-		&mut self,
-		notification: &str,
-		subscribe: (&str, F),
-		unsubscribe: (&str, G),
-	) where
+	pub fn add_subscription<F, G>(&mut self, notification: &str, subscribe: (&str, F), unsubscribe: (&str, G))
+	where
 		F: SubscribeRpcMethod<T>,
 		G: UnsubscribeRpcMethod<T>,
 	{
@@ -99,8 +95,8 @@ impl<T: PubSubMetadata, S: core::Middleware<T>> Into<core::MetaIoHandler<T, S>> 
 
 #[cfg(test)]
 mod tests {
-	use std::sync::Arc;
 	use std::sync::atomic::{AtomicBool, Ordering};
+	use std::sync::Arc;
 
 	use crate::core;
 	use crate::core::futures::future;

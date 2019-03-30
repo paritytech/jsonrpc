@@ -1,11 +1,11 @@
 //! CORS handling utility functions
 use unicase;
 
-use std::{fmt, ops};
+pub use self::unicase::Ascii;
 use crate::hosts::{Host, Port};
 use crate::matcher::{Matcher, Pattern};
 use std::collections::HashSet;
-pub use self::unicase::Ascii;
+use std::{fmt, ops};
 
 /// Origin Protocol
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]
@@ -116,11 +116,15 @@ pub enum AccessControlAllowOrigin {
 
 impl fmt::Display for AccessControlAllowOrigin {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}", match *self {
-			AccessControlAllowOrigin::Any => "*",
-			AccessControlAllowOrigin::Null => "null",
-			AccessControlAllowOrigin::Value(ref val) => val,
-		})
+		write!(
+			f,
+			"{}",
+			match *self {
+				AccessControlAllowOrigin::Any => "*",
+				AccessControlAllowOrigin::Null => "null",
+				AccessControlAllowOrigin::Value(ref val) => val,
+			}
+		)
 	}
 }
 
@@ -156,7 +160,8 @@ pub enum AllowCors<T> {
 
 impl<T> AllowCors<T> {
 	/// Maps `Ok` variant of `AllowCors`.
-	pub fn map<F, O>(self, f: F) -> AllowCors<O> where
+	pub fn map<F, O>(self, f: F) -> AllowCors<O>
+	where
 		F: FnOnce(T) -> O,
 	{
 		use self::AllowCors::*;
@@ -184,7 +189,7 @@ impl<T> Into<Option<T>> for AllowCors<T> {
 pub fn get_cors_allow_origin(
 	origin: Option<&str>,
 	host: Option<&str>,
-	allowed: &Option<Vec<AccessControlAllowOrigin>>
+	allowed: &Option<Vec<AccessControlAllowOrigin>>,
 ) -> AllowCors<AccessControlAllowOrigin> {
 	match origin {
 		None => AllowCors::NotRequired,
@@ -203,44 +208,40 @@ pub fn get_cors_allow_origin(
 			match allowed.as_ref() {
 				None if *origin == "null" => AllowCors::Ok(AccessControlAllowOrigin::Null),
 				None => AllowCors::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
-				Some(ref allowed) if *origin == "null" => {
-					allowed.iter().find(|cors| **cors == AccessControlAllowOrigin::Null).cloned()
-						.map(AllowCors::Ok)
-						.unwrap_or(AllowCors::Invalid)
-				},
-				Some(ref allowed) => {
-					allowed.iter().find(|cors| {
-						match **cors {
-							AccessControlAllowOrigin::Any => true,
-							AccessControlAllowOrigin::Value(ref val) if val.matches(origin) =>
-							{
-								true
-							},
-							_ => false
-						}
+				Some(ref allowed) if *origin == "null" => allowed
+					.iter()
+					.find(|cors| **cors == AccessControlAllowOrigin::Null)
+					.cloned()
+					.map(AllowCors::Ok)
+					.unwrap_or(AllowCors::Invalid),
+				Some(ref allowed) => allowed
+					.iter()
+					.find(|cors| match **cors {
+						AccessControlAllowOrigin::Any => true,
+						AccessControlAllowOrigin::Value(ref val) if val.matches(origin) => true,
+						_ => false,
 					})
 					.map(|_| AccessControlAllowOrigin::Value(Origin::parse(origin)))
-					.map(AllowCors::Ok).unwrap_or(AllowCors::Invalid)
-				},
+					.map(AllowCors::Ok)
+					.unwrap_or(AllowCors::Invalid),
 			}
-		},
+		}
 	}
 }
 
 /// Validates if the `AccessControlAllowedHeaders` in the request are allowed.
 pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
-	mut headers: impl Iterator<Item=T>,
-	requested_headers: impl Iterator<Item=T>,
+	mut headers: impl Iterator<Item = T>,
+	requested_headers: impl Iterator<Item = T>,
 	cors_allow_headers: &AccessControlAllowHeaders,
-	to_result: F
+	to_result: F,
 ) -> AllowCors<Vec<O>> {
 	// Check if the header fields which were sent in the request are allowed
 	if let AccessControlAllowHeaders::Only(only) = cors_allow_headers {
-		let are_all_allowed = headers
-			.all(|header| {
-				let name = &Ascii::new(header.as_ref());
-				only.iter().any(|h| Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
-			});
+		let are_all_allowed = headers.all(|header| {
+			let name = &Ascii::new(header.as_ref());
+			only.iter().any(|h| Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
+		});
 
 		if !are_all_allowed {
 			return AllowCors::Invalid;
@@ -252,7 +253,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 		AccessControlAllowHeaders::Any => {
 			let headers = requested_headers.map(to_result).collect();
 			(false, headers)
-		},
+		}
 		AccessControlAllowHeaders::Only(only) => {
 			let mut filtered = false;
 			let headers: Vec<_> = requested_headers
@@ -265,7 +266,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 				.collect();
 
 			(filtered, headers)
-		},
+		}
 	};
 
 	if headers.is_empty() {
@@ -310,10 +311,22 @@ mod tests {
 		use self::OriginProtocol::*;
 
 		assert_eq!(Origin::parse("http://parity.io"), Origin::new(Http, "parity.io", None));
-		assert_eq!(Origin::parse("https://parity.io:8443"), Origin::new(Https, "parity.io", Some(8443)));
-		assert_eq!(Origin::parse("chrome-extension://124.0.0.1"), Origin::new(Custom("chrome-extension".into()), "124.0.0.1", None));
-		assert_eq!(Origin::parse("parity.io/somepath"), Origin::new(Http, "parity.io", None));
-		assert_eq!(Origin::parse("127.0.0.1:8545/somepath"), Origin::new(Http, "127.0.0.1", Some(8545)));
+		assert_eq!(
+			Origin::parse("https://parity.io:8443"),
+			Origin::new(Https, "parity.io", Some(8443))
+		);
+		assert_eq!(
+			Origin::parse("chrome-extension://124.0.0.1"),
+			Origin::new(Custom("chrome-extension".into()), "124.0.0.1", None)
+		);
+		assert_eq!(
+			Origin::parse("parity.io/somepath"),
+			Origin::new(Http, "parity.io", None)
+		);
+		assert_eq!(
+			Origin::parse("127.0.0.1:8545/somepath"),
+			Origin::new(Http, "127.0.0.1", Some(8545))
+		);
 	}
 
 	#[test]
@@ -435,7 +448,10 @@ mod tests {
 		let res = get_cors_allow_origin(origin, host, &Some(vec![AccessControlAllowOrigin::Any]));
 
 		// then
-		assert_eq!(res, AllowCors::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(
+			res,
+			AllowCors::Ok(AccessControlAllowOrigin::Value("http://parity.io".into()))
+		);
 	}
 
 	#[test]
@@ -445,11 +461,7 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_allow_origin(
-			origin,
-			host,
-			&Some(vec![AccessControlAllowOrigin::Null]),
-		);
+		let res = get_cors_allow_origin(origin, host, &Some(vec![AccessControlAllowOrigin::Null]));
 
 		// then
 		assert_eq!(res, AllowCors::NotRequired);
@@ -462,11 +474,7 @@ mod tests {
 		let host = None;
 
 		// when
-		let res = get_cors_allow_origin(
-			origin,
-			host,
-			&Some(vec![AccessControlAllowOrigin::Null]),
-		);
+		let res = get_cors_allow_origin(origin, host, &Some(vec![AccessControlAllowOrigin::Null]));
 
 		// then
 		assert_eq!(res, AllowCors::Ok(AccessControlAllowOrigin::Null));
@@ -482,11 +490,17 @@ mod tests {
 		let res = get_cors_allow_origin(
 			origin,
 			host,
-			&Some(vec![AccessControlAllowOrigin::Value("http://ethereum.org".into()), AccessControlAllowOrigin::Value("http://parity.io".into())]),
+			&Some(vec![
+				AccessControlAllowOrigin::Value("http://ethereum.org".into()),
+				AccessControlAllowOrigin::Value("http://parity.io".into()),
+			]),
 		);
 
 		// then
-		assert_eq!(res, AllowCors::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(
+			res,
+			AllowCors::Ok(AccessControlAllowOrigin::Value("http://parity.io".into()))
+		);
 	}
 
 	#[test]
@@ -497,8 +511,8 @@ mod tests {
 		let origin3 = Some("chrome-extension://test".into());
 		let host = None;
 		let allowed = Some(vec![
-		   AccessControlAllowOrigin::Value("http://*.io".into()),
-		   AccessControlAllowOrigin::Value("chrome-extension://*".into())
+			AccessControlAllowOrigin::Value("http://*.io".into()),
+			AccessControlAllowOrigin::Value("chrome-extension://*".into()),
 		]);
 
 		// when
@@ -507,17 +521,21 @@ mod tests {
 		let res3 = get_cors_allow_origin(origin3, host, &allowed);
 
 		// then
-		assert_eq!(res1, AllowCors::Ok(AccessControlAllowOrigin::Value("http://parity.io".into())));
+		assert_eq!(
+			res1,
+			AllowCors::Ok(AccessControlAllowOrigin::Value("http://parity.io".into()))
+		);
 		assert_eq!(res2, AllowCors::Invalid);
-		assert_eq!(res3, AllowCors::Ok(AccessControlAllowOrigin::Value("chrome-extension://test".into())));
+		assert_eq!(
+			res3,
+			AllowCors::Ok(AccessControlAllowOrigin::Value("chrome-extension://test".into()))
+		);
 	}
 
 	#[test]
 	fn should_return_invalid_if_header_not_allowed() {
 		// given
-		let cors_allow_headers = AccessControlAllowHeaders::Only(vec![
-			"x-allowed".to_owned(),
-		]);
+		let cors_allow_headers = AccessControlAllowHeaders::Only(vec!["x-allowed".to_owned()]);
 		let headers = vec!["Access-Control-Request-Headers"];
 		let requested = vec!["x-not-allowed"];
 
@@ -531,29 +549,25 @@ mod tests {
 	#[test]
 	fn should_return_valid_if_header_allowed() {
 		// given
-		let allowed = vec![
-			"x-allowed".to_owned(),
-		];
+		let allowed = vec!["x-allowed".to_owned()];
 		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed.clone());
 		let headers = vec!["Access-Control-Request-Headers"];
 		let requested = vec!["x-allowed"];
 
 		// when
-		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| (*x).to_owned());
+		let res = get_cors_allow_headers(headers.iter(), requested.iter(), &cors_allow_headers.into(), |x| {
+			(*x).to_owned()
+		});
 
 		// then
-		let allowed = vec![
-			"x-allowed".to_owned(),
-		];
+		let allowed = vec!["x-allowed".to_owned()];
 		assert_eq!(res, AllowCors::Ok(allowed));
 	}
 
 	#[test]
 	fn should_return_no_allowed_headers_if_none_in_request() {
 		// given
-		let allowed = vec![
-			"x-allowed".to_owned(),
-		];
+		let allowed = vec!["x-allowed".to_owned()];
 		let cors_allow_headers = AccessControlAllowHeaders::Only(allowed.clone());
 		let headers: Vec<String> = vec![];
 

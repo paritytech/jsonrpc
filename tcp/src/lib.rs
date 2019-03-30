@@ -23,21 +23,26 @@ use jsonrpc_server_utils as server_utils;
 
 pub use jsonrpc_core;
 
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
-#[cfg(test)] #[macro_use] extern crate lazy_static;
+#[cfg(test)]
+#[macro_use]
+extern crate lazy_static;
 
 mod dispatch;
 mod meta;
 mod server;
 mod service;
 
-#[cfg(test)] mod logger;
-#[cfg(test)] mod tests;
+#[cfg(test)]
+mod logger;
+#[cfg(test)]
+mod tests;
 
 use jsonrpc_core as jsonrpc;
 
+pub use self::server_utils::{codecs::Separator, tokio};
 pub use crate::dispatch::{Dispatcher, PushMessageError};
 pub use crate::meta::{MetaExtractor, RequestContext};
-pub use crate::server::{ServerBuilder, Server};
-pub use self::server_utils::{tokio, codecs::Separator};
+pub use crate::server::{Server, ServerBuilder};

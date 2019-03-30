@@ -3,15 +3,15 @@
 use std;
 use std::sync::Arc;
 
-use tokio_service::{self, Service as TokioService};
-use crate::jsonrpc::futures::{future, Future, Stream, Sink};
 use crate::jsonrpc::futures::sync::{mpsc, oneshot};
-use crate::jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
+use crate::jsonrpc::futures::{future, Future, Sink, Stream};
+use crate::jsonrpc::{middleware, FutureResult, MetaIoHandler, Metadata, Middleware};
+use tokio_service::{self, Service as TokioService};
 
 use crate::server_utils::{
+	codecs, reactor, session,
+	tokio::{self, reactor::Handle, runtime::TaskExecutor},
 	tokio_codec::Framed,
-	tokio::{self, runtime::TaskExecutor, reactor::Handle},
-	reactor, session, codecs,
 };
 use parking_lot::Mutex;
 
@@ -61,7 +61,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 
 impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new IPC server build given the `IoHandler`.
-	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S> where
+	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S>
+	where
 		T: Into<MetaIoHandler<M, S>>,
 	{
 		Self::with_meta_extractor(io_handler, NoopExtractor)
@@ -70,7 +71,8 @@ impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
 
 impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new IPC server build given the `IoHandler` and metadata extractor.
-	pub fn with_meta_extractor<T, E>(io_handler: T, extractor: E) -> ServerBuilder<M, S> where
+	pub fn with_meta_extractor<T, E>(io_handler: T, extractor: E) -> ServerBuilder<M, S>
+	where
 		T: Into<MetaIoHandler<M, S>>,
 		E: MetaExtractor<M>,
 	{
@@ -93,7 +95,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	}
 
 	/// Sets session metadata extractor.
-	pub fn session_meta_extractor<X>(mut self, meta_extractor: X) -> Self where
+	pub fn session_meta_extractor<X>(mut self, meta_extractor: X) -> Self
+	where
 		X: MetaExtractor<M>,
 	{
 		self.meta_extractor = Arc::new(meta_extractor);
@@ -155,7 +158,9 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let connections = match endpoint.incoming(&endpoint_handle) {
 				Ok(connections) => connections,
 				Err(e) => {
-					start_signal.send(Err(e)).expect("Cannot fail since receiver never dropped before receiving");
+					start_signal
+						.send(Err(e))
+						.expect("Cannot fail since receiver never dropped before receiving");
 					return future::Either::A(future::ok(()));
 				}
 			};
@@ -167,7 +172,9 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				let session_id = id;
 				let session_stats = session_stats.clone();
 				trace!(target: "ipc", "Accepted incoming IPC connection: {}", session_id);
-				if let Some(stats) = session_stats.as_ref() { stats.open_session(session_id) }
+				if let Some(stats) = session_stats.as_ref() {
+					stats.open_session(session_id)
+				}
 
 				let (sender, receiver) = mpsc::channel(16);
 				let meta = meta_extractor.extract(&RequestContext {
@@ -178,23 +185,18 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				let service = Service::new(rpc_handler.clone(), meta);
 				let (writer, reader) = Framed::new(
 					io_stream,
-					codecs::StreamCodec::new(
-						incoming_separator.clone(),
-						outgoing_separator.clone(),
-					),
-				).split();
+					codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
+				)
+				.split();
 				let responses = reader
 					.map(move |req| {
-						service.call(req)
-							.then(|result| {
-								match result {
-									Err(_) => {
-										future::ok(None)
-									}
-									Ok(some_result) => future::ok(some_result),
-								}
+						service
+							.call(req)
+							.then(|result| match result {
+								Err(_) => future::ok(None),
+								Ok(some_result) => future::ok(some_result),
 							})
-							.map_err(|_:()| std::io::ErrorKind::Other.into())
+							.map_err(|_: ()| std::io::ErrorKind::Other.into())
 					})
 					.buffer_unordered(client_buffer_size)
 					.filter_map(|x| x)
@@ -203,11 +205,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					.select_with_weak(receiver.map_err(|e| {
 						warn!(target: "ipc", "Notification error: {:?}", e);
 						std::io::ErrorKind::Other.into()
-				}));
+					}));
 
 				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
-					if let Some(stats) = session_stats.as_ref() { stats.close_session(session_id) }
+					if let Some(stats) = session_stats.as_ref() {
+						stats.close_session(session_id)
+					}
 					Ok(())
 				});
 
@@ -215,15 +219,18 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 				Ok(())
 			});
-			start_signal.send(Ok(())).expect("Cannot fail since receiver never dropped before receiving");
+			start_signal
+				.send(Ok(()))
+				.expect("Cannot fail since receiver never dropped before receiving");
 
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			future::Either::B(
-				server.select(stop)
+				server
+					.select(stop)
 					.map(|_| {
 						let _ = wait_signal.send(());
 					})
-					.map_err(|_| ())
+					.map_err(|_| ()),
 			)
 		}));
 
@@ -238,11 +245,10 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				handles: Arc::new(Mutex::new(handle)),
 				wait_handle: Some(wait_receiver),
 			}),
-			Err(e) => Err(e)
+			Err(e) => Err(e),
 		}
 	}
 }
-
 
 /// IPC Server handle
 #[derive(Debug)]
@@ -268,9 +274,7 @@ impl Server {
 	pub fn wait(mut self) {
 		self.wait_handle.take().map(|wait_receiver| wait_receiver.wait());
 	}
-
 }
-
 
 #[derive(Debug)]
 struct InnerHandles {
@@ -282,7 +286,9 @@ struct InnerHandles {
 impl InnerHandles {
 	pub fn close(&mut self) {
 		let _ = self.stop.take().map(|stop| stop.send(()));
-		if let Some(executor) = self.executor.take() { executor.close() }
+		if let Some(executor) = self.executor.take() {
+			executor.close()
+		}
 		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
@@ -310,29 +316,27 @@ impl CloseHandle {
 mod tests {
 	use tokio_uds;
 
-	use std::thread;
-	use std::sync::Arc;
-	use std::time;
-	use std::time::{Instant, Duration};
-	use super::{ServerBuilder, Server};
-	use crate::jsonrpc::{MetaIoHandler, Value};
-	use crate::jsonrpc::futures::{Future, future, Stream, Sink};
-	use crate::jsonrpc::futures::sync::{mpsc, oneshot};
 	use self::tokio_uds::UnixStream;
-	use parking_lot::Mutex;
-	use crate::server_utils::{
-		tokio_codec::Decoder,
-		tokio::{self, timer::Delay}
-	};
-	use crate::server_utils::codecs;
-	use crate::meta::{MetaExtractor, RequestContext, NoopExtractor};
 	use super::SecurityAttributes;
+	use super::{Server, ServerBuilder};
+	use crate::jsonrpc::futures::sync::{mpsc, oneshot};
+	use crate::jsonrpc::futures::{future, Future, Sink, Stream};
+	use crate::jsonrpc::{MetaIoHandler, Value};
+	use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
+	use crate::server_utils::codecs;
+	use crate::server_utils::{
+		tokio::{self, timer::Delay},
+		tokio_codec::Decoder,
+	};
+	use parking_lot::Mutex;
+	use std::sync::Arc;
+	use std::thread;
+	use std::time;
+	use std::time::{Duration, Instant};
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
-		io.add_method("say_hello", |_params| {
-			Ok(Value::String("hello".to_string()))
-		});
+		io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 		ServerBuilder::new(io)
 	}
 
@@ -345,16 +349,11 @@ mod tests {
 	fn dummy_request_str(path: &str, data: &str) -> String {
 		let stream_future = UnixStream::connect(path);
 		let reply = stream_future.and_then(|stream| {
-			let stream = codecs::StreamCodec::stream_incoming()
-				.framed(stream);
+			let stream = codecs::StreamCodec::stream_incoming().framed(stream);
 			let reply = stream
 				.send(data.to_owned())
-				.and_then(move |stream| {
-					stream.into_future().map_err(|(err, _)| err)
-				})
-				.and_then(|(reply, _)| {
-					future::ok(reply.expect("there should be one reply"))
-				});
+				.and_then(move |stream| stream.into_future().map_err(|(err, _)| err))
+				.and_then(|(reply, _)| future::ok(reply.expect("there should be one reply")));
 			reply
 		});
 
@@ -366,12 +365,11 @@ mod tests {
 		crate::logger::init_log();
 
 		let mut io = MetaIoHandler::<()>::default();
-		io.add_method("say_hello", |_params| {
-			Ok(Value::String("hello".to_string()))
-		});
+		io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 		let server = ServerBuilder::new(io);
 
-		let _server = server.start("/tmp/test-ipc-20000")
+		let _server = server
+			.start("/tmp/test-ipc-20000")
 			.expect("Server must run with no issues");
 	}
 
@@ -395,19 +393,20 @@ mod tests {
 			let result = dummy_request_str(
 				path,
 				"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
-				);
+			);
 			stop_signal.send(result).unwrap();
 		});
 		t.join().unwrap();
 
-		let _ = stop_receiver.map(move |result: String| {
-			assert_eq!(
-				result,
-				"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
-				"Response does not exactly match the expected response",
-			);
-			server.close();
-		}).wait();
+		let _ = stop_receiver
+			.map(move |result: String| {
+				assert_eq!(
+					result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+					"Response does not exactly match the expected response",
+				);
+				server.close();
+			})
+			.wait();
 	}
 
 	#[test]
@@ -421,30 +420,31 @@ mod tests {
 		for _ in 0..4 {
 			let path = path.clone();
 			let mut stop_signal = stop_signal.clone();
-			handles.push(
-				thread::spawn(move || {
-					for _ in 0..100 {
-						let result = dummy_request_str(
-							&path,
-							"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
-							);
-						stop_signal.try_send(result).unwrap();
-					}
-				})
-			);
+			handles.push(thread::spawn(move || {
+				for _ in 0..100 {
+					let result = dummy_request_str(
+						&path,
+						"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}",
+					);
+					stop_signal.try_send(result).unwrap();
+				}
+			}));
 		}
 
 		for handle in handles.drain(..) {
 			handle.join().unwrap();
 		}
 
-		let _ = stop_receiver.map(|result| {
-			assert_eq!(
-				result,
-				"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
-				"Response does not exactly match the expected response",
+		let _ = stop_receiver
+			.map(|result| {
+				assert_eq!(
+					result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+					"Response does not exactly match the expected response",
 				);
-		}).take(400).collect().wait();
+			})
+			.take(400)
+			.collect()
+			.wait();
 		server.close();
 	}
 
@@ -455,14 +455,22 @@ mod tests {
 		let server = run(path);
 		server.close();
 
-		assert!(::std::fs::metadata(path).is_err(), "There should be no socket file left");
-		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+		assert!(
+			::std::fs::metadata(path).is_err(),
+			"There should be no socket file left"
+		);
+		assert!(
+			UnixStream::connect(path).wait().is_err(),
+			"Connection to the closed socket should fail"
+		);
 	}
 
 	fn huge_response_test_str() -> String {
 		let mut result = String::from("begin_hello");
 		result.push_str("begin_hello");
-		for _ in 0..16384 { result.push(' '); }
+		for _ in 0..16384 {
+			result.push(' ');
+		}
 		result.push_str("end_hello");
 		result
 	}
@@ -481,9 +489,7 @@ mod tests {
 		let path = "/tmp/test-ipc-60000";
 
 		let mut io = MetaIoHandler::<()>::default();
-		io.add_method("say_huge_hello", |_params| {
-			Ok(Value::String(huge_response_test_str()))
-		});
+		io.add_method("say_huge_hello", |_params| Ok(Value::String(huge_response_test_str())));
 		let builder = ServerBuilder::new(io);
 
 		let server = builder.start(path).expect("Server must run with no issues");
@@ -499,14 +505,16 @@ mod tests {
 		});
 		t.join().unwrap();
 
-		let _ = stop_receiver.map(move |result: String| {
-			assert_eq!(
-				result,
-				huge_response_test_json(),
-				"Response does not exactly match the expected response",
-			);
-			server.close();
-		}).wait();
+		let _ = stop_receiver
+			.map(move |result: String| {
+				assert_eq!(
+					result,
+					huge_response_test_json(),
+					"Response does not exactly match the expected response",
+				);
+				server.close();
+			})
+			.wait();
 	}
 
 	#[test]
@@ -541,7 +549,7 @@ mod tests {
 		let path = "/tmp/test-ipc-30009";
 		let (signal, receiver) = mpsc::channel(16);
 		let session_metadata_extractor = SessionEndExtractor {
-			drop_receivers: Arc::new(Mutex::new(signal))
+			drop_receivers: Arc::new(Mutex::new(signal)),
 		};
 
 		let io = MetaIoHandler::<Arc<SessionEndMeta>>::default();
@@ -551,10 +559,12 @@ mod tests {
 			let _ = UnixStream::connect(path).wait().expect("Socket should connect");
 		}
 
-		receiver.into_future()
+		receiver
+			.into_future()
 			.map_err(|_| ())
 			.and_then(|drop_receiver| drop_receiver.0.unwrap().map_err(|_| ()))
-			.wait().unwrap();
+			.wait()
+			.unwrap();
 		server.close();
 	}
 
@@ -565,7 +575,10 @@ mod tests {
 		let server = run(path);
 		let handle = server.close_handle();
 		handle.close();
-		assert!(UnixStream::connect(path).wait().is_err(), "Connection to the closed socket should fail");
+		assert!(
+			UnixStream::connect(path).wait().is_err(),
+			"Connection to the closed socket should fail"
+		);
 	}
 
 	#[test]
@@ -589,20 +602,17 @@ mod tests {
 			.map(|_| false)
 			.map_err(|err| panic!("{:?}", err));
 
-		let result_fut = rx
-			.map_err(|_| ())
-			.select(delay)
-			.then(move |result| {
-				match result {
-					Ok((result, _)) => {
-						assert_eq!(result, true, "Wait timeout exceeded");
-						assert!(UnixStream::connect(path).wait().is_err(),
-							"Connection to the closed socket should fail");
-						Ok(())
-					},
-					Err(_) => Err(()),
-				}
-			});
+		let result_fut = rx.map_err(|_| ()).select(delay).then(move |result| match result {
+			Ok((result, _)) => {
+				assert_eq!(result, true, "Wait timeout exceeded");
+				assert!(
+					UnixStream::connect(path).wait().is_err(),
+					"Connection to the closed socket should fail"
+				);
+				Ok(())
+			}
+			Err(_) => Err(()),
+		});
 
 		tokio::run(result_fut);
 	}

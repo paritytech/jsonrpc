@@ -19,14 +19,15 @@
 
 use tokio;
 use tokio_stdin_stdout;
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 pub use jsonrpc_core;
 
+use jsonrpc_core::IoHandler;
 use std::sync::Arc;
 use tokio::prelude::{Future, Stream};
 use tokio_codec::{FramedRead, FramedWrite, LinesCodec};
-use jsonrpc_core::{IoHandler};
 
 /// Stdio server builder
 pub struct ServerBuilder {
@@ -35,8 +36,13 @@ pub struct ServerBuilder {
 
 impl ServerBuilder {
 	/// Returns a new server instance
-	pub fn new<T>(handler: T) -> Self where T: Into<IoHandler> {
-		ServerBuilder { handler: Arc::new(handler.into()) }
+	pub fn new<T>(handler: T) -> Self
+	where
+		T: Into<IoHandler>,
+	{
+		ServerBuilder {
+			handler: Arc::new(handler.into()),
+		}
 	}
 
 	/// Will block until EOF is read or until an error occurs.

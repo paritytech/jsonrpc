@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use jsonrpc_core::{futures, MetaIoHandler, Metadata, Error, Value, Result};
 use jsonrpc_core::futures::future::FutureResult;
+use jsonrpc_core::{futures, Error, MetaIoHandler, Metadata, Result, Value};
 use jsonrpc_derive::rpc;
 
 #[derive(Clone)]
@@ -37,7 +37,9 @@ struct RpcImpl;
 impl Rpc<u64> for RpcImpl {
 	type Metadata = Meta;
 
-	fn one(&self) -> Result<u64> { Ok(100) }
+	fn one(&self) -> Result<u64> {
+		Ok(100)
+	}
 
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
@@ -56,15 +58,14 @@ impl Rpc<u64> for RpcImpl {
 	}
 }
 
-
 fn main() {
 	let mut io = MetaIoHandler::default();
 	let rpc = RpcImpl;
 
 	io.extend_with(rpc.to_delegate());
 
-	let server = jsonrpc_tcp_server::ServerBuilder
-		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| {
+	let server =
+		jsonrpc_tcp_server::ServerBuilder::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| {
 			Meta(format!("{}", context.peer_addr))
 		})
 		.start(&"0.0.0.0:3030".parse().unwrap())

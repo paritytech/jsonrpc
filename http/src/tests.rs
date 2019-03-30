@@ -1,22 +1,26 @@
 use jsonrpc_core;
 
-use std::str::Lines;
-use std::net::TcpStream;
+use self::jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 use std::io::{Read, Write};
-use self::jsonrpc_core::{IoHandler, Params, Value, Error, ErrorCode};
+use std::net::TcpStream;
+use std::str::Lines;
 
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
 
 fn serve_hosts(hosts: Vec<Host>) -> Server {
 	ServerBuilder::new(IoHandler::default())
-		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value("parity.io".into())]))
+		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Value(
+			"parity.io".into(),
+		)]))
 		.allowed_hosts(DomainsValidation::AllowOnly(hosts))
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
 }
 
-fn id<T>(t: T) -> T { t }
+fn id<T>(t: T) -> T {
+	t
+}
 
 fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
 	let builder = ServerBuilder::new(io())
@@ -28,26 +32,20 @@ fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
 		.rest_api(RestApi::Secure)
 		.health_api(("/health", "hello_async"));
 
-	alter(builder)
-		.start_http(&"127.0.0.1:0".parse().unwrap())
-		.unwrap()
+	alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap()
 }
 
 fn serve_allow_headers(cors_allow_headers: cors::AccessControlAllowHeaders) -> Server {
 	let mut io = IoHandler::default();
-	io.add_method("hello", |params: Params| {
-		match params.parse::<(u64, )>() {
-			Ok((num, )) => Ok(Value::String(format!("world: {}", num))),
-			_ => Ok(Value::String("world".into())),
-		}
+	io.add_method("hello", |params: Params| match params.parse::<(u64,)>() {
+		Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
+		_ => Ok(Value::String("world".into())),
 	});
 	ServerBuilder::new(io)
-		.cors(
-			DomainsValidation::AllowOnly(vec![
-				AccessControlAllowOrigin::Value("parity.io".into()),
-				AccessControlAllowOrigin::Null,
-			])
-		)
+		.cors(DomainsValidation::AllowOnly(vec![
+			AccessControlAllowOrigin::Value("parity.io".into()),
+			AccessControlAllowOrigin::Null,
+		]))
 		.cors_allow_headers(cors_allow_headers)
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap()
@@ -57,11 +55,9 @@ fn io() -> IoHandler {
 	use std::{thread, time};
 
 	let mut io = IoHandler::default();
-	io.add_method("hello", |params: Params| {
-		match params.parse::<(u64, )>() {
-			Ok((num, )) => Ok(Value::String(format!("world: {}", num))),
-			_ => Ok(Value::String("world".into())),
-		}
+	io.add_method("hello", |params: Params| match params.parse::<(u64,)>() {
+		Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
+		_ => Ok(Value::String("world".into())),
 	});
 	io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
 	io.add_method("hello_async", |_params: Params| {
@@ -94,7 +90,7 @@ fn read_block(lines: &mut Lines) -> String {
 			Some(v) => {
 				block.push_str(v);
 				block.push_str("\n");
-			},
+			}
 		}
 	}
 	block
@@ -112,11 +108,7 @@ fn request(server: Server, request: &str) -> Response {
 	let headers = read_block(&mut lines);
 	let body = read_block(&mut lines);
 
-	Response {
-		status,
-		headers,
-		body,
-	}
+	Response { status, headers, body }
 }
 
 #[test]
@@ -125,19 +117,23 @@ fn should_return_method_not_allowed_for_get() {
 	let server = serve(id);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			\r\n\
-			I shouldn't be read.\r\n\
-		"
+		 GET / HTTP/1.1\r\n\
+		 Host: 127.0.0.1:8080\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 I shouldn't be read.\r\n\
+		 ",
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 405 Method Not Allowed".to_owned());
-	assert_eq!(response.body, "Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned());
+	assert_eq!(
+		response.body,
+		"Used HTTP Method is not allowed. POST or OPTIONS is required\n".to_owned()
+	);
 }
 
 #[test]
@@ -146,14 +142,15 @@ fn should_handle_health_endpoint() {
 	let server = serve(id);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET /health HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			\r\n\
-			I shouldn't be read.\r\n\
-		"
+		 GET /health HTTP/1.1\r\n\
+		 Host: 127.0.0.1:8080\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 I shouldn't be read.\r\n\
+		 ",
 	);
 
 	// then
@@ -167,14 +164,15 @@ fn should_handle_health_endpoint_failure() {
 	let server = serve(|builder| builder.health_api(("/api/health", "fail")));
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			GET /api/health HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			\r\n\
-			I shouldn't be read.\r\n\
-		"
+		 GET /api/health HTTP/1.1\r\n\
+		 Host: 127.0.0.1:8080\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 I shouldn't be read.\r\n\
+		 ",
 	);
 
 	// then
@@ -188,19 +186,23 @@ fn should_return_unsupported_media_type_if_not_json() {
 	let server = serve(id);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			\r\n\
-			{}\r\n\
-		"
+		 POST / HTTP/1.1\r\n\
+		 Host: 127.0.0.1:8080\r\n\
+		 Connection: close\r\n\
+		 \r\n\
+		 {}\r\n\
+		 ",
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned());
+	assert_eq!(
+		response.body,
+		"Supplied content type is not allowed. Content-Type: application/json is required\n".to_owned()
+	);
 }
 
 #[test]
@@ -210,16 +212,21 @@ fn should_return_error_for_malformed_request() {
 
 	// when
 	let req = r#"{"jsonrpc":"3.0","method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -234,16 +241,21 @@ fn should_return_error_for_malformed_request2() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","metho1d":""}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -258,23 +270,27 @@ fn should_return_empty_response_for_notification() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, "".to_owned());
 }
-
 
 #[test]
 fn should_return_method_not_found() {
@@ -283,16 +299,21 @@ fn should_return_method_not_found() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -307,23 +328,34 @@ fn should_add_cors_allow_origins() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("access-control-allow-origin: http://parity.io"), "Headers missing in {}", response.headers);
+	assert!(
+		response
+			.headers
+			.contains("access-control-allow-origin: http://parity.io"),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -333,24 +365,39 @@ fn should_add_cors_max_age_headers() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("access-control-allow-origin: http://parity.io"), "Headers missing in {}", response.headers);
-	assert!(response.headers.contains("access-control-max-age: 1000"), "Headers missing in {}", response.headers);
+	assert!(
+		response
+			.headers
+			.contains("access-control-allow-origin: http://parity.io"),
+		"Headers missing in {}",
+		response.headers
+	);
+	assert!(
+		response.headers.contains("access-control-max-age: 1000"),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -360,25 +407,28 @@ fn should_not_add_cors_allow_origins() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: fake.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: fake.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 403 Forbidden".to_owned());
 	assert_eq!(response.body, cors_invalid_allow_origin());
 }
-
-
 
 #[test]
 fn should_not_process_the_request_in_case_of_invalid_allow_origin() {
@@ -387,17 +437,22 @@ fn should_not_process_the_request_in_case_of_invalid_allow_origin() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: fake.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: fake.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -405,27 +460,35 @@ fn should_not_process_the_request_in_case_of_invalid_allow_origin() {
 	assert_eq!(response.body, cors_invalid_allow_origin());
 }
 
-
 #[test]
 fn should_return_proper_headers_on_options() {
 	// given
 	let server = serve(id);
 
 	// when
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Length: 0\r\n\
-			\r\n\
-		"
+		 OPTIONS / HTTP/1.1\r\n\
+		 Host: 127.0.0.1:8080\r\n\
+		 Connection: close\r\n\
+		 Content-Length: 0\r\n\
+		 \r\n\
+		 ",
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("allow: OPTIONS, POST"), "Headers missing in {}", response.headers);
-	assert!(response.headers.contains("accept: application/json"), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains("allow: OPTIONS, POST"),
+		"Headers missing in {}",
+		response.headers
+	);
+	assert!(
+		response.headers.contains("accept: application/json"),
+		"Headers missing in {}",
+		response.headers
+	);
 	assert_eq!(response.body, "");
 }
 
@@ -436,23 +499,32 @@ fn should_add_cors_allow_origin_for_null_origin() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: null\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: null\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains("access-control-allow-origin: null"),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -462,23 +534,32 @@ fn should_add_cors_allow_origin_for_null_origin_when_all() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: null\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: null\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, method_not_found());
-	assert!(response.headers.contains("access-control-allow-origin: null"), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains("access-control-allow-origin: null"),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -488,16 +569,17 @@ fn should_not_allow_request_larger_than_max() {
 		.start_http(&"127.0.0.1:0".parse().unwrap())
 		.unwrap();
 
-	let response = request(server,
+	let response = request(
+		server,
 		"\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Length: 8\r\n\
-			Content-Type: application/json\r\n\
-			\r\n\
-			12345678\r\n\
-		"
+		 POST / HTTP/1.1\r\n\
+		 Host: 127.0.0.1:8080\r\n\
+		 Connection: close\r\n\
+		 Content-Length: 8\r\n\
+		 Content-Type: application/json\r\n\
+		 \r\n\
+		 12345678\r\n\
+		 ",
 	);
 	assert_eq!(response.status, "HTTP/1.1 413 Payload Too Large".to_owned());
 }
@@ -509,16 +591,21 @@ fn should_reject_invalid_hosts() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -533,15 +620,20 @@ fn should_reject_missing_host() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -556,16 +648,21 @@ fn should_allow_if_host_is_valid() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: parity.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: parity.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -576,31 +673,36 @@ fn should_allow_if_host_is_valid() {
 #[test]
 fn should_respond_configured_allowed_hosts_to_options() {
 	// given
-	let allowed = vec![
-			"X-Allowed".to_owned(),
-			"X-AlsoAllowed".to_owned(),
-	];
+	let allowed = vec!["X-Allowed".to_owned(), "X-AlsoAllowed".to_owned()];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Access-Control-Request-Headers: {}\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			\r\n\
-		", &allowed.join(", "))
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Access-Control-Request-Headers: {}\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 \r\n\
+			 ",
+			&allowed.join(", ")
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
-	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains(&expected),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -609,22 +711,28 @@ fn should_not_contain_default_cors_allow_headers() {
 	let server = serve(id);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: 0\r\n\
-			\r\n\
-		")
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: 0\r\n\
+			 \r\n\
+			 "
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(!response.headers.contains("access-control-allow-headers:"),
-		"Header should not be in {}", response.headers);
+	assert!(
+		!response.headers.contains("access-control-allow-headers:"),
+		"Header should not be in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -633,106 +741,123 @@ fn should_respond_valid_to_default_allowed_headers() {
 	let server = serve(id);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: Accept, Content-Type, Origin\r\n\
-			\r\n\
-		")
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: Accept, Content-Type, Origin\r\n\
+			 \r\n\
+			 "
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let expected = "access-control-allow-headers: Accept, Content-Type, Origin";
-	assert!(response.headers.contains(expected), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains(expected),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
 fn should_by_default_respond_valid_to_any_request_headers() {
 	// given
-	let allowed = vec![
-		"X-Abc".to_owned(),
-		"X-123".to_owned(),
-	];
+	let allowed = vec!["X-Abc".to_owned(), "X-123".to_owned()];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: {}\r\n\
-			\r\n\
-		", &allowed.join(", "))
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: {}\r\n\
+			 \r\n\
+			 ",
+			&allowed.join(", ")
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
-	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains(&expected),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
 fn should_respond_valid_to_configured_allow_headers() {
 	// given
-	let allowed = vec![
-			"X-Allowed".to_owned(),
-			"X-AlsoAllowed".to_owned(),
-	];
+	let allowed = vec!["X-Allowed".to_owned(), "X-AlsoAllowed".to_owned()];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: {}\r\n\
-			\r\n\
-		", &allowed.join(", "))
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: {}\r\n\
+			 \r\n\
+			 ",
+			&allowed.join(", ")
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let expected = format!("access-control-allow-headers: {}", &allowed.join(", "));
-	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains(&expected),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
 fn should_respond_invalid_if_non_allowed_header_used() {
 	// given
-	let custom = cors::AccessControlAllowHeaders::Only(
-		vec![
-			"X-Allowed".to_owned(),
-		]);
+	let custom = cors::AccessControlAllowHeaders::Only(vec!["X-Allowed".to_owned()]);
 	let server = serve_allow_headers(custom);
 
 	// when
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			X-Not-Allowed: not allowed\r\n\
-			\r\n\
-		")
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 X-Not-Allowed: not allowed\r\n\
+			 \r\n\
+			 "
+		),
 	);
 
 	// then
@@ -743,26 +868,29 @@ fn should_respond_invalid_if_non_allowed_header_used() {
 #[test]
 fn should_respond_valid_if_allowed_header_used() {
 	// given
-	let custom = cors::AccessControlAllowHeaders::Only(
-		vec![
-			"X-Allowed".to_owned(),
-		]);
+	let custom = cors::AccessControlAllowHeaders::Only(vec!["X-Allowed".to_owned()]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			X-Allowed: Foobar\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 X-Allowed: Foobar\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -773,26 +901,29 @@ fn should_respond_valid_if_allowed_header_used() {
 #[test]
 fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 	// given
-	let custom = cors::AccessControlAllowHeaders::Only(
-		vec![
-			"X-Allowed".to_owned(),
-		]);
+	let custom = cors::AccessControlAllowHeaders::Only(vec!["X-Allowed".to_owned()]);
 	let server = serve_allow_headers(custom);
 	let addr = server.address().clone();
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			X-AlLoWed: Foobar\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 X-AlLoWed: Foobar\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -803,32 +934,32 @@ fn should_respond_valid_if_case_insensitive_allowed_header_used() {
 #[test]
 fn should_respond_valid_on_case_mismatches_in_allowed_headers() {
 	// given
-	let allowed = vec![
-		"X-Allowed".to_owned(),
-		"X-AlsoAllowed".to_owned(),
-	];
+	let allowed = vec!["X-Allowed".to_owned(), "X-AlsoAllowed".to_owned()];
 	let custom = cors::AccessControlAllowHeaders::Only(allowed.clone());
 	let server = serve_allow_headers(custom);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: x-ALLoweD, x-alSOaLloWeD\r\n\
-			\r\n\
-		")
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: x-ALLoweD, x-alSOaLloWeD\r\n\
+			 \r\n\
+			 "
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	let contained = response.headers.contains(
-		"access-control-allow-headers: x-ALLoweD, x-alSOaLloWeD"
-	);
+	let contained = response
+		.headers
+		.contains("access-control-allow-headers: x-ALLoweD, x-alSOaLloWeD");
 	assert!(contained, "Headers missing in {}", response.headers);
 }
 
@@ -840,46 +971,54 @@ fn should_respond_valid_to_any_requested_header() {
 	let headers = "Something, Anything, Xyz, 123, _?";
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: {}\r\n\
-			\r\n\
-		", headers)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: {}\r\n\
+			 \r\n\
+			 ",
+			headers
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	let expected = format!("access-control-allow-headers: {}", headers);
-	assert!(response.headers.contains(&expected), "Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains(&expected),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
 fn should_forbid_invalid_request_headers() {
 	// given
-	let custom = cors::AccessControlAllowHeaders::Only(
-		vec![
-			"X-Allowed".to_owned(),
-		]);
+	let custom = cors::AccessControlAllowHeaders::Only(vec!["X-Allowed".to_owned()]);
 	let server = serve_allow_headers(custom);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: *\r\n\
-			\r\n\
-		")
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: *\r\n\
+			 \r\n\
+			 "
+		),
 	);
 
 	// then
@@ -896,23 +1035,29 @@ fn should_respond_valid_to_wildcard_if_any_header_allowed() {
 	let server = serve_allow_headers(cors::AccessControlAllowHeaders::Any);
 
 	// when
-	let response = request(server,
-		&format!("\
-			OPTIONS / HTTP/1.1\r\n\
-			Host: 127.0.0.1:8080\r\n\
-			Origin: http://parity.io\r\n\
-			Content-Length: 0\r\n\
-			Content-Type: application/json\r\n\
-			Connection: close\r\n\
-			Access-Control-Request-Headers: *\r\n\
-			\r\n\
-		")
+	let response = request(
+		server,
+		&format!(
+			"\
+			 OPTIONS / HTTP/1.1\r\n\
+			 Host: 127.0.0.1:8080\r\n\
+			 Origin: http://parity.io\r\n\
+			 Content-Length: 0\r\n\
+			 Content-Type: application/json\r\n\
+			 Connection: close\r\n\
+			 Access-Control-Request-Headers: *\r\n\
+			 \r\n\
+			 "
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
-	assert!(response.headers.contains("access-control-allow-headers: *"),
-		"Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains("access-control-allow-headers: *"),
+		"Headers missing in {}",
+		response.headers
+	);
 }
 
 #[test]
@@ -922,16 +1067,21 @@ fn should_allow_application_json_utf8() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: parity.io\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json; charset=utf-8\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: parity.io\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json; charset=utf-8\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -947,16 +1097,22 @@ fn should_always_allow_the_bind_address() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: {}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr, req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: {}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr,
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -972,16 +1128,22 @@ fn should_always_allow_the_bind_address_as_localhost() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"x"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -997,16 +1159,22 @@ fn should_handle_sync_requests_correctly() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -1022,16 +1190,22 @@ fn should_handle_async_requests_with_immediate_response_correctly() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_async"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -1047,16 +1221,22 @@ fn should_handle_async_requests_correctly() {
 
 	// when
 	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_async2"}"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -1072,16 +1252,22 @@ fn should_handle_sync_batch_requests_correctly() {
 
 	// when
 	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -1097,16 +1283,22 @@ fn should_handle_rest_request_with_params() {
 
 	// when
 	let req = "";
-	let response = request(server,
-		&format!("\
-			POST /hello/5 HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST /hello/5 HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -1122,16 +1314,22 @@ fn should_handle_rest_request_with_case_insensitive_content_type() {
 
 	// when
 	let req = "";
-	let response = request(server,
-		&format!("\
-			POST /hello/5 HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: Application/JSON; charset=UTF-8\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST /hello/5 HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: Application/JSON; charset=UTF-8\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
@@ -1147,20 +1345,29 @@ fn should_return_error_in_case_of_unsecure_rest_and_no_method() {
 
 	// when
 	let req = "";
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
 	assert_eq!(response.status, "HTTP/1.1 415 Unsupported Media Type".to_owned());
-	assert_eq!(&response.body, "Supplied content type is not allowed. Content-Type: application/json is required\n");
+	assert_eq!(
+		&response.body,
+		"Supplied content type is not allowed. Content-Type: application/json is required\n"
+	);
 }
 
 #[test]
@@ -1171,21 +1378,30 @@ fn should_return_connection_header() {
 
 	// when
 	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: close\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: close\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
-	assert!(response.headers.contains("connection: close"),
-		"Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains("connection: close"),
+		"Headers missing in {}",
+		response.headers
+	);
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
 }
@@ -1198,20 +1414,29 @@ fn should_close_connection_without_keep_alive() {
 
 	// when
 	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
-	assert!(response.headers.contains("connection: close"),
-		"Header missing in {}", response.headers);
+	assert!(
+		response.headers.contains("connection: close"),
+		"Header missing in {}",
+		response.headers
+	);
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
 }
@@ -1224,26 +1449,33 @@ fn should_respond_with_close_even_if_client_wants_to_keep_alive() {
 
 	// when
 	let req = r#"[{"jsonrpc":"2.0","id":1,"method":"hello"}]"#;
-	let response = request(server,
-		&format!("\
-			POST / HTTP/1.1\r\n\
-			Host: localhost:{}\r\n\
-			Connection: keep-alive\r\n\
-			Content-Type: application/json\r\n\
-			Content-Length: {}\r\n\
-			\r\n\
-			{}\r\n\
-		", addr.port(), req.as_bytes().len(), req)
+	let response = request(
+		server,
+		&format!(
+			"\
+			 POST / HTTP/1.1\r\n\
+			 Host: localhost:{}\r\n\
+			 Connection: keep-alive\r\n\
+			 Content-Type: application/json\r\n\
+			 Content-Length: {}\r\n\
+			 \r\n\
+			 {}\r\n\
+			 ",
+			addr.port(),
+			req.as_bytes().len(),
+			req
+		),
 	);
 
 	// then
-	assert!(response.headers.contains("connection: close"),
-		"Headers missing in {}", response.headers);
+	assert!(
+		response.headers.contains("connection: close"),
+		"Headers missing in {}",
+		response.headers
+	);
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
 }
-
-
 
 fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
@@ -1258,18 +1490,18 @@ fn cors_invalid_allow_headers() -> String {
 }
 
 fn method_not_found() -> String {
- "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
+	"{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32601,\"message\":\"Method not found\"},\"id\":1}\n".into()
 }
 
 fn invalid_request() -> String {
- "{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
+	"{\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32600,\"message\":\"Invalid request\"},\"id\":null}\n".into()
 }
 fn world() -> String {
- "{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
+	"{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}\n".into()
 }
 fn world_5() -> String {
- "{\"jsonrpc\":\"2.0\",\"result\":\"world: 5\",\"id\":1}\n".into()
+	"{\"jsonrpc\":\"2.0\",\"result\":\"world: 5\",\"id\":1}\n".into()
 }
 fn world_batch() -> String {
- "[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
+	"[{\"jsonrpc\":\"2.0\",\"result\":\"world\",\"id\":1}]\n".into()
 }

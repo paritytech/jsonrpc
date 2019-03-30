@@ -1,12 +1,12 @@
-use std::thread;
-use std::sync::{atomic, Arc, RwLock};
 use std::collections::HashMap;
+use std::sync::{atomic, Arc, RwLock};
+use std::thread;
 
-use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_core::futures::Future;
+use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_derive::rpc;
-use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId};
 use jsonrpc_pubsub::typed;
+use jsonrpc_pubsub::{PubSubHandler, Session, SubscriptionId};
 
 #[rpc]
 pub trait Rpc {
@@ -31,11 +31,13 @@ impl Rpc for RpcImpl {
 
 	fn subscribe(&self, _meta: Self::Metadata, subscriber: typed::Subscriber<String>, param: u64) {
 		if param != 10 {
-			subscriber.reject(Error {
-				code: ErrorCode::InvalidParams,
-				message: "Rejecting subscription - invalid parameters provided.".into(),
-				data: None,
-			}).unwrap();
+			subscriber
+				.reject(Error {
+					code: ErrorCode::InvalidParams,
+					message: "Rejecting subscription - invalid parameters provided.".into(),
+					data: None,
+				})
+				.unwrap();
 			return;
 		}
 
@@ -59,28 +61,27 @@ impl Rpc for RpcImpl {
 	}
 }
 
-
 fn main() {
 	let mut io = PubSubHandler::default();
 	let rpc = RpcImpl::default();
 	let active_subscriptions = rpc.active.clone();
 
-	thread::spawn(move || {
-		loop {
-			{
-				let subscribers = active_subscriptions.read().unwrap();
-				for sink in subscribers.values() {
-					let _ = sink.notify(Ok("Hello World!".into())).wait();
-				}
+	thread::spawn(move || loop {
+		{
+			let subscribers = active_subscriptions.read().unwrap();
+			for sink in subscribers.values() {
+				let _ = sink.notify(Ok("Hello World!".into())).wait();
 			}
-			thread::sleep(::std::time::Duration::from_secs(1));
 		}
+		thread::sleep(::std::time::Duration::from_secs(1));
 	});
 
 	io.extend_with(rpc.to_delegate());
 
-	let server = jsonrpc_tcp_server::ServerBuilder
-		::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| Arc::new(Session::new(context.sender.clone())))
+	let server =
+		jsonrpc_tcp_server::ServerBuilder::with_meta_extractor(io, |context: &jsonrpc_tcp_server::RequestContext| {
+			Arc::new(Session::new(context.sender.clone()))
+		})
 		.start(&"0.0.0.0:3030".parse().unwrap())
 		.expect("Server must start with no issues");
 

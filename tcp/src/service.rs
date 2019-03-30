@@ -1,9 +1,9 @@
-use std::sync::Arc;
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use tokio_service;
 
-use crate::jsonrpc::{middleware, FutureResult, Metadata, MetaIoHandler, Middleware};
+use crate::jsonrpc::{middleware, FutureResult, MetaIoHandler, Metadata, Middleware};
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
@@ -13,7 +13,11 @@ pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
-		Service { peer_addr, handler, meta }
+		Service {
+			peer_addr,
+			handler,
+			meta,
+		}
 	}
 }
 

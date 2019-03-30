@@ -1,6 +1,6 @@
+use bytes::BytesMut;
 use std::{io, str};
 use tokio_codec::{Decoder, Encoder};
-use bytes::BytesMut;
 
 /// Separator for enveloping messages in streaming codecs
 #[derive(Debug, Clone)]
@@ -80,14 +80,11 @@ impl Decoder for StreamCodec {
 						start_idx = idx;
 					}
 					depth += 1;
-				}
-				else if (byte == b'}' || byte == b']') && !in_str {
+				} else if (byte == b'}' || byte == b']') && !in_str {
 					depth -= 1;
-				}
-				else if byte == b'"' && !is_escaped {
+				} else if byte == b'"' && !is_escaped {
 					in_str = !in_str;
-				}
-				else if is_whitespace(byte) {
+				} else if is_whitespace(byte) {
 					whitespaces += 1;
 				}
 				if byte == b'\\' && !is_escaped && in_str {
@@ -99,8 +96,10 @@ impl Decoder for StreamCodec {
 				if depth == 0 && idx != start_idx && idx - start_idx + 1 > whitespaces {
 					let bts = buf.split_to(idx + 1);
 					match String::from_utf8(bts.as_ref().to_vec()) {
-						Ok(val) => { return Ok(Some(val)) },
-						Err(_) => { return Ok(None); } // skip non-utf requests (TODO: log error?)
+						Ok(val) => return Ok(Some(val)),
+						Err(_) => {
+							return Ok(None);
+						} // skip non-utf requests (TODO: log error?)
 					};
 				}
 			}
@@ -127,8 +126,8 @@ impl Encoder for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
+	use bytes::{BufMut, BytesMut};
 	use tokio_codec::Decoder;
-	use bytes::{BytesMut, BufMut};
 
 	#[test]
 	fn simple_encode() {
@@ -137,7 +136,8 @@ mod tests {
 
 		let mut codec = StreamCodec::stream_incoming();
 
-		let request = codec.decode(&mut buf)
+		let request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in simple test")
 			.expect("There should be at least one request in simple test");
 
@@ -151,23 +151,27 @@ mod tests {
 
 		let mut codec = StreamCodec::stream_incoming();
 
-		let request = codec.decode(&mut buf)
+		let request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in first escape test")
 			.expect("There should be a request in first escape test");
 
 		assert_eq!(request, r#"{ test: "\"\\" }"#);
 
-		let request2 = codec.decode(&mut buf)
+		let request2 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in 2nd escape test")
 			.expect("There should be a request in 2nd escape test");
 		assert_eq!(request2, r#"{ test: "\ " }"#);
 
-		let request3 = codec.decode(&mut buf)
+		let request3 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in 3rd escape test")
 			.expect("There should be a request in 3rd escape test");
 		assert_eq!(request3, r#"{ test: "\}" }"#);
 
-		let request4 = codec.decode(&mut buf)
+		let request4 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in 4th escape test")
 			.expect("There should be a request in 4th escape test");
 		assert_eq!(request4, r#"[ test: "\]" ]"#);
@@ -180,26 +184,33 @@ mod tests {
 
 		let mut codec = StreamCodec::stream_incoming();
 
-		let request = codec.decode(&mut buf)
+		let request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in first whitespace test")
 			.expect("There should be a request in first whitespace test");
 
 		assert_eq!(request, "{ test: 1 }");
 
-		let request2 = codec.decode(&mut buf)
+		let request2 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in first 2nd test")
 			.expect("There should be aa request in 2nd whitespace test");
 		// TODO: maybe actually trim it out
 		assert_eq!(request2, "\n\n\n\n{ test: 2 }");
 
-		let request3 = codec.decode(&mut buf)
+		let request3 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in first 3rd test")
 			.expect("There should be a request in 3rd whitespace test");
 		assert_eq!(request3, "\n\r{\n test: 3 }");
 
-		let request4 = codec.decode(&mut buf)
+		let request4 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in first 4th test");
-		assert!(request4.is_none(), "There should be no 4th request because it contains only whitespaces");
+		assert!(
+			request4.is_none(),
+			"There should be no 4th request because it contains only whitespaces"
+		);
 	}
 
 	#[test]
@@ -209,17 +220,20 @@ mod tests {
 
 		let mut codec = StreamCodec::stream_incoming();
 
-		let request = codec.decode(&mut buf)
+		let request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in first fragmented test")
 			.expect("There should be at least one request in first fragmented test");
 		assert_eq!(request, "{ test: 1 }");
-		codec.decode(&mut buf)
+		codec
+			.decode(&mut buf)
 			.expect("There should be no error in second fragmented test")
 			.expect("There should be at least one request in second fragmented test");
 		assert_eq!(String::from_utf8(buf.as_ref().to_vec()).unwrap(), "{ tes");
 
 		buf.put_slice(b"t: 3 }");
-		let request = codec.decode(&mut buf)
+		let request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in third fragmented test")
 			.expect("There should be at least one request in third fragmented test");
 		assert_eq!(request, "{ test: 3 }");
@@ -247,7 +261,8 @@ mod tests {
 
 		let mut codec = StreamCodec::stream_incoming();
 
-		let parsed_request = codec.decode(&mut buf)
+		let parsed_request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in huge test")
 			.expect("There should be at least one request huge test");
 		assert_eq!(request, parsed_request);
@@ -260,10 +275,12 @@ mod tests {
 
 		let mut codec = StreamCodec::default();
 
-		let request = codec.decode(&mut buf)
+		let request = codec
+			.decode(&mut buf)
 			.expect("There should be no error in simple test")
 			.expect("There should be at least one request in simple test");
-		let request2 = codec.decode(&mut buf)
+		let request2 = codec
+			.decode(&mut buf)
 			.expect("There should be no error in simple test")
 			.expect("There should be at least one request in simple test");
 

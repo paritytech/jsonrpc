@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::core;
 use crate::server_utils;
 use crate::server_utils::cors::Origin;
-use crate::server_utils::hosts::{Host, DomainsValidation};
+use crate::server_utils::hosts::{DomainsValidation, Host};
 use crate::server_utils::reactor::UninitializedExecutor;
 use crate::server_utils::session::SessionStats;
 
@@ -28,7 +28,8 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 
 impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder`
-	pub fn new<T>(handler: T) -> Self where
+	pub fn new<T>(handler: T) -> Self
+	where
 		T: Into<core::MetaIoHandler<M, S>>,
 	{
 		Self::with_meta_extractor(handler, NoopExtractor)
@@ -37,7 +38,8 @@ impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
 
 impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 	/// Creates new `ServerBuilder`
-	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self where
+	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self
+	where
 		T: Into<core::MetaIoHandler<M, S>>,
 		E: MetaExtractor<M>,
 	{
@@ -121,5 +123,4 @@ impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
 			self.max_payload_bytes,
 		)
 	}
-
 }

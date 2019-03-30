@@ -1,10 +1,10 @@
 //! Event Loop Executor
 //! Either spawns a new event loop, or re-uses provided one.
 
-use std::{io, thread};
-use std::sync::mpsc;
-use tokio;
 use num_cpus;
+use std::sync::mpsc;
+use std::{io, thread};
+use tokio;
 
 use crate::core::futures::{self, Future};
 
@@ -106,32 +106,32 @@ impl RpcEventLoop {
 			tb = tb.name(name);
 		}
 
-		let handle = tb.spawn(move || {
-			let core_threads = match num_cpus::get_physical() {
-				1 => 1,
-				2..=4 => 2,
-				_ => 3,
-			};
+		let handle = tb
+			.spawn(move || {
+				let core_threads = match num_cpus::get_physical() {
+					1 => 1,
+					2..=4 => 2,
+					_ => 3,
+				};
 
-			let runtime = tokio::runtime::Builder::new()
-				.core_threads(core_threads)
-				.name_prefix("jsonrpc-eventloop-")
-				.build();
+				let runtime = tokio::runtime::Builder::new()
+					.core_threads(core_threads)
+					.name_prefix("jsonrpc-eventloop-")
+					.build();
 
-			match runtime {
-				Ok(mut runtime) => {
-					tx.send(Ok(runtime.executor())).expect("Rx is blocking upper thread.");
-					let terminate = futures::empty().select(stopped)
-						.map(|_| ())
-						.map_err(|_| ());
-					runtime.spawn(terminate);
-					runtime.shutdown_on_idle().wait().unwrap();
-				},
-				Err(err) => {
-					tx.send(Err(err)).expect("Rx is blocking upper thread.");
+				match runtime {
+					Ok(mut runtime) => {
+						tx.send(Ok(runtime.executor())).expect("Rx is blocking upper thread.");
+						let terminate = futures::empty().select(stopped).map(|_| ()).map_err(|_| ());
+						runtime.spawn(terminate);
+						runtime.shutdown_on_idle().wait().unwrap();
+					}
+					Err(err) => {
+						tx.send(Err(err)).expect("Rx is blocking upper thread.");
+					}
 				}
-			}
-		}).expect("Couldn't spawn a thread.");
+			})
+			.expect("Couldn't spawn a thread.");
 
 		let exec = rx.recv().expect("tx is transfered to a newly spawned thread.");
 
@@ -149,13 +149,21 @@ impl RpcEventLoop {
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> thread::Result<()> {
-		self.handle.take().expect("Handle is always set before self is consumed.").join()
+		self.handle
+			.take()
+			.expect("Handle is always set before self is consumed.")
+			.join()
 	}
 
 	/// Finishes this event loop.
 	pub fn close(mut self) {
-		let _ = self.close.take().expect("Close is always set before self is consumed.").send(()).map_err(|e| {
-			warn!("Event Loop is already finished. {:?}", e);
-		});
+		let _ = self
+			.close
+			.take()
+			.expect("Close is always set before self is consumed.")
+			.send(())
+			.map_err(|e| {
+				warn!("Event Loop is already finished. {:?}", e);
+			});
 	}
 }

@@ -1,13 +1,13 @@
 use std::fmt;
 use std::sync::{atomic, Arc};
 
-use crate::core::{self, futures};
 use crate::core::futures::sync::mpsc;
+use crate::core::{self, futures};
 use crate::server_utils::{session, tokio::runtime::TaskExecutor};
 use crate::ws;
 
 use crate::error;
-use crate::{Origin};
+use crate::Origin;
 
 /// Output of WebSocket connection. Use this to send messages to the other endpoint.
 #[derive(Clone)]
@@ -19,10 +19,7 @@ pub struct Sender {
 impl Sender {
 	/// Creates a new `Sender`.
 	pub fn new(out: ws::Sender, active: Arc<atomic::AtomicBool>) -> Self {
-		Sender {
-			out,
-			active,
-		}
+		Sender { out, active }
 	}
 
 	fn check_active(&self) -> error::Result<()> {
@@ -36,7 +33,8 @@ impl Sender {
 	/// Sends a message over the connection.
 	/// Will return error if the connection is not active any more.
 	pub fn send<M>(&self, msg: M) -> error::Result<()>
-		where M: Into<ws::Message>
+	where
+		M: Into<ws::Message>,
 	{
 		self.check_active()?;
 		self.out.send(msg)?;
@@ -45,8 +43,9 @@ impl Sender {
 
 	/// Sends a message over the endpoints of all connections.
 	/// Will return error if the connection is not active any more.
-	pub fn broadcast<M>(&self, msg: M) -> error::Result<()> where
-		M: Into<ws::Message>
+	pub fn broadcast<M>(&self, msg: M) -> error::Result<()>
+	where
+		M: Into<ws::Message>,
 	{
 		self.check_active()?;
 		self.out.broadcast(msg)?;
@@ -103,7 +102,8 @@ pub trait MetaExtractor<M: core::Metadata>: Send + Sync + 'static {
 	fn extract(&self, _context: &RequestContext) -> M;
 }
 
-impl<M, F> MetaExtractor<M> for F where
+impl<M, F> MetaExtractor<M> for F
+where
 	M: core::Metadata,
 	F: Fn(&RequestContext) -> M + Send + Sync + 'static,
 {
@@ -116,7 +116,9 @@ impl<M, F> MetaExtractor<M> for F where
 #[derive(Debug, Clone)]
 pub struct NoopExtractor;
 impl<M: core::Metadata + Default> MetaExtractor<M> for NoopExtractor {
-	fn extract(&self, _context: &RequestContext) -> M { M::default() }
+	fn extract(&self, _context: &RequestContext) -> M {
+		M::default()
+	}
 }
 
 struct SenderFuture(Sender, mpsc::Receiver<String>);
@@ -132,16 +134,16 @@ impl futures::Future for SenderFuture {
 			match item {
 				futures::Async::NotReady => {
 					return Ok(futures::Async::NotReady);
-				},
+				}
 				futures::Async::Ready(None) => {
 					return Ok(futures::Async::Ready(()));
-				},
+				}
 				futures::Async::Ready(Some(val)) => {
 					if let Err(e) = self.0.send(val) {
 						warn!("Error sending a subscription update: {:?}", e);
 						return Ok(futures::Async::Ready(()));
 					}
-				},
+				}
 			}
 		}
 	}
