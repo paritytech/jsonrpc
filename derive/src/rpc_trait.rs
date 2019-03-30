@@ -175,10 +175,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 	syn::Ident::new(&mod_name, proc_macro2::Span::call_site())
 }
 
-pub fn rpc_impl(
-	input: syn::Item,
-	options: DeriveOptions,
-) -> Result<proc_macro2::TokenStream> {
+pub fn rpc_impl(input: syn::Item, options: DeriveOptions) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		item => {
@@ -189,8 +186,7 @@ pub fn rpc_impl(
 		}
 	};
 
-	let (rpc_server_trait, rpc_client_module, has_pubsub_methods) =
-		generate_rpc_item_trait(&rpc_trait)?;
+	let (rpc_server_trait, rpc_client_module, has_pubsub_methods) = generate_rpc_item_trait(&rpc_trait)?;
 
 	let name = rpc_trait.ident.clone();
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);

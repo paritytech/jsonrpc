@@ -68,8 +68,7 @@ impl RpcMethodAttribute {
 					RPC_ATTR_NAME => {
 						let has_metadata =
 							get_meta_list(meta).map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
-						let returns = get_meta_list(meta)
-							.map_or(None, |ml| get_name_value(RETURNS_META_WORD, ml));
+						let returns = get_meta_list(meta).map_or(None, |ml| get_name_value(RETURNS_META_WORD, ml));
 						Some(Ok(AttributeKind::Rpc { has_metadata, returns }))
 					}
 					PUB_SUB_ATTR_NAME => Some(Self::parse_pubsub(meta)),

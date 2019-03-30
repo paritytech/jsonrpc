@@ -1,13 +1,10 @@
 //! JSON-RPC client implementation.
 #![deny(missing_docs)]
 
-use jsonrpc_core::{
-	Call, Error, Id, MethodCall, Output, Params,
-	Request, Response, Version,
-};
+use failure::{format_err, Fail};
 use futures::prelude::*;
 use futures::sync::{mpsc, oneshot};
-use failure::{Fail, format_err};
+use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
 use log::debug;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -47,9 +44,7 @@ pub struct RpcFuture {
 impl RpcFuture {
 	/// Creates a new `RpcFuture`.
 	pub fn new(recv: oneshot::Receiver<Result<Value, Error>>) -> Self {
-		RpcFuture {
-			recv
-		}
+		RpcFuture { recv }
 	}
 }
 
@@ -96,11 +91,7 @@ pub struct RpcClient<TSink, TStream> {
 
 impl<TSink, TStream> RpcClient<TSink, TStream> {
 	/// Creates a new `RpcClient`.
-	pub fn new(
-		sink: TSink,
-		stream: TStream,
-		channel: mpsc::Receiver<RpcMessage>,
-	) -> Self {
+	pub fn new(sink: TSink, stream: TStream, channel: mpsc::Receiver<RpcMessage>) -> Self {
 		RpcClient {
 			id: 0,
 			queue: HashMap::new(),
@@ -120,8 +111,8 @@ impl<TSink, TStream> RpcClient<TSink, TStream> {
 
 impl<TSink, TStream> Future for RpcClient<TSink, TStream>
 where
-	TSink: Sink<SinkItem=String, SinkError=RpcError>,
-	TStream: Stream<Item=String, Error=RpcError>,
+	TSink: Sink<SinkItem = String, SinkError = RpcError>,
+	TStream: Stream<Item = String, Error = RpcError>,
 {
 	type Item = ();
 	type Error = RpcError;
@@ -139,7 +130,7 @@ where
 					// outstanding requests.
 					self.channel.take();
 					break;
-				},
+				}
 				Ok(Async::NotReady) => break,
 				Err(()) => continue,
 			};
@@ -151,22 +142,19 @@ where
 				id: id.clone(),
 			}));
 			self.queue.insert(id, msg.sender);
-			let request_str = serde_json::to_string(&request)
-				.map_err(|error| RpcError::Other(error.into()))?;
+			let request_str = serde_json::to_string(&request).map_err(|error| RpcError::Other(error.into()))?;
 			self.outgoing.push_back(request_str);
 		}
 		// Handle outgoing rpc requests.
 		loop {
 			match self.outgoing.pop_front() {
-				Some(request) => {
-					match self.sink.start_send(request)? {
-						AsyncSink::Ready => {},
-						AsyncSink::NotReady(request) => {
-							self.outgoing.push_front(request);
-							break;
-						},
+				Some(request) => match self.sink.start_send(request)? {
+					AsyncSink::Ready => {}
+					AsyncSink::NotReady(request) => {
+						self.outgoing.push_front(request);
+						break;
 					}
-				}
+				},
 				None => break,
 			}
 		}
@@ -183,13 +171,13 @@ where
 					// can be shutdown. Reopening closed connections must
 					// be handled by the transport.
 					debug!("connection closed");
-					return Ok(Async::Ready(()))
-				},
+					return Ok(Async::Ready(()));
+				}
 				Ok(Async::NotReady) => break,
 				Err(err) => Err(err)?,
 			};
-			let response = serde_json::from_str::<Response>(&response_str)
-				.map_err(|error| RpcError::Other(error.into()))?;
+			let response =
+				serde_json::from_str::<Response>(&response_str).map_err(|error| RpcError::Other(error.into()))?;
 			let outputs: Vec<Output> = match response {
 				Response::Single(output) => vec![output],
 				Response::Batch(outputs) => outputs,
@@ -198,10 +186,9 @@ where
 				let channel = self.queue.remove(output.id());
 				let value: Result<Value, Error> = output.into();
 				match channel {
-					Some(tx) => tx.send(value)
-						.map_err(|_| {
-							RpcError::Other(format_err!("oneshot channel closed"))
-						})?,
+					Some(tx) => tx
+						.send(value)
+						.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?,
 					None => Err(RpcError::UnknownId)?,
 				};
 			}
@@ -252,13 +239,10 @@ pub mod test {
 		type SinkItem = String;
 		type SinkError = RpcError;
 
-		fn start_send(
-			&mut self,
-			request: Self::SinkItem,
-		) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
+		fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
 			match self.handler.handle_request_sync(&request) {
 				Some(response) => self.queue.push_back(response),
-				None => {},
+				None => {}
 			};
 			Ok(AsyncSink::Ready)
 		}
@@ -269,9 +253,7 @@ pub mod test {
 	}
 
 	/// Connects to a `IoHandler`.
-	pub fn connect<TClient, TServer>(
-		server: TServer,
-	) -> (TClient, impl Future<Item=(), Error=RpcError>)
+	pub fn connect<TClient, TServer>(server: TServer) -> (TClient, impl Future<Item = (), Error = RpcError>)
 	where
 		TClient: From<RpcChannel>,
 		TServer: Into<HashMap<String, RemoteProcedure<()>>>,
@@ -288,8 +270,8 @@ pub mod test {
 
 #[cfg(test)]
 mod tests {
-	use crate as jsonrpc_client;
 	use super::*;
+	use crate as jsonrpc_client;
 	use jsonrpc_core::Result;
 	use jsonrpc_derive::rpc;
 
@@ -309,12 +291,11 @@ mod tests {
 
 	#[test]
 	fn test_client_terminates() {
-		let (client, rpc_client) =
-			test::connect::<gen_client::Client, _>(RpcServer.to_delegate());
-		let fut = client.clone().add(3, 4)
-			.and_then(move |res| {
-				client.add(res, 5)
-			})
+		let (client, rpc_client) = test::connect::<gen_client::Client, _>(RpcServer.to_delegate());
+		let fut = client
+			.clone()
+			.add(3, 4)
+			.and_then(move |res| client.add(res, 5))
 			.join(rpc_client)
 			.map(|(res, ())| {
 				assert_eq!(res, 12);

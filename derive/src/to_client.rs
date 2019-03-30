@@ -1,28 +1,21 @@
+use crate::rpc_attr::AttributeKind;
+use crate::to_delegate::{generate_where_clause_serialization_predicates, MethodRegistration};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::Result;
 use syn::punctuated::Punctuated;
-use crate::rpc_attr::AttributeKind;
-use crate::to_delegate::{
-	generate_where_clause_serialization_predicates,
-	MethodRegistration,
-};
+use syn::Result;
 
-pub fn generate_client_module(
-	methods: &[MethodRegistration],
-	item_trait: &syn::ItemTrait,
-) -> Result<TokenStream> {
+pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::ItemTrait) -> Result<TokenStream> {
 	let client_methods = generate_client_methods(methods)?;
 	let generics = &item_trait.generics;
-	let where_clause =
-		generate_where_clause_serialization_predicates(&item_trait, true);
+	let where_clause = generate_where_clause_serialization_predicates(&item_trait, true);
 	let where_clause2 = where_clause.clone();
-	let markers = generics.params.iter()
-		.filter_map(|param| {
-			match param {
-				syn::GenericParam::Type(syn::TypeParam { ident, .. }) => Some(ident),
-				_ => None,
-			}
+	let markers = generics
+		.params
+		.iter()
+		.filter_map(|param| match param {
+			syn::GenericParam::Type(syn::TypeParam { ident, .. }) => Some(ident),
+			_ => None,
 		})
 		.enumerate()
 		.map(|(i, ty)| {
@@ -30,16 +23,18 @@ pub fn generate_client_module(
 			let field = Ident::new(&field_name, ty.span());
 			(field, ty)
 		});
-	let (markers_decl, markers_impl): (Vec<_>, Vec<_>) = markers.map(|(field, ty)| {
-		(
-			quote! {
-				#field: std::marker::PhantomData<#ty>
-			},
-			quote! {
-				#field: std::marker::PhantomData
-			}
-		)
-	}).unzip();
+	let (markers_decl, markers_impl): (Vec<_>, Vec<_>) = markers
+		.map(|(field, ty)| {
+			(
+				quote! {
+					#field: std::marker::PhantomData<#ty>
+				},
+				quote! {
+					#field: std::marker::PhantomData
+				},
+			)
+		})
+		.unzip();
 	Ok(quote! {
 		/// The generated client module.
 		pub mod gen_client {
@@ -105,9 +100,7 @@ pub fn generate_client_module(
 	})
 }
 
-fn generate_client_methods(
-	methods: &[MethodRegistration],
-) -> Result<Vec<syn::ImplItem>> {
+fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::ImplItem>> {
 	let mut client_methods = vec![];
 	for method in methods {
 		match method {
@@ -118,21 +111,12 @@ fn generate_client_methods(
 				let args = compute_args(&method.trait_item);
 				let arg_names = compute_arg_identifiers(&args)?;
 				let returns = match &method.attr.kind {
-					AttributeKind::Rpc { returns, .. } => {
-						compute_returns(&method.trait_item, returns)?
-					},
+					AttributeKind::Rpc { returns, .. } => compute_returns(&method.trait_item, returns)?,
 					AttributeKind::PubSub { .. } => {
 						continue;
-					},
+					}
 				};
-				let client_method = generate_client_method(
-					&attrs,
-					rpc_name,
-					name,
-					&args,
-					&arg_names,
-					&returns,
-				);
+				let client_method = generate_client_method(&attrs, rpc_name, name, &args, &arg_names, &returns);
 				client_methods.push(client_method);
 			}
 			MethodRegistration::PubSub { .. } => {
@@ -180,23 +164,19 @@ fn get_doc_comments(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
 			syn::Attribute {
 				path: syn::Path { segments, .. },
 				..
-			} => {
-				match &segments[0] {
-					syn::PathSegment { ident, .. } => {
-						if ident.to_string() == "doc" {
-							doc_comments.push(attr.to_owned());
-						}
+			} => match &segments[0] {
+				syn::PathSegment { ident, .. } => {
+					if ident.to_string() == "doc" {
+						doc_comments.push(attr.to_owned());
 					}
 				}
-			}
+			},
 		}
 	}
 	doc_comments
 }
 
-fn compute_args(
-	method: &syn::TraitItemMethod,
-) -> Punctuated<syn::FnArg, syn::token::Comma> {
+fn compute_args(method: &syn::TraitItemMethod) -> Punctuated<syn::FnArg, syn::token::Comma> {
 	let mut args = Punctuated::new();
 	for arg in &method.sig.decl.inputs {
 		let ty = match arg {
@@ -221,9 +201,7 @@ fn compute_args(
 	args
 }
 
-fn compute_arg_identifiers(
-	args: &Punctuated<syn::FnArg, syn::token::Comma>,
-) -> Result<Vec<&syn::Ident>> {
+fn compute_arg_identifiers(args: &Punctuated<syn::FnArg, syn::token::Comma>) -> Result<Vec<&syn::Ident>> {
 	let mut arg_names = vec![];
 	for arg in args {
 		let pat = match arg {
@@ -235,8 +213,8 @@ fn compute_arg_identifiers(
 			syn::Pat::Wild(wild) => {
 				let span = wild.underscore_token.spans[0];
 				let msg = "No wildcard patterns allowed in rpc trait.";
-				return Err(syn::Error::new(span, msg))
-			},
+				return Err(syn::Error::new(span, msg));
+			}
 			_ => continue,
 		};
 		arg_names.push(ident);
@@ -244,10 +222,7 @@ fn compute_arg_identifiers(
 	Ok(arg_names)
 }
 
-fn compute_returns(
-	method: &syn::TraitItemMethod,
-	returns: &Option<String>,
-) -> Result<syn::Type> {
+fn compute_returns(method: &syn::TraitItemMethod, returns: &Option<String>) -> Result<syn::Type> {
 	let returns: Option<syn::Type> = match returns {
 		Some(returns) => Some(syn::parse_str(returns)?),
 		None => None,
@@ -261,7 +236,7 @@ fn compute_returns(
 		None => {
 			let span = method.attrs[0].pound_token.spans[0];
 			let msg = "Missing returns attribute.";
-			return Err(syn::Error::new(span, msg))
+			return Err(syn::Error::new(span, msg));
 		}
 	};
 	Ok(returns)
@@ -269,39 +244,28 @@ fn compute_returns(
 
 fn try_infer_returns(output: &syn::ReturnType) -> Option<syn::Type> {
 	match output {
-		syn::ReturnType::Type(_, ty) => {
-			match &**ty {
-				syn::Type::Path(syn::TypePath {
-					path: syn::Path { segments, .. },
-					..
-				}) => {
-					match &segments[0] {
-						syn::PathSegment {
-							ident,
-							arguments,
-							..
-						} => {
-							if ident.to_string().ends_with("Result") {
-								get_first_type_argument(arguments)
-							} else {
-								None
-							}
-						}
+		syn::ReturnType::Type(_, ty) => match &**ty {
+			syn::Type::Path(syn::TypePath {
+				path: syn::Path { segments, .. },
+				..
+			}) => match &segments[0] {
+				syn::PathSegment { ident, arguments, .. } => {
+					if ident.to_string().ends_with("Result") {
+						get_first_type_argument(arguments)
+					} else {
+						None
 					}
 				}
-				_ => None,
-			}
-		}
+			},
+			_ => None,
+		},
 		_ => None,
 	}
 }
 
 fn get_first_type_argument(args: &syn::PathArguments) -> Option<syn::Type> {
 	match args {
-		syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
-			args,
-			..
-		}) => {
+		syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) => {
 			if args.len() > 0 {
 				match &args[0] {
 					syn::GenericArgument::Type(ty) => Some(ty.to_owned()),
@@ -311,6 +275,6 @@ fn get_first_type_argument(args: &syn::PathArguments) -> Option<syn::Type> {
 				None
 			}
 		}
-		_ => None
+		_ => None,
 	}
 }

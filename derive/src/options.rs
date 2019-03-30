@@ -16,7 +16,7 @@ impl DeriveOptions {
 
 	pub fn try_from(tokens: TokenStream) -> Result<Self, syn::Error> {
 		if tokens.is_empty() {
-			return Ok(Self::new(true, true))
+			return Ok(Self::new(true, true));
 		}
 		let ident: syn::Ident = syn::parse::<syn::Ident>(tokens)?;
 		let options = {
