@@ -22,7 +22,7 @@ use jsonrpc_core as core;
 
 pub use self::error::{Error, Result};
 pub use self::metadata::{MetaExtractor, NoopExtractor, RequestContext};
-pub use self::server::{CloseHandle, Server};
+pub use self::server::{Broadcaster, CloseHandle, Server};
 pub use self::server_builder::ServerBuilder;
 pub use self::server_utils::cors::Origin;
 pub use self::server_utils::hosts::{DomainsValidation, Host};
