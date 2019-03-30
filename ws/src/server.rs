@@ -38,6 +38,13 @@ impl Server {
 		&self.addr
 	}
 
+	/// Returns a Broadcaster that can be used to send messages on all connections.
+	pub fn broadcaster(&self) -> Broadcaster {
+		Broadcaster {
+			broadcaster: self.broadcaster.clone(),
+		}
+	}
+
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
 	pub fn start<M: core::Metadata, S: core::Middleware<M>>(
@@ -157,6 +164,29 @@ impl CloseHandle {
 		let _ = self.broadcaster.shutdown();
 		if let Some(executor) = self.executor.lock().unwrap().take() {
 			executor.close()
+		}
+	}
+}
+
+/// A Broadcaster that can be used to send messages on all connections.
+#[derive(Clone)]
+pub struct Broadcaster {
+	broadcaster: ws::Sender,
+}
+
+impl Broadcaster {
+	/// Send a message to the endpoints of all connections.
+	#[inline]
+	pub fn send<M>(&self, msg: M) -> Result<()>
+	where
+		M: Into<ws::Message>,
+	{
+		match self.broadcaster.send(msg).map_err(Error::from) {
+			Err(error) => {
+				error!("Error while running sending. Details: {:?}", error);
+				Err(error)
+			}
+			Ok(_server) => Ok(()),
 		}
 	}
 }
