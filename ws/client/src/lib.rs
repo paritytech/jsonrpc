@@ -3,7 +3,8 @@
 use failure::Error;
 use futures::prelude::*;
 use futures::sync::mpsc;
-use jsonrpc_client::{RpcChannel, RpcClient, RpcError};
+use jsonrpc_client::RpcClient;
+pub use jsonrpc_client::{RpcChannel, RpcError};
 use log::info;
 use std::collections::VecDeque;
 use websocket::{ClientBuilder, OwnedMessage};
