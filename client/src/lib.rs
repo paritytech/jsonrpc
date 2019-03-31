@@ -203,27 +203,36 @@ where
 }
 
 /// Utilities for testing.
-pub mod test {
+pub mod local {
 	use super::*;
-	use jsonrpc_core::{IoHandler, RemoteProcedure};
+	use jsonrpc_core::{Metadata, MetaIoHandler};
+	use std::ops::Deref;
 
 	/// Implements a rpc client using an `IoHandler`.
-	pub struct FakeRpc {
-		handler: IoHandler,
+	pub struct LocalRpc<THandler> {
+		handler: THandler,
 		queue: VecDeque<String>,
 	}
 
-	impl FakeRpc {
+	impl<TMetadata, THandler> LocalRpc<THandler>
+	where
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+	{
 		/// Creates a new `FakeRpc`.
-		pub fn new(handler: IoHandler) -> Self {
-			FakeRpc {
+		pub fn new(handler: THandler) -> Self {
+			Self {
 				handler,
 				queue: VecDeque::new(),
 			}
 		}
 	}
 
-	impl Stream for FakeRpc {
+	impl<TMetadata, THandler> Stream for LocalRpc<THandler>
+	where
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+	{
 		type Item = String;
 		type Error = RpcError;
 
@@ -235,12 +244,16 @@ pub mod test {
 		}
 	}
 
-	impl Sink for FakeRpc {
+	impl<TMetadata, THandler> Sink for LocalRpc<THandler>
+	where
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+	{
 		type SinkItem = String;
 		type SinkError = RpcError;
 
 		fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-			match self.handler.handle_request_sync(&request) {
+			match self.handler.handle_request_sync(&request, TMetadata::default()) {
 				Some(response) => self.queue.push_back(response),
 				None => {}
 			};
@@ -253,14 +266,15 @@ pub mod test {
 	}
 
 	/// Connects to a `IoHandler`.
-	pub fn connect<TClient, TServer>(server: TServer) -> (TClient, impl Future<Item = (), Error = RpcError>)
+	pub fn connect<TClient, TMetadata, THandler>(
+		handler: THandler,
+	) -> (TClient, impl Future<Item = (), Error = RpcError>)
 	where
 		TClient: From<RpcChannel>,
-		TServer: Into<HashMap<String, RemoteProcedure<()>>>,
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
 	{
-		let mut io = IoHandler::new();
-		io.extend_with(server);
-		let (sink, stream) = test::FakeRpc::new(io).split();
+		let (sink, stream) = local::LocalRpc::new(handler).split();
 		let (sender, receiver) = mpsc::channel(0);
 		let rpc_client = RpcClient::new(sink, stream, receiver);
 		let client = TClient::from(sender);
@@ -272,7 +286,7 @@ pub mod test {
 mod tests {
 	use super::*;
 	use crate as jsonrpc_client;
-	use jsonrpc_core::Result;
+	use jsonrpc_core::{IoHandler, Result};
 	use jsonrpc_derive::rpc;
 
 	#[rpc]
@@ -291,7 +305,10 @@ mod tests {
 
 	#[test]
 	fn test_client_terminates() {
-		let (client, rpc_client) = test::connect::<gen_client::Client, _>(RpcServer.to_delegate());
+		let mut handler = IoHandler::new();
+		handler.extend_with(RpcServer.to_delegate());
+		let (client, rpc_client) =
+			local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.add(3, 4)
