@@ -1,4 +1,5 @@
 use crate::rpc_attr::AttributeKind;
+use crate::rpc_trait::crate_name;
 use crate::to_delegate::{generate_where_clause_serialization_predicates, MethodRegistration};
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
@@ -35,9 +36,11 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 			)
 		})
 		.unzip();
+	let client_name = crate_name("jsonrpc-client")?;
 	Ok(quote! {
 		/// The generated client module.
 		pub mod gen_client {
+			use #client_name as _jsonrpc_client;
 			use super::*;
 			use _jsonrpc_core::{
 				Call, Error, ErrorCode, Id, MethodCall, Params, Request,
@@ -46,7 +49,7 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 			use _jsonrpc_core::futures::{future, Future, Sink};
 			use _jsonrpc_core::futures::sync::oneshot;
 			use _jsonrpc_core::serde_json::{self, Value};
-			use jsonrpc_client::{RpcChannel, RpcError, RpcFuture, RpcMessage};
+			use _jsonrpc_client::{RpcChannel, RpcError, RpcFuture, RpcMessage};
 
 			/// The Client.
 			#[derive(Clone)]

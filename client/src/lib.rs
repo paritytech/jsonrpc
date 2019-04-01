@@ -123,7 +123,7 @@ where
 			if self.channel.is_none() {
 				break;
 			}
-			let msg = match self.channel.as_mut().unwrap().poll() {
+			let msg = match self.channel.as_mut().expect("channel is some; qed").poll() {
 				Ok(Async::Ready(Some(msg))) => msg,
 				Ok(Async::Ready(None)) => {
 					// When the channel is dropped we still need to finish
@@ -202,13 +202,13 @@ where
 	}
 }
 
-/// Utilities for testing.
+/// Rpc client implementation for `Deref<Target=MetaIoHandler<Metadata + Default>>`.
 pub mod local {
 	use super::*;
-	use jsonrpc_core::{Metadata, MetaIoHandler};
+	use jsonrpc_core::{MetaIoHandler, Metadata};
 	use std::ops::Deref;
 
-	/// Implements a rpc client using an `IoHandler`.
+	/// Implements a rpc client for `MetaIoHandler`.
 	pub struct LocalRpc<THandler> {
 		handler: THandler,
 		queue: VecDeque<String>,
@@ -217,9 +217,9 @@ pub mod local {
 	impl<TMetadata, THandler> LocalRpc<THandler>
 	where
 		TMetadata: Metadata + Default,
-		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	{
-		/// Creates a new `FakeRpc`.
+		/// Creates a new `LocalRpc`.
 		pub fn new(handler: THandler) -> Self {
 			Self {
 				handler,
@@ -231,7 +231,7 @@ pub mod local {
 	impl<TMetadata, THandler> Stream for LocalRpc<THandler>
 	where
 		TMetadata: Metadata + Default,
-		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	{
 		type Item = String;
 		type Error = RpcError;
@@ -247,7 +247,7 @@ pub mod local {
 	impl<TMetadata, THandler> Sink for LocalRpc<THandler>
 	where
 		TMetadata: Metadata + Default,
-		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	{
 		type SinkItem = String;
 		type SinkError = RpcError;
@@ -272,7 +272,7 @@ pub mod local {
 	where
 		TClient: From<RpcChannel>,
 		TMetadata: Metadata + Default,
-		THandler: Deref<Target=MetaIoHandler<TMetadata>>,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	{
 		let (sink, stream) = local::LocalRpc::new(handler).split();
 		let (sender, receiver) = mpsc::channel(0);
@@ -307,8 +307,7 @@ mod tests {
 	fn test_client_terminates() {
 		let mut handler = IoHandler::new();
 		handler.extend_with(RpcServer.to_delegate());
-		let (client, rpc_client) =
-			local::connect::<gen_client::Client, _, _>(handler);
+		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.add(3, 4)
