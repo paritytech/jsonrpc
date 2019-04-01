@@ -1,6 +1,7 @@
 //! A simple example
 #![deny(missing_docs)]
-use jsonrpc_core::futures::future::{self, FutureResult};
+use jsonrpc_client::local;
+use jsonrpc_core::futures::future::{self, Future, FutureResult};
 use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
@@ -38,7 +39,14 @@ impl Rpc for RpcImpl {
 
 fn main() {
 	let mut io = IoHandler::new();
-	let rpc = RpcImpl;
+	io.extend_with(RpcImpl.to_delegate());
 
-	io.extend_with(rpc.to_delegate())
+	{
+		let (client, server) = local::connect::<gen_client::Client, _, _>(io);
+		client.add(5, 6)
+			.map(|res| println!("5 + 6 = {}", res))
+			.join(server)
+	}
+		.wait()
+		.unwrap();
 }
