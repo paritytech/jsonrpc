@@ -17,8 +17,8 @@ pub enum RpcError {
 	#[fail(display = "Server returned rpc error {}", _0)]
 	JsonRpcError(Error),
 	/// Failure to parse server response.
-	#[fail(display = "Failed to parse server response")]
-	ParseError,
+	#[fail(display = "Failed to parse server response as {}: {}", _0, _1)]
+	ParseError(String, failure::Error),
 	/// Request timed out.
 	#[fail(display = "Request timed out")]
 	Timeout,

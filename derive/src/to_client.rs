@@ -135,6 +135,7 @@ fn generate_client_method(
 	arg_names: &[&syn::Ident],
 	returns: &syn::Type,
 ) -> syn::ImplItem {
+	let returns_str = quote!(#returns).to_string();
 	syn::parse_quote! {
 		#(#attrs)*
 		pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
@@ -149,8 +150,14 @@ fn generate_client_method(
 			}.expect("should never happen");
 			self.call_method(method, params)
 				.and_then(|value: Value| {
+					log::debug!("response: {:?}", value);
 					let result = serde_json::from_value::<#returns>(value)
-						.map_err(|error| RpcError::Other(error.into()));
+						.map_err(|error| {
+							RpcError::ParseError(
+								#returns_str.to_string(),
+								error.into(),
+							)
+						});
 					future::done(result)
 				})
 		}
