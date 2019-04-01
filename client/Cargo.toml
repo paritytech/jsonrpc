@@ -27,6 +27,7 @@ serde_json = "1.0"
 
 [dev-dependencies]
 jsonrpc-derive = { version = "10.1", path = "../derive" }
+jsonrpc-client = { version = "10.1", path = "." }
 serde = "1.0"
 tokio = "0.1"
 

@@ -284,8 +284,8 @@ pub mod local {
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use crate as jsonrpc_client;
+	use futures::prelude::*;
+	use jsonrpc_client::local;
 	use jsonrpc_core::{IoHandler, Result};
 	use jsonrpc_derive::rpc;
 

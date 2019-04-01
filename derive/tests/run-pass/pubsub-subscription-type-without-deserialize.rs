@@ -6,6 +6,7 @@ extern crate jsonrpc_client;
 extern crate jsonrpc_pubsub;
 #[macro_use]
 extern crate jsonrpc_derive;
+extern crate log;
 
 use std::sync::Arc;
 use jsonrpc_core::Result;

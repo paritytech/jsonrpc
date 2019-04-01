@@ -6,8 +6,8 @@ error: Maximum supported number of params is 16
 11 | |     #[rpc(name = "tooManyParams")]
 12 | |     fn to_many_params(
 13 | |         &self,
-14 | |         _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64,
-15 | |         _: u64, _: u64, _: u64, _: u64, _: u64, _: u64, _: u64,
+14 | |         a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64,
+15 | |         k: u64, l: u64, m: u64, n: u64, o: u64, p: u64, q: u64,
 16 | |     ) -> Result<String>;
    | |________________________^
 
