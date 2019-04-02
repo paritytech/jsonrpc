@@ -3,6 +3,8 @@
 Rust implementation of JSON-RPC 2.0 Specification.
 Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` and `tcp`.
 
+**New!** Support for [clients](#Client-support).
+
 [![Build Status][travis-image]][travis-url]
 [![Build Status][appveyor-image]][appveyor-url]
 
