@@ -7,7 +7,7 @@ homepage = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-derive"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "10.1.0"
+version = "11.0.0"
 
 [lib]
 proc-macro = true
@@ -19,10 +19,10 @@ quote = "0.6"
 proc-macro-crate = "0.1.3"
 
 [dev-dependencies]
-jsonrpc-core = { version = "10.1", path = "../core" }
-jsonrpc-client = { version = "10.1", path = "../client" }
-jsonrpc-pubsub = { version = "10.1", path = "../pubsub" }
-jsonrpc-tcp-server = { version = "10.1", path = "../tcp" }
+jsonrpc-core = { version = "11.0", path = "../core" }
+jsonrpc-client = { version = "11.0", path = "../client" }
+jsonrpc-pubsub = { version = "11.0", path = "../pubsub" }
+jsonrpc-tcp-server = { version = "11.0", path = "../tcp" }
 log = "0.4"
 serde = "1.0"
 serde_derive = "1.0"
