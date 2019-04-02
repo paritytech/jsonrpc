@@ -6,15 +6,15 @@ use serde_json;
 pub trait Rpc {
 	/// Multiplies two numbers. Second number is optional.
 	#[rpc(name = "mul")]
-	fn mul(&self, _: u64, _: Option<u64>) -> Result<u64>;
+	fn mul(&self, a: u64, b: Option<u64>) -> Result<u64>;
 
 	/// Echos back the message, example of a single param trailing
 	#[rpc(name = "echo")]
-	fn echo(&self, _: Option<String>) -> Result<String>;
+	fn echo(&self, a: Option<String>) -> Result<String>;
 
 	/// Adds up to three numbers and returns a result
 	#[rpc(name = "add_multi")]
-	fn add_multi(&self, _: Option<u64>, _: Option<u64>, _: Option<u64>) -> Result<u64>;
+	fn add_multi(&self, a: Option<u64>, b: Option<u64>, c: Option<u64>) -> Result<u64>;
 }
 
 #[derive(Default)]

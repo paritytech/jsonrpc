@@ -1,4 +1,4 @@
-error: Invalid attribute parameter(s): 'Xname'. Expected 'name'
+error: Invalid attribute parameter(s): 'Xname'. Expected 'name, returns'
   --> $DIR/attr-invalid-name-values.rs:10:2
    |
 10 |       /// Returns a protocol version

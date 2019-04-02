@@ -2,9 +2,11 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate jsonrpc_core;
+extern crate jsonrpc_client;
 extern crate jsonrpc_pubsub;
 #[macro_use]
 extern crate jsonrpc_derive;
+extern crate log;
 
 use std::sync::Arc;
 use jsonrpc_core::Result;
@@ -20,7 +22,7 @@ pub trait Rpc<T> {
 
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
-	fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
+	fn unsubscribe(&self, a: Option<Self::Metadata>, b: SubscriptionId) -> Result<bool>;
 }
 
 // One way serialization

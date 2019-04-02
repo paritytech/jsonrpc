@@ -1,13 +1,11 @@
 extern crate serde;
 extern crate jsonrpc_core;
-extern crate jsonrpc_client;
 #[macro_use]
 extern crate jsonrpc_derive;
-extern crate log;
 
 use jsonrpc_core::{Result, IoHandler};
 
-#[rpc]
+#[rpc(server)]
 pub trait Rpc {
 	/// Returns a protocol version
 	#[rpc(name = "protocolVersion")]

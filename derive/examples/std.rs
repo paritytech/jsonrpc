@@ -1,7 +1,11 @@
-use jsonrpc_core::futures::future::{self, FutureResult};
+//! A simple example
+#![deny(missing_docs)]
+use jsonrpc_client::local;
+use jsonrpc_core::futures::future::{self, Future, FutureResult};
 use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
+/// Rpc trait
 #[rpc]
 pub trait Rpc {
 	/// Returns a protocol version
@@ -10,11 +14,11 @@ pub trait Rpc {
 
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add", alias("callAsyncMetaAlias"))]
-	fn add(&self, _: u64, _: u64) -> Result<u64>;
+	fn add(&self, a: u64, b: u64) -> Result<u64>;
 
 	/// Performs asynchronous operation
 	#[rpc(name = "callAsync")]
-	fn call(&self, _: u64) -> FutureResult<String, Error>;
+	fn call(&self, a: u64) -> FutureResult<String, Error>;
 }
 
 struct RpcImpl;
@@ -35,7 +39,11 @@ impl Rpc for RpcImpl {
 
 fn main() {
 	let mut io = IoHandler::new();
-	let rpc = RpcImpl;
+	io.extend_with(RpcImpl.to_delegate());
 
-	io.extend_with(rpc.to_delegate())
+	let fut = {
+		let (client, server) = local::connect::<gen_client::Client, _, _>(io);
+		client.add(5, 6).map(|res| println!("5 + 6 = {}", res)).join(server)
+	};
+	fut.wait().unwrap();
 }

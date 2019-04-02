@@ -15,10 +15,10 @@
 //! 	fn protocol_version(&self) -> Result<String>;
 //!
 //! 	#[rpc(name = "add")]
-//! 	fn add(&self, _: u64, _: u64) -> Result<u64>;
+//! 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 //!
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, _: u64) -> FutureResult<String, Error>;
+//! 	fn call(&self, a: u64) -> FutureResult<String, Error>;
 //! }
 //!
 //! struct RpcImpl;
@@ -124,7 +124,7 @@
 //! # fn main() {}
 //! ```
 
-#![recursion_limit = "128"]
+#![recursion_limit = "256"]
 #![warn(missing_docs)]
 
 extern crate proc_macro;
@@ -132,8 +132,10 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
+mod options;
 mod rpc_attr;
 mod rpc_trait;
+mod to_client;
 mod to_delegate;
 
 /// Apply `#[rpc]` to a trait, and a `to_delegate` method is generated which
@@ -141,10 +143,15 @@ mod to_delegate;
 /// Attach the delegate to an `IoHandler` and the methods are now callable
 /// via JSON-RPC.
 #[proc_macro_attribute]
-pub fn rpc(_args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn rpc(args: TokenStream, input: TokenStream) -> TokenStream {
 	let input_toks = parse_macro_input!(input as syn::Item);
 
-	match rpc_trait::rpc_impl(input_toks) {
+	let options = match options::DeriveOptions::try_from(args) {
+		Ok(options) => options,
+		Err(error) => return error.to_compile_error().into(),
+	};
+
+	match rpc_trait::rpc_impl(input_toks, options) {
 		Ok(output) => output.into(),
 		Err(err) => err.to_compile_error().into(),
 	}

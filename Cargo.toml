@@ -1,6 +1,7 @@
 [workspace]
 members = [
 	"core",
+	"client",
 	"http",
 	"ipc",
 	"derive",
@@ -11,4 +12,5 @@ members = [
 	"tcp",
 	"test",
 	"ws",
+	"ws/client",
 ]
