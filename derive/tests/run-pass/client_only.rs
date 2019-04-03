@@ -1,6 +1,6 @@
 extern crate serde;
 extern crate jsonrpc_core;
-extern crate jsonrpc_client;
+extern crate jsonrpc_core_client;
 #[macro_use]
 extern crate jsonrpc_derive;
 extern crate log;
