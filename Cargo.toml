@@ -1,7 +1,7 @@
 [workspace]
 members = [
 	"core",
-	"client",
+	"core-client",
 	"http",
 	"ipc",
 	"derive",

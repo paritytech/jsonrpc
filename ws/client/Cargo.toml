@@ -22,7 +22,7 @@ categories = [
 failure = "0.1"
 futures = "0.1"
 jsonrpc-core = { version = "11.0", path = "../../core" }
-jsonrpc-client = { version = "11.0", path = "../../client" }
+jsonrpc-core-client = { version = "11.0", path = "../../core-client" }
 log = "0.4"
 tokio = "0.1"
 websocket = "0.22"

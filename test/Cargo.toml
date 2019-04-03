@@ -11,7 +11,7 @@ edition = "2018"
 
 [dependencies]
 jsonrpc-core = { path = "../core", version = "11.0" }
-jsonrpc-client = { path = "../client", version = "11.0" }
+jsonrpc-core-client = { path = "../core-client", version = "11.0" }
 jsonrpc-pubsub = { path = "../pubsub", version = "11.0" }
 log = "0.4"
 serde = "1.0"

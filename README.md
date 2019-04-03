@@ -17,6 +17,7 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 ## Sub-projects
 - [jsonrpc-core](./core) [![crates.io][core-image]][core-url]
+- [jsonrpc-core-client](./core-client) [![crates.io][core-client-image]][core-client-url]
 - [jsonrpc-http-server](./http) [![crates.io][http-server-image]][http-server-url]
 - [jsonrpc-ipc-server](./ipc) [![crates.io][ipc-server-image]][ipc-server-url]
 - [jsonrpc-tcp-server](./tcp) [![crates.io][tcp-server-image]][tcp-server-url]
@@ -28,6 +29,8 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 [core-image]: https://img.shields.io/crates/v/jsonrpc-core.svg
 [core-url]: https://crates.io/crates/jsonrpc-core
+[core-client-image]: https://img.shields.io/crates/v/jsonrpc-core-client.svg
+[core-client-url]: https://crates.io/crates/jsonrpc-core-client
 [http-server-image]: https://img.shields.io/crates/v/jsonrpc-http-server.svg
 [http-server-url]: https://crates.io/crates/jsonrpc-http-server
 [ipc-server-image]: https://img.shields.io/crates/v/jsonrpc-ipc-server.svg
@@ -101,7 +104,7 @@ fn main() {
 ### Client support
 
 ```rust
-use jsonrpc_client::local;
+use jsonrpc_core_client::local;
 use jsonrpc_core::futures::future::{self, Future, FutureResult};
 use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;

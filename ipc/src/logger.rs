@@ -10,7 +10,7 @@ lazy_static! {
 		builder.filter(None, LevelFilter::Info);
 
 		if let Ok(log) = env::var("RUST_LOG") {
-			builder.parse_filters(&log);
+			builder.parse(&log);
 		}
 
 		if let Ok(_) = builder.try_init() {
