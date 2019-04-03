@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-ws-client"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "10.1.0"
+version = "11.0.0"
 
 categories = [
 	"asynchronous",
@@ -21,8 +21,8 @@ categories = [
 [dependencies]
 failure = "0.1"
 futures = "0.1"
-jsonrpc-core = { version = "10.1", path = "../../core" }
-jsonrpc-client = { version = "10.1", path = "../../client" }
+jsonrpc-core = { version = "11.0", path = "../../core" }
+jsonrpc-client = { version = "11.0", path = "../../client" }
 log = "0.4"
 tokio = "0.1"
 websocket = "0.22"

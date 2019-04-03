@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-client"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "10.1.0"
+version = "11.0.0"
 
 categories = [
 	"asynchronous",
@@ -21,13 +21,13 @@ categories = [
 [dependencies]
 failure = "0.1"
 futures = "~0.1.6"
-jsonrpc-core = { version = "10.1", path = "../core" }
+jsonrpc-core = { version = "11.0", path = "../core" }
 log = "0.4"
 serde_json = "1.0"
 
 [dev-dependencies]
-jsonrpc-derive = { version = "10.1", path = "../derive" }
-jsonrpc-client = { version = "10.1", path = "." }
+jsonrpc-derive = { version = "11.0", path = "../derive" }
+jsonrpc-client = { version = "11.0", path = "." }
 serde = "1.0"
 tokio = "0.1"
 
