@@ -393,7 +393,7 @@ mod tests {
 
 	impl AddClient {
 		fn add(&self, a: u64, b: u64) -> impl Future<Item=u64, Error=RpcError> {
-			self.0.call_method("add".into(), "u64".into(), (a, b))
+			self.0.call_method("add", "u64", (a, b))
 		}
 	}
 
