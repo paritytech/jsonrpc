@@ -63,9 +63,9 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 				#(#where_clause),*
 			{
 				/// Creates a new `Client`.
-				pub fn new(inner: TypedClient) -> Self {
+				pub fn new(sender: RpcChannel) -> Self {
 					Client {
-						inner,
+						inner: sender.into(),
 						#(#markers_impl),*
 					}
 				}
