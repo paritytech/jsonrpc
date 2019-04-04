@@ -259,22 +259,25 @@ impl TypedClient {
 		let params = match args {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
-			_ => panic!("RPC params should serialize to a JSON array, or null"),
+			_ => return future::Either::A(future::err(RpcError::Other(
+				format_err!("RPC params should serialize to a JSON array, or null")))),
 		};
 
-		self.0
-			.call_method(method, params)
-			.and_then(move |value: Value| {
-				log::debug!("response: {:?}", value);
-				let result = serde_json::from_value::<R>(value)
-					.map_err(|error| {
-						RpcError::ParseError(
-							returns.into(),
-							error.into(),
-						)
-					});
-				future::done(result)
-			})
+		future::Either::B(
+			self.0
+				.call_method(method, params)
+				.and_then(move |value: Value| {
+					log::debug!("response: {:?}", value);
+					let result = serde_json::from_value::<R>(value)
+						.map_err(|error| {
+							RpcError::ParseError(
+								returns.into(),
+								error.into(),
+							)
+						});
+					future::done(result)
+				})
+		)
 	}
 }
 
