@@ -242,6 +242,11 @@ impl From<RpcChannel> for TypedClient {
 }
 
 impl TypedClient {
+	/// Create new TypedClient
+	pub fn new(raw_cli: RawClient) -> Self {
+		TypedClient(raw_cli)
+	}
+
 	/// Call RPC with serialization of request and deserialization of response
 	pub fn call_method<T: Serialize, R: DeserializeOwned + 'static>(
 		&self,

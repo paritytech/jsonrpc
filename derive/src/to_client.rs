@@ -49,12 +49,12 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 			use _jsonrpc_core::futures::{future, Future, Sink};
 			use _jsonrpc_core::futures::sync::oneshot;
 			use _jsonrpc_core::serde_json::{self, Value};
-			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, RpcMessage};
+			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, RpcMessage, TypedClient};
 
 			/// The Client.
 			#[derive(Clone)]
 			pub struct Client#generics {
-				sender: RpcChannel,
+				inner: TypedClient,
 				#(#markers_decl),*
 			}
 
@@ -63,32 +63,14 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 				#(#where_clause),*
 			{
 				/// Creates a new `Client`.
-				pub fn new(sender: RpcChannel) -> Self {
+				pub fn new(inner: TypedClient) -> Self {
 					Client {
-						sender,
+						inner,
 						#(#markers_impl),*
 					}
 				}
 
 				#(#client_methods)*
-
-				fn call_method(
-					&self,
-					method: String,
-					params: Params,
-				) -> impl Future<Item=Value, Error=RpcError> {
-					let (sender, receiver) = oneshot::channel();
-					let msg = RpcMessage {
-						method,
-						params,
-						sender,
-					};
-					self.sender
-						.to_owned()
-						.send(msg)
-						.map_err(|error| RpcError::Other(error.into()))
-						.and_then(|_| RpcFuture::new(receiver))
-				}
 			}
 
 			impl#generics From<RpcChannel> for Client#generics
@@ -96,7 +78,7 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 				#(#where_clause2),*
 			{
 				fn from(channel: RpcChannel) -> Self {
-					Client::new(channel)
+					Client::new(channel.into())
 				}
 			}
 		}
@@ -143,26 +125,7 @@ fn generate_client_method(
 		#(#attrs)*
 		pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
 			let args_tuple = (#(#arg_names,)*);
-			let args = serde_json::to_value(args_tuple)
-				.expect("Only types with infallible serialisation can be used for JSON-RPC");
-			let method = #rpc_name.to_owned();
-			let params = match args {
-				Value::Array(vec) => Some(Params::Array(vec)),
-				Value::Null => Some(Params::None),
-				_ => None,
-			}.expect("should never happen");
-			self.call_method(method, params)
-				.and_then(|value: Value| {
-					log::debug!("response: {:?}", value);
-					let result = serde_json::from_value::<#returns>(value)
-						.map_err(|error| {
-							RpcError::ParseError(
-								#returns_str.to_string(),
-								error.into(),
-							)
-						});
-					future::done(result)
-				})
+			self.inner.call_method(#rpc_name, #returns_str, args_tuple)
 		}
 	}
 }
