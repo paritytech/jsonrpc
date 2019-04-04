@@ -69,12 +69,12 @@ impl Future for RpcFuture {
 /// the derive crate can generate a client.
 pub struct RpcMessage {
 	/// The rpc method name.
-	pub method: String,
+	method: String,
 	/// The rpc method parameters.
-	pub params: Params,
+	params: Params,
 	/// The oneshot channel to send the result of the rpc
 	/// call to.
-	pub sender: oneshot::Sender<Result<Value, Error>>,
+	sender: oneshot::Sender<Result<Value, Error>>,
 }
 
 /// A channel to a `RpcClient`.
