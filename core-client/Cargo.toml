@@ -23,11 +23,11 @@ failure = "0.1"
 futures = "~0.1.6"
 jsonrpc-core = { version = "11.0", path = "../core" }
 log = "0.4"
+serde = "1.0"
 serde_json = "1.0"
 
 [dev-dependencies]
 jsonrpc-derive = { version = "11.0", path = "../derive" }
-jsonrpc-core-client = { version = "11.0", path = "." }
 serde = "1.0"
 tokio = "0.1"
 

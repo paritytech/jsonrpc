@@ -2,13 +2,15 @@
 #![deny(missing_docs)]
 
 use failure::{format_err, Fail};
-use futures::prelude::*;
+use futures::{future, prelude::*};
 use futures::sync::{mpsc, oneshot};
 use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
 use log::debug;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 /// The errors returned by the client.
 #[derive(Debug, Fail)]
@@ -202,6 +204,75 @@ where
 	}
 }
 
+/// Client for raw JSON RPC requests
+#[derive(Clone)]
+pub struct RawClient(RpcChannel);
+
+impl From<RpcChannel> for RawClient {
+	fn from(channel: RpcChannel) -> Self {
+		RawClient(channel)
+	}
+}
+
+impl RawClient {
+	/// Call RPC with raw JSON
+	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item=Value, Error=RpcError> {
+		let (sender, receiver) = oneshot::channel();
+		let msg = RpcMessage {
+			method: method.into(),
+			params,
+			sender,
+		};
+		self.0
+			.to_owned()
+			.send(msg)
+			.map_err(|error| RpcError::Other(error.into()))
+			.and_then(|_| RpcFuture::new(receiver))
+	}
+}
+
+/// Client for typed JSON RPC requests
+#[derive(Clone)]
+pub struct TypedClient(RawClient);
+
+impl From<RpcChannel> for TypedClient {
+	fn from(channel: RpcChannel) -> Self {
+		TypedClient(channel.into())
+	}
+}
+
+impl TypedClient {
+	/// Call RPC with serialization of request and deserialization of response
+	pub fn call_method<T: Serialize, R: DeserializeOwned + 'static>(
+		&self,
+		method: &str,
+		returns: &'static str,
+		args: T,
+	) -> impl Future<Item=R, Error=RpcError> {
+		let args = serde_json::to_value(args)
+			.expect("Only types with infallible serialisation can be used for JSON-RPC");
+		let params = match args {
+			Value::Array(vec) => Params::Array(vec),
+			Value::Null => Params::None,
+			_ => panic!("RPC params should serialize to a JSON array, or null"),
+		};
+
+		self.0
+			.call_method(method, params)
+			.and_then(move |value: Value| {
+				log::debug!("response: {:?}", value);
+				let result = serde_json::from_value::<R>(value)
+					.map_err(|error| {
+						RpcError::ParseError(
+							returns.into(),
+							error.into(),
+						)
+					});
+				future::done(result)
+			})
+	}
+}
+
 /// Rpc client implementation for `Deref<Target=MetaIoHandler<Metadata + Default>>`.
 pub mod local {
 	use super::*;
@@ -284,12 +355,12 @@ pub mod local {
 
 #[cfg(test)]
 mod tests {
-	use futures::prelude::*;
-	use jsonrpc_core_client::local;
+	use super::*;
 	use jsonrpc_core::{IoHandler, Result};
 	use jsonrpc_derive::rpc;
+	use crate::{TypedClient, RpcError, RpcChannel};
 
-	#[rpc]
+	#[rpc(server)]
 	pub trait Rpc {
 		#[rpc(name = "add")]
 		fn add(&self, a: u64, b: u64) -> Result<u64>;
@@ -303,11 +374,26 @@ mod tests {
 		}
 	}
 
+	#[derive(Clone)]
+	struct AddClient(TypedClient);
+
+	impl From<RpcChannel> for AddClient {
+		fn from(channel: RpcChannel) -> Self {
+			AddClient(channel.into())
+		}
+	}
+
+	impl AddClient {
+		fn add(&self, a: u64, b: u64) -> impl Future<Item=u64, Error=RpcError> {
+			self.0.call_method("add".into(), "u64".into(), (a, b))
+		}
+	}
+
 	#[test]
 	fn test_client_terminates() {
 		let mut handler = IoHandler::new();
 		handler.extend_with(RpcServer.to_delegate());
-		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
+		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
 		let fut = client
 			.clone()
 			.add(3, 4)
