@@ -49,12 +49,12 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 			use _jsonrpc_core::futures::{future, Future, Sink};
 			use _jsonrpc_core::futures::sync::oneshot;
 			use _jsonrpc_core::serde_json::{self, Value};
-			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, RpcMessage};
+			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, RpcMessage, TypedClient};
 
 			/// The Client.
 			#[derive(Clone)]
 			pub struct Client#generics {
-				sender: RpcChannel,
+				inner: TypedClient,
 				#(#markers_decl),*
 			}
 
@@ -65,30 +65,12 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 				/// Creates a new `Client`.
 				pub fn new(sender: RpcChannel) -> Self {
 					Client {
-						sender,
+						inner: sender.into(),
 						#(#markers_impl),*
 					}
 				}
 
 				#(#client_methods)*
-
-				fn call_method(
-					&self,
-					method: String,
-					params: Params,
-				) -> impl Future<Item=Value, Error=RpcError> {
-					let (sender, receiver) = oneshot::channel();
-					let msg = RpcMessage {
-						method,
-						params,
-						sender,
-					};
-					self.sender
-						.to_owned()
-						.send(msg)
-						.map_err(|error| RpcError::Other(error.into()))
-						.and_then(|_| RpcFuture::new(receiver))
-				}
 			}
 
 			impl#generics From<RpcChannel> for Client#generics
@@ -96,7 +78,7 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 				#(#where_clause2),*
 			{
 				fn from(channel: RpcChannel) -> Self {
-					Client::new(channel)
+					Client::new(channel.into())
 				}
 			}
 		}
@@ -119,7 +101,14 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 						continue;
 					}
 				};
-				let client_method = generate_client_method(&attrs, rpc_name, name, &args, &arg_names, &returns);
+				let returns_str = quote!(#returns).to_string();
+				let client_method = syn::parse_quote! {
+					#(#attrs)*
+					pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
+						let args_tuple = (#(#arg_names,)*);
+						self.inner.call_method(#rpc_name, #returns_str, args_tuple)
+					}
+				};
 				client_methods.push(client_method);
 			}
 			MethodRegistration::PubSub { .. } => {
@@ -128,43 +117,6 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 		}
 	}
 	Ok(client_methods)
-}
-
-fn generate_client_method(
-	attrs: &[syn::Attribute],
-	rpc_name: &str,
-	name: &syn::Ident,
-	args: &Punctuated<syn::FnArg, syn::token::Comma>,
-	arg_names: &[&syn::Ident],
-	returns: &syn::Type,
-) -> syn::ImplItem {
-	let returns_str = quote!(#returns).to_string();
-	syn::parse_quote! {
-		#(#attrs)*
-		pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
-			let args_tuple = (#(#arg_names,)*);
-			let args = serde_json::to_value(args_tuple)
-				.expect("Only types with infallible serialisation can be used for JSON-RPC");
-			let method = #rpc_name.to_owned();
-			let params = match args {
-				Value::Array(vec) => Some(Params::Array(vec)),
-				Value::Null => Some(Params::None),
-				_ => None,
-			}.expect("should never happen");
-			self.call_method(method, params)
-				.and_then(|value: Value| {
-					log::debug!("response: {:?}", value);
-					let result = serde_json::from_value::<#returns>(value)
-						.map_err(|error| {
-							RpcError::ParseError(
-								#returns_str.to_string(),
-								error.into(),
-							)
-						});
-					future::done(result)
-				})
-		}
-	}
 }
 
 fn get_doc_comments(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
