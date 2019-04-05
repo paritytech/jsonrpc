@@ -364,23 +364,8 @@ pub mod local {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jsonrpc_core::{IoHandler, Result};
-	use jsonrpc_derive::rpc;
+	use jsonrpc_core::{self, IoHandler};
 	use crate::{TypedClient, RpcError, RpcChannel};
-
-	#[rpc(server)]
-	pub trait Rpc {
-		#[rpc(name = "add")]
-		fn add(&self, a: u64, b: u64) -> Result<u64>;
-	}
-
-	struct RpcServer;
-
-	impl Rpc for RpcServer {
-		fn add(&self, a: u64, b: u64) -> Result<u64> {
-			Ok(a + b)
-		}
-	}
 
 	#[derive(Clone)]
 	struct AddClient(TypedClient);
@@ -400,7 +385,12 @@ mod tests {
 	#[test]
 	fn test_client_terminates() {
 		let mut handler = IoHandler::new();
-		handler.extend_with(RpcServer.to_delegate());
+		handler.add_method("add", |params: Params| {
+			let (a, b) = params.parse::<(u64, u64)>()?;
+			let res = a + b;
+			Ok(jsonrpc_core::to_value(res).unwrap())
+		});
+
 		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
 		let fut = client
 			.clone()
