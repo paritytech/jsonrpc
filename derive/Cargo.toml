@@ -23,7 +23,9 @@ jsonrpc-core = { version = "11.0", path = "../core" }
 jsonrpc-core-client = { version = "11.0", path = "../core-client" }
 jsonrpc-pubsub = { version = "11.0", path = "../pubsub" }
 jsonrpc-tcp-server = { version = "11.0", path = "../tcp" }
+futures = "~0.1.6"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
+tokio = "0.1"
 compiletest_rs = { version = "0.3", features = ["stable"] }
