@@ -19,8 +19,10 @@ categories = [
 ]
 
 [dependencies]
+env_logger = "0.6"
 failure = "0.1"
-futures = "~0.1.6"
+futures = "0.1.26"
+hyper = "0.12"
 jsonrpc-core = { version = "11.0", path = "../core" }
 log = "0.4"
 serde = "1.0"

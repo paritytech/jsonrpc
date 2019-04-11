@@ -12,6 +12,8 @@ use std::collections::VecDeque;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+pub mod transports;
+
 /// The errors returned by the client.
 #[derive(Debug, Fail)]
 pub enum RpcError {
