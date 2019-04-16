@@ -1,9 +1,11 @@
 //! Client transport implementations
 use futures::{sync::mpsc, Future, Stream, Sink};
-use crate::{RpcClient, RpcChannel, RpcError};
+use crate::RpcError;
 
+pub mod local;
 pub mod http;
 
+/// Create a request/response transport with the supplied future
 pub fn request_response<F, R>(request_buffer: usize, f: F) -> (
 	impl Sink<SinkItem=String, SinkError=RpcError>,
 	impl Stream<Item=String, Error=RpcError>,
