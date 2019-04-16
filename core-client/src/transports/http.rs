@@ -4,7 +4,7 @@ use hyper::{http, Client, Request};
 use hyper::rt;
 use futures::{Future, Stream};
 
-use crate::{RpcClient, RpcChannel, RpcError};
+use crate::{RpcChannel, RpcError};
 use super::request_response;
 
 /// Create a HTTP Client
@@ -15,7 +15,7 @@ where
 	let url = url.to_owned();
 	let client = Client::new();
 
-	let (sink, stream, run) = request_response(8, move |request: String| {
+	let (rpc_client, sender) = request_response(8, move |request: String| {
 		let request = Request::post(&url)
 			.header(http::header::CONTENT_TYPE, http::header::HeaderValue::from_static("application/json"))
 			.body(request.into())
@@ -33,11 +33,8 @@ where
 			})
 	});
 
-	let (rpc_client, sender) = RpcClient::with_channel(sink, stream);
-
 	(
 		rt::lazy(move || {
-			rt::spawn(run);
 			rt::spawn(rpc_client.map_err(|e| {
 				log::error!("RPC Client error: {:?}", e);
 			}));

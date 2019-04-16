@@ -1,15 +1,15 @@
 //! Client transport implementations
+use failure::format_err;
 use futures::{sync::mpsc, Future, Stream, Sink};
-use crate::RpcError;
+use crate::{RpcError, RpcClient, RpcChannel};
 
 pub mod local;
 pub mod http;
 
 /// Create a request/response transport with the supplied future
 pub fn request_response<F, R>(request_buffer: usize, f: F) -> (
-	impl Sink<SinkItem=String, SinkError=RpcError>,
-	impl Stream<Item=String, Error=RpcError>,
-	impl Future<Item=(), Error=()>,
+	impl Future<Item=(), Error=RpcError>,
+	RpcChannel,
 ) where
 	F: Fn(String) -> R,
 	R: Future<Item=String, Error=RpcError>,
@@ -17,7 +17,7 @@ pub fn request_response<F, R>(request_buffer: usize, f: F) -> (
 	let (requests, requests_rx) = mpsc::channel(request_buffer);
 	let (responses, responses_rx) = mpsc::channel(0);
 
-	let run = requests_rx
+	let run= requests_rx
 		.map(f)
 		.forward(responses.sink_map_err(|_e| ()))
 		.map(|_| ());
@@ -29,5 +29,12 @@ pub fn request_response<F, R>(request_buffer: usize, f: F) -> (
 		.map_err(|()| unreachable!())
 		.and_then(|res| res);
 
-	(sink, stream, run)
+	let (rpc_client, sender) = RpcClient::with_channel(sink, stream);
+
+	let client = run
+		.map_err(|()| RpcError::Other(format_err!("Transport error"))) // todo: [AJ] check unifying of error types
+		.join(rpc_client)
+		.map(|((), ())| ());
+
+	(client, sender)
 }
