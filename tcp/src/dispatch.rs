@@ -109,11 +109,7 @@ impl<S: Stream<Item = String, Error = std::io::Error>> Stream for PeerMessageQue
 		};
 
 		match rx.poll() {
-			Ok(Async::Ready(Some(item))) => {
-				// If the other stream isn't finished yet, give them a chance to
-				// go first next time as we pulled something off `up`.
-				Ok(Async::Ready(Some(item)))
-			}
+			Ok(Async::Ready(Some(item))) => Ok(Async::Ready(Some(item))),
 			Ok(Async::Ready(None)) | Ok(Async::NotReady) if up_closed => {
 				self.receiver = None;
 				Ok(Async::Ready(None))
