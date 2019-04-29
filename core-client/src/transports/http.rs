@@ -51,21 +51,16 @@ mod tests {
 
 	fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
 		let builder = ServerBuilder::new(io())
-			.cors(DomainsValidation::AllowOnly(vec![
-				AccessControlAllowOrigin::Value("parity.io".into()),
-				AccessControlAllowOrigin::Null,
-			]))
-			.cors_max_age(None)
-			.rest_api(RestApi::Secure)
+			.rest_api(RestApi::Unsecure)
 			.health_api(("/health", "hello_async"));
 
-		alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap()
+		alter(builder).start_http(&"127.0.0.1:3030".parse().unwrap()).unwrap()
 	}
 
 	fn io() -> IoHandler {
 		let mut io = IoHandler::default();
-		io.add_method("hello", |params: Params| match params.parse::<(u64,)>() {
-			Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
+		io.add_method("hello", |params: Params| match params.parse::<(String,)>() {
+			Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
 			_ => Ok(Value::String("world".into())),
 		});
 		io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
@@ -91,26 +86,24 @@ mod tests {
 
 	#[test]
 	fn should_work() {
-		env_logger::init();
-		use std::thread;
+		crate::logger::init_log();
 
 		// given
 		let _server = serve(id);
 
-		println!("http test");
+		let uri = "http://localhost:3030";
+		let run =
+			http(uri)
+				.and_then(|client: TestClient| {
+					client.hello("http")
+						.then(|result| {
+							assert_eq!(result.unwrap(), "hello http");
+							drop(client);
+							Ok(())
+						})
+				});
 
-//		rt::run(rt::lazy(|| {
-//			let uri = "127.0.0.1:0";
-//			http(uri)
-//				.and_then(|client: TestClient| {
-//					client.hello("http")
-//						.then(|result| {
-//							assert_eq!(result.unwrap(), "hello http");
-//							drop(client);
-//							Ok(())
-//						})
-//				})
-//		}));
+		rt::run(run);
 
 		assert!(false);
 	}

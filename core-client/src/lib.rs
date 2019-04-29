@@ -14,6 +14,9 @@ use serde::Serialize;
 
 pub mod transports;
 
+#[cfg(test)]
+mod logger;
+
 /// The errors returned by the client.
 #[derive(Debug, Fail)]
 pub enum RpcError {
