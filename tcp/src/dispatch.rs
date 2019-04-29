@@ -12,7 +12,7 @@ pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::Sender<String>>>;
 
 pub struct PeerMessageQueue<S: Stream> {
 	up: S,
-	receiver: mpsc::Receiver<String>,
+	receiver: Option<mpsc::Receiver<String>>,
 	_addr: SocketAddr,
 }
 
@@ -20,7 +20,7 @@ impl<S: Stream> PeerMessageQueue<S> {
 	pub fn new(response_stream: S, receiver: mpsc::Receiver<String>, addr: SocketAddr) -> Self {
 		PeerMessageQueue {
 			up: response_stream,
-			receiver,
+			receiver: Some(receiver),
 			_addr: addr,
 		}
 	}
@@ -82,26 +82,44 @@ impl<S: Stream<Item = String, Error = std::io::Error>> Stream for PeerMessageQue
 	type Item = String;
 	type Error = std::io::Error;
 
+	// The receiver will never return `Ok(Async::Ready(None))`
+	// Because the sender is kept in `SenderChannels` and it will never be dropped until `the stream` is resolved.
+	//
+	// Thus, that is the reason we terminate if `up_closed && receiver == Async::NotReady`.
+	//
+	// However, it is possible to have a race between `poll` and `push_work` if the connection is dropped.
+	// Therefore, the receiver is then dropped when the connection is dropped and an error is propagated when
+	// a `send` attempt is made on that channel.
 	fn poll(&mut self) -> Poll<Option<String>, std::io::Error> {
 		// check if we have response pending
-		match self.up.poll() {
-			Ok(Async::Ready(Some(val))) => {
-				return Ok(Async::Ready(Some(val)));
-			}
-			Ok(Async::Ready(None)) => {
-				// this will ensure that this polling will end when incoming i/o stream ends
-				return Ok(Async::Ready(None));
-			}
-			_ => {}
-		}
 
-		match self.receiver.poll() {
-			Ok(result) => Ok(result),
-			Err(send_err) => {
-				// not sure if it can ever happen
-				warn!("MPSC send error: {:?}", send_err);
-				Err(std::io::Error::from(std::io::ErrorKind::Other))
+		let up_closed = match self.up.poll() {
+			Ok(Async::Ready(Some(item))) => return Ok(Async::Ready(Some(item))),
+			Ok(Async::Ready(None)) => true,
+			Ok(Async::NotReady) => false,
+			err => return err,
+		};
+
+		let rx = match &mut self.receiver {
+			None => {
+				debug_assert!(up_closed);
+				return Ok(Async::Ready(None))
 			}
+			Some(rx) => rx,
+		};
+
+		match rx.poll() {
+			Ok(Async::Ready(Some(item))) => {
+				// If the other stream isn't finished yet, give them a chance to
+				// go first next time as we pulled something off `up`.
+				Ok(Async::Ready(Some(item)))
+			}
+			Ok(Async::Ready(None)) | Ok(Async::NotReady) if up_closed => {
+				self.receiver = None;
+				Ok(Async::Ready(None))
+			}
+			Ok(Async::Ready(None)) | Ok(Async::NotReady) => Ok(Async::NotReady),
+			Err(_) => Err(std::io::Error::new(std::io::ErrorKind::Other, "MPSC error")),
 		}
 	}
 }
