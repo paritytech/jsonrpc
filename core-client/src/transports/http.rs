@@ -1,13 +1,13 @@
 //! HTTP client
 
-use hyper::{http, Client, Request};
+use hyper::{http, rt, Client, Request};
 use futures::{Future, Stream};
 
 use crate::{RpcChannel, RpcError};
 use super::request_response;
 
 /// Create a HTTP Client
-pub fn http<TClient>(url: &str) -> impl Future<Item=TClient, Error=()>
+pub fn http<TClient>(url: &str) -> impl Future<Item=TClient, Error=RpcError>
 where
 	TClient: From<RpcChannel>,
 {
@@ -32,9 +32,10 @@ where
 			})
 	});
 
-	rpc_client
-		.map_err(|e| log::error!("RPC Client error: {:?}", e))
-		.map(|()| TClient::from(sender))
+	rt::lazy(move|| {
+		rt::spawn(rpc_client.map_err(|e| log::error!("RPC Client error: {:?}", e)));
+		Ok(TClient::from(sender))
+	})
 }
 
 #[cfg(test)]
@@ -44,6 +45,7 @@ mod tests {
 	use hyper::rt;
 	use super::*;
 	use crate::*;
+	use std::time::Duration;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -91,20 +93,26 @@ mod tests {
 		// given
 		let _server = serve(id);
 
+		let (tx, rx) = std::sync::mpsc::channel();
 		let uri = "http://localhost:3030";
+
+		// when
 		let run =
 			http(uri)
 				.and_then(|client: TestClient| {
 					client.hello("http")
-						.then(|result| {
-							assert_eq!(result.unwrap(), "hello http");
+						.and_then(move |result| {
 							drop(client);
+							let _ = tx.send(result);
 							Ok(())
 						})
-				});
+				})
+				.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
 		rt::run(run);
 
-		assert!(false);
+		// then
+		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		assert_eq!("hello http", result);
 	}
 }

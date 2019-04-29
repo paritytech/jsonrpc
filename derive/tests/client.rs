@@ -1,5 +1,5 @@
 use futures::prelude::*;
-use jsonrpc_core_client::local;
+use jsonrpc_core_client::transports::local;
 use jsonrpc_core::{IoHandler, Result};
 use jsonrpc_derive::rpc;
 
