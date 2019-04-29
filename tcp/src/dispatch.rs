@@ -103,7 +103,7 @@ impl<S: Stream<Item = String, Error = std::io::Error>> Stream for PeerMessageQue
 		let rx = match &mut self.receiver {
 			None => {
 				debug_assert!(up_closed);
-				return Ok(Async::Ready(None))
+				return Ok(Async::Ready(None));
 			}
 			Some(rx) => rx,
 		};

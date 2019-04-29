@@ -2,15 +2,15 @@
 #![deny(missing_docs)]
 
 use failure::{format_err, Fail};
-use futures::{future, prelude::*};
 use futures::sync::{mpsc, oneshot};
+use futures::{future, prelude::*};
 use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
 use log::debug;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
 
 /// The errors returned by the client.
 #[derive(Debug, Fail)]
@@ -216,7 +216,7 @@ impl From<RpcChannel> for RawClient {
 
 impl RawClient {
 	/// Call RPC with raw JSON
-	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item=Value, Error=RpcError> {
+	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item = Value, Error = RpcError> {
 		let (sender, receiver) = oneshot::channel();
 		let msg = RpcMessage {
 			method: method.into(),
@@ -253,31 +253,25 @@ impl TypedClient {
 		method: &str,
 		returns: &'static str,
 		args: T,
-	) -> impl Future<Item=R, Error=RpcError> {
-		let args = serde_json::to_value(args)
-			.expect("Only types with infallible serialisation can be used for JSON-RPC");
+	) -> impl Future<Item = R, Error = RpcError> {
+		let args =
+			serde_json::to_value(args).expect("Only types with infallible serialisation can be used for JSON-RPC");
 		let params = match args {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
-			_ => return future::Either::A(future::err(RpcError::Other(
-				format_err!("RPC params should serialize to a JSON array, or null")))),
+			_ => {
+				return future::Either::A(future::err(RpcError::Other(format_err!(
+					"RPC params should serialize to a JSON array, or null"
+				))))
+			}
 		};
 
-		future::Either::B(
-			self.0
-				.call_method(method, params)
-				.and_then(move |value: Value| {
-					log::debug!("response: {:?}", value);
-					let result = serde_json::from_value::<R>(value)
-						.map_err(|error| {
-							RpcError::ParseError(
-								returns.into(),
-								error.into(),
-							)
-						});
-					future::done(result)
-				})
-		)
+		future::Either::B(self.0.call_method(method, params).and_then(move |value: Value| {
+			log::debug!("response: {:?}", value);
+			let result =
+				serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns.into(), error.into()));
+			future::done(result)
+		}))
 	}
 }
 
@@ -364,8 +358,8 @@ pub mod local {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::{RpcChannel, RpcError, TypedClient};
 	use jsonrpc_core::{self, IoHandler};
-	use crate::{TypedClient, RpcError, RpcChannel};
 
 	#[derive(Clone)]
 	struct AddClient(TypedClient);
@@ -377,7 +371,7 @@ mod tests {
 	}
 
 	impl AddClient {
-		fn add(&self, a: u64, b: u64) -> impl Future<Item=u64, Error=RpcError> {
+		fn add(&self, a: u64, b: u64) -> impl Future<Item = u64, Error = RpcError> {
 			self.0.call_method("add", "u64", (a, b))
 		}
 	}
