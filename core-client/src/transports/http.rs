@@ -51,12 +51,14 @@ mod tests {
 		t
 	}
 
-	fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
+	fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> (Server, String) {
 		let builder = ServerBuilder::new(io())
-			.rest_api(RestApi::Unsecure)
-			.health_api(("/health", "hello_async"));
+			.rest_api(RestApi::Unsecure);
 
-		alter(builder).start_http(&"127.0.0.1:3030".parse().unwrap()).unwrap()
+		let server = alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap();
+		let uri = format!("http://{}", server.address());
+
+		(server, uri)
 	}
 
 	fn io() -> IoHandler {
@@ -81,8 +83,10 @@ mod tests {
 
 	impl TestClient {
 		fn hello(&self, msg: &'static str) -> impl Future<Item=String, Error=RpcError> {
-			println!("Client hello");
 			self.0.call_method("hello", "String", (msg,))
+		}
+		fn fail(&self) -> impl Future<Item=(), Error=RpcError> {
+			self.0.call_method("fail", "()", ())
 		}
 	}
 
@@ -91,14 +95,12 @@ mod tests {
 		crate::logger::init_log();
 
 		// given
-		let _server = serve(id);
-
+		let (_server, uri) = serve(id);
 		let (tx, rx) = std::sync::mpsc::channel();
-		let uri = "http://localhost:3030";
 
 		// when
 		let run =
-			http(uri)
+			http(&uri)
 				.and_then(|client: TestClient| {
 					client.hello("http")
 						.and_then(move |result| {
@@ -114,5 +116,67 @@ mod tests {
 		// then
 		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap();
 		assert_eq!("hello http", result);
+	}
+
+	#[test]
+	fn handles_server_error() {
+		crate::logger::init_log();
+
+		// given
+		let (_server, uri) = serve(id);
+		let (tx, rx) = std::sync::mpsc::channel();
+
+		// when
+		let run =
+			http(&uri)
+				.and_then(|client: TestClient| {
+					client
+						.fail()
+						.then(move |res| {
+							let _ = tx.send(res);
+							Ok(())
+						})
+				})
+				.map_err(|e| log::error!("RPC Client error: {:?}", e));
+		rt::run(run);
+
+		// then
+		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		if let Err(RpcError::JsonRpcError(err)) = res {
+			assert_eq!(err, Error { code: ErrorCode::ServerError(-34), message: "Server error".into(), data: None })
+		} else {
+			panic!("Server should error")
+		}
+	}
+
+	#[test]
+	fn client_still_works_after_server_error() {
+		crate::logger::init_log();
+
+		// given
+		let (_server, uri) = serve(id);
+		let (tx, rx) = std::sync::mpsc::channel();
+
+		// when
+		let run =
+			http(&uri)
+				.and_then(|client: TestClient| {
+					client
+						.fail()
+						.and_then(move |_fail_res| {
+							client.hello("http")
+						})
+						.and_then(move |res| {
+							let _ = tx.send(res);
+							Ok(())
+						})
+				})
+				.map_err(|e| log::error!("RPC Client error: {:?}", e));
+
+		rt::run(run);
+
+		// then
+		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		assert_eq!(res, "hello http")
 	}
 }
