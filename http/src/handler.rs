@@ -121,7 +121,7 @@ impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> {
 	type Item = hyper::Response<Body>;
 	type Error = hyper::Error;
 
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+	fn poll(&mut self) -> Poll<Self::Item, hyper::Error> {
 		match *self {
 			Handler::Rpc(ref mut handler) => handler.poll(),
 			Handler::Middleware(ref mut middleware) => middleware.poll(),
