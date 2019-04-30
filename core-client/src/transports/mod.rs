@@ -17,7 +17,7 @@ pub fn request_response<F, R>(request_buffer: usize, f: F) -> (
 	let (requests, requests_rx) = mpsc::channel(request_buffer);
 	let (responses, responses_rx) = mpsc::channel(0);
 
-	let run= requests_rx
+	let run = requests_rx
 		.map(f)
 		.forward(responses.sink_map_err(|_e| ()))
 		.map(|_| ());
