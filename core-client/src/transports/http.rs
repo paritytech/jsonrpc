@@ -47,9 +47,12 @@ where
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, msg)| {
 			let future = match result {
-				Ok(ref res) if !res.status().is_success() => A(future::err(
-					RpcError::Other(format_err!("Unexpected response status code: {}", res.status()))
-				)),
+				Ok(ref res) if !res.status().is_success() => {
+					log::trace!("http result status {}", res.status());
+					A(future::err(
+						RpcError::Other(format_err!("Unexpected response status code: {}", res.status()))
+					))
+				},
 				Ok(res) => B(
 					res.into_body()
 						.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
@@ -68,7 +71,7 @@ where
 								Response::Batch(_) => unreachable!(),
 							};
 							let value: Result<serde_json::Value, Error> = output.into();
-							value.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+							value.map_err(|e| RpcError::JsonRpcError(e))
 						})
 					});
 
@@ -189,10 +192,11 @@ mod tests {
 
 		// then
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+
 		if let Err(RpcError::JsonRpcError(err)) = res {
 			assert_eq!(err, Error { code: ErrorCode::ServerError(-34), message: "Server error".into(), data: None })
 		} else {
-			panic!("Server should error")
+			panic!("Expected JsonRpcError. Received {:?}", res)
 		}
 	}
 
