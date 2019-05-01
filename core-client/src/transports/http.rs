@@ -1,39 +1,86 @@
 //! HTTP client
 
+use failure::{format_err, Fail};
+use futures::{
+	future::{self, Either::{A, B}},
+	sync::mpsc,
+	Future,
+	Stream
+};
 use hyper::{http, rt, Client, Request};
-use futures::{Future, Stream};
+use jsonrpc_core::{self, Call, Error, Id, MethodCall, Output, Params, Response, Version};
 
-use crate::{RpcChannel, RpcError};
+use crate::{RpcChannel, RpcError, RpcMessage};
 use super::request_response;
+use futures::sink::Sink;
 
 /// Create a HTTP Client
 pub fn http<TClient>(url: &str) -> impl Future<Item=TClient, Error=RpcError>
 where
 	TClient: From<RpcChannel>,
 {
+	let max_parallel = 8;
 	let url = url.to_owned();
 	let client = Client::new();
 
-	let (rpc_client, sender) = request_response(8, move |request: String| {
-		let request = Request::post(&url)
-			.header(http::header::CONTENT_TYPE, http::header::HeaderValue::from_static("application/json"))
-			.body(request.into())
-			.unwrap();
+	let (sender, receiver) = mpsc::channel(0);
 
-		client
-			.request(request)
-			.map_err(|e| RpcError::Other(e.into()))
-			.and_then(|res| {
-				// TODO [ToDr] Handle non-200
-				res.into_body()
-					.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
-					.concat2()
-					.map(|chunk| String::from_utf8_lossy(chunk.as_ref()).into_owned())
+	let fut = receiver
+		.map(move |msg: RpcMessage| {
+			let request = jsonrpc_core::Request::Single(Call::MethodCall(MethodCall {
+				jsonrpc: Some(Version::V2),
+				method: msg.method.clone(),
+				params: msg.params.clone(),
+				id: Id::Num(1), // todo: [AJ] assign num
+			}));
+			let request_str = serde_json::to_string(&request).expect("Infallible serialization");
+
+			let request = Request::post(&url)
+				.header(http::header::CONTENT_TYPE, http::header::HeaderValue::from_static("application/json"))
+				.body(request_str.into())
+				.unwrap();
+
+			client
+				.request(request)
+				.then(move |response| Ok((response, msg)))
+		})
+		.buffer_unordered(max_parallel)
+		.for_each(|(result, msg)| {
+			let future = match result {
+				Ok(ref res) if !res.status().is_success() => A(future::err(
+					RpcError::Other(format_err!("Unexpected response status code: {}", res.status()))
+				)),
+				Ok(res) => B(
+					res.into_body()
+						.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+						.concat2()
+				),
+				Err(err) => A(future::err(RpcError::Other(err.into()))),
+			};
+			future.then(|result| {
+				let result = result.and_then(|response| {
+					let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
+					serde_json::from_str::<Response>(&response_str)
+						.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+						.and_then(|response| {
+							let output: Output = match response {
+								Response::Single(output) => output,
+								Response::Batch(_) => unreachable!(),
+							};
+							let value: Result<serde_json::Value, Error> = output.into();
+							value.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+						})
+					});
+
+				if let Err(err) = msg.sender.send(result) {
+					log::warn!("Error resuming asynchronous request: {:?}", err);
+				}
+				Ok(())
 			})
-	});
+		});
 
 	rt::lazy(move|| {
-		rt::spawn(rpc_client.map_err(|e| log::error!("RPC Client error: {:?}", e)));
+		rt::spawn(fut.map_err(|e| log::error!("RPC Client error: {:?}", e)));
 		Ok(TClient::from(sender))
 	})
 }

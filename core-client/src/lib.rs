@@ -43,14 +43,14 @@ impl From<Error> for RpcError {
 	}
 }
 
-/// The future retured by the client.
+/// The future returned by the client.
 pub struct RpcFuture {
-	recv: oneshot::Receiver<Result<Value, Error>>,
+	recv: oneshot::Receiver<Result<Value, RpcError>>,
 }
 
 impl RpcFuture {
 	/// Creates a new `RpcFuture`.
-	pub fn new(recv: oneshot::Receiver<Result<Value, Error>>) -> Self {
+	pub fn new(recv: oneshot::Receiver<Result<Value, RpcError>>) -> Self {
 		RpcFuture { recv }
 	}
 }
@@ -63,7 +63,7 @@ impl Future for RpcFuture {
 		// TODO should timeout (#410)
 		match self.recv.poll() {
 			Ok(Async::Ready(Ok(value))) => Ok(Async::Ready(value)),
-			Ok(Async::Ready(Err(error))) => Err(RpcError::JsonRpcError(error)),
+			Ok(Async::Ready(Err(error))) => Err(error),
 			Ok(Async::NotReady) => Ok(Async::NotReady),
 			Err(error) => Err(RpcError::Other(error.into())),
 		}
@@ -79,7 +79,7 @@ pub struct RpcMessage {
 	params: Params,
 	/// The oneshot channel to send the result of the rpc
 	/// call to.
-	sender: oneshot::Sender<Result<Value, Error>>,
+	sender: oneshot::Sender<Result<Value, RpcError>>,
 }
 
 /// A channel to a `RpcClient`.
@@ -89,7 +89,7 @@ pub type RpcChannel = mpsc::Sender<RpcMessage>;
 /// messages through an underlying transport.
 pub struct RpcClient<TSink, TStream> {
 	id: u64,
-	queue: HashMap<Id, oneshot::Sender<Result<Value, Error>>>,
+	queue: HashMap<Id, oneshot::Sender<Result<Value, RpcError>>>,
 	sink: TSink,
 	stream: TStream,
 	channel: Option<mpsc::Receiver<RpcMessage>>,
@@ -201,7 +201,7 @@ where
 				let value: Result<Value, Error> = output.into();
 				match channel {
 					Some(tx) => tx
-						.send(value)
+						.send(value.map_err(RpcError::JsonRpcError))
 						.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?,
 					None => Err(RpcError::UnknownId)?,
 				};
