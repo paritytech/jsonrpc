@@ -201,33 +201,71 @@ mod tests {
 	}
 
 	#[test]
-	fn client_still_works_after_server_error() {
-		crate::logger::init_log();
-
+	fn handles_connection_refused_error() {
 		// given
-		let (_server, uri) = serve(id);
+		let (server, uri) = serve(id);
+		// stop server so that we get a connection refused
+		server.close();
 		let (tx, rx) = std::sync::mpsc::channel();
 
-		// when
-		let run =
-			http(&uri)
-				.and_then(|client: TestClient| {
-					client
-						.fail()
-						.and_then(move |_fail_res| {
-							client.hello("http")
-						})
-						.and_then(move |res| {
-							let _ = tx.send(res);
-							Ok(())
-						})
-				})
-				.map_err(|e| log::error!("RPC Client error: {:?}", e));
+		let client = http(&uri);
 
-		rt::run(run);
+		let call = move || client
+			.and_then(|client: TestClient| {
+				client
+					.hello("http")
+					.then(move |res| {
+						let _ = tx.send(res);
+						Ok(())
+					})
+			})
+			.map_err(|e| log::error!("RPC Client error: {:?}", e));
+
+		rt::run(call());
 
 		// then
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
-		assert_eq!(res, "hello http")
+
+		if let Err(RpcError::Other(err)) = res {
+			if let Some(err) = err.downcast_ref::<hyper::Error>() {
+				assert!(err.is_connect())
+			} else {
+				panic!("Expected a hyper::Error")
+			}
+		} else {
+			panic!("Expected JsonRpcError. Received {:?}", res)
+		}
 	}
+
+//	#[test]
+//	fn client_still_works_after_server_error() {
+//		crate::logger::init_log();
+//
+//		// given
+//		let (_server, uri) = serve(id);
+//		let (tx, rx) = std::sync::mpsc::channel();
+//
+//		// when
+//		let run =
+//			http(&uri)
+//				.and_then(|client: TestClient| {
+//					client
+//						.fail()
+//						.hello("http")
+////						.and_then(move |_fail_res| {
+////							client.hello("http")
+////						})
+//						.and_then(move |res| {
+//							let _ = tx.send(res);
+//							Ok(())
+//						})
+//				})
+//				.map_err(|e| log::error!("RPC Client error: {:?}", e));
+//
+//		rt::run(run);
+//
+//		// then
+//		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+//		assert_eq!(res, "hello http")
+//	}
 }
