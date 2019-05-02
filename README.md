@@ -104,7 +104,7 @@ fn main() {
 ### Client support
 
 ```rust
-use jsonrpc_core_client::local;
+use jsonrpc_core_client::transports::local;
 use jsonrpc_core::futures::future::{self, Future, FutureResult};
 use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
