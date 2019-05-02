@@ -11,7 +11,6 @@ use hyper::{http, rt, Client, Request};
 use jsonrpc_core::{self, Call, Error, Id, MethodCall, Output, Params, Response, Version};
 
 use crate::{RpcChannel, RpcError, RpcMessage};
-use super::request_response;
 use futures::sink::Sink;
 
 /// Create a HTTP Client

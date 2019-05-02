@@ -3,7 +3,7 @@
 use failure::Error;
 use futures::prelude::*;
 use futures::sync::mpsc;
-use jsonrpc_core_client::RpcClient;
+use jsonrpc_core_client::transports::Duplex;
 pub use jsonrpc_core_client::{RpcChannel, RpcError};
 use log::info;
 use std::collections::VecDeque;
@@ -22,7 +22,7 @@ where
 			let (sink, stream) = client.split();
 			let (sink, stream) = WebsocketClient::new(sink, stream).split();
 			let (sender, receiver) = mpsc::channel(0);
-			let rpc_client = RpcClient::new(sink, stream, receiver).map_err(|error| eprintln!("{:?}", error));
+			let rpc_client = Duplex::new(sink, stream, receiver).map_err(|error| eprintln!("{:?}", error));
 			tokio::spawn(rpc_client);
 			sender.into()
 		})

@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::ops::Deref;
 use futures::prelude::*;
 use jsonrpc_core::{MetaIoHandler, Metadata};
-use crate::{RpcChannel, RpcClient, RpcError};
+use crate::{RpcChannel, RpcError};
 
 /// Implements a rpc client for `MetaIoHandler`.
 pub struct LocalRpc<THandler> {
@@ -73,7 +73,7 @@ pub fn connect<TClient, TMetadata, THandler>(
 		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 {
 	let (sink, stream) = LocalRpc::new(handler).split();
-	let (rpc_client, sender) = RpcClient::with_channel(sink, stream);
+	let (rpc_client, sender) = crate::transports::Duplex::with_channel(sink, stream);
 	let client = TClient::from(sender);
 	(client, rpc_client)
 }
