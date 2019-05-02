@@ -1,6 +1,6 @@
 //! HTTP client
 
-use failure::{format_err, Fail};
+use failure::format_err;
 use futures::{
 	future::{self, Either::{A, B}},
 	sync::mpsc,
@@ -90,25 +90,58 @@ where
 
 #[cfg(test)]
 mod tests {
+	use std::time::Duration;
+	use std::net::SocketAddr;
 	use jsonrpc_core::{IoHandler, Params, Error, ErrorCode, Value};
 	use jsonrpc_http_server::*;
 	use hyper::rt;
 	use super::*;
 	use crate::*;
-	use std::time::Duration;
 
 	fn id<T>(t: T) -> T {
 		t
 	}
 
-	fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> (Server, String) {
-		let builder = ServerBuilder::new(io())
-			.rest_api(RestApi::Unsecure);
+	struct TestServer {
+		uri: String,
+		socket_addr: SocketAddr,
+		server: Option<Server>,
+	}
 
-		let server = alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap();
-		let uri = format!("http://{}", server.address());
+	impl TestServer {
+		fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Self {
+			let builder = ServerBuilder::new(io())
+				.rest_api(RestApi::Unsecure);
 
-		(server, uri)
+			let server = alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap();
+			let socket_addr = server.address().clone();
+			let uri = format!("http://{}", socket_addr);
+
+			TestServer {
+				uri,
+				socket_addr,
+				server: Some(server)
+			}
+		}
+
+		fn start(&mut self) {
+			if self.server.is_none() {
+				let server = ServerBuilder::new(io())
+					.rest_api(RestApi::Unsecure)
+					.start_http(&self.socket_addr)
+					.unwrap();
+				self.server = Some(server);
+			} else {
+				panic!("Server already running")
+			}
+		}
+
+		fn stop(&mut self) {
+			let server = self.server.take();
+			if let Some(server) = server {
+				server.close();
+			}
+		}
 	}
 
 	fn io() -> IoHandler {
@@ -145,12 +178,12 @@ mod tests {
 		crate::logger::init_log();
 
 		// given
-		let (_server, uri) = serve(id);
+		let server = TestServer::serve(id);
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
 		let run =
-			http(&uri)
+			http(&server.uri)
 				.and_then(|client: TestClient| {
 					client.hello("http")
 						.and_then(move |result| {
@@ -173,12 +206,12 @@ mod tests {
 		crate::logger::init_log();
 
 		// given
-		let (_server, uri) = serve(id);
+		let server = TestServer::serve(id);
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
 		let run =
-			http(&uri)
+			http(&server.uri)
 				.and_then(|client: TestClient| {
 					client
 						.fail()
@@ -203,14 +236,14 @@ mod tests {
 	#[test]
 	fn handles_connection_refused_error() {
 		// given
-		let (server, uri) = serve(id);
+		let mut server = TestServer::serve(id);
 		// stop server so that we get a connection refused
-		server.close();
+		server.stop();
 		let (tx, rx) = std::sync::mpsc::channel();
 
-		let client = http(&uri);
+		let client = http(&server.uri);
 
-		let call = move || client
+		let call = client
 			.and_then(|client: TestClient| {
 				client
 					.hello("http")
@@ -221,7 +254,7 @@ mod tests {
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
-		rt::run(call());
+		rt::run(call);
 
 		// then
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -237,35 +270,48 @@ mod tests {
 		}
 	}
 
-//	#[test]
-//	fn client_still_works_after_server_error() {
-//		crate::logger::init_log();
-//
-//		// given
-//		let (_server, uri) = serve(id);
-//		let (tx, rx) = std::sync::mpsc::channel();
-//
-//		// when
-//		let run =
-//			http(&uri)
-//				.and_then(|client: TestClient| {
-//					client
-//						.fail()
-//						.hello("http")
-////						.and_then(move |_fail_res| {
-////							client.hello("http")
-////						})
-//						.and_then(move |res| {
-//							let _ = tx.send(res);
-//							Ok(())
-//						})
-//				})
-//				.map_err(|e| log::error!("RPC Client error: {:?}", e));
-//
-//		rt::run(run);
-//
-//		// then
-//		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
-//		assert_eq!(res, "hello http")
-//	}
+	#[test]
+	#[ignore] // todo: [AJ] make it pass
+	fn client_still_works_after_http_connect_error() {
+		// given
+		let mut server = TestServer::serve(id);
+
+		// stop server so that we get a connection refused
+		server.stop();
+
+		let (tx, rx) = std::sync::mpsc::channel();
+		let tx2 = tx.clone();
+
+		let client = http(&server.uri);
+
+		let call = client
+			.and_then(move |client: TestClient| {
+				client
+					.hello("http")
+					.then(move |res| {
+						let _ = tx.send(res);
+						Ok(())
+					})
+					.and_then(move |_| {
+						server.start(); // todo: make the server start on the main thread
+						client
+							.hello("http2")
+							.then(move |res| {
+								let _ = tx2.send(res);
+								Ok(())
+							})
+					})
+			})
+			.map_err(|e| log::error!("RPC Client error: {:?}", e));
+
+		// when
+		rt::run(call);
+
+		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		assert!(res.is_err());
+
+		// then
+		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
+		assert_eq!("hello http", result);
+	}
 }
