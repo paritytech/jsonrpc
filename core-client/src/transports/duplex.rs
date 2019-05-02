@@ -3,7 +3,7 @@
 use failure::{format_err};
 use futures::{prelude::*};
 use futures::sync::{mpsc, oneshot};
-use jsonrpc_core::{Error, Id, Output, Response};
+use jsonrpc_core::Id;
 use log::debug;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -106,18 +106,13 @@ impl<TSink, TStream> Future for Duplex<TSink, TStream>
 				Ok(Async::NotReady) => break,
 				Err(err) => Err(err)?,
 			};
-			let response =
-				serde_json::from_str::<Response>(&response_str).map_err(|error| RpcError::Other(error.into()))?;
-			let outputs: Vec<Output> = match response {
-				Response::Single(output) => vec![output],
-				Response::Batch(outputs) => outputs,
-			};
-			for output in outputs {
-				let channel = self.queue.remove(output.id());
-				let value: Result<Value, Error> = output.into();
+
+			let responses = super::parse_response(&response_str)?;
+			for (id, result) in responses {
+				let channel = self.queue.remove(&id);
 				match channel {
 					Some(tx) => tx
-						.send(value.map_err(RpcError::JsonRpcError))
+						.send(result)
 						.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?,
 					None => Err(RpcError::UnknownId)?,
 				};

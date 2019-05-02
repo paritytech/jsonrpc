@@ -8,8 +8,6 @@ use futures::{
 	Stream
 };
 use hyper::{http, rt, Client, Request};
-use jsonrpc_core::{self, Error, Output, Response};
-
 use crate::{RpcChannel, RpcError, RpcMessage};
 use super::RequestBuilder;
 
@@ -28,12 +26,10 @@ where
 	let fut = receiver
 		.map(move |msg: RpcMessage| {
 			let (_, request) = request_builder.single_request(&msg);
-
 			let request = Request::post(&url)
 				.header(http::header::CONTENT_TYPE, http::header::HeaderValue::from_static("application/json"))
 				.body(request.into())
 				.unwrap();
-
 			client
 				.request(request)
 				.then(move |response| Ok((response, msg)))
@@ -55,21 +51,20 @@ where
 				Err(err) => A(future::err(RpcError::Other(err.into()))),
 			};
 			future.then(|result| {
-				let result = result.and_then(|response| {
-					let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
-					serde_json::from_str::<Response>(&response_str)
-						.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
-						.and_then(|response| {
-							let output: Output = match response {
-								Response::Single(output) => output,
-								Response::Batch(_) => unreachable!(),
-							};
-							let value: Result<serde_json::Value, Error> = output.into();
-							value.map_err(|e| RpcError::JsonRpcError(e))
-						})
+				let response = result
+					.and_then(|response| {
+						let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
+						super::parse_response(&response_str)
+					})
+					.and_then(|responses| {
+						if responses.len() == 1 {
+							responses.into_iter().nth(0).expect("Exactly one response; qed").1
+						} else {
+							Err(RpcError::Other(format_err!("Transport currently only supports Single requests")))
+						}
 					});
 
-				if let Err(err) = msg.sender.send(result) {
+				if let Err(err) = msg.sender.send(response) {
 					log::warn!("Error resuming asynchronous request: {:?}", err);
 				}
 				Ok(())
