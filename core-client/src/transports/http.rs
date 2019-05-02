@@ -21,7 +21,7 @@ where
 	let client = Client::new();
 	let mut request_builder = RequestBuilder::new();
 
-	let (sender, receiver) = mpsc::channel(0);
+	let (sender, receiver) = mpsc::channel(max_parallel);
 
 	let fut = receiver
 		.map(move |msg: RpcMessage| {
