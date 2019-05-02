@@ -1,15 +1,15 @@
 //! Duplex transport
 
-use failure::{format_err, Fail};
-use futures::{future, prelude::*};
+use failure::{format_err};
+use futures::{prelude::*};
 use futures::sync::{mpsc, oneshot};
-use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
+use jsonrpc_core::{Error, Id, Output, Response};
 use log::debug;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::VecDeque;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+
+
 use crate::{RpcError, RpcMessage};
 use super::RequestBuilder;
 

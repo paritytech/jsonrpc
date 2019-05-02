@@ -4,11 +4,11 @@
 use failure::{format_err, Fail};
 use futures::{future, prelude::*};
 use futures::sync::{mpsc, oneshot};
-use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
-use log::debug;
+use jsonrpc_core::{Error, Params};
+
 use serde_json::Value;
-use std::collections::HashMap;
-use std::collections::VecDeque;
+
+
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 

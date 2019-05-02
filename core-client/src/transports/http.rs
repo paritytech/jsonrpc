@@ -3,13 +3,12 @@
 use failure::format_err;
 use futures::{
 	future::{self, Either::{A, B}},
-	sink::Sink,
 	sync::mpsc,
 	Future,
 	Stream
 };
 use hyper::{http, rt, Client, Request};
-use jsonrpc_core::{self, Call, Error, Id, MethodCall, Output, Params, Response, Version};
+use jsonrpc_core::{self, Error, Output, Response};
 
 use crate::{RpcChannel, RpcError, RpcMessage};
 use super::RequestBuilder;

@@ -1,6 +1,6 @@
 //! Client transport implementations
-use failure::format_err;
-use futures::{sync::mpsc, Future, Stream, Sink};
+
+
 use jsonrpc_core::{Call, Id, MethodCall, Version};
 use crate::RpcMessage;
 
