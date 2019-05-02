@@ -3,6 +3,7 @@
 use failure::format_err;
 use futures::{
 	future::{self, Either::{A, B}},
+	sink::Sink,
 	sync::mpsc,
 	Future,
 	Stream
@@ -11,7 +12,7 @@ use hyper::{http, rt, Client, Request};
 use jsonrpc_core::{self, Call, Error, Id, MethodCall, Output, Params, Response, Version};
 
 use crate::{RpcChannel, RpcError, RpcMessage};
-use futures::sink::Sink;
+use super::RequestBuilder;
 
 /// Create a HTTP Client
 pub fn http<TClient>(url: &str) -> impl Future<Item=TClient, Error=RpcError>
@@ -21,22 +22,17 @@ where
 	let max_parallel = 8;
 	let url = url.to_owned();
 	let client = Client::new();
+	let mut request_builder = RequestBuilder::new();
 
 	let (sender, receiver) = mpsc::channel(0);
 
 	let fut = receiver
 		.map(move |msg: RpcMessage| {
-			let request = jsonrpc_core::Request::Single(Call::MethodCall(MethodCall {
-				jsonrpc: Some(Version::V2),
-				method: msg.method.clone(),
-				params: msg.params.clone(),
-				id: Id::Num(1), // todo: [AJ] assign num
-			}));
-			let request_str = serde_json::to_string(&request).expect("Infallible serialization");
+			let (_, request) = request_builder.single_request(&msg);
 
 			let request = Request::post(&url)
 				.header(http::header::CONTENT_TYPE, http::header::HeaderValue::from_static("application/json"))
-				.body(request_str.into())
+				.body(request.into())
 				.unwrap();
 
 			client

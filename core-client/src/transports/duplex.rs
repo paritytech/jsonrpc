@@ -11,11 +11,12 @@ use std::collections::VecDeque;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use crate::{RpcError, RpcMessage};
+use super::RequestBuilder;
 
 /// The Duplex handles sending and receiving asynchronous
 /// messages through an underlying transport.
 pub struct Duplex<TSink, TStream> {
-	id: u64,
+	request_builder: RequestBuilder,
 	queue: HashMap<Id, oneshot::Sender<Result<Value, RpcError>>>,
 	sink: TSink,
 	stream: TStream,
@@ -27,7 +28,7 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 	/// Creates a new `Duplex`.
 	pub fn new(sink: TSink, stream: TStream, channel: mpsc::Receiver<RpcMessage>) -> Self {
 		Duplex {
-			id: 0,
+			request_builder: RequestBuilder::new(),
 			queue: HashMap::new(),
 			sink,
 			stream,
@@ -41,12 +42,6 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 		let (sender, receiver) = mpsc::channel(0);
 		let client = Duplex::new(sink, stream, receiver);
 		(client, sender)
-	}
-
-	fn next_id(&mut self) -> Id {
-		let id = self.id;
-		self.id = id + 1;
-		Id::Num(id)
 	}
 }
 
@@ -75,13 +70,7 @@ impl<TSink, TStream> Future for Duplex<TSink, TStream>
 				Ok(Async::NotReady) => break,
 				Err(()) => continue,
 			};
-			let id = self.next_id();
-			let request = Request::Single(Call::MethodCall(MethodCall {
-				jsonrpc: Some(Version::V2),
-				method: msg.method,
-				params: msg.params,
-				id: id.clone(),
-			}));
+			let (id, request) = self.request_builder.single_request(&msg);
 			self.queue.insert(id, msg.sender);
 			let request_str = serde_json::to_string(&request).map_err(|error| RpcError::Other(error.into()))?;
 			self.outgoing.push_back(request_str);
