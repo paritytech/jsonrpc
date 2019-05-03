@@ -1,6 +1,6 @@
 use env_logger::Builder;
-use log::LevelFilter;
 use lazy_static::lazy_static;
+use log::LevelFilter;
 use std::env;
 
 lazy_static! {

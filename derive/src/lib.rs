@@ -123,9 +123,9 @@
 //!
 //! # fn main() {}
 //! ```
-//! 
+//!
 //! Client Example
-//! 
+//!
 //! ```
 //! use jsonrpc_core_client::transports::local;
 //! use jsonrpc_core::futures::future::{self, Future, FutureResult};
@@ -174,7 +174,7 @@
 //! 	};
 //! 	fut.wait().unwrap();
 //! }
-//! 
+//!
 //! ```
 
 #![recursion_limit = "256"]

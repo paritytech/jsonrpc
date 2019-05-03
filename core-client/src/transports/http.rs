@@ -1,18 +1,20 @@
 //! HTTP client
 
+use super::RequestBuilder;
+use crate::{RpcChannel, RpcError, RpcMessage};
 use failure::format_err;
 use futures::{
-	future::{self, Either::{A, B}},
+	future::{
+		self,
+		Either::{A, B},
+	},
 	sync::mpsc,
-	Future,
-	Stream
+	Future, Stream,
 };
 use hyper::{http, rt, Client, Request};
-use crate::{RpcChannel, RpcError, RpcMessage};
-use super::RequestBuilder;
 
 /// Create a HTTP Client
-pub fn http<TClient>(url: &str) -> impl Future<Item=TClient, Error=RpcError>
+pub fn http<TClient>(url: &str) -> impl Future<Item = TClient, Error = RpcError>
 where
 	TClient: From<RpcChannel>,
 {
@@ -27,27 +29,28 @@ where
 		.map(move |msg: RpcMessage| {
 			let (_, request) = request_builder.single_request(&msg);
 			let request = Request::post(&url)
-				.header(http::header::CONTENT_TYPE, http::header::HeaderValue::from_static("application/json"))
+				.header(
+					http::header::CONTENT_TYPE,
+					http::header::HeaderValue::from_static("application/json"),
+				)
 				.body(request.into())
 				.unwrap();
-			client
-				.request(request)
-				.then(move |response| Ok((response, msg)))
+			client.request(request).then(move |response| Ok((response, msg)))
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, msg)| {
 			let future = match result {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
-					A(future::err(
-						RpcError::Other(format_err!("Unexpected response status code: {}", res.status()))
-					))
-				},
-				Ok(res) => B(
-					res.into_body()
-						.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
-						.concat2()
-				),
+					A(future::err(RpcError::Other(format_err!(
+						"Unexpected response status code: {}",
+						res.status()
+					))))
+				}
+				Ok(res) => B(res
+					.into_body()
+					.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+					.concat2()),
 				Err(err) => A(future::err(RpcError::Other(err.into()))),
 			};
 			future.then(|result| {
@@ -60,7 +63,9 @@ where
 						if responses.len() == 1 {
 							responses.into_iter().nth(0).expect("Exactly one response; qed").1
 						} else {
-							Err(RpcError::Other(format_err!("Transport currently only supports Single requests")))
+							Err(RpcError::Other(format_err!(
+								"Transport currently only supports Single requests"
+							)))
 						}
 					});
 
@@ -71,7 +76,7 @@ where
 			})
 		});
 
-	rt::lazy(move|| {
+	rt::lazy(move || {
 		rt::spawn(fut.map_err(|e| log::error!("RPC Client error: {:?}", e)));
 		Ok(TClient::from(sender))
 	})
@@ -79,13 +84,13 @@ where
 
 #[cfg(test)]
 mod tests {
-	use std::time::Duration;
-	use std::net::SocketAddr;
-	use jsonrpc_core::{IoHandler, Params, Error, ErrorCode, Value};
-	use jsonrpc_http_server::*;
-	use hyper::rt;
 	use super::*;
 	use crate::*;
+	use hyper::rt;
+	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
+	use jsonrpc_http_server::*;
+	use std::net::SocketAddr;
+	use std::time::Duration;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -99,8 +104,7 @@ mod tests {
 
 	impl TestServer {
 		fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Self {
-			let builder = ServerBuilder::new(io())
-				.rest_api(RestApi::Unsecure);
+			let builder = ServerBuilder::new(io()).rest_api(RestApi::Unsecure);
 
 			let server = alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap();
 			let socket_addr = server.address().clone();
@@ -109,7 +113,7 @@ mod tests {
 			TestServer {
 				uri,
 				socket_addr,
-				server: Some(server)
+				server: Some(server),
 			}
 		}
 
@@ -154,10 +158,10 @@ mod tests {
 	}
 
 	impl TestClient {
-		fn hello(&self, msg: &'static str) -> impl Future<Item=String, Error=RpcError> {
+		fn hello(&self, msg: &'static str) -> impl Future<Item = String, Error = RpcError> {
 			self.0.call_method("hello", "String", (msg,))
 		}
-		fn fail(&self) -> impl Future<Item=(), Error=RpcError> {
+		fn fail(&self) -> impl Future<Item = (), Error = RpcError> {
 			self.0.call_method("fail", "()", ())
 		}
 	}
@@ -171,17 +175,15 @@ mod tests {
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run =
-			http(&server.uri)
-				.and_then(|client: TestClient| {
-					client.hello("http")
-						.and_then(move |result| {
-							drop(client);
-							let _ = tx.send(result);
-							Ok(())
-						})
+		let run = http(&server.uri)
+			.and_then(|client: TestClient| {
+				client.hello("http").and_then(move |result| {
+					drop(client);
+					let _ = tx.send(result);
+					Ok(())
 				})
-				.map_err(|e| log::error!("RPC Client error: {:?}", e));
+			})
+			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
 		rt::run(run);
 
@@ -199,24 +201,28 @@ mod tests {
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run =
-			http(&server.uri)
-				.and_then(|client: TestClient| {
-					client
-						.fail()
-						.then(move |res| {
-							let _ = tx.send(res);
-							Ok(())
-						})
+		let run = http(&server.uri)
+			.and_then(|client: TestClient| {
+				client.fail().then(move |res| {
+					let _ = tx.send(res);
+					Ok(())
 				})
-				.map_err(|e| log::error!("RPC Client error: {:?}", e));
+			})
+			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 		rt::run(run);
 
 		// then
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
 
 		if let Err(RpcError::JsonRpcError(err)) = res {
-			assert_eq!(err, Error { code: ErrorCode::ServerError(-34), message: "Server error".into(), data: None })
+			assert_eq!(
+				err,
+				Error {
+					code: ErrorCode::ServerError(-34),
+					message: "Server error".into(),
+					data: None
+				}
+			)
 		} else {
 			panic!("Expected JsonRpcError. Received {:?}", res)
 		}
@@ -234,12 +240,10 @@ mod tests {
 
 		let call = client
 			.and_then(|client: TestClient| {
-				client
-					.hello("http")
-					.then(move |res| {
-						let _ = tx.send(res);
-						Ok(())
-					})
+				client.hello("http").then(move |res| {
+					let _ = tx.send(res);
+					Ok(())
+				})
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
@@ -283,12 +287,10 @@ mod tests {
 					})
 					.and_then(move |_| {
 						server.start(); // todo: make the server start on the main thread
-						client
-							.hello("http2")
-							.then(move |res| {
-								let _ = tx2.send(res);
-								Ok(())
-							})
+						client.hello("http2").then(move |res| {
+							let _ = tx2.send(res);
+							Ok(())
+						})
 					})
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));

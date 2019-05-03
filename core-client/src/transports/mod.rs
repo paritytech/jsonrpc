@@ -1,16 +1,13 @@
 //! Client transport implementations
 
-
-use jsonrpc_core::{
-	Call, Error, Id, MethodCall, Output, Response, Version,
-};
+use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Response, Version};
 use serde_json::Value;
 
 use crate::{RpcError, RpcMessage};
 
-pub mod local;
-pub mod http;
 pub mod duplex;
+pub mod http;
+pub mod local;
 
 pub use duplex::Duplex;
 
@@ -22,9 +19,7 @@ pub struct RequestBuilder {
 impl RequestBuilder {
 	/// Create a new RequestBuilder
 	pub fn new() -> Self {
-		RequestBuilder {
-			id: 0
-		}
+		RequestBuilder { id: 0 }
 	}
 
 	fn next_id(&mut self) -> Id {
@@ -42,7 +37,10 @@ impl RequestBuilder {
 			params: msg.params.clone(),
 			id: id.clone(),
 		}));
-		(id, serde_json::to_string(&request).expect("Request serialization is infallible; qed"))
+		(
+			id,
+			serde_json::to_string(&request).expect("Request serialization is infallible; qed"),
+		)
 	}
 }
 

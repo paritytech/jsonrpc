@@ -1,7 +1,7 @@
 //! Duplex transport
 
-use failure::{format_err};
-use futures::{prelude::*};
+use failure::format_err;
+use futures::prelude::*;
 use futures::sync::{mpsc, oneshot};
 use jsonrpc_core::Id;
 use log::debug;
@@ -9,9 +9,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-
-use crate::{RpcError, RpcMessage};
 use super::RequestBuilder;
+use crate::{RpcError, RpcMessage};
 
 /// The Duplex handles sending and receiving asynchronous
 /// messages through an underlying transport.
@@ -46,9 +45,9 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 }
 
 impl<TSink, TStream> Future for Duplex<TSink, TStream>
-	where
-		TSink: Sink<SinkItem = String, SinkError = RpcError>,
-		TStream: Stream<Item = String, Error = RpcError>,
+where
+	TSink: Sink<SinkItem = String, SinkError = RpcError>,
+	TStream: Stream<Item = String, Error = RpcError>,
 {
 	type Item = ();
 	type Error = RpcError;
