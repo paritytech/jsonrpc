@@ -8,6 +8,7 @@ use crate::{RpcError, RpcMessage};
 pub mod duplex;
 pub mod http;
 pub mod local;
+pub mod ws;
 
 pub use duplex::Duplex;
 

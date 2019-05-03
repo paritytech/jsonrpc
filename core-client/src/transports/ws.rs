@@ -1,9 +1,8 @@
 //! JSON-RPC websocket client implementation.
-#![deny(missing_docs)]
+use super::Duplex;
+use crate::{RpcChannel, RpcError};
 use failure::Error;
 use futures::prelude::*;
-use jsonrpc_core_client::transports::Duplex;
-pub use jsonrpc_core_client::{RpcChannel, RpcError};
 use log::info;
 use std::collections::VecDeque;
 use websocket::{ClientBuilder, OwnedMessage};
