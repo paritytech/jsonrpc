@@ -78,7 +78,7 @@ where
 
 	rt::lazy(move || {
 		rt::spawn(fut.map_err(|e| log::error!("RPC Client error: {:?}", e)));
-		Ok(TClient::from(sender))
+		Ok(TClient::from(sender.into()))
 	})
 }
 

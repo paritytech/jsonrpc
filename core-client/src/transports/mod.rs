@@ -29,7 +29,7 @@ impl RequestBuilder {
 	}
 
 	/// Build a single request with the next available id
-	pub fn single_request(&mut self, msg: &RpcMessage) -> (Id, String) {
+	fn single_request(&mut self, msg: &RpcMessage) -> (Id, String) {
 		let id = self.next_id();
 		let request = jsonrpc_core::Request::Single(Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),

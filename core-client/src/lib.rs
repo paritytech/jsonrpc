@@ -44,7 +44,7 @@ impl From<Error> for RpcError {
 
 /// A message sent to the `RpcClient`. This is public so that
 /// the derive crate can generate a client.
-pub struct RpcMessage {
+struct RpcMessage {
 	/// The rpc method name.
 	method: String,
 	/// The rpc method parameters.
@@ -55,7 +55,23 @@ pub struct RpcMessage {
 }
 
 /// A channel to a `RpcClient`.
-pub type RpcChannel = mpsc::Sender<RpcMessage>;
+#[derive(Clone)]
+pub struct RpcChannel(mpsc::Sender<RpcMessage>);
+
+impl RpcChannel {
+	fn send(
+		&self,
+		msg: RpcMessage,
+	) -> impl Future<Item = mpsc::Sender<RpcMessage>, Error = mpsc::SendError<RpcMessage>> {
+		self.0.to_owned().send(msg)
+	}
+}
+
+impl Into<RpcChannel> for mpsc::Sender<RpcMessage> {
+	fn into(self) -> RpcChannel {
+		RpcChannel(self)
+	}
+}
 
 /// The future returned by the rpc call.
 pub struct RpcFuture {
@@ -104,7 +120,6 @@ impl RawClient {
 			sender,
 		};
 		self.0
-			.to_owned()
 			.send(msg)
 			.map_err(|error| RpcError::Other(error.into()))
 			.and_then(|_| RpcFuture::new(receiver))
