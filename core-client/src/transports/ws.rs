@@ -1,10 +1,8 @@
 //! JSON-RPC websocket client implementation.
-#![deny(missing_docs)]
+use super::Duplex;
+use crate::{RpcChannel, RpcError};
 use failure::Error;
 use futures::prelude::*;
-use futures::sync::mpsc;
-use jsonrpc_core_client::transports::Duplex;
-pub use jsonrpc_core_client::{RpcChannel, RpcError};
 use log::info;
 use std::collections::VecDeque;
 use websocket::{ClientBuilder, OwnedMessage};
@@ -21,8 +19,8 @@ where
 		.map(|(client, _)| {
 			let (sink, stream) = client.split();
 			let (sink, stream) = WebsocketClient::new(sink, stream).split();
-			let (sender, receiver) = mpsc::channel(0);
-			let rpc_client = Duplex::new(sink, stream, receiver).map_err(|error| eprintln!("{:?}", error));
+			let (rpc_client, sender) = Duplex::with_channel(sink, stream);
+			let rpc_client = rpc_client.map_err(|error| eprintln!("{:?}", error));
 			tokio::spawn(rpc_client);
 			sender.into()
 		})

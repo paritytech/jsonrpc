@@ -1,7 +1,7 @@
 //! Duplex transport
 
-use failure::{format_err};
-use futures::{prelude::*};
+use failure::format_err;
+use futures::prelude::*;
 use futures::sync::{mpsc, oneshot};
 use jsonrpc_core::Id;
 use log::debug;
@@ -9,9 +9,8 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
-
-use crate::{RpcError, RpcMessage};
 use super::RequestBuilder;
+use crate::{RpcChannel, RpcError, RpcMessage};
 
 /// The Duplex handles sending and receiving asynchronous
 /// messages through an underlying transport.
@@ -26,7 +25,7 @@ pub struct Duplex<TSink, TStream> {
 
 impl<TSink, TStream> Duplex<TSink, TStream> {
 	/// Creates a new `Duplex`.
-	pub fn new(sink: TSink, stream: TStream, channel: mpsc::Receiver<RpcMessage>) -> Self {
+	fn new(sink: TSink, stream: TStream, channel: mpsc::Receiver<RpcMessage>) -> Self {
 		Duplex {
 			request_builder: RequestBuilder::new(),
 			queue: HashMap::new(),
@@ -38,17 +37,17 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 	}
 
 	/// Creates a new `Duplex`, along with a channel to communicate
-	pub fn with_channel(sink: TSink, stream: TStream) -> (Self, mpsc::Sender<RpcMessage>) {
+	pub fn with_channel(sink: TSink, stream: TStream) -> (Self, RpcChannel) {
 		let (sender, receiver) = mpsc::channel(0);
 		let client = Duplex::new(sink, stream, receiver);
-		(client, sender)
+		(client, sender.into())
 	}
 }
 
 impl<TSink, TStream> Future for Duplex<TSink, TStream>
-	where
-		TSink: Sink<SinkItem = String, SinkError = RpcError>,
-		TStream: Stream<Item = String, Error = RpcError>,
+where
+	TSink: Sink<SinkItem = String, SinkError = RpcError>,
+	TStream: Stream<Item = String, Error = RpcError>,
 {
 	type Item = ();
 	type Error = RpcError;

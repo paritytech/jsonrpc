@@ -12,5 +12,4 @@ members = [
 	"tcp",
 	"test",
 	"ws",
-	"ws/client",
 ]
