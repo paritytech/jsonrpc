@@ -55,8 +55,7 @@ pub fn parse_response(response: &str) -> Result<Vec<(Id, Result<Value, RpcError>
 				Response::Batch(outputs) => outputs,
 			};
 			outputs
-				.iter()
-				.cloned()
+				.into_iter()
 				.map(|output| {
 					let id = output.id().clone();
 					let value: Result<Value, Error> = output.into();
