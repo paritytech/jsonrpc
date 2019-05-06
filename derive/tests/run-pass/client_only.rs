@@ -4,8 +4,10 @@ extern crate jsonrpc_core_client;
 #[macro_use]
 extern crate jsonrpc_derive;
 
+use jsonrpc_core::IoHandler;
 use jsonrpc_core::futures::future::Future;
 use jsonrpc_core::futures::sync::mpsc;
+use jsonrpc_core_client::transports::local;
 
 #[rpc(client)]
 pub trait Rpc {
@@ -20,8 +22,9 @@ pub trait Rpc {
 
 fn main() {
 	let fut = {
-		let (sender, _) = mpsc::channel(0);
-		gen_client::Client::new(sender)
+		let mut handler = IoHandler::new();
+		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
+		client
 			.add(5, 6)
 			.map(|res| println!("5 + 6 = {}", res))
 	};
