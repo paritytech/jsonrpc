@@ -69,9 +69,8 @@ where
 				Ok(Async::NotReady) => break,
 				Err(()) => continue,
 			};
-			let (id, request) = self.request_builder.single_request(&msg);
+			let (id, request_str) = self.request_builder.single_request(&msg);
 			self.queue.insert(id, msg.sender);
-			let request_str = serde_json::to_string(&request).map_err(|error| RpcError::Other(error.into()))?;
 			self.outgoing.push_back(request_str);
 		}
 		// Handle outgoing rpc requests.
