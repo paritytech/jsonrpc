@@ -11,7 +11,7 @@ version = "11.0.0"
 
 [dependencies]
 log = "0.4"
-parking_lot = "0.7"
+parking_lot = "0.8"
 tokio-service = "0.1"
 jsonrpc-core = { version = "11.0", path = "../core" }
 jsonrpc-server-utils = { version = "11.0", path = "../server-utils" }
