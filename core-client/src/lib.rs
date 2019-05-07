@@ -4,12 +4,13 @@
 use failure::{format_err, Fail};
 use futures::sync::{mpsc, oneshot};
 use futures::{future, prelude::*};
-use jsonrpc_core::{Error, Params};
-
-use serde_json::Value;
-
+use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
+use log::debug;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde_json::Value;
+use std::collections::HashMap;
+use std::collections::VecDeque;
 
 pub mod transports;
 
@@ -167,6 +168,86 @@ impl TypedClient {
 				serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns.into(), error.into()));
 			future::done(result)
 		}))
+	}
+}
+
+/// Rpc client implementation for `Deref<Target=MetaIoHandler<Metadata + Default>>`.
+pub mod local {
+	use super::*;
+	use jsonrpc_core::{MetaIoHandler, Metadata};
+	use std::ops::Deref;
+
+	/// Implements a rpc client for `MetaIoHandler`.
+	pub struct LocalRpc<THandler> {
+		handler: THandler,
+		queue: VecDeque<String>,
+	}
+
+	impl<TMetadata, THandler> LocalRpc<THandler>
+	where
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	{
+		/// Creates a new `LocalRpc`.
+		pub fn new(handler: THandler) -> Self {
+			Self {
+				handler,
+				queue: VecDeque::new(),
+			}
+		}
+	}
+
+	impl<TMetadata, THandler> Stream for LocalRpc<THandler>
+	where
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	{
+		type Item = String;
+		type Error = RpcError;
+
+		fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
+			match self.queue.pop_front() {
+				Some(response) => Ok(Async::Ready(Some(response))),
+				None => Ok(Async::NotReady),
+			}
+		}
+	}
+
+	impl<TMetadata, THandler> Sink for LocalRpc<THandler>
+	where
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	{
+		type SinkItem = String;
+		type SinkError = RpcError;
+
+		fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
+			match self.handler.handle_request_sync(&request, TMetadata::default()) {
+				Some(response) => self.queue.push_back(response),
+				None => {}
+			};
+			Ok(AsyncSink::Ready)
+		}
+
+		fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
+			Ok(Async::Ready(()))
+		}
+	}
+
+	/// Connects to a `IoHandler`.
+	pub fn connect<TClient, TMetadata, THandler>(
+		handler: THandler,
+	) -> (TClient, impl Future<Item = (), Error = RpcError>)
+	where
+		TClient: From<RpcChannel>,
+		TMetadata: Metadata + Default,
+		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	{
+		let (sink, stream) = local::LocalRpc::new(handler).split();
+		let (sender, receiver) = mpsc::channel(0);
+		let rpc_client = RpcClient::new(sink, stream, receiver);
+		let client = TClient::from(sender);
+		(client, rpc_client)
 	}
 }
 
