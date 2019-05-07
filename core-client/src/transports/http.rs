@@ -254,7 +254,7 @@ mod tests {
 
 		if let Err(RpcError::Other(err)) = res {
 			if let Some(err) = err.downcast_ref::<hyper::Error>() {
-				assert!(err.is_connect())
+				assert!(err.is_connect(), format!("Expected Connection Error, got {:?}", err))
 			} else {
 				panic!("Expected a hyper::Error")
 			}
