@@ -1,12 +1,10 @@
-extern crate serde;
 #[macro_use]
-extern crate serde_derive;
+extern crate serde;
 extern crate jsonrpc_core;
 extern crate jsonrpc_core_client;
 extern crate jsonrpc_pubsub;
 #[macro_use]
 extern crate jsonrpc_derive;
-extern crate log;
 
 use std::sync::Arc;
 use jsonrpc_core::Result;
