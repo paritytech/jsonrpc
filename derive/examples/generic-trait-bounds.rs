@@ -1,4 +1,4 @@
-use serde_derive::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use jsonrpc_core::futures::future::{self, FutureResult};
 use jsonrpc_core::{Error, IoHandler, Result};
