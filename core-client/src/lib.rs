@@ -65,9 +65,9 @@ impl RpcChannel {
 	}
 }
 
-impl Into<RpcChannel> for mpsc::Sender<RpcMessage> {
-	fn into(self) -> RpcChannel {
-		RpcChannel(self)
+impl From<mpsc::Sender<RpcMessage>> for RpcChannel {
+	fn from(sender: mpsc::Sender<RpcMessage>) -> Self {
+		RpcChannel(sender)
 	}
 }
 
