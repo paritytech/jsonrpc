@@ -10,7 +10,7 @@ pub mod http;
 pub mod local;
 pub mod ws;
 
-pub use duplex::Duplex;
+pub use duplex::duplex;
 
 /// Creates JSON-RPC requests
 pub struct RequestBuilder {

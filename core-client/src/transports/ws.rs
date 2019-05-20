@@ -1,5 +1,4 @@
 //! JSON-RPC websocket client implementation.
-use super::Duplex;
 use crate::{RpcChannel, RpcError};
 use failure::Error;
 use futures::prelude::*;
@@ -19,7 +18,7 @@ where
 		.map(|(client, _)| {
 			let (sink, stream) = client.split();
 			let (sink, stream) = WebsocketClient::new(sink, stream).split();
-			let (rpc_client, sender) = Duplex::with_channel(sink, stream);
+			let (rpc_client, sender) = super::duplex(sink, stream);
 			let rpc_client = rpc_client.map_err(|error| eprintln!("{:?}", error));
 			tokio::spawn(rpc_client);
 			sender.into()

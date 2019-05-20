@@ -35,13 +35,13 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 			outgoing: VecDeque::new(),
 		}
 	}
+}
 
-	/// Creates a new `Duplex`, along with a channel to communicate
-	pub fn with_channel(sink: TSink, stream: TStream) -> (Self, RpcChannel) {
-		let (sender, receiver) = mpsc::channel(0);
-		let client = Duplex::new(sink, stream, receiver);
-		(client, sender.into())
-	}
+/// Creates a new `Duplex`, along with a channel to communicate
+pub fn duplex<TSink, TStream>(sink: TSink, stream: TStream) -> (Duplex<TSink, TStream>, RpcChannel) {
+	let (sender, receiver) = mpsc::channel(0);
+	let client = Duplex::new(sink, stream, receiver);
+	(client, sender.into())
 }
 
 impl<TSink, TStream> Future for Duplex<TSink, TStream>

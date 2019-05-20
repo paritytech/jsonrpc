@@ -71,7 +71,7 @@ where
 	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 {
 	let (sink, stream) = LocalRpc::new(handler).split();
-	let (rpc_client, sender) = crate::transports::Duplex::with_channel(sink, stream);
+	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
 	let client = TClient::from(sender);
 	(client, rpc_client)
 }
