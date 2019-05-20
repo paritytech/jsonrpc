@@ -11,7 +11,7 @@ use futures::{
 	sync::mpsc,
 	Future, Stream,
 };
-use hyper::{http, rt, Client, Request};
+use hyper::{http, rt, Client, Request, Uri};
 
 /// Create a HTTP Client
 pub fn http<TClient>(url: &str) -> impl Future<Item = TClient, Error = RpcError>
@@ -19,7 +19,10 @@ where
 	TClient: From<RpcChannel>,
 {
 	let max_parallel = 8;
-	let url = url.to_owned();
+	let url: Uri = match url.parse() {
+		Ok(url) => url,
+		Err(e) => return A(future::err(RpcError::Other(e.into())))
+	};
 	let client = Client::new();
 	let mut request_builder = RequestBuilder::new();
 
@@ -34,7 +37,7 @@ where
 					http::header::HeaderValue::from_static("application/json"),
 				)
 				.body(request.into())
-				.unwrap();
+				.expect("Uri and request headers are valid; qed");
 			client.request(request).then(move |response| Ok((response, msg)))
 		})
 		.buffer_unordered(max_parallel)
@@ -76,10 +79,10 @@ where
 			})
 		});
 
-	rt::lazy(move || {
+	B(rt::lazy(move || {
 		rt::spawn(fut.map_err(|e| log::error!("RPC Client error: {:?}", e)));
 		Ok(TClient::from(sender.into()))
-	})
+	}))
 }
 
 #[cfg(test)]
@@ -91,6 +94,7 @@ mod tests {
 	use jsonrpc_http_server::*;
 	use std::net::SocketAddr;
 	use std::time::Duration;
+	use assert_matches::assert_matches;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -190,6 +194,25 @@ mod tests {
 		// then
 		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap();
 		assert_eq!("hello http", result);
+	}
+
+	#[test]
+	fn handles_invalid_uri() {
+		crate::logger::init_log();
+
+		// given
+		let invalid_uri = "invalid uri";
+
+		// when
+		let run = http(invalid_uri); // rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		let res: Result<TestClient, RpcError> = run.wait();
+
+		// then
+		assert_matches!(
+			res.map(|_cli| unreachable!()), Err(RpcError::Other(err)) => {
+				assert_eq!("InvalidUri(InvalidUriChar)", format!("{:?}", err));
+			}
+		);
 	}
 
 	#[test]

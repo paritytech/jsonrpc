@@ -30,6 +30,7 @@ tokio = "0.1"
 websocket = "0.22"
 
 [dev-dependencies]
+assert_matches = "1.1"
 jsonrpc-http-server = { version = "11.0", path = "../http" }
 lazy_static = "1.0"
 env_logger = "0.6"
