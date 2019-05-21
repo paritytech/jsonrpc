@@ -4,13 +4,15 @@
 use failure::{format_err, Fail};
 use futures::sync::{mpsc, oneshot};
 use futures::{future, prelude::*};
-use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Request, Response, Version};
-use log::debug;
+use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
-use std::collections::HashMap;
-use std::collections::VecDeque;
+
+pub mod transports;
+
+#[cfg(test)]
+mod logger;
 
 /// The errors returned by the client.
 #[derive(Debug, Fail)]
@@ -38,14 +40,45 @@ impl From<Error> for RpcError {
 	}
 }
 
-/// The future retured by the client.
+/// A message sent to the `RpcClient`. This is public so that
+/// the derive crate can generate a client.
+struct RpcMessage {
+	/// The rpc method name.
+	method: String,
+	/// The rpc method parameters.
+	params: Params,
+	/// The oneshot channel to send the result of the rpc
+	/// call to.
+	sender: oneshot::Sender<Result<Value, RpcError>>,
+}
+
+/// A channel to a `RpcClient`.
+#[derive(Clone)]
+pub struct RpcChannel(mpsc::Sender<RpcMessage>);
+
+impl RpcChannel {
+	fn send(
+		&self,
+		msg: RpcMessage,
+	) -> impl Future<Item = mpsc::Sender<RpcMessage>, Error = mpsc::SendError<RpcMessage>> {
+		self.0.to_owned().send(msg)
+	}
+}
+
+impl From<mpsc::Sender<RpcMessage>> for RpcChannel {
+	fn from(sender: mpsc::Sender<RpcMessage>) -> Self {
+		RpcChannel(sender)
+	}
+}
+
+/// The future returned by the rpc call.
 pub struct RpcFuture {
-	recv: oneshot::Receiver<Result<Value, Error>>,
+	recv: oneshot::Receiver<Result<Value, RpcError>>,
 }
 
 impl RpcFuture {
 	/// Creates a new `RpcFuture`.
-	pub fn new(recv: oneshot::Receiver<Result<Value, Error>>) -> Self {
+	pub fn new(recv: oneshot::Receiver<Result<Value, RpcError>>) -> Self {
 		RpcFuture { recv }
 	}
 }
@@ -58,148 +91,9 @@ impl Future for RpcFuture {
 		// TODO should timeout (#410)
 		match self.recv.poll() {
 			Ok(Async::Ready(Ok(value))) => Ok(Async::Ready(value)),
-			Ok(Async::Ready(Err(error))) => Err(RpcError::JsonRpcError(error)),
+			Ok(Async::Ready(Err(error))) => Err(error),
 			Ok(Async::NotReady) => Ok(Async::NotReady),
 			Err(error) => Err(RpcError::Other(error.into())),
-		}
-	}
-}
-
-/// A message sent to the `RpcClient`. This is public so that
-/// the derive crate can generate a client.
-pub struct RpcMessage {
-	/// The rpc method name.
-	method: String,
-	/// The rpc method parameters.
-	params: Params,
-	/// The oneshot channel to send the result of the rpc
-	/// call to.
-	sender: oneshot::Sender<Result<Value, Error>>,
-}
-
-/// A channel to a `RpcClient`.
-pub type RpcChannel = mpsc::Sender<RpcMessage>;
-
-/// The RpcClient handles sending and receiving asynchronous
-/// messages through an underlying transport.
-pub struct RpcClient<TSink, TStream> {
-	id: u64,
-	queue: HashMap<Id, oneshot::Sender<Result<Value, Error>>>,
-	sink: TSink,
-	stream: TStream,
-	channel: Option<mpsc::Receiver<RpcMessage>>,
-	outgoing: VecDeque<String>,
-}
-
-impl<TSink, TStream> RpcClient<TSink, TStream> {
-	/// Creates a new `RpcClient`.
-	pub fn new(sink: TSink, stream: TStream, channel: mpsc::Receiver<RpcMessage>) -> Self {
-		RpcClient {
-			id: 0,
-			queue: HashMap::new(),
-			sink,
-			stream,
-			channel: Some(channel),
-			outgoing: VecDeque::new(),
-		}
-	}
-
-	fn next_id(&mut self) -> Id {
-		let id = self.id;
-		self.id = id + 1;
-		Id::Num(id)
-	}
-}
-
-impl<TSink, TStream> Future for RpcClient<TSink, TStream>
-where
-	TSink: Sink<SinkItem = String, SinkError = RpcError>,
-	TStream: Stream<Item = String, Error = RpcError>,
-{
-	type Item = ();
-	type Error = RpcError;
-
-	fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-		// Handle requests from the client.
-		loop {
-			if self.channel.is_none() {
-				break;
-			}
-			let msg = match self.channel.as_mut().expect("channel is some; qed").poll() {
-				Ok(Async::Ready(Some(msg))) => msg,
-				Ok(Async::Ready(None)) => {
-					// When the channel is dropped we still need to finish
-					// outstanding requests.
-					self.channel.take();
-					break;
-				}
-				Ok(Async::NotReady) => break,
-				Err(()) => continue,
-			};
-			let id = self.next_id();
-			let request = Request::Single(Call::MethodCall(MethodCall {
-				jsonrpc: Some(Version::V2),
-				method: msg.method,
-				params: msg.params,
-				id: id.clone(),
-			}));
-			self.queue.insert(id, msg.sender);
-			let request_str = serde_json::to_string(&request).map_err(|error| RpcError::Other(error.into()))?;
-			self.outgoing.push_back(request_str);
-		}
-		// Handle outgoing rpc requests.
-		loop {
-			match self.outgoing.pop_front() {
-				Some(request) => match self.sink.start_send(request)? {
-					AsyncSink::Ready => {}
-					AsyncSink::NotReady(request) => {
-						self.outgoing.push_front(request);
-						break;
-					}
-				},
-				None => break,
-			}
-		}
-		let done_sending = match self.sink.poll_complete()? {
-			Async::Ready(()) => true,
-			Async::NotReady => false,
-		};
-		// Handle incoming rpc requests.
-		loop {
-			let response_str = match self.stream.poll() {
-				Ok(Async::Ready(Some(response_str))) => response_str,
-				Ok(Async::Ready(None)) => {
-					// The websocket connection was closed so the client
-					// can be shutdown. Reopening closed connections must
-					// be handled by the transport.
-					debug!("connection closed");
-					return Ok(Async::Ready(()));
-				}
-				Ok(Async::NotReady) => break,
-				Err(err) => Err(err)?,
-			};
-			let response =
-				serde_json::from_str::<Response>(&response_str).map_err(|error| RpcError::Other(error.into()))?;
-			let outputs: Vec<Output> = match response {
-				Response::Single(output) => vec![output],
-				Response::Batch(outputs) => outputs,
-			};
-			for output in outputs {
-				let channel = self.queue.remove(output.id());
-				let value: Result<Value, Error> = output.into();
-				match channel {
-					Some(tx) => tx
-						.send(value)
-						.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?,
-					None => Err(RpcError::UnknownId)?,
-				};
-			}
-		}
-		if self.channel.is_none() && self.outgoing.is_empty() && self.queue.is_empty() && done_sending {
-			debug!("client finished");
-			Ok(Async::Ready(()))
-		} else {
-			Ok(Async::NotReady)
 		}
 	}
 }
@@ -224,7 +118,6 @@ impl RawClient {
 			sender,
 		};
 		self.0
-			.to_owned()
 			.send(msg)
 			.map_err(|error| RpcError::Other(error.into()))
 			.and_then(|_| RpcFuture::new(receiver))
@@ -275,89 +168,10 @@ impl TypedClient {
 	}
 }
 
-/// Rpc client implementation for `Deref<Target=MetaIoHandler<Metadata + Default>>`.
-pub mod local {
-	use super::*;
-	use jsonrpc_core::{MetaIoHandler, Metadata};
-	use std::ops::Deref;
-
-	/// Implements a rpc client for `MetaIoHandler`.
-	pub struct LocalRpc<THandler> {
-		handler: THandler,
-		queue: VecDeque<String>,
-	}
-
-	impl<TMetadata, THandler> LocalRpc<THandler>
-	where
-		TMetadata: Metadata + Default,
-		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
-	{
-		/// Creates a new `LocalRpc`.
-		pub fn new(handler: THandler) -> Self {
-			Self {
-				handler,
-				queue: VecDeque::new(),
-			}
-		}
-	}
-
-	impl<TMetadata, THandler> Stream for LocalRpc<THandler>
-	where
-		TMetadata: Metadata + Default,
-		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
-	{
-		type Item = String;
-		type Error = RpcError;
-
-		fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-			match self.queue.pop_front() {
-				Some(response) => Ok(Async::Ready(Some(response))),
-				None => Ok(Async::NotReady),
-			}
-		}
-	}
-
-	impl<TMetadata, THandler> Sink for LocalRpc<THandler>
-	where
-		TMetadata: Metadata + Default,
-		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
-	{
-		type SinkItem = String;
-		type SinkError = RpcError;
-
-		fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-			match self.handler.handle_request_sync(&request, TMetadata::default()) {
-				Some(response) => self.queue.push_back(response),
-				None => {}
-			};
-			Ok(AsyncSink::Ready)
-		}
-
-		fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-			Ok(Async::Ready(()))
-		}
-	}
-
-	/// Connects to a `IoHandler`.
-	pub fn connect<TClient, TMetadata, THandler>(
-		handler: THandler,
-	) -> (TClient, impl Future<Item = (), Error = RpcError>)
-	where
-		TClient: From<RpcChannel>,
-		TMetadata: Metadata + Default,
-		THandler: Deref<Target = MetaIoHandler<TMetadata>>,
-	{
-		let (sink, stream) = local::LocalRpc::new(handler).split();
-		let (sender, receiver) = mpsc::channel(0);
-		let rpc_client = RpcClient::new(sink, stream, receiver);
-		let client = TClient::from(sender);
-		(client, rpc_client)
-	}
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::transports::local;
 	use crate::{RpcChannel, RpcError, TypedClient};
 	use jsonrpc_core::{self, IoHandler};
 
