@@ -40,6 +40,7 @@ after_success: |
   [ $TRAVIS_BRANCH = master ] &&
   [ $TRAVIS_PULL_REQUEST = false ] &&
   [ $TRAVIS_RUST_VERSION = stable ] &&
+  [ $JSONRPC_CLIENT_FEATURES = '' ] &&
   cargo doc --all --no-deps &&
   echo '<meta http-equiv=refresh content=0;url=jsonrpc_core/index.html>' > target/doc/index.html &&
   pip install --user ghp-import &&
