@@ -7,17 +7,22 @@ branches:
 
 cache: cargo
 
+os:
+  - linux
+  - osx
+
+rust:
+  - stable
+  - beta
+  - nightly
+
 matrix:
   fast_finish: false
-  include:
-  - os: linux
-    rust: stable
-  - os: linux
-    rust: beta
-  - os: linux
-    rust: nightly
+  exclude:
   - os: osx
-    rust: stable
+    rust: beta
+  - os: osx
+    rust: nightly
   allow_failures:
   - rust: nightly
 
