@@ -1,4 +1,6 @@
 //! HTTP client
+//!
+//! HTTPS support is enabled with the `tls` feature.
 
 use super::RequestBuilder;
 use crate::{RpcChannel, RpcError, RpcMessage};
@@ -23,7 +25,18 @@ where
 		Ok(url) => url,
 		Err(e) => return A(future::err(RpcError::Other(e.into())))
 	};
+
+	#[cfg(feature = "tls")]
+	let connector = match hyper_tls::HttpsConnector::new(4) {
+		Ok(connector) => connector,
+		Err(e) => return A(future::err(RpcError::Other(e.into())))
+	};
+	#[cfg(feature = "tls")]
+	let client = Client::builder().build::<_, hyper::Body>(connector);
+
+	#[cfg(not(feature = "tls"))]
 	let client = Client::new();
+
 	let mut request_builder = RequestBuilder::new();
 
 	let (sender, receiver) = mpsc::channel(max_parallel);
