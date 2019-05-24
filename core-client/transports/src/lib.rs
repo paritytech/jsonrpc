@@ -183,6 +183,28 @@ impl RawClient {
 			.map_err(|error| RpcError::Other(error.into()))
 			.and_then(|_| RpcFuture::new(receiver))
 	}
+
+	/// Subscribe to topic with raw JSON
+	pub fn subscribe(
+		&self,
+		subscribe: &str,
+		subscribe_params: Params,
+		topic: &str,
+		unsubscribe: &str,
+	) -> impl Future<Item = SubscriptionStream, Error = RpcError> {
+		let (sender, receiver) = mpsc::channel(0);
+		let msg = SubscribeMessage {
+			subscribe_method: subscribe.into(),
+			subscribe_params,
+			topic: topic.into(),
+			unsubscribe_method: unsubscribe.into(),
+			sender,
+		};
+		self.0
+			.send(msg.into())
+			.map_err(|error| RpcError::Other(error.into()))
+			.map(|_| SubscriptionStream::new(receiver))
+	}
 }
 
 /// Client for typed JSON RPC requests
