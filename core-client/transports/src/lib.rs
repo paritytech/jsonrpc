@@ -27,9 +27,6 @@ pub enum RpcError {
 	/// Request timed out.
 	#[fail(display = "Request timed out")]
 	Timeout,
-	/// The server returned a response with an unknown id.
-	#[fail(display = "Server returned a response with an unknown id")]
-	UnknownId,
 	/// Not rpc specific errors.
 	#[fail(display = "{}", _0)]
 	Other(failure::Error),
