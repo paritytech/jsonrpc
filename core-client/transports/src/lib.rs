@@ -132,6 +132,33 @@ impl Future for RpcFuture {
 	}
 }
 
+/// The stream returned by a subscribe.
+pub struct SubscriptionStream {
+	recv: mpsc::Receiver<Result<Value, RpcError>>,
+}
+
+impl SubscriptionStream {
+	/// Crates a new `SubscriptionStream`.
+	pub fn new(recv: mpsc::Receiver<Result<Value, RpcError>>) -> Self {
+		SubscriptionStream { recv }
+	}
+}
+
+impl Stream for SubscriptionStream {
+	type Item = Value;
+	type Error = RpcError;
+
+	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
+		match self.recv.poll() {
+			Ok(Async::Ready(Some(Ok(value)))) => Ok(Async::Ready(Some(value))),
+			Ok(Async::Ready(Some(Err(error)))) => Err(error),
+			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+			Ok(Async::NotReady) => Ok(Async::NotReady),
+			Err(()) => Err(RpcError::Other(format_err!("mpsc channel returned an error."))),
+		}
+	}
+}
+
 /// Client for raw JSON RPC requests
 #[derive(Clone)]
 pub struct RawClient(RpcChannel);
