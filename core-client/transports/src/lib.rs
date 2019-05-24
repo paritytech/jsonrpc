@@ -395,9 +395,9 @@ mod tests {
 		);
 
 		// when
-		let (client, rpc_client) = local::connect_with_pubsub::<RawClient, _>(handler);
+		let (client, rpc_client) = local::connect_with_pubsub::<TypedClient, _>(handler);
 		let fut = client
-			.subscribe("subscribe_hello", core::Params::None, "hello", "unsubscribe_hello")
+			.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")
 			.and_then(|stream| {
 				stream
 					.into_future()
