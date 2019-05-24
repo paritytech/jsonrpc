@@ -42,8 +42,15 @@ where
 	let (sender, receiver) = mpsc::channel(max_parallel);
 
 	let fut = receiver
-		.map(move |msg: RpcMessage| {
-			let (_, request) = request_builder.single_request(&msg);
+		.filter_map(move |msg: RpcMessage| {
+			let msg = match msg {
+				RpcMessage::Call(call) => call,
+				RpcMessage::Subscribe(_) => {
+					log::warn!("Unsupported `RpcMessage` type `Subscribe`.");
+					return None;
+				}
+			};
+			let (_, request) = request_builder.call_request(&msg);
 			let request = Request::post(&url)
 				.header(
 					http::header::CONTENT_TYPE,
@@ -51,7 +58,7 @@ where
 				)
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
-			client.request(request).then(move |response| Ok((response, msg)))
+			Some(client.request(request).then(move |response| Ok((response, msg))))
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, msg)| {

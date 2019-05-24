@@ -41,9 +41,8 @@ impl From<Error> for RpcError {
 	}
 }
 
-/// A message sent to the `RpcClient`. This is public so that
-/// the derive crate can generate a client.
-struct RpcMessage {
+/// A rpc call message.
+struct CallMessage {
 	/// The rpc method name.
 	method: String,
 	/// The rpc method parameters.
@@ -51,6 +50,40 @@ struct RpcMessage {
 	/// The oneshot channel to send the result of the rpc
 	/// call to.
 	sender: oneshot::Sender<Result<Value, RpcError>>,
+}
+
+/// A rpc subscribe message.
+struct SubscribeMessage {
+	/// The subscribe method name.
+	subscribe_method: String,
+	/// The subscribe method parameters.
+	subscribe_params: Params,
+	/// The topic name.
+	topic: String,
+	/// The channel to send notifications to.
+	sender: mpsc::Sender<Result<Value, RpcError>>,
+	/// The unsubscribe method name.
+	unsubscribe_method: String,
+}
+
+/// A message sent to the `RpcClient`.
+enum RpcMessage {
+	/// Make a rpc call.
+	Call(CallMessage),
+	/// Subscribe to a notification.
+	Subscribe(SubscribeMessage),
+}
+
+impl From<CallMessage> for RpcMessage {
+	fn from(msg: CallMessage) -> Self {
+		RpcMessage::Call(msg)
+	}
+}
+
+impl From<SubscribeMessage> for RpcMessage {
+	fn from(msg: SubscribeMessage) -> Self {
+		RpcMessage::Subscribe(msg)
+	}
 }
 
 /// A channel to a `RpcClient`.
@@ -113,13 +146,13 @@ impl RawClient {
 	/// Call RPC with raw JSON
 	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item = Value, Error = RpcError> {
 		let (sender, receiver) = oneshot::channel();
-		let msg = RpcMessage {
+		let msg = CallMessage {
 			method: method.into(),
 			params,
 			sender,
 		};
 		self.0
-			.send(msg)
+			.send(msg.into())
 			.map_err(|error| RpcError::Other(error.into()))
 			.and_then(|_| RpcFuture::new(receiver))
 	}
