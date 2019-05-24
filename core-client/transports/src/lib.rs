@@ -193,6 +193,7 @@ mod tests {
 
 	#[test]
 	fn test_client_terminates() {
+		crate::logger::init_log();
 		let mut handler = IoHandler::new();
 		handler.add_method("add", |params: Params| {
 			let (a, b) = params.parse::<(u64, u64)>()?;
