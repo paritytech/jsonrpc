@@ -46,10 +46,10 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 				Call, Error, ErrorCode, Id, MethodCall, Params, Request,
 				Response, Version,
 			};
-			use _jsonrpc_core::futures::{future, Future, Sink};
-			use _jsonrpc_core::futures::sync::oneshot;
+			use _jsonrpc_core::futures::prelude::*;
+			use _jsonrpc_core::futures::sync::{mpsc, oneshot};
 			use _jsonrpc_core::serde_json::{self, Value};
-			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, TypedClient};
+			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, TypedClient, TypedSubscriptionStream};
 
 			/// The Client.
 			#[derive(Clone)]
@@ -111,8 +111,28 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				};
 				client_methods.push(client_method);
 			}
-			MethodRegistration::PubSub { .. } => {
-				println!("warning: pubsub methods are currently not supported in the generated client.")
+			MethodRegistration::PubSub {
+				name: subscription,
+				subscribe,
+				unsubscribe,
+			} => {
+				let attrs = get_doc_comments(&subscribe.trait_item.attrs);
+				let name = &subscribe.trait_item.sig.ident;
+				let mut args = compute_args(&subscribe.trait_item).into_iter();
+				let returns = compute_subscription_type(&args.next().unwrap());
+				let returns_str = quote!(#returns).to_string();
+				let args = args.collect();
+				let arg_names = compute_arg_identifiers(&args)?;
+				let subscribe = subscribe.name();
+				let unsubscribe = unsubscribe.name();
+				let client_method = syn::parse_quote!(
+					#(#attrs)*
+					pub fn #name(&self, #args) -> impl Future<Item=TypedSubscriptionStream<#returns>, Error=RpcError> {
+						let args_tuple = (#(#arg_names,)*);
+						self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
+					}
+				);
+				client_methods.push(client_method);
 			}
 		}
 	}
@@ -239,4 +259,18 @@ fn get_first_type_argument(args: &syn::PathArguments) -> Option<syn::Type> {
 		}
 		_ => None,
 	}
+}
+
+fn compute_subscription_type(arg: &syn::FnArg) -> syn::Type {
+	let ty = match arg {
+		syn::FnArg::Captured(cap) => match &cap.ty {
+			syn::Type::Path(path) => {
+				let last = &path.path.segments[&path.path.segments.len() - 1];
+				get_first_type_argument(&last.arguments)
+			}
+			_ => None,
+		},
+		_ => None,
+	};
+	ty.expect("a subscription needs a return type")
 }
