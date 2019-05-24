@@ -1,5 +1,5 @@
 //! jsonrpc response
-use super::{Error, ErrorCode, Id, Notification, Value, Version};
+use super::{Error, ErrorCode, Id, Notification, Params, Value, Version};
 use crate::Result as CoreResult;
 
 /// Successful response
@@ -89,7 +89,23 @@ impl From<Output> for CoreResult<Value> {
 		match output {
 			Output::Success(s) => Ok(s.result),
 			Output::Failure(f) => Err(f.error),
-			Output::Notification(n) => Ok(n.params.into()),
+			Output::Notification(n) => match &n.params {
+				Params::Map(map) => {
+					let subscription = map.contains_key("subscription");
+					let result = map.contains_key("result");
+					let error = map.contains_key("error");
+					if subscription && result {
+						Ok(map.get("result").unwrap().to_owned())
+					} else if subscription && error {
+						let err = map.get("error").unwrap().to_owned();
+						let error = serde_json::from_value::<Error>(err).expect("should be a jsonrpc error");
+						Err(error)
+					} else {
+						Ok(n.params.into())
+					}
+				}
+				_ => Ok(n.params.into()),
+			},
 		}
 	}
 }
