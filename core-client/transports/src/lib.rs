@@ -9,6 +9,7 @@ use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use std::marker::PhantomData;
 
 pub mod transports;
 
@@ -152,6 +153,40 @@ impl Stream for SubscriptionStream {
 			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
 			Ok(Async::NotReady) => Ok(Async::NotReady),
 			Err(()) => Err(RpcError::Other(format_err!("mpsc channel returned an error."))),
+		}
+	}
+}
+
+/// A typed subscription stream.
+pub struct TypedSubscriptionStream<T> {
+	_marker: PhantomData<T>,
+	returns: &'static str,
+	stream: SubscriptionStream,
+}
+
+impl<T> TypedSubscriptionStream<T> {
+	/// Creates a new `TypedSubscriptionStream`.
+	pub fn new(stream: SubscriptionStream, returns: &'static str) -> Self {
+		TypedSubscriptionStream {
+			_marker: PhantomData,
+			returns,
+			stream,
+		}
+	}
+}
+
+impl<T: DeserializeOwned + 'static> Stream for TypedSubscriptionStream<T> {
+	type Item = T;
+	type Error = RpcError;
+
+	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
+		match self.stream.poll() {
+			Ok(Async::Ready(Some(value))) => serde_json::from_value::<T>(value)
+				.map(|result| Async::Ready(Some(result)))
+				.map_err(|error| RpcError::ParseError(self.returns.into(), error.into())),
+			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+			Ok(Async::NotReady) => Ok(Async::NotReady),
+			Err(err) => Err(err),
 		}
 	}
 }
@@ -353,5 +388,4 @@ mod tests {
 		tokio::run(fut);
 		assert_eq!(called.load(Ordering::SeqCst), true);
 	}
-
 }
