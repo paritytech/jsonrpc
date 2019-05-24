@@ -253,7 +253,10 @@ mod tests {
 	use super::*;
 	use crate::transports::local;
 	use crate::{RpcChannel, RpcError, TypedClient};
-	use jsonrpc_core::{self, IoHandler};
+	use jsonrpc_core::{self as core, IoHandler};
+	use jsonrpc_pubsub::{PubSubHandler, Subscriber, SubscriptionId};
+	use std::sync::atomic::{AtomicBool, Ordering};
+	use std::sync::Arc;
 
 	#[derive(Clone)]
 	struct AddClient(TypedClient);
@@ -295,4 +298,60 @@ mod tests {
 			});
 		tokio::run(fut);
 	}
+
+	#[test]
+	fn should_handle_subscription() {
+		crate::logger::init_log();
+		// given
+		let mut handler = PubSubHandler::<local::LocalMeta, _>::default();
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		handler.add_subscription(
+			"hello",
+			("subscribe_hello", |params, _meta, subscriber: Subscriber| {
+				assert_eq!(params, core::Params::None);
+				let sink = subscriber
+					.assign_id(SubscriptionId::Number(5))
+					.expect("assigned subscription id");
+				std::thread::spawn(move || {
+					for i in 0..3 {
+						std::thread::sleep(std::time::Duration::from_millis(100));
+						sink.notify(Params::Array(vec![Value::Number(i.into())]))
+							.wait()
+							.expect("sent notification");
+					}
+				});
+			}),
+			("unsubscribe_hello", move |id, _meta| {
+				// Should be called because session is dropped.
+				called2.store(true, Ordering::SeqCst);
+				assert_eq!(id, SubscriptionId::Number(5));
+				future::ok(core::Value::Bool(true))
+			}),
+		);
+
+		// when
+		let (client, rpc_client) = local::connect_with_pubsub::<RawClient, _>(handler);
+		let fut = client
+			.subscribe("subscribe_hello", core::Params::None, "hello", "unsubscribe_hello")
+			.and_then(|stream| {
+				stream
+					.into_future()
+					.map(move |(result, _)| {
+						drop(client);
+						result.unwrap()
+					})
+					.map_err(|(err, _)| err)
+			})
+			.join(rpc_client)
+			.map(|(res, _)| {
+				log::info!("ok {:?}", res);
+			})
+			.map_err(|err| {
+				log::error!("err {:?}", err);
+			});
+		tokio::run(fut);
+		assert_eq!(called.load(Ordering::SeqCst), true);
+	}
+
 }
