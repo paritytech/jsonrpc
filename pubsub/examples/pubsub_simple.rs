@@ -10,8 +10,10 @@ use jsonrpc_core::futures::Future;
 /// To test the server:
 ///
 /// ```bash
-/// $ netcat localhost 3030 -
-/// {"id":1,"jsonrpc":"2.0","method":"hello_subscribe","params":[10]}
+/// $ netcat localhost 3030
+/// > {"id":1,"jsonrpc":"2.0","method":"subscribe_hello","params":null}
+/// < {"id":1,"jsonrpc":"2.0","result":5,"id":1}
+/// < {"jsonrpc":"2.0","method":"hello","params":[10]}
 ///
 /// ```
 fn main() {
