@@ -23,7 +23,7 @@ where
 	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return A(future::err(RpcError::Other(e.into())))
+		Err(e) => return A(future::err(RpcError::Other(e.into()))),
 	};
 
 	#[cfg(feature = "tls")]
@@ -102,12 +102,12 @@ where
 mod tests {
 	use super::*;
 	use crate::*;
+	use assert_matches::assert_matches;
 	use hyper::rt;
 	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 	use jsonrpc_http_server::*;
 	use std::net::SocketAddr;
 	use std::time::Duration;
-	use assert_matches::assert_matches;
 
 	fn id<T>(t: T) -> T {
 		t
