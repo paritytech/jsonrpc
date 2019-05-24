@@ -281,6 +281,35 @@ impl TypedClient {
 			future::done(result)
 		}))
 	}
+
+	/// Subscribe with serialization of request and deserialization of response
+	pub fn subscribe<T: Serialize, R: DeserializeOwned + 'static>(
+		&self,
+		subscribe: &str,
+		subscribe_params: T,
+		topic: &str,
+		unsubscribe: &str,
+		returns: &'static str,
+	) -> impl Future<Item = TypedSubscriptionStream<R>, Error = RpcError> {
+		let args = serde_json::to_value(subscribe_params)
+			.expect("Only types with infallible serialisation can be used for JSON-RPC");
+
+		let params = match args {
+			Value::Array(vec) => Params::Array(vec),
+			Value::Null => Params::None,
+			_ => {
+				return future::Either::A(future::err(RpcError::Other(format_err!(
+					"RPC params should serialize to a JSON array, or null"
+				))))
+			}
+		};
+
+		let typed_stream = self
+			.0
+			.subscribe(subscribe, params, topic, unsubscribe)
+			.map(move |stream| TypedSubscriptionStream::new(stream, returns));
+		future::Either::B(typed_stream)
+	}
 }
 
 #[cfg(test)]
@@ -388,4 +417,5 @@ mod tests {
 		tokio::run(fut);
 		assert_eq!(called.load(Ordering::SeqCst), true);
 	}
+
 }
