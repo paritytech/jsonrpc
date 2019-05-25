@@ -62,7 +62,6 @@ fn request(server: Server, request: &str) -> Response {
 
 fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
 	use crate::core::futures::sync::oneshot;
-	use std::time::Duration;
 
 	let pending = Arc::new(AtomicUsize::new(0));
 
