@@ -382,7 +382,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		let (done_tx, done_rx) = oneshot::channel();
 		let eloop = self.executor.init_with_name("http.worker0")?;
 		let req_max_size = self.max_request_body_size;
-		// First thread `Executor` is initialised differently from the others
+		// The first threads `Executor` is initialised differently from the others
 		serve(
 			(shutdown_signal, local_addr_tx, done_tx),
 			eloop.executor(),
@@ -552,9 +552,9 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					warn!("Incoming streams error, closing sever: {:?}", e);
 				})
 				.select(shutdown_signal
-					.map_err(|e| {
-						debug!("Shutdown signaller dropped, closing server: {:?}", e);
-					}))
+				.map_err(|e| {
+					debug!("Shutdown signaller dropped, closing server: {:?}", e);
+				}))
 				.map(|_| ())
 				.map_err(|_| ())
 		})
