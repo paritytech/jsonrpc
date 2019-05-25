@@ -244,7 +244,8 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			rest_api: RestApi::Disabled,
 			health_api: None,
 			keep_alive: true,
-			threads: 1,
+			threads: 4,
+//			threads: 1,
 			max_request_body_size: 5 * 1024 * 1024,
 		}
 	}
@@ -379,11 +380,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = oneshot::channel();
-		let (is_done_tx, is_done_rx) = oneshot::channel();
+		let (done_tx, done_rx) = oneshot::channel();
 		let eloop = self.executor.init_with_name("http.worker0")?;
 		let req_max_size = self.max_request_body_size;
+		// First thread `Executor` is initialised differently from the others
 		serve(
-			(shutdown_signal, local_addr_tx, is_done_tx),
+			(shutdown_signal, local_addr_tx, done_tx),
 			eloop.executor(),
 			addr.to_owned(),
 			cors_domains.clone(),
@@ -402,10 +404,10 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			.map(|i| {
 				let (local_addr_tx, local_addr_rx) = mpsc::channel();
 				let (close, shutdown_signal) = oneshot::channel();
-				let (is_done_tx, is_done_rx) = oneshot::channel();
+				let (done_tx, done_rx) = oneshot::channel();
 				let eloop = UninitializedExecutor::Unspawned.init_with_name(format!("http.worker{}", i + 1))?;
 				serve(
-					(shutdown_signal, local_addr_tx, is_done_tx),
+					(shutdown_signal, local_addr_tx, done_tx),
 					eloop.executor(),
 					addr.to_owned(),
 					cors_domains.clone(),
@@ -420,7 +422,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 					reuse_port,
 					req_max_size,
 				);
-				Ok((eloop, close, local_addr_rx, is_done_rx))
+				Ok((eloop, close, local_addr_rx, done_rx))
 			})
 			.collect::<io::Result<Vec<_>>>()?;
 
@@ -429,27 +431,27 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 		// Wait for other threads as well.
 		let mut handles: Vec<(Executor, oneshot::Sender<()>, oneshot::Receiver<()>)> = handles
 			.into_iter()
-			.map(|(eloop, close, local_addr_rx, is_done_rx)| {
+			.map(|(eloop, close, local_addr_rx, done_rx)| {
 				let _ = recv_address(local_addr_rx)?;
-				Ok((eloop, close, is_done_rx))
+				Ok((eloop, close, done_rx))
 			})
 			.collect::<io::Result<(Vec<_>)>>()?;
-		handles.push((eloop, close, is_done_rx));
+		handles.push((eloop, close, done_rx));
 
-		let mut executors = vec![];
-		let mut closers = vec![];
-		let mut is_done_rxs = vec![];
-		for handle in handles {
-			executors.push(handle.0);
-			closers.push(handle.1);
-			is_done_rxs.push(handle.2);
-		}
+		let (executors, closers, done_rxs) = handles
+			.into_iter()
+			.fold((vec![], vec![], vec![]), |mut acc, (eloop, closer, done_rx)| {
+				acc.0.push(eloop);
+				acc.1.push(closer);
+				acc.2.push(done_rx);
+				acc
+			});
 
 		Ok(Server {
 			address: local_addr?,
 			executors: Arc::new( Mutex::new(Some(executors))),
 			close: Arc::new(Mutex::new(Some(closers))),
-			done_sig: Some(is_done_rxs),
+			done: Some(done_rxs),
 		})
 	}
 }
@@ -476,7 +478,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	reuse_port: bool,
 	max_request_body_size: usize,
 ) {
-	let (shutdown_signal, local_addr_tx, is_done_tx) = signals;
+	let (shutdown_signal, local_addr_tx, done_tx) = signals;
 	executor.spawn(future::lazy(move || {
 		let handle = tokio::reactor::Handle::default();
 
@@ -564,7 +566,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		})
 	}).and_then(|_| {
 		println!("[serve] DONE!");
-		is_done_tx.send(())
+		done_tx.send(())
 	}));
 }
 
@@ -591,7 +593,7 @@ pub struct CloseHandle {
 }
 
 impl CloseHandle {
-	pub fn close(mut self) {
+	pub fn close(self) {
 		println!("[CLoseHandle, close] closing executors");
         if let Some(executors) = self.executors.lock().take() {
             for executor in executors { executor.close() }
@@ -600,23 +602,7 @@ impl CloseHandle {
         if let Some(closers) = self.closers.lock().take() {
             for closer in closers { let _ = closer.send(()); }
         }
-
-//		let execs = Arc::get_mut(&mut self.executors).expect("CloseHandle.close").take();
-//		if let Some(executors) = execs {
-//			for executor in executors {
-//				executor.close()
-//			}
-//		}
-//		for executor in self.executors.take() {
-//			executor.close()
-//		}
 	}
-
-//	pub fn wait(mut self) {
-//		if let Some(executors) = self.executors.lock().take() {
-//			for executor in executors { executor.wait() }
-//		}
-//	}
 }
 
 /// jsonrpc http server instance
@@ -624,10 +610,9 @@ pub struct Server {
 	address: SocketAddr,
 	executors: Arc<Mutex<Option<Vec<Executor>>>>,
 	close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
-	done_sig: Option<Vec<oneshot::Receiver<()>>>,
+	done: Option<Vec<oneshot::Receiver<()>>>,
 }
 
-const PROOF: &str = "Server is always Some until self is consumed.";
 impl Server {
 	/// Returns address of this server
 	pub fn address(&self) -> &SocketAddr {
@@ -637,39 +622,20 @@ impl Server {
 	/// Closes the server.
 	pub fn close(self) {
 		self.close_handle().close()
-//		for close in self.close.take().expect(PROOF) {
-//			let _ = close.send(());
-//		}
-//
-//		for executor in self.executors.take().expect(PROOF) {
-//			executor.close();
-//		}
 	}
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) {
-		if let Some(ch) = self.done_sig.take() {
-			for c in ch {
-				c.map(|_|{println!("[Server.wait] Got signal")}).wait();
+		if let Some(receivers) = self.done.take() {
+			for receiver in receivers {
+				receiver.map(|_| { println!("[Server.wait] Got signal") }).wait();
+//				let _ = receiver.wait();
 			}
-//			ch[0].map(|_| {
-//				println!("[Server.wait] got msg");
-//			}).wait();
 		}
-//		self.done_sig.unwrap()[0].map(move |_| {
-//			println!("[Server.wait] got msg");
-//		}).wait();
-//		self.done_signal.recv()
-
-//		self.close_handle().wait()
-//		let execs = Arc::get_mut(&mut self.executors).expect("Server.wait");
-//
-////		for executor in self.executors.take().expect(PROOF) {
-//		for executor in execs.take().expect(PROOF) {
-//			executor.wait();
-//		}
 	}
 
+	/// Get a handle that allows us to close the server from a different thread and/or while the
+	/// server is `wait()`ing.
 	pub fn close_handle(&self) -> CloseHandle {
 		CloseHandle {
 			executors: self.executors.clone(),
@@ -678,12 +644,8 @@ impl Server {
 	}
 }
 
-//impl Drop for Server {
-//	fn drop(&mut self) {
-//		if let Some(executors) = self.executors.take() {
-//			for executor in executors {
-//				executor.close();
-//			}
-//		};
-//	}
-//}
+impl Drop for Server {
+	fn drop(&mut self) {
+		self.close_handle().close();
+	}
+}
