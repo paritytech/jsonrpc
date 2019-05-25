@@ -1409,23 +1409,16 @@ fn should_return_connection_header() {
 fn close_handle_makes_wait_return() {
 	let server = serve(id);
 	let close_handle = server.close_handle();
-	let close_handle2 = close_handle.clone();
 
 	let (tx, rx) = mpsc::channel();
 
 	thread::spawn(move || {
-		println!("[tst thr] SENDING");
 		tx.send(server.wait()).unwrap();
-		println!("[tst thr] SENT");
 	});
 
 	thread::sleep(Duration::from_secs(3));
 
-	println!("[tst] WAKING UP");
-
-	thread::spawn(move || {close_handle.close() });
-	thread::spawn(move || {close_handle2.close() });
-//	close_handle.close();
+	close_handle.close();
 
 	rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
 }

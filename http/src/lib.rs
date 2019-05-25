@@ -244,8 +244,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			rest_api: RestApi::Disabled,
 			health_api: None,
 			keep_alive: true,
-			threads: 4,
-//			threads: 1,
+			threads: 1,
 			max_request_body_size: 5 * 1024 * 1024,
 		}
 	}
@@ -550,22 +549,16 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					Ok(())
 				})
 				.map_err(|e| {
-					println!("Incoming streams error, closing server");
 					warn!("Incoming streams error, closing sever: {:?}", e);
 				})
 				.select(shutdown_signal
-					.inspect(|x| {
-						println!("Shutdown signaller got traffic {:?}", x);
-					})
 					.map_err(|e| {
-						println!("Shutdown signaller dropped, closing server");
 						debug!("Shutdown signaller dropped, closing server: {:?}", e);
 					}))
 				.map(|_| ())
 				.map_err(|_| ())
 		})
 	}).and_then(|_| {
-		println!("[serve] DONE!");
 		done_tx.send(())
 	}));
 }
@@ -586,6 +579,8 @@ fn configure_port(_reuse: bool, _tcp: &net2::TcpBuilder) -> io::Result<()> {
 	Ok(())
 }
 
+/// Handle used to close the server. Can be cloned and passed around to different threads and be used
+/// to close a server that is `wait()`ing.
 #[derive(Clone)]
 pub struct CloseHandle {
 	executors: Arc<Mutex<Option<Vec<Executor>>>>,
@@ -593,12 +588,12 @@ pub struct CloseHandle {
 }
 
 impl CloseHandle {
+	/// Shutdown a running server
 	pub fn close(self) {
-		println!("[CLoseHandle, close] closing executors");
         if let Some(executors) = self.executors.lock().take() {
             for executor in executors { executor.close() }
         }
-		println!("[CLoseHandle, close] sending () to closers");
+
         if let Some(closers) = self.closers.lock().take() {
             for closer in closers { let _ = closer.send(()); }
         }
@@ -628,8 +623,7 @@ impl Server {
 	pub fn wait(mut self) {
 		if let Some(receivers) = self.done.take() {
 			for receiver in receivers {
-				receiver.map(|_| { println!("[Server.wait] Got signal") }).wait();
-//				let _ = receiver.wait();
+				let _ = receiver.wait();
 			}
 		}
 	}
