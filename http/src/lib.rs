@@ -437,19 +437,17 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			.collect::<io::Result<(Vec<_>)>>()?;
 		handles.push((eloop, close, done_rx));
 
-		let (executors, closers, done_rxs) = handles
+		let (executors, done_rxs) = handles
 			.into_iter()
-			.fold((vec![], vec![], vec![]), |mut acc, (eloop, closer, done_rx)| {
-				acc.0.push(eloop);
-				acc.1.push(closer);
-				acc.2.push(done_rx);
+			.fold((vec![], vec![]), |mut acc, (eloop, closer, done_rx)| {
+				acc.0.push((eloop, closer));
+				acc.1.push(done_rx);
 				acc
 			});
 
 		Ok(Server {
 			address: local_addr?,
 			executors: Arc::new(Mutex::new(Some(executors))),
-			close: Arc::new(Mutex::new(Some(closers))),
 			done: Some(done_rxs),
 		})
 	}
@@ -581,21 +579,18 @@ fn configure_port(_reuse: bool, _tcp: &net2::TcpBuilder) -> io::Result<()> {
 
 /// Handle used to close the server. Can be cloned and passed around to different threads and be used
 /// to close a server that is `wait()`ing.
+
 #[derive(Clone)]
-pub struct CloseHandle {
-	executors: Arc<Mutex<Option<Vec<Executor>>>>,
-	closers: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
-}
+pub struct CloseHandle(Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>);
 
 impl CloseHandle {
 	/// Shutdown a running server
 	pub fn close(self) {
-        if let Some(executors) = self.executors.lock().take() {
-            for executor in executors { executor.close() }
-        }
-
-        if let Some(closers) = self.closers.lock().take() {
-            for closer in closers { let _ = closer.send(()); }
+        if let Some(executors) = self.0.lock().take() {
+            for (executor, closer) in executors {
+	            executor.close();
+	            let _ = closer.send(());
+            }
         }
 	}
 }
@@ -603,8 +598,7 @@ impl CloseHandle {
 /// jsonrpc http server instance
 pub struct Server {
 	address: SocketAddr,
-	executors: Arc<Mutex<Option<Vec<Executor>>>>,
-	close: Arc<Mutex<Option<Vec<oneshot::Sender<()>>>>>,
+	executors: Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>,
 	done: Option<Vec<oneshot::Receiver<()>>>,
 }
 
@@ -631,10 +625,7 @@ impl Server {
 	/// Get a handle that allows us to close the server from a different thread and/or while the
 	/// server is `wait()`ing.
 	pub fn close_handle(&self) -> CloseHandle {
-		CloseHandle {
-			executors: self.executors.clone(),
-			closers: self.close.clone(),
-		}
+		CloseHandle(self.executors.clone())
 	}
 }
 
