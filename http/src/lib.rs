@@ -448,7 +448,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 		Ok(Server {
 			address: local_addr?,
-			executors: Arc::new( Mutex::new(Some(executors))),
+			executors: Arc::new(Mutex::new(Some(executors))),
 			close: Arc::new(Mutex::new(Some(closers))),
 			done: Some(done_rxs),
 		})
