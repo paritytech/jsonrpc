@@ -20,11 +20,12 @@ categories = [
 
 [features]
 tls = ["hyper-tls"]
+http = ["hyper"]
 
 [dependencies]
 failure = "0.1"
 futures = "0.1.26"
-hyper = "0.12"
+hyper = { version = "0.12", optional = true }
 hyper-tls = { version = "0.3.2", optional = true }
 jsonrpc-core = { version = "11.0", path = "../core" }
 log = "0.4"

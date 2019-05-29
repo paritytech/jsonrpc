@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::{RpcError, RpcMessage};
 
 pub mod duplex;
+#[cfg(feature = "http")]
 pub mod http;
 pub mod local;
 pub mod ws;
