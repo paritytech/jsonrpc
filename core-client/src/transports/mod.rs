@@ -9,6 +9,7 @@ pub mod duplex;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod local;
+#[cfg(feature = "ws")]
 pub mod ws;
 
 pub use duplex::duplex;
