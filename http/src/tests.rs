@@ -4,6 +4,7 @@ use self::jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::str::Lines;
+use std::time::Duration;
 
 use self::jsonrpc_core::futures::{self, Future};
 use super::*;
@@ -52,8 +53,6 @@ fn serve_allow_headers(cors_allow_headers: cors::AccessControlAllowHeaders) -> S
 }
 
 fn io() -> IoHandler {
-	use std::{thread, time};
-
 	let mut io = IoHandler::default();
 	io.add_method("hello", |params: Params| match params.parse::<(u64,)>() {
 		Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
@@ -66,7 +65,7 @@ fn io() -> IoHandler {
 	io.add_method("hello_async2", |_params: Params| {
 		let (c, p) = futures::oneshot();
 		thread::spawn(move || {
-			thread::sleep(time::Duration::from_millis(10));
+			thread::sleep(Duration::from_millis(10));
 			c.send(Value::String("world".into())).unwrap();
 		});
 		p.map_err(|_| Error::invalid_request())
@@ -1404,6 +1403,24 @@ fn should_return_connection_header() {
 	);
 	assert_eq!(response.status, "HTTP/1.1 200 OK".to_owned());
 	assert_eq!(response.body, world_batch());
+}
+
+#[test]
+fn close_handle_makes_wait_return() {
+	let server = serve(id);
+	let close_handle = server.close_handle();
+
+	let (tx, rx) = mpsc::channel();
+
+	thread::spawn(move || {
+		tx.send(server.wait()).unwrap();
+	});
+
+	thread::sleep(Duration::from_secs(3));
+
+	close_handle.close();
+
+	rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
 }
 
 #[test]
