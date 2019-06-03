@@ -1,0 +1,50 @@
+[package]
+authors = ["Parity Technologies <admin@parity.io>"]
+description = "Transport agnostic JSON-RPC 2.0 client implementation."
+documentation = "https://docs.rs/jsonrpc-client-transports/"
+edition = "2018"
+homepage = "https://github.com/paritytech/jsonrpc"
+keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
+license = "MIT"
+name = "jsonrpc-client-transports"
+repository = "https://github.com/paritytech/jsonrpc"
+version = "12.0.0"
+
+categories = [
+	"asynchronous",
+	"network-programming",
+	"web-programming::http-client",
+	"web-programming::http-server",
+	"web-programming::websocket",
+]
+
+[features]
+default = ["http", "tls", "ws"]
+tls = ["hyper-tls", "http"]
+http = ["hyper"]
+ws = [
+	"websocket",
+	"tokio",
+]
+
+[dependencies]
+failure = "0.1"
+futures = "0.1.26"
+hyper = { version = "0.12", optional = true }
+hyper-tls = { version = "0.3.2", optional = true }
+jsonrpc-core = { version = "12.0", path = "../../core" }
+log = "0.4"
+serde = "1.0"
+serde_json = "1.0"
+tokio = { version = "0.1", optional = true }
+websocket = { version = "0.22", optional = true }
+
+[dev-dependencies]
+assert_matches = "1.1"
+jsonrpc-http-server = { version = "12.0", path = "../../http" }
+lazy_static = "1.0"
+env_logger = "0.6"
+tokio = "0.1"
+
+[badges]
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
