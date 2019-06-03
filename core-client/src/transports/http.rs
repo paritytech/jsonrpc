@@ -16,7 +16,7 @@ use futures::{
 use hyper::{http, rt, Client, Request, Uri};
 
 /// Create a HTTP Client
-pub fn http<TClient>(url: &str) -> impl Future<Item = TClient, Error = RpcError>
+pub fn connect<TClient>(url: &str) -> impl Future<Item = TClient, Error = RpcError>
 where
 	TClient: From<RpcChannel>,
 {
@@ -192,7 +192,7 @@ mod tests {
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = http(&server.uri)
+		let run = connect(&server.uri)
 			.and_then(|client: TestClient| {
 				client.hello("http").and_then(move |result| {
 					drop(client);
@@ -217,7 +217,7 @@ mod tests {
 		let invalid_uri = "invalid uri";
 
 		// when
-		let run = http(invalid_uri); // rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		let run = connect(invalid_uri); // rx.recv_timeout(Duration::from_secs(3)).unwrap();
 		let res: Result<TestClient, RpcError> = run.wait();
 
 		// then
@@ -237,7 +237,7 @@ mod tests {
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = http(&server.uri)
+		let run = connect(&server.uri)
 			.and_then(|client: TestClient| {
 				client.fail().then(move |res| {
 					let _ = tx.send(res);
@@ -272,7 +272,7 @@ mod tests {
 		server.stop();
 		let (tx, rx) = std::sync::mpsc::channel();
 
-		let client = http(&server.uri);
+		let client = connect(&server.uri);
 
 		let call = client
 			.and_then(|client: TestClient| {
@@ -311,7 +311,7 @@ mod tests {
 		let (tx, rx) = std::sync::mpsc::channel();
 		let tx2 = tx.clone();
 
-		let client = http(&server.uri);
+		let client = connect(&server.uri);
 
 		let call = client
 			.and_then(move |client: TestClient| {

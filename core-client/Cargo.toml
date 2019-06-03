@@ -19,7 +19,7 @@ categories = [
 ]
 
 [features]
-tls = ["hyper-tls"]
+tls = ["hyper-tls", "http"]
 http = ["hyper"]
 ws = [
 	"websocket",

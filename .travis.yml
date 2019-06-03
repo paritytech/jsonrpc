@@ -33,7 +33,7 @@ script:
   - cargo build --all
   - cargo test --all
   - cargo test --manifest-path=core-client/Cargo.toml --features "http"
-  - cargo test --manifest-path=core-client/Cargo.toml --features "http, tls"
+  - cargo test --manifest-path=core-client/Cargo.toml --features "tls"
   - cargo test --manifest-path=core-client/Cargo.toml --features "ws"
   - |
     ([ $TRAVIS_RUST_VERSION = stable ] && cargo fmt --all -- --check) || true
