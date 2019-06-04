@@ -3,7 +3,7 @@
 set -exu
 
 VERSION=$(grep "^version" ./core/Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-ORDER=(core core-client/transports core-client server-utils tcp ws ws/client http ipc stdio pubsub derive test)
+ORDER=(core server-utils tcp ws http ipc stdio pubsub core-client/transports core-client derive test)
 
 echo "Publishing version $VERSION"
 cargo clean
@@ -12,7 +12,7 @@ for crate in ${ORDER[@]}; do
 	cd $crate
 	echo "Publishing $crate@$VERSION"
 	sleep 5
-	cargo publish $@
+	cargo publish $@ || read -p "\n\t Publishing $crate failed. Press [enter] to continue."
 	cd -
 done
 
