@@ -2,6 +2,7 @@
 members = [
 	"core",
 	"core-client",
+	"core-client/transports",
 	"http",
 	"ipc",
 	"derive",
