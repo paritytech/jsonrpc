@@ -208,14 +208,19 @@ where
 							continue;
 						}
 						if let Some(notification) = self.pending_subscriptions.remove(&id) {
-							let sid = SubscriptionId::parse_value(&result.unwrap()).unwrap();
-							// Ignore subscription if we already unsubscribed
-							if let Some(subscription) = self.subscriptions.get_mut(&notification) {
-								subscription.id = Some(sid);
+							match result.map(|id| SubscriptionId::parse_value(&id)) {
+								Ok(Some(sid)) => {
+									// Ignore subscription if we already unsubscribed
+									if let Some(subscription) = self.subscriptions.get_mut(&notification) {
+										subscription.id = Some(sid);
+									}
+								}
+								Ok(None) => log::warn!("received invalid id"),
+								Err(err) => log::warn!("received invalid notification {:?}", err),
 							}
 							continue;
 						}
-						log::info!("unknown id {:?}", id);
+						log::warn!("unknown id {:?}", id);
 					}
 				},
 				None => break,
