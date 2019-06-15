@@ -10,7 +10,7 @@ use std::sync::Arc;
 use jsonrpc_core::Result;
 use jsonrpc_pubsub::{typed::Subscriber, SubscriptionId, Session, PubSubHandler};
 
-#[rpc]
+#[rpc(server)]
 pub trait Rpc<T> {
 	type Metadata;
 
