@@ -1420,7 +1420,8 @@ fn close_handle_makes_wait_return() {
 
 	close_handle.close();
 
-	rx.recv_timeout(Duration::from_secs(10)).expect("Expected server to close");
+	rx.recv_timeout(Duration::from_secs(10))
+		.expect("Expected server to close");
 }
 
 #[test]

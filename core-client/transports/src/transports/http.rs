@@ -29,7 +29,7 @@ where
 	#[cfg(feature = "tls")]
 	let connector = match hyper_tls::HttpsConnector::new(4) {
 		Ok(connector) => connector,
-		Err(e) => return A(future::err(RpcError::Other(e.into())))
+		Err(e) => return A(future::err(RpcError::Other(e.into()))),
 	};
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
