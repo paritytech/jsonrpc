@@ -50,18 +50,24 @@ struct CallMessage {
 	sender: oneshot::Sender<Result<Value, RpcError>>,
 }
 
-/// A rpc subscribe message.
-struct SubscribeMessage {
+/// A rpc subscription.
+struct Subscription {
 	/// The subscribe method name.
-	subscribe_method: String,
+	subscribe: String,
 	/// The subscribe method parameters.
 	subscribe_params: Params,
-	/// The topic name.
-	topic: String,
+	/// The name of the notification.
+	notification: String,
+	/// The unsubscribe method name.
+	unsubscribe: String,
+}
+
+/// A rpc subscribe message.
+struct SubscribeMessage {
+	/// The subscription to subscribe to.
+	subscription: Subscription,
 	/// The channel to send notifications to.
 	sender: mpsc::Sender<Result<Value, RpcError>>,
-	/// The unsubscribe method name.
-	unsubscribe_method: String,
 }
 
 /// A message sent to the `RpcClient`.
@@ -180,14 +186,14 @@ impl<T: DeserializeOwned + 'static> Stream for TypedSubscriptionStream<T> {
 	type Error = RpcError;
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-		match self.stream.poll() {
-			Ok(Async::Ready(Some(value))) => serde_json::from_value::<T>(value)
+		let result = match self.stream.poll()? {
+			Async::Ready(Some(value)) => serde_json::from_value::<T>(value)
 				.map(|result| Async::Ready(Some(result)))
-				.map_err(|error| RpcError::ParseError(self.returns.into(), error.into())),
-			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-			Ok(Async::NotReady) => Ok(Async::NotReady),
-			Err(err) => Err(err),
-		}
+				.map_err(|error| RpcError::ParseError(self.returns.into(), error.into()))?,
+			Async::Ready(None) => Async::Ready(None),
+			Async::NotReady => Async::NotReady,
+		};
+		Ok(result)
 	}
 }
 
@@ -221,15 +227,17 @@ impl RawClient {
 		&self,
 		subscribe: &str,
 		subscribe_params: Params,
-		topic: &str,
+		notification: &str,
 		unsubscribe: &str,
 	) -> impl Future<Item = SubscriptionStream, Error = RpcError> {
 		let (sender, receiver) = mpsc::channel(0);
 		let msg = SubscribeMessage {
-			subscribe_method: subscribe.into(),
-			subscribe_params,
-			topic: topic.into(),
-			unsubscribe_method: unsubscribe.into(),
+			subscription: Subscription {
+				subscribe: subscribe.into(),
+				subscribe_params,
+				notification: notification.into(),
+				unsubscribe: unsubscribe.into(),
+			},
 			sender,
 		};
 		self.0

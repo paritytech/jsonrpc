@@ -5,7 +5,7 @@ use failure::format_err;
 use futures::prelude::*;
 use futures::sync::mpsc;
 use jsonrpc_core::{MetaIoHandler, Metadata};
-use jsonrpc_pubsub::{PubSubMetadata, Session};
+use jsonrpc_pubsub::Session;
 use std::collections::VecDeque;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ where
 		Self {
 			handler,
 			meta,
-			queue: VecDeque::new(),
+			queue: Default::default(),
 		}
 	}
 }
@@ -70,7 +70,7 @@ where
 }
 
 /// Connects to a `Deref<Target = MetaIoHandler<Metadata>`.
-pub fn connect_with_meta<TClient, THandler, TMetadata>(
+pub fn connect_with_metadata<TClient, THandler, TMetadata>(
 	handler: THandler,
 	meta: TMetadata,
 ) -> (TClient, impl Future<Item = (), Error = RpcError>)
@@ -92,18 +92,11 @@ where
 	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	TMetadata: Metadata + Default,
 {
-	connect_with_meta(handler, Default::default())
+	connect_with_metadata(handler, Default::default())
 }
 
 /// Metadata for LocalRpc.
-#[derive(Clone)]
-pub struct LocalMeta(Arc<Session>);
-impl Metadata for LocalMeta {}
-impl PubSubMetadata for LocalMeta {
-	fn session(&self) -> Option<Arc<Session>> {
-		Some(self.0.clone())
-	}
-}
+pub type LocalMeta = Arc<Session>;
 
 /// Connects with pubsub.
 pub fn connect_with_pubsub<TClient, THandler>(handler: THandler) -> (TClient, impl Future<Item = (), Error = RpcError>)
@@ -112,7 +105,7 @@ where
 	THandler: Deref<Target = MetaIoHandler<LocalMeta>>,
 {
 	let (tx, rx) = mpsc::channel(0);
-	let meta = LocalMeta(Arc::new(Session::new(tx)));
+	let meta = Arc::new(Session::new(tx));
 	let (sink, stream) = LocalRpc::new(handler, meta).split();
 	let stream = stream.select(rx.map_err(|_| RpcError::Other(format_err!("Pubsub channel returned an error"))));
 	let (rpc_client, sender) = crate::transports::duplex(sink, stream);

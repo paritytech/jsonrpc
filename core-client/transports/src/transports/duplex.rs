@@ -61,12 +61,12 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 		Duplex {
 			request_builder: RequestBuilder::new(),
 			channel: Some(channel),
-			pending_requests: HashMap::new(),
-			pending_subscriptions: HashMap::new(),
-			subscriptions: HashMap::new(),
+			pending_requests: Default::default(),
+			pending_subscriptions: Default::default(),
+			subscriptions: Default::default(),
 			stream,
-			incoming: VecDeque::new(),
-			outgoing: VecDeque::new(),
+			incoming: Default::default(),
+			outgoing: Default::default(),
 			sink,
 		}
 	}
@@ -110,15 +110,29 @@ where
 			let request_str = match msg {
 				RpcMessage::Call(msg) => {
 					let (id, request_str) = self.request_builder.call_request(&msg);
+					if self.pending_requests.contains_key(&id) {
+						log::error!("reuse of request id {:?}", id);
+					}
 					self.pending_requests.insert(id, msg.sender);
 					request_str
 				}
 				RpcMessage::Subscribe(msg) => {
-					let (id, request_str) = self.request_builder.subscribe_request(&msg);
-					let subscription = Subscription::new(msg.sender, msg.unsubscribe_method);
-					self.subscriptions.insert(msg.topic.clone(), subscription);
-					log::debug!("subscribed to {}", msg.topic);
-					self.pending_subscriptions.insert(id, msg.topic);
+					let (id, request_str) = self.request_builder.subscribe_request(
+						msg.subscription.subscribe.clone(),
+						msg.subscription.subscribe_params.clone(),
+					);
+					let subscription = Subscription::new(msg.sender, msg.subscription.unsubscribe);
+					if self.subscriptions.contains_key(&msg.subscription.notification) {
+						// TODO: handle better
+						log::warn!(
+							"overwritting existing subscription for {}",
+							msg.subscription.notification
+						);
+					}
+					self.subscriptions
+						.insert(msg.subscription.notification.clone(), subscription);
+					log::debug!("subscribed to {}", msg.subscription.notification);
+					self.pending_subscriptions.insert(id, msg.subscription.notification);
 					request_str
 				}
 			};
@@ -154,53 +168,53 @@ where
 			match self.incoming.pop_front() {
 				Some((id, result, method)) => match method {
 					// is a notification
-					Some(method) => {
-						match self.subscriptions.get_mut(&method) {
-							Some(subscription) => match subscription.channel.poll_ready() {
-								Ok(Async::Ready(())) => {
-									subscription.channel.try_send(result).expect("shouldn't fail; qed");
-								}
-								Ok(Async::NotReady) => {
-									self.incoming.push_front((id, result, Some(method)));
-									break;
-								}
-								Err(_) => {
-									let subscription = self.subscriptions.remove(&method).expect("subscription exists");
-									// TODO fix
-									let sid = subscription.id.unwrap_or(SubscriptionId::Number(5));
-									let (_id, request_str) =
-										self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
-									log::debug!("outgoing: {}", request_str);
-									self.outgoing.push_back(request_str);
-									log::debug!("unsubscribed from {}", method);
-								}
-							},
-							None => {
-								log::info!("unknown subscription {}", method);
+					Some(method) => match self.subscriptions.get_mut(&method) {
+						Some(subscription) => match subscription.channel.poll_ready() {
+							Ok(Async::Ready(())) => {
+								subscription.channel.try_send(result).expect("shouldn't fail; qed");
 							}
+							Ok(Async::NotReady) => {
+								self.incoming.push_front((id, result, Some(method)));
+								break;
+							}
+							Err(_) => {
+								let subscription = self.subscriptions.remove(&method).expect("subscription exists");
+								match subscription.id {
+									Some(sid) => {
+										let (_id, request_str) =
+											self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
+										log::debug!("outgoing: {}", request_str);
+										self.outgoing.push_back(request_str);
+										log::debug!("unsubscribed from {}", method);
+									}
+									None => {
+										// TODO: handle better
+										log::warn!(
+											"subscription cancelled before receiving a response from the server"
+										);
+									}
+								}
+							}
+						},
+						None => {
+							log::warn!("unknown subscription {}", method);
 						}
-					}
+					},
 					// is a response
 					None => {
-						match self.pending_requests.remove(&id) {
-							Some(tx) => {
-								tx.send(result)
-									.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?;
-								continue;
+						if let Some(tx) = self.pending_requests.remove(&id) {
+							tx.send(result)
+								.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?;
+							continue;
+						}
+						if let Some(notification) = self.pending_subscriptions.remove(&id) {
+							let sid = SubscriptionId::parse_value(&result.unwrap()).unwrap();
+							// Ignore subscription if we already unsubscribed
+							if let Some(subscription) = self.subscriptions.get_mut(&notification) {
+								subscription.id = Some(sid);
 							}
-							None => {}
-						};
-						match self.pending_subscriptions.remove(&id) {
-							Some(topic) => {
-								let sid = SubscriptionId::parse_value(&result.unwrap()).unwrap();
-								// Ignore subscription if we already unsubscribed
-								if self.subscriptions.contains_key(&topic) {
-									self.subscriptions.get_mut(&topic).expect("subscription exists").id = Some(sid);
-								}
-								continue;
-							}
-							None => {}
-						};
+							continue;
+						}
 						log::info!("unknown id {:?}", id);
 					}
 				},

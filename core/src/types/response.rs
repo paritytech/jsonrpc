@@ -95,10 +95,12 @@ impl From<Output> for CoreResult<Value> {
 					let result = map.contains_key("result");
 					let error = map.contains_key("error");
 					if subscription && result {
-						Ok(map.get("result").unwrap().to_owned())
+						Ok(map.get("result").expect("map contains result; qed").to_owned())
 					} else if subscription && error {
-						let err = map.get("error").unwrap().to_owned();
-						let error = serde_json::from_value::<Error>(err).expect("should be a jsonrpc error");
+						let err = map.get("error").expect("map contains error; qed").to_owned();
+						let error = serde_json::from_value::<Error>(err)
+							.ok()
+							.unwrap_or_else(|| Error::parse_error());
 						Err(error)
 					} else {
 						Ok(n.params.into())

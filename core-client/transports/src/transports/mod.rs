@@ -4,7 +4,7 @@ use jsonrpc_core::{Call, Error, Id, MethodCall, Output, Params, Response, Versio
 use jsonrpc_pubsub::SubscriptionId;
 use serde_json::Value;
 
-use crate::{CallMessage, RpcError, SubscribeMessage};
+use crate::{CallMessage, RpcError};
 
 pub mod duplex;
 #[cfg(feature = "http")]
@@ -51,8 +51,8 @@ impl RequestBuilder {
 		self.single_request(msg.method.clone(), msg.params.clone())
 	}
 
-	fn subscribe_request(&mut self, msg: &SubscribeMessage) -> (Id, String) {
-		self.single_request(msg.subscribe_method.clone(), msg.subscribe_params.clone())
+	fn subscribe_request(&mut self, subscribe: String, subscribe_params: Params) -> (Id, String) {
+		self.single_request(subscribe, subscribe_params)
 	}
 
 	fn unsubscribe_request(&mut self, unsubscribe: String, sid: SubscriptionId) -> (Id, String) {
