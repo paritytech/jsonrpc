@@ -296,6 +296,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	///
 	/// Panics when set to `0`.
 	#[cfg(not(unix))]
+	#[allow(unused_mut)]
 	pub fn threads(mut self, _threads: usize) -> Self {
 		warn!("Multi-threaded server is not available on Windows. Falling back to single thread.");
 		self
