@@ -1,6 +1,3 @@
-#![allow(deprecated)]
-
-use std;
 use std::sync::Arc;
 
 use crate::jsonrpc::futures::sync::{mpsc, oneshot};
@@ -154,7 +151,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			}
 
-			let endpoint_handle = Handle::current();
+			let endpoint_handle = Handle::default();
 			let connections = match endpoint.incoming(&endpoint_handle) {
 				Ok(connections) => connections,
 				Err(e) => {
