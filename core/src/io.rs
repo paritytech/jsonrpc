@@ -11,10 +11,10 @@ use crate::types::{Call, Output, Request, Response};
 use crate::types::{Error, ErrorCode, Version};
 
 /// A type representing middleware or RPC response before serialization.
-pub type FutureResponse = Box<Future<Item = Option<Response>, Error = ()> + Send>;
+pub type FutureResponse = Box<dyn Future<Item = Option<Response>, Error = ()> + Send>;
 
 /// A type representing middleware or RPC call output.
-pub type FutureOutput = Box<Future<Item = Option<Output>, Error = ()> + Send>;
+pub type FutureOutput = Box<dyn Future<Item = Option<Output>, Error = ()> + Send>;
 
 /// A type representing future string response.
 pub type FutureResult<F, G> = future::Map<
@@ -238,7 +238,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				let jsonrpc = method.jsonrpc;
 				let valid_version = self.compatibility.is_version_valid(jsonrpc);
 
-				let call_method = |method: &Arc<RpcMethod<T>>| {
+				let call_method = |method: &Arc<dyn RpcMethod<T>>| {
 					let method = method.clone();
 					futures::lazy(move || method.call(params, meta))
 				};

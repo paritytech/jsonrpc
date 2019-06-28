@@ -15,9 +15,9 @@ use crate::types::{PubSubMetadata, SinkResult, SubscriptionId, TransportError, T
 /// RPC client session
 /// Keeps track of active subscriptions and unsubscribes from them upon dropping.
 pub struct Session {
-	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<Fn(SubscriptionId) + Send + 'static>>>,
+	active_subscriptions: Mutex<HashMap<(SubscriptionId, String), Box<dyn Fn(SubscriptionId) + Send + 'static>>>,
 	transport: TransportSender,
-	on_drop: Mutex<Vec<Box<FnMut() + Send>>>,
+	on_drop: Mutex<Vec<Box<dyn FnMut() + Send>>>,
 }
 
 impl fmt::Debug for Session {
