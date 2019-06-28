@@ -248,13 +248,7 @@ where
 			Async::NotReady => false,
 		};
 
-		log::debug!("channel is none: {}", self.channel.is_none());
-		log::debug!("outgoing: {}", self.outgoing.len());
-		log::debug!("incoming: {}", self.incoming.len());
-		log::debug!("pending_requests: {}", self.pending_requests.len());
-		log::debug!("pending_subscriptions: {}", self.pending_subscriptions.len());
-		log::debug!("subscriptions: {}", self.subscriptions.len());
-		log::debug!("sink is empty: {}", sink_empty);
+		log::debug!("{:?}", self);
 		// Return ready when the future is complete
 		if self.channel.is_none()
 			&& self.outgoing.is_empty()
@@ -269,5 +263,16 @@ where
 		} else {
 			Ok(Async::NotReady)
 		}
+	}
+}
+
+impl<TSink, TStream> std::fmt::Debug for Duplex<TSink, TStream> {
+	fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+		writeln!(f, "channel is none: {}", self.channel.is_none())?;
+		writeln!(f, "outgoing: {}", self.outgoing.len())?;
+		writeln!(f, "incoming: {}", self.incoming.len())?;
+		writeln!(f, "pending_requests: {}", self.pending_requests.len())?;
+		writeln!(f, "pending_subscriptions: {}", self.pending_subscriptions.len())?;
+		writeln!(f, "subscriptions: {}", self.subscriptions.len())
 	}
 }
