@@ -91,19 +91,19 @@ impl From<Output> for CoreResult<Value> {
 			Output::Failure(f) => Err(f.error),
 			Output::Notification(n) => match &n.params {
 				Params::Map(map) => {
-					let subscription = map.contains_key("subscription");
-					let result = map.contains_key("result");
-					let error = map.contains_key("error");
-					if subscription && result {
-						Ok(map.get("result").expect("map contains result; qed").to_owned())
-					} else if subscription && error {
-						let err = map.get("error").expect("map contains error; qed").to_owned();
-						let error = serde_json::from_value::<Error>(err)
-							.ok()
-							.unwrap_or_else(|| Error::parse_error());
-						Err(error)
-					} else {
-						Ok(n.params.into())
+					let subscription = map.get("subscription");
+					let result = map.get("result");
+					let error = map.get("error");
+
+					match (subscription, result, error) {
+						(Some(_), Some(result), _) => Ok(result.to_owned()),
+						(Some(_), _, Some(error)) => {
+							let error = serde_json::from_value::<Error>(error.to_owned())
+								.ok()
+								.unwrap_or_else(|| Error::parse_error());
+							Err(error)
+						}
+						_ => Ok(n.params.into()),
 					}
 				}
 				_ => Ok(n.params.into()),
