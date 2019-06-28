@@ -5,4 +5,7 @@
 //!
 //! See documentation of [`jsonrpc-client-transports`](../jsonrpc_client_transports/) for more details.
 
+#![deny(missing_docs)]
+#![deny(warnings)]
+
 pub use jsonrpc_client_transports::*;

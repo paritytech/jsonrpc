@@ -43,7 +43,8 @@
 //! }
 //! ```
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
+#![deny(warnings)]
 
 extern crate jsonrpc_core as rpc;
 use serde;

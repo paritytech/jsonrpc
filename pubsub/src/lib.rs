@@ -1,6 +1,7 @@
 //! Publish-Subscribe extension for JSON-RPC
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
+#![deny(warnings)]
 
 use jsonrpc_core as core;
 

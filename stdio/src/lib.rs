@@ -15,7 +15,8 @@
 //! }
 //! ```
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
+#![deny(warnings)]
 
 use tokio;
 use tokio_stdin_stdout;

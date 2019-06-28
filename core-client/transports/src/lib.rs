@@ -1,6 +1,7 @@
 //! JSON-RPC client implementation.
 
 #![deny(missing_docs)]
+#![deny(warnings)]
 
 use failure::{format_err, Fail};
 use futures::sync::{mpsc, oneshot};
