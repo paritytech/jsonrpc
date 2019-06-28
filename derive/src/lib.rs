@@ -178,7 +178,7 @@
 //! ```
 
 #![recursion_limit = "256"]
-#![deny(missing_docs)]
+#![warn(missing_docs)]
 
 extern crate proc_macro;
 
