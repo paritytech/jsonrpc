@@ -38,9 +38,9 @@ impl Params {
 	}
 }
 
-impl Into<Value> for Params {
-	fn into(self) -> Value {
-		match self {
+impl From<Params> for Value {
+	fn from(params: Params) -> Value {
+		match params {
 			Params::Array(vec) => Value::Array(vec),
 			Params::Map(map) => Value::Object(map),
 			Params::None => Value::Null,
