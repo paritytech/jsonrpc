@@ -22,8 +22,16 @@ where
 	TMetadata: Metadata,
 	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 {
-	/// Creates a new `LocalRpc`.
-	pub fn new(handler: THandler, meta: TMetadata) -> Self {
+	/// Creates a new `LocalRpc` with default metadata.
+	pub fn new(handler: THandler) -> Self
+	where
+		TMetadata: Default
+	{
+		Self::with_metadata(handler, Default::default())
+	}
+
+	/// Creates a new `LocalRpc` with given handler and metadata.
+	pub fn with_metadata(handler: THandler, meta: TMetadata) -> Self {
 		Self {
 			handler,
 			meta,
@@ -79,7 +87,7 @@ where
 	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	TMetadata: Metadata,
 {
-	let (sink, stream) = LocalRpc::new(handler, meta).split();
+	let (sink, stream) = LocalRpc::with_metadata(handler, meta).split();
 	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
 	let client = TClient::from(sender);
 	(client, rpc_client)
@@ -106,7 +114,7 @@ where
 {
 	let (tx, rx) = mpsc::channel(0);
 	let meta = Arc::new(Session::new(tx));
-	let (sink, stream) = LocalRpc::new(handler, meta).split();
+	let (sink, stream) = LocalRpc::with_metadata(handler, meta).split();
 	let stream = stream.select(rx.map_err(|_| RpcError::Other(format_err!("Pubsub channel returned an error"))));
 	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
 	let client = TClient::from(sender);
