@@ -61,7 +61,7 @@ impl RequestBuilder {
 }
 
 /// Parse raw string into JSON values, together with the request Id
-pub fn parse_response(response: &str) -> Result<Vec<(Id, Result<Value, RpcError>, Option<String>)>, RpcError> {
+pub fn parse_response(response: &str) -> Result<Vec<(Id, Result<Value, RpcError>, Option<String>, Option<SubscriptionId>)>, RpcError> {
 	serde_json::from_str::<Response>(&response)
 		.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
 		.map(|response| {
@@ -73,10 +73,11 @@ pub fn parse_response(response: &str) -> Result<Vec<(Id, Result<Value, RpcError>
 				.into_iter()
 				.map(|output| {
 					let id = output.id().clone();
+					let sid = SubscriptionId::parse_output(&output);
 					let method = output.method();
 					let value: Result<Value, Error> = output.into();
 					let result = value.map_err(RpcError::JsonRpcError);
-					(id, result, method)
+					(id, result, method, sid)
 				})
 				.collect::<Vec<_>>()
 		})

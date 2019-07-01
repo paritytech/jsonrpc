@@ -389,7 +389,11 @@ mod tests {
 				std::thread::spawn(move || {
 					for i in 0..3 {
 						std::thread::sleep(std::time::Duration::from_millis(100));
-						sink.notify(Params::Array(vec![Value::Number(i.into())]))
+						let value = serde_json::json!({
+							"subscription": 5,
+							"result": vec![i],
+						});
+						sink.notify(serde_json::from_value(value).unwrap())
 							.wait()
 							.expect("sent notification");
 					}
