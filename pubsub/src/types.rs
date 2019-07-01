@@ -53,6 +53,20 @@ impl SubscriptionId {
 			_ => None,
 		}
 	}
+
+	/// Parses an output into a subscription id.
+	pub fn parse_output(output: &core::Output) -> Option<SubscriptionId> {
+		match output {
+			core::Output::Notification(n) => match &n.params {
+				core::Params::Map(map) => match map.get("subscription") {
+					Some(value) => Self::parse_value(value),
+					None => None,
+				}
+				_ => None
+			}
+			_ => None
+		}
+	}
 }
 
 impl From<String> for SubscriptionId {
