@@ -18,7 +18,6 @@
 //! ```
 
 #![deny(missing_docs)]
-#![deny(warnings)]
 
 use jsonrpc_server_utils as server_utils;
 

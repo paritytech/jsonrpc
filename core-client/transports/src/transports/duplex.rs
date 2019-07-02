@@ -16,6 +16,8 @@ use crate::{RpcChannel, RpcError, RpcMessage};
 struct Subscription {
 	/// Subscription id received when subscribing.
 	id: Option<SubscriptionId>,
+	/// A method name used for notification.
+	notification: String,
 	/// Rpc method to unsubscribe.
 	unsubscribe: String,
 	/// Where to send messages to.
@@ -23,13 +25,23 @@ struct Subscription {
 }
 
 impl Subscription {
-	fn new(channel: mpsc::Sender<Result<Value, RpcError>>, unsubscribe: String) -> Self {
+	fn new(
+		channel: mpsc::Sender<Result<Value, RpcError>>,
+		notification: String,
+		unsubscribe: String,
+	) -> Self {
 		Subscription {
 			id: None,
+			notification,
 			unsubscribe,
 			channel,
 		}
 	}
+}
+
+enum PendingRequest {
+	Call(oneshot::Sender<Result<Value, RpcError>>),
+	Subscription(Subscription),
 }
 
 /// The Duplex handles sending and receiving asynchronous
@@ -39,17 +51,13 @@ pub struct Duplex<TSink, TStream> {
 	/// Channel from the client.
 	channel: Option<mpsc::Receiver<RpcMessage>>,
 	/// Requests that haven't received a response yet.
-	pending_requests: HashMap<Id, oneshot::Sender<Result<Value, RpcError>>>,
-	/// Subscription requests that haven't received a subscription id yet.
-	pending_subscriptions: HashMap<Id, String>,
+	pending_requests: HashMap<Id, PendingRequest>,
 	/// A map from the subscription name to the subscription.
-	subscriptions: HashMap<String, HashMap<Id, Subscription>>,
-	/// A map from subscription id to id.
-	subscription_ids: HashMap<SubscriptionId, Id>,
+	subscriptions: HashMap<(SubscriptionId, String), Subscription>,
 	/// Incoming messages from the underlying transport.
 	stream: TStream,
 	/// Unprocessed incoming messages.
-	incoming: VecDeque<(Id, Result<Value, RpcError>, Option<String>)>,
+	incoming: VecDeque<(Id, Result<Value, RpcError>, Option<String>, Option<SubscriptionId>)>,
 	/// Unprocessed outgoing messages.
 	outgoing: VecDeque<String>,
 	/// Outgoing messages from the underlying transport.
@@ -64,9 +72,7 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 			request_builder: RequestBuilder::new(),
 			channel: Some(channel),
 			pending_requests: Default::default(),
-			pending_subscriptions: Default::default(),
 			subscriptions: Default::default(),
-			subscription_ids: Default::default(),
 			stream,
 			incoming: Default::default(),
 			outgoing: Default::default(),
@@ -113,26 +119,28 @@ where
 			let request_str = match msg {
 				RpcMessage::Call(msg) => {
 					let (id, request_str) = self.request_builder.call_request(&msg);
-					if self.pending_requests.contains_key(&id) {
+
+					if self.pending_requests.insert(id.clone(), PendingRequest::Call(msg.sender)).is_some() {
 						log::error!("reuse of request id {:?}", id);
 					}
-					self.pending_requests.insert(id, msg.sender);
 					request_str
 				}
 				RpcMessage::Subscribe(msg) => {
+					let crate::Subscription {
+						subscribe,
+						subscribe_params,
+						notification,
+						unsubscribe,
+					} = msg.subscription;
 					let (id, request_str) = self.request_builder.subscribe_request(
-						msg.subscription.subscribe.clone(),
-						msg.subscription.subscribe_params.clone(),
+						subscribe,
+						subscribe_params,
 					);
-					let subscription = Subscription::new(msg.sender, msg.subscription.unsubscribe);
-					let map = self.subscriptions.entry(msg.subscription.notification.clone())
-						.or_default();
-					if map.contains_key(&id) {
+					log::debug!("subscribing to {}", notification);
+					let subscription = Subscription::new(msg.sender, notification, unsubscribe);
+					if self.pending_requests.insert(id.clone(), PendingRequest::Subscription(subscription)).is_some() {
 						log::error!("reuse of request id {:?}", id);
 					}
-					map.insert(id.clone(), subscription);
-					log::debug!("subscribed to {}", msg.subscription.notification);
-					self.pending_subscriptions.insert(id, msg.subscription.notification);
 					request_str
 				}
 			};
@@ -158,11 +166,8 @@ where
 			};
 			log::debug!("incoming: {}", response_str);
 			for (id, result, method, sid) in super::parse_response(&response_str)? {
-				let id = sid.map(|sid| {
-					self.subscription_ids.get(&sid).unwrap_or(&id)
-				}).unwrap_or(&id).to_owned();
-				log::debug!("id: {:?} result: {:?} method: {:?}", &id, &result, &method);
-				self.incoming.push_back((id, result, method));
+				log::debug!("id: {:?} (sid: {:?}) result: {:?} method: {:?}", id, sid, result, method);
+				self.incoming.push_back((id, result, method, sid));
 			}
 		}
 
@@ -170,73 +175,83 @@ where
 		log::debug!("handle incoming");
 		loop {
 			match self.incoming.pop_front() {
-				Some((id, result, method)) => match method {
-					// is a notification
-					Some(method) => match self.subscriptions.get_mut(&method) {
-						Some(map) => match map.get_mut(&id) {
-							Some(subscription) => match subscription.channel.poll_ready() {
-								Ok(Async::Ready(())) => {
-									subscription.channel.try_send(result).expect("The channel is ready; qed");
-								}
-								Ok(Async::NotReady) => {
-									self.incoming.push_front((id, result, Some(method)));
-									break;
-								}
-								Err(_) => {
-									let subscription = map.remove(&id).expect("subscription exists");
-									match subscription.id {
-										Some(sid) => {
-											self.subscription_ids.remove(&sid);
-											let (_id, request_str) =
-												self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
-											log::debug!("outgoing: {}", request_str);
-											self.outgoing.push_back(request_str);
-											log::debug!("unsubscribed from {}", method);
-										}
-										None => {
-											// TODO: handle better #443
-											log::warn!(
-												"subscription cancelled before receiving a response from the server"
-											);
-										}
-									}
-									if map.is_empty() {
-										self.subscriptions.remove(&method);
-									}
-								}
-							},
-							None => {
-								log::warn!("unknown subscription {} {:?}", method, id);
-							}
-						}
-						None => {
-							log::warn!("unknown subscription {}", method);
-						},
-					}
-					// is a response
-					None => {
-						if let Some(tx) = self.pending_requests.remove(&id) {
+				Some((id, result, method, sid)) => {
+					let sid_and_method = sid.and_then(|sid| method.map(|method| (sid, method)));
+					// Handle the response to a pending request.
+					match self.pending_requests.remove(&id) {
+						// It's a regular Req-Res call, so just answer.
+						Some(PendingRequest::Call(tx)) => {
 							tx.send(result)
 								.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?;
 							continue;
-						}
-						if let Some(notification) = self.pending_subscriptions.remove(&id) {
-							match result.map(|id| SubscriptionId::parse_value(&id)) {
-								Ok(Some(sid)) => {
-									// Ignore subscription if we already unsubscribed
-									if let Some(map) = self.subscriptions.get_mut(&notification) {
-										if let Some(subscription) = map.get_mut(&id) {
-											subscription.id = Some(sid.clone());
-											self.subscription_ids.insert(sid, id);
-										}
-									}
+						},
+						// It was a subscription request,
+						// turn it into a proper subscription.
+						Some(PendingRequest::Subscription(mut subscription)) => {
+							let sid = result.as_ref().ok().and_then(|res| SubscriptionId::parse_value(res));
+							let method = subscription.notification.clone();
+
+							if let Some(sid) = sid {
+								subscription.id = Some(sid.clone());
+								if self.subscriptions.insert((sid.clone(), method.clone()), subscription).is_some() {
+									log::warn!(
+										"Overwriting existing subscription under {:?} ({:?}). \
+										Seems that server returned the same subscription id.",
+										sid,
+										method,
+									);
 								}
-								Ok(None) => log::warn!("received invalid id"),
-								Err(err) => log::warn!("received invalid notification {:?}", err),
+							} else {
+								log::warn!(
+									"The response does not have expected subscription id in response: {:?} ({:?}): {:?}",
+									id,
+									method,
+									result,
+								);
 							}
 							continue;
+						},
+						// It's not a pending request nor a notification
+						None if sid_and_method.is_none() => {
+							log::warn!("Got unexpected response with id {:?} ({:?})", id, sid_and_method);
+							continue;
+						},
+						// just fall-through in case it's a notification
+						None => {}
+					};
+
+					let sid_and_method = if let Some(x) = sid_and_method {
+						x
+					} else {
+						continue;
+					};
+
+					if let Some(subscription) = self.subscriptions.get_mut(&sid_and_method) {
+						match subscription.channel.poll_ready() {
+							Ok(Async::Ready(())) => {
+								subscription.channel.try_send(result).expect("The channel is ready; qed");
+							}
+							Ok(Async::NotReady) => {
+								let (sid, method) = sid_and_method;
+								self.incoming.push_front((id, result, Some(method), Some(sid)));
+								break;
+							}
+							Err(_) => {
+								let subscription = self.subscriptions
+									.remove(&sid_and_method)
+									.expect("Subscription was just polled; qed");
+								let sid = subscription.id
+									.expect("Every subscription that ends up in `self.subscriptions` has id already \
+									assigned; assignment happens during response to subscribe request.");
+								let (_id, request_str) =
+									self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
+								log::debug!("outgoing: {}", request_str);
+								self.outgoing.push_back(request_str);
+								log::debug!("unsubscribed from {:?}", sid_and_method);
+							}
 						}
-						log::warn!("unknown id {:?}", id);
+					} else {
+						log::warn!("Received unexpected subscription notification: {:?}", sid_and_method);
 					}
 				},
 				None => break,
@@ -270,7 +285,6 @@ where
 			&& self.outgoing.is_empty()
 			&& self.incoming.is_empty()
 			&& self.pending_requests.is_empty()
-			&& self.pending_subscriptions.is_empty()
 			&& self.subscriptions.is_empty()
 			&& sink_empty
 		{
@@ -288,8 +302,7 @@ impl<TSink, TStream> std::fmt::Debug for Duplex<TSink, TStream> {
 		writeln!(f, "outgoing: {}", self.outgoing.len())?;
 		writeln!(f, "incoming: {}", self.incoming.len())?;
 		writeln!(f, "pending_requests: {}", self.pending_requests.len())?;
-		writeln!(f, "pending_subscriptions: {}", self.pending_subscriptions.len())?;
 		writeln!(f, "subscriptions: {}", self.subscriptions.len())?;
-		writeln!(f, "subscription_ids: {}", self.subscription_ids.len())
+		Ok(())
 	}
 }
