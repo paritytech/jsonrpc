@@ -408,6 +408,8 @@ mod tests {
 
 		// when
 		let (client, rpc_client) = local::connect_with_pubsub::<TypedClient, _>(handler);
+		let received = Arc::new(std::sync::Mutex::new(vec![]));
+		let r2 = received.clone();
 		let fut = client
 			.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")
 			.and_then(|stream| {
@@ -415,9 +417,11 @@ mod tests {
 					.into_future()
 					.map(move |(result, _)| {
 						drop(client);
-						result.unwrap()
+						r2.lock().unwrap().push(result.unwrap());
 					})
-					.map_err(|(err, _)| err)
+					.map_err(|_| {
+						panic!("Expected message not received.");
+					})
 			})
 			.join(rpc_client)
 			.map(|(res, _)| {
@@ -428,6 +432,7 @@ mod tests {
 			});
 		tokio::run(fut);
 		assert_eq!(called.load(Ordering::SeqCst), true);
+		assert!(!received.lock().unwrap().is_empty(), "Expected at least one received item.");
 	}
 
 }

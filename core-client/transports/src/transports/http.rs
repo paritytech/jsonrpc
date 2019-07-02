@@ -230,7 +230,7 @@ mod tests {
 		// then
 		assert_matches!(
 			res.map(|_cli| unreachable!()), Err(RpcError::Other(err)) => {
-				assert_eq!("InvalidUri(InvalidUriChar)", format!("{:?}", err));
+				assert_eq!(format!("{}", err), "invalid uri character");
 			}
 		);
 	}
