@@ -385,7 +385,7 @@ pub fn generate_where_clause_serialization_predicates(
 			self.visiting_return_type = false
 		}
 		fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
-			if self.visiting_return_type && self.trait_generics.contains(&segment.ident) {
+			if self.visiting_return_type || self.visiting_subscriber_arg && self.trait_generics.contains(&segment.ident) {
 				self.serialize_type_params.insert(segment.ident.clone());
 			}
 			if self.visiting_fn_arg && self.trait_generics.contains(&segment.ident) && !self.visiting_subscriber_arg {
