@@ -75,7 +75,7 @@ impl MethodRegistration {
 	}
 }
 
-const SUBCRIBER_TYPE_IDENT: &str = "Subscriber";
+const SUBSCRIBER_TYPE_IDENT: &str = "Subscriber";
 const METADATA_CLOSURE_ARG: &str = "meta";
 const SUBSCRIBER_CLOSURE_ARG: &str = "subscriber";
 
@@ -258,7 +258,7 @@ impl RpcMethod {
 		});
 		let subscriber_arg = param_types.get(1).and_then(|ty| {
 			if let syn::Type::Path(path) = ty {
-				if path.path.segments.iter().any(|s| s.ident == SUBCRIBER_TYPE_IDENT) {
+				if path.path.segments.iter().any(|s| s.ident == SUBSCRIBER_TYPE_IDENT) {
 					Some(ty.clone())
 				} else {
 					None
@@ -369,8 +369,8 @@ pub fn generate_where_clause_serialization_predicates(
 	#[derive(Default)]
 	struct FindTyParams {
 		trait_generics: HashSet<syn::Ident>,
-		serialize_type_params: HashSet<syn::Ident>,
-		deserialize_type_params: HashSet<syn::Ident>,
+		server_to_client_type_params: HashSet<syn::Ident>,
+		client_to_server_type_params: HashSet<syn::Ident>,
 		visiting_return_type: bool,
 		visiting_fn_arg: bool,
 		visiting_subscriber_arg: bool,
@@ -385,15 +385,20 @@ pub fn generate_where_clause_serialization_predicates(
 			self.visiting_return_type = false
 		}
 		fn visit_path_segment(&mut self, segment: &'ast syn::PathSegment) {
-			if self.visiting_return_type || self.visiting_subscriber_arg && self.trait_generics.contains(&segment.ident) {
-				self.serialize_type_params.insert(segment.ident.clone());
-			}
-			if self.visiting_fn_arg && self.trait_generics.contains(&segment.ident) && !self.visiting_subscriber_arg {
-				self.deserialize_type_params.insert(segment.ident.clone());
-			}
-			self.visiting_subscriber_arg = self.visiting_fn_arg && segment.ident == SUBCRIBER_TYPE_IDENT;
+			self.visiting_subscriber_arg =
+				self.visiting_subscriber_arg || (self.visiting_fn_arg && segment.ident == SUBSCRIBER_TYPE_IDENT);
 			visit::visit_path_segment(self, segment);
-			self.visiting_subscriber_arg = false;
+			self.visiting_subscriber_arg = self.visiting_subscriber_arg && segment.ident != SUBSCRIBER_TYPE_IDENT;
+		}
+		fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+			if self.trait_generics.contains(&ident) {
+				if self.visiting_return_type || self.visiting_subscriber_arg {
+					self.server_to_client_type_params.insert(ident.clone());
+				}
+				if self.visiting_fn_arg && !self.visiting_subscriber_arg {
+					self.client_to_server_type_params.insert(ident.clone());
+				}
+			}
 		}
 		fn visit_fn_arg(&mut self, arg: &'ast syn::FnArg) {
 			self.visiting_fn_arg = true;
@@ -415,17 +420,17 @@ pub fn generate_where_clause_serialization_predicates(
 			let mut bounds: Punctuated<syn::TypeParamBound, Token![+]> = parse_quote!(Send + Sync + 'static);
 			// add json serialization trait bounds
 			if client {
-				if visitor.serialize_type_params.contains(&ty.ident) {
+				if visitor.server_to_client_type_params.contains(&ty.ident) {
 					bounds.push(parse_quote!(_serde::de::DeserializeOwned))
 				}
-				if visitor.deserialize_type_params.contains(&ty.ident) {
+				if visitor.client_to_server_type_params.contains(&ty.ident) {
 					bounds.push(parse_quote!(_serde::Serialize))
 				}
 			} else {
-				if visitor.serialize_type_params.contains(&ty.ident) {
+				if visitor.server_to_client_type_params.contains(&ty.ident) {
 					bounds.push(parse_quote!(_serde::Serialize))
 				}
-				if visitor.deserialize_type_params.contains(&ty.ident) {
+				if visitor.client_to_server_type_params.contains(&ty.ident) {
 					bounds.push(parse_quote!(_serde::de::DeserializeOwned))
 				}
 			}
