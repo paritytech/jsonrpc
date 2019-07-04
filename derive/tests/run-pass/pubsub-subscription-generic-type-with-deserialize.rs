@@ -10,30 +10,35 @@ use std::sync::Arc;
 use jsonrpc_core::Result;
 use jsonrpc_pubsub::{typed::Subscriber, SubscriptionId, Session, PubSubHandler};
 
-#[rpc(server)]
-pub trait Rpc<T> {
+#[derive(Serialize, Deserialize)]
+pub struct Wrapper<T, U> {
+	inner: T,
+	inner2: U,
+}
+
+#[rpc]
+pub trait Rpc<T, U> {
 	type Metadata;
 
 	/// Hello subscription
 	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_sub"))]
-	fn subscribe(&self, _: Self::Metadata, _: Subscriber<T>);
+	fn subscribe(&self, _: Self::Metadata, _: Subscriber<Wrapper<T, U>>);
 
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
 	fn unsubscribe(&self, a: Option<Self::Metadata>, b: SubscriptionId) -> Result<bool>;
 }
 
-// One way serialization
-#[derive(Serialize)]
-struct SerializeOnly {
+#[derive(Serialize, Deserialize)]
+struct SerializeAndDeserialize {
 	foo: String,
 }
 
 struct RpcImpl;
-impl Rpc<SerializeOnly> for RpcImpl {
+impl Rpc<SerializeAndDeserialize, SerializeAndDeserialize> for RpcImpl {
 	type Metadata = Arc<Session>;
 
-	fn subscribe(&self, _: Self::Metadata, _: Subscriber<SerializeOnly>) {
+	fn subscribe(&self, _: Self::Metadata, _: Subscriber<Wrapper<SerializeAndDeserialize, SerializeAndDeserialize>>) {
 		unimplemented!();
 	}
 

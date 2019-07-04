@@ -23,13 +23,13 @@ where
 	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return A(future::err(RpcError::Other(e.into())))
+		Err(e) => return A(future::err(RpcError::Other(e.into()))),
 	};
 
 	#[cfg(feature = "tls")]
 	let connector = match hyper_tls::HttpsConnector::new(4) {
 		Ok(connector) => connector,
-		Err(e) => return A(future::err(RpcError::Other(e.into())))
+		Err(e) => return A(future::err(RpcError::Other(e.into()))),
 	};
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
@@ -42,8 +42,15 @@ where
 	let (sender, receiver) = mpsc::channel(max_parallel);
 
 	let fut = receiver
-		.map(move |msg: RpcMessage| {
-			let (_, request) = request_builder.single_request(&msg);
+		.filter_map(move |msg: RpcMessage| {
+			let msg = match msg {
+				RpcMessage::Call(call) => call,
+				RpcMessage::Subscribe(_) => {
+					log::warn!("Unsupported `RpcMessage` type `Subscribe`.");
+					return None;
+				}
+			};
+			let (_, request) = request_builder.call_request(&msg);
 			let request = Request::post(&url)
 				.header(
 					http::header::CONTENT_TYPE,
@@ -51,7 +58,7 @@ where
 				)
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
-			client.request(request).then(move |response| Ok((response, msg)))
+			Some(client.request(request).then(move |response| Ok((response, msg))))
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, msg)| {
@@ -102,12 +109,12 @@ where
 mod tests {
 	use super::*;
 	use crate::*;
+	use assert_matches::assert_matches;
 	use hyper::rt;
 	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 	use jsonrpc_http_server::*;
 	use std::net::SocketAddr;
 	use std::time::Duration;
-	use assert_matches::assert_matches;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -223,7 +230,7 @@ mod tests {
 		// then
 		assert_matches!(
 			res.map(|_cli| unreachable!()), Err(RpcError::Other(err)) => {
-				assert_eq!("InvalidUri(InvalidUriChar)", format!("{:?}", err));
+				assert_eq!(format!("{}", err), "invalid uri character");
 			}
 		);
 	}

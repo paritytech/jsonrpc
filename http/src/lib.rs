@@ -18,7 +18,7 @@
 //! }
 //! ```
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 use jsonrpc_server_utils as server_utils;
 use net2;
@@ -71,7 +71,7 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// a future for server response
-		response: Box<Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>,
+		response: Box<dyn Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>,
 	},
 }
 
@@ -157,7 +157,7 @@ pub struct Rpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::m
 	/// RPC Handler
 	pub handler: Arc<MetaIoHandler<M, S>>,
 	/// Metadata extractor
-	pub extractor: Arc<MetaExtractor<M>>,
+	pub extractor: Arc<dyn MetaExtractor<M>>,
 }
 
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
@@ -194,8 +194,8 @@ pub enum RestApi {
 pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
 	executor: UninitializedExecutor,
-	meta_extractor: Arc<MetaExtractor<M>>,
-	request_middleware: Arc<RequestMiddleware>,
+	meta_extractor: Arc<dyn MetaExtractor<M>>,
+	request_middleware: Arc<dyn RequestMiddleware>,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
 	allowed_headers: cors::AccessControlAllowHeaders,
@@ -295,6 +295,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	///
 	/// Panics when set to `0`.
 	#[cfg(not(unix))]
+	#[allow(unused_mut)]
 	pub fn threads(mut self, _threads: usize) -> Self {
 		warn!("Multi-threaded server is not available on Windows. Falling back to single thread.");
 		self
@@ -460,13 +461,17 @@ fn recv_address(local_addr_rx: mpsc::Receiver<io::Result<SocketAddr>>) -> io::Re
 }
 
 fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
-	signals: (oneshot::Receiver<()>, mpsc::Sender<io::Result<SocketAddr>>, oneshot::Sender<()>),
+	signals: (
+		oneshot::Receiver<()>,
+		mpsc::Sender<io::Result<SocketAddr>>,
+		oneshot::Sender<()>,
+	),
 	executor: tokio::runtime::TaskExecutor,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
 	allowed_headers: cors::AccessControlAllowHeaders,
-	request_middleware: Arc<RequestMiddleware>,
+	request_middleware: Arc<dyn RequestMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
 	rest_api: RestApi,
@@ -476,89 +481,89 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	max_request_body_size: usize,
 ) {
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
-	executor.spawn(future::lazy(move || {
-		let handle = tokio::reactor::Handle::default();
+	executor.spawn(
+		future::lazy(move || {
+			let handle = tokio::reactor::Handle::default();
 
-		let bind = move || {
-			let listener = match addr {
-				SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
-				SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
+			let bind = move || {
+				let listener = match addr {
+					SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
+					SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
+				};
+				configure_port(reuse_port, &listener)?;
+				listener.reuse_address(true)?;
+				listener.bind(&addr)?;
+				let listener = listener.listen(1024)?;
+				let listener = tokio::net::TcpListener::from_std(listener, &handle)?;
+				// Add current host to allowed headers.
+				// NOTE: we need to use `l.local_addr()` instead of `addr`
+				// it might be different!
+				let local_addr = listener.local_addr()?;
+
+				Ok((listener, local_addr))
 			};
-			configure_port(reuse_port, &listener)?;
-			listener.reuse_address(true)?;
-			listener.bind(&addr)?;
-			let listener = listener.listen(1024)?;
-			let listener = tokio::net::TcpListener::from_std(listener, &handle)?;
-			// Add current host to allowed headers.
-			// NOTE: we need to use `l.local_addr()` instead of `addr`
-			// it might be different!
-			let local_addr = listener.local_addr()?;
 
-			Ok((listener, local_addr))
-		};
-
-		let bind_result = match bind() {
-			Ok((listener, local_addr)) => {
-				// Send local address
-				match local_addr_tx.send(Ok(local_addr)) {
-					Ok(_) => futures::future::ok((listener, local_addr)),
-					Err(_) => {
-						warn!(
-							"Thread {:?} unable to reach receiver, closing server",
-							thread::current().name()
-						);
-						futures::future::err(())
+			let bind_result = match bind() {
+				Ok((listener, local_addr)) => {
+					// Send local address
+					match local_addr_tx.send(Ok(local_addr)) {
+						Ok(_) => futures::future::ok((listener, local_addr)),
+						Err(_) => {
+							warn!(
+								"Thread {:?} unable to reach receiver, closing server",
+								thread::current().name()
+							);
+							futures::future::err(())
+						}
 					}
 				}
-			}
-			Err(err) => {
-				// Send error
-				let _send_result = local_addr_tx.send(Err(err));
+				Err(err) => {
+					// Send error
+					let _send_result = local_addr_tx.send(Err(err));
 
-				futures::future::err(())
-			}
-		};
+					futures::future::err(())
+				}
+			};
 
-		bind_result.and_then(move |(listener, local_addr)| {
-			let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
+			bind_result.and_then(move |(listener, local_addr)| {
+				let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-			let mut http = server::conn::Http::new();
-			http.keep_alive(keep_alive);
-			let tcp_stream = SuspendableStream::new(listener.incoming());
+				let mut http = server::conn::Http::new();
+				http.keep_alive(keep_alive);
+				let tcp_stream = SuspendableStream::new(listener.incoming());
 
-			tcp_stream
-				.for_each(move |socket| {
-					let service = ServerHandler::new(
-						jsonrpc_handler.clone(),
-						cors_domains.clone(),
-						cors_max_age,
-						allowed_headers.clone(),
-						allowed_hosts.clone(),
-						request_middleware.clone(),
-						rest_api,
-						health_api.clone(),
-						max_request_body_size,
-						keep_alive,
-					);
-					tokio::spawn(
-						http.serve_connection(socket, service)
-							.map_err(|e| error!("Error serving connection: {:?}", e)),
-					);
-					Ok(())
-				})
-				.map_err(|e| {
-					warn!("Incoming streams error, closing sever: {:?}", e);
-				})
-				.select(shutdown_signal
-				.map_err(|e| {
-					debug!("Shutdown signaller dropped, closing server: {:?}", e);
-				}))
-				.map(|_| ())
-				.map_err(|_| ())
+				tcp_stream
+					.for_each(move |socket| {
+						let service = ServerHandler::new(
+							jsonrpc_handler.clone(),
+							cors_domains.clone(),
+							cors_max_age,
+							allowed_headers.clone(),
+							allowed_hosts.clone(),
+							request_middleware.clone(),
+							rest_api,
+							health_api.clone(),
+							max_request_body_size,
+							keep_alive,
+						);
+						tokio::spawn(
+							http.serve_connection(socket, service)
+								.map_err(|e| error!("Error serving connection: {:?}", e)),
+						);
+						Ok(())
+					})
+					.map_err(|e| {
+						warn!("Incoming streams error, closing sever: {:?}", e);
+					})
+					.select(shutdown_signal.map_err(|e| {
+						debug!("Shutdown signaller dropped, closing server: {:?}", e);
+					}))
+					.map(|_| ())
+					.map_err(|_| ())
+			})
 		})
-	}).and_then(|_| {
-		done_tx.send(())
-	}));
+		.and_then(|_| done_tx.send(())),
+	);
 }
 
 #[cfg(unix)]
@@ -586,12 +591,12 @@ pub struct CloseHandle(Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>)
 impl CloseHandle {
 	/// Shutdown a running server
 	pub fn close(self) {
-        if let Some(executors) = self.0.lock().take() {
-            for (executor, closer) in executors {
-	            executor.close();
-	            let _ = closer.send(());
-            }
-        }
+		if let Some(executors) = self.0.lock().take() {
+			for (executor, closer) in executors {
+				executor.close();
+				let _ = closer.send(());
+			}
+		}
 	}
 }
 

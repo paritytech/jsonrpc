@@ -1,6 +1,6 @@
 //! JSON-RPC servers utilities.
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 #[macro_use]
 extern crate log;

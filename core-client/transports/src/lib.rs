@@ -9,6 +9,7 @@ use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use std::marker::PhantomData;
 
 pub mod transports;
 
@@ -27,9 +28,6 @@ pub enum RpcError {
 	/// Request timed out.
 	#[fail(display = "Request timed out")]
 	Timeout,
-	/// The server returned a response with an unknown id.
-	#[fail(display = "Server returned a response with an unknown id")]
-	UnknownId,
 	/// Not rpc specific errors.
 	#[fail(display = "{}", _0)]
 	Other(failure::Error),
@@ -41,9 +39,8 @@ impl From<Error> for RpcError {
 	}
 }
 
-/// A message sent to the `RpcClient`. This is public so that
-/// the derive crate can generate a client.
-struct RpcMessage {
+/// A rpc call message.
+struct CallMessage {
 	/// The rpc method name.
 	method: String,
 	/// The rpc method parameters.
@@ -51,6 +48,46 @@ struct RpcMessage {
 	/// The oneshot channel to send the result of the rpc
 	/// call to.
 	sender: oneshot::Sender<Result<Value, RpcError>>,
+}
+
+/// A rpc subscription.
+struct Subscription {
+	/// The subscribe method name.
+	subscribe: String,
+	/// The subscribe method parameters.
+	subscribe_params: Params,
+	/// The name of the notification.
+	notification: String,
+	/// The unsubscribe method name.
+	unsubscribe: String,
+}
+
+/// A rpc subscribe message.
+struct SubscribeMessage {
+	/// The subscription to subscribe to.
+	subscription: Subscription,
+	/// The channel to send notifications to.
+	sender: mpsc::Sender<Result<Value, RpcError>>,
+}
+
+/// A message sent to the `RpcClient`.
+enum RpcMessage {
+	/// Make a rpc call.
+	Call(CallMessage),
+	/// Subscribe to a notification.
+	Subscribe(SubscribeMessage),
+}
+
+impl From<CallMessage> for RpcMessage {
+	fn from(msg: CallMessage) -> Self {
+		RpcMessage::Call(msg)
+	}
+}
+
+impl From<SubscribeMessage> for RpcMessage {
+	fn from(msg: SubscribeMessage) -> Self {
+		RpcMessage::Subscribe(msg)
+	}
 }
 
 /// A channel to a `RpcClient`.
@@ -99,6 +136,67 @@ impl Future for RpcFuture {
 	}
 }
 
+/// The stream returned by a subscribe.
+pub struct SubscriptionStream {
+	recv: mpsc::Receiver<Result<Value, RpcError>>,
+}
+
+impl SubscriptionStream {
+	/// Crates a new `SubscriptionStream`.
+	pub fn new(recv: mpsc::Receiver<Result<Value, RpcError>>) -> Self {
+		SubscriptionStream { recv }
+	}
+}
+
+impl Stream for SubscriptionStream {
+	type Item = Value;
+	type Error = RpcError;
+
+	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
+		match self.recv.poll() {
+			Ok(Async::Ready(Some(Ok(value)))) => Ok(Async::Ready(Some(value))),
+			Ok(Async::Ready(Some(Err(error)))) => Err(error),
+			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
+			Ok(Async::NotReady) => Ok(Async::NotReady),
+			Err(()) => Err(RpcError::Other(format_err!("mpsc channel returned an error."))),
+		}
+	}
+}
+
+/// A typed subscription stream.
+pub struct TypedSubscriptionStream<T> {
+	_marker: PhantomData<T>,
+	returns: &'static str,
+	stream: SubscriptionStream,
+}
+
+impl<T> TypedSubscriptionStream<T> {
+	/// Creates a new `TypedSubscriptionStream`.
+	pub fn new(stream: SubscriptionStream, returns: &'static str) -> Self {
+		TypedSubscriptionStream {
+			_marker: PhantomData,
+			returns,
+			stream,
+		}
+	}
+}
+
+impl<T: DeserializeOwned + 'static> Stream for TypedSubscriptionStream<T> {
+	type Item = T;
+	type Error = RpcError;
+
+	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
+		let result = match self.stream.poll()? {
+			Async::Ready(Some(value)) => serde_json::from_value::<T>(value)
+				.map(|result| Async::Ready(Some(result)))
+				.map_err(|error| RpcError::ParseError(self.returns.into(), error.into()))?,
+			Async::Ready(None) => Async::Ready(None),
+			Async::NotReady => Async::NotReady,
+		};
+		Ok(result)
+	}
+}
+
 /// Client for raw JSON RPC requests
 #[derive(Clone)]
 pub struct RawClient(RpcChannel);
@@ -113,15 +211,39 @@ impl RawClient {
 	/// Call RPC with raw JSON
 	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item = Value, Error = RpcError> {
 		let (sender, receiver) = oneshot::channel();
-		let msg = RpcMessage {
+		let msg = CallMessage {
 			method: method.into(),
 			params,
 			sender,
 		};
 		self.0
-			.send(msg)
+			.send(msg.into())
 			.map_err(|error| RpcError::Other(error.into()))
 			.and_then(|_| RpcFuture::new(receiver))
+	}
+
+	/// Subscribe to topic with raw JSON
+	pub fn subscribe(
+		&self,
+		subscribe: &str,
+		subscribe_params: Params,
+		notification: &str,
+		unsubscribe: &str,
+	) -> impl Future<Item = SubscriptionStream, Error = RpcError> {
+		let (sender, receiver) = mpsc::channel(0);
+		let msg = SubscribeMessage {
+			subscription: Subscription {
+				subscribe: subscribe.into(),
+				subscribe_params,
+				notification: notification.into(),
+				unsubscribe: unsubscribe.into(),
+			},
+			sender,
+		};
+		self.0
+			.send(msg.into())
+			.map_err(|error| RpcError::Other(error.into()))
+			.map(|_| SubscriptionStream::new(receiver))
 	}
 }
 
@@ -167,6 +289,35 @@ impl TypedClient {
 			future::done(result)
 		}))
 	}
+
+	/// Subscribe with serialization of request and deserialization of response
+	pub fn subscribe<T: Serialize, R: DeserializeOwned + 'static>(
+		&self,
+		subscribe: &str,
+		subscribe_params: T,
+		topic: &str,
+		unsubscribe: &str,
+		returns: &'static str,
+	) -> impl Future<Item = TypedSubscriptionStream<R>, Error = RpcError> {
+		let args = serde_json::to_value(subscribe_params)
+			.expect("Only types with infallible serialisation can be used for JSON-RPC");
+
+		let params = match args {
+			Value::Array(vec) => Params::Array(vec),
+			Value::Null => Params::None,
+			_ => {
+				return future::Either::A(future::err(RpcError::Other(format_err!(
+					"RPC params should serialize to a JSON array, or null"
+				))))
+			}
+		};
+
+		let typed_stream = self
+			.0
+			.subscribe(subscribe, params, topic, unsubscribe)
+			.map(move |stream| TypedSubscriptionStream::new(stream, returns));
+		future::Either::B(typed_stream)
+	}
 }
 
 #[cfg(test)]
@@ -174,7 +325,10 @@ mod tests {
 	use super::*;
 	use crate::transports::local;
 	use crate::{RpcChannel, RpcError, TypedClient};
-	use jsonrpc_core::{self, IoHandler};
+	use jsonrpc_core::{self as core, IoHandler};
+	use jsonrpc_pubsub::{PubSubHandler, Subscriber, SubscriptionId};
+	use std::sync::atomic::{AtomicBool, Ordering};
+	use std::sync::Arc;
 
 	#[derive(Clone)]
 	struct AddClient(TypedClient);
@@ -193,6 +347,7 @@ mod tests {
 
 	#[test]
 	fn test_client_terminates() {
+		crate::logger::init_log();
 		let mut handler = IoHandler::new();
 		handler.add_method("add", |params: Params| {
 			let (a, b) = params.parse::<(u64, u64)>()?;
@@ -215,4 +370,69 @@ mod tests {
 			});
 		tokio::run(fut);
 	}
+
+	#[test]
+	fn should_handle_subscription() {
+		crate::logger::init_log();
+		// given
+		let mut handler = PubSubHandler::<local::LocalMeta, _>::default();
+		let called = Arc::new(AtomicBool::new(false));
+		let called2 = called.clone();
+		handler.add_subscription(
+			"hello",
+			("subscribe_hello", |params, _meta, subscriber: Subscriber| {
+				assert_eq!(params, core::Params::None);
+				let sink = subscriber
+					.assign_id(SubscriptionId::Number(5))
+					.expect("assigned subscription id");
+				std::thread::spawn(move || {
+					for i in 0..3 {
+						std::thread::sleep(std::time::Duration::from_millis(100));
+						let value = serde_json::json!({
+							"subscription": 5,
+							"result": vec![i],
+						});
+						sink.notify(serde_json::from_value(value).unwrap())
+							.wait()
+							.expect("sent notification");
+					}
+				});
+			}),
+			("unsubscribe_hello", move |id, _meta| {
+				// Should be called because session is dropped.
+				called2.store(true, Ordering::SeqCst);
+				assert_eq!(id, SubscriptionId::Number(5));
+				future::ok(core::Value::Bool(true))
+			}),
+		);
+
+		// when
+		let (client, rpc_client) = local::connect_with_pubsub::<TypedClient, _>(handler);
+		let received = Arc::new(std::sync::Mutex::new(vec![]));
+		let r2 = received.clone();
+		let fut = client
+			.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")
+			.and_then(|stream| {
+				stream
+					.into_future()
+					.map(move |(result, _)| {
+						drop(client);
+						r2.lock().unwrap().push(result.unwrap());
+					})
+					.map_err(|_| {
+						panic!("Expected message not received.");
+					})
+			})
+			.join(rpc_client)
+			.map(|(res, _)| {
+				log::info!("ok {:?}", res);
+			})
+			.map_err(|err| {
+				log::error!("err {:?}", err);
+			});
+		tokio::run(fut);
+		assert_eq!(called.load(Ordering::SeqCst), true);
+		assert!(!received.lock().unwrap().is_empty(), "Expected at least one received item.");
+	}
+
 }

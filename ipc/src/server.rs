@@ -1,6 +1,3 @@
-#![allow(deprecated)]
-
-use std;
 use std::sync::Arc;
 
 use crate::jsonrpc::futures::sync::{mpsc, oneshot};
@@ -50,8 +47,8 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
 /// IPC server builder
 pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
-	meta_extractor: Arc<MetaExtractor<M>>,
-	session_stats: Option<Arc<session::SessionStats>>,
+	meta_extractor: Arc<dyn MetaExtractor<M>>,
+	session_stats: Option<Arc<dyn session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
@@ -154,7 +151,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			}
 
-			let endpoint_handle = Handle::current();
+			let endpoint_handle = Handle::default();
 			let connections = match endpoint.incoming(&endpoint_handle) {
 				Ok(connections) => connections,
 				Err(e) => {

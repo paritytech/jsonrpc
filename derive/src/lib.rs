@@ -71,7 +71,7 @@
 //! 		name = "hello_subscribe",
 //! 		alias("hello_sub")
 //! 	)]
-//!		fn subscribe(&self, _: Self::Metadata, _: Subscriber<String>, _: u64);
+//!		fn subscribe(&self, _: Self::Metadata, _: Subscriber<String>, param: u64);
 //!
 //!		/// Unsubscribe from hello subscription.
 //!		#[pubsub(

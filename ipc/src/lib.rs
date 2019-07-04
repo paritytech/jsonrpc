@@ -1,6 +1,6 @@
 //! Cross-platform JSON-RPC IPC transport.
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 use jsonrpc_server_utils as server_utils;
 

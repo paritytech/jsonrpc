@@ -14,11 +14,11 @@ pub trait Rpc {
 
 	/// Hello subscription
 	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_sub"))]
-	fn subscribe(&self, _: Self::Metadata, _: typed::Subscriber<String>, _: u64);
+	fn subscribe(&self, meta: Self::Metadata, subscriber: typed::Subscriber<String>, param: u64);
 
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
-	fn unsubscribe(&self, _: Option<Self::Metadata>, _: SubscriptionId) -> Result<bool>;
+	fn unsubscribe(&self, meta: Option<Self::Metadata>, subscription: SubscriptionId) -> Result<bool>;
 }
 
 #[derive(Default)]

@@ -43,7 +43,7 @@
 //! }
 //! ```
 
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 extern crate jsonrpc_core as rpc;
 use serde;
@@ -130,6 +130,10 @@ impl Rpc {
 			response::Output::Failure(response::Failure { error, .. }) => match encoding {
 				Encoding::Compact => serde_json::to_string(&error),
 				Encoding::Pretty => serde_json::to_string_pretty(&error),
+			},
+			response::Output::Notification(notification) => match encoding {
+				Encoding::Compact => serde_json::to_string(&notification),
+				Encoding::Pretty => serde_json::to_string_pretty(&notification),
 			},
 		}
 		.expect("Serialization is infallible; qed");
