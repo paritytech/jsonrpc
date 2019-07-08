@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -131,12 +130,25 @@ where
 	}
 }
 
-impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M>
+impl<T, M> core::IoHandlerExtension<M> for IoDelegate<T, M>
 where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {
-	fn into(self) -> HashMap<String, RemoteProcedure<M>> {
-		self.inner.into()
+	fn augment<S: core::Middleware<M>>(self, handler: &mut core::MetaIoHandler<M, S>) {
+		handler.extend_with(self.inner)
+	}
+}
+
+impl<T, M> IntoIterator for IoDelegate<T, M>
+where
+	T: Send + Sync + 'static,
+	M: Metadata,
+{
+	type Item = (String, RemoteProcedure<M>);
+	type IntoIter = <core::IoDelegate<T, M> as IntoIterator>::IntoIter;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.inner.into_iter()
 	}
 }

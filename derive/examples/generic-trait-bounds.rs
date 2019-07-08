@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use jsonrpc_core::futures::future::{self, FutureResult};
-use jsonrpc_core::{Error, IoHandler, Result};
+use jsonrpc_core::{Error, IoHandler, Result, IoHandlerExtension};
 use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
@@ -57,5 +57,5 @@ impl Rpc<InAndOut, In, Out> for RpcImpl {
 fn main() {
 	let mut io = IoHandler::new();
 
-	io.extend_with(Rpc::to_delegate(RpcImpl));
+	RpcImpl.to_delegate().augment(&mut io);
 }

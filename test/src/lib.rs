@@ -49,8 +49,6 @@ extern crate jsonrpc_core as rpc;
 use serde;
 use serde_json;
 
-use std::collections::HashMap;
-
 /// Test RPC options.
 #[derive(Default, Debug)]
 pub struct Options {
@@ -88,7 +86,7 @@ impl Rpc {
 	/// Create a new RPC instance from a single delegate.
 	pub fn new<D>(delegate: D) -> Self
 	where
-		D: Into<HashMap<String, rpc::RemoteProcedure<()>>>,
+		D: IntoIterator<Item = (String, rpc::RemoteProcedure<()>)>,
 	{
 		let mut io = rpc::IoHandler::new();
 		io.extend_with(delegate);

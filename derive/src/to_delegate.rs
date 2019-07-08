@@ -121,6 +121,7 @@ pub fn generate_trait_item_method(
 		}
 	};
 
+
 	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
 	let mut method = method.clone();
 	method

@@ -145,12 +145,25 @@ where
 	}
 }
 
-impl<T, M> Into<HashMap<String, RemoteProcedure<M>>> for IoDelegate<T, M>
+impl<T, M> crate::io::IoHandlerExtension<M> for IoDelegate<T, M>
 where
 	T: Send + Sync + 'static,
 	M: Metadata,
 {
-	fn into(self) -> HashMap<String, RemoteProcedure<M>> {
-		self.methods
+	fn augment<S: crate::Middleware<M>>(self, handler: &mut crate::MetaIoHandler<M, S>) {
+		handler.extend_with(self.methods)
+	}
+}
+
+impl<T, M> IntoIterator for IoDelegate<T, M>
+where
+	T: Send + Sync + 'static,
+	M: Metadata,
+{
+	type Item = (String, RemoteProcedure<M>);
+	type IntoIter = std::collections::hash_map::IntoIter<String, RemoteProcedure<M>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.methods.into_iter()
 	}
 }
