@@ -299,26 +299,28 @@ pub trait IoHandlerExtension<M: Metadata = ()> {
 }
 
 macro_rules! impl_io_handler_extension {
-	($( $x:ident, )+) => {
-		impl<M, $( $x, )+> IoHandlerExtension<M> for ($( $x, )+) where
+	($( $x:ident, )*) => {
+		impl<M, $( $x, )*> IoHandlerExtension<M> for ($( $x, )*) where
 			M: Metadata,
 			$(
 				$x: IoHandlerExtension<M>,
-			)+
+			)*
 			{
+				#[allow(unused)]
 				fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
 					#[allow(non_snake_case)]
 					let (
-						$( $x, )+
+						$( $x, )*
 					) = self;
 					$(
 						$x.augment(handler);
-					)+
+					)*
 				}
 			}
 	}
 }
 
+impl_io_handler_extension!();
 impl_io_handler_extension!(A,);
 impl_io_handler_extension!(A,B,);
 impl_io_handler_extension!(A,B,C,);
