@@ -346,6 +346,12 @@ impl<M: Metadata> IoHandlerExtension<M> for HashMap<String, RemoteProcedure<M>> 
 	}
 }
 
+impl<M: Metadata, S2: Middleware<M>> IoHandlerExtension<M> for MetaIoHandler<M, S2> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		handler.methods.extend(self.methods)
+	}
+}
+
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
 #[derive(Debug, Default)]
 pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
@@ -404,6 +410,12 @@ impl<M: Metadata> DerefMut for IoHandler<M> {
 impl From<IoHandler> for MetaIoHandler<()> {
 	fn from(io: IoHandler) -> Self {
 		io.0
+	}
+}
+
+impl<M: Metadata> IoHandlerExtension<M> for IoHandler<M> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		handler.methods.extend(self.0.methods)
 	}
 }
 
