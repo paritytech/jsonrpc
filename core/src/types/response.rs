@@ -4,6 +4,7 @@ use crate::Result as CoreResult;
 
 /// Successful response
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 pub struct Success {
 	/// Protocol version
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -16,6 +17,7 @@ pub struct Success {
 
 /// Unsuccessful response
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 pub struct Failure {
 	/// Protocol Version
 	#[serde(skip_serializing_if = "Option::is_none")]
@@ -28,6 +30,7 @@ pub struct Failure {
 
 /// Represents output - failure or success
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 #[serde(untagged)]
 pub enum Output {
 	/// Notification
@@ -114,6 +117,7 @@ impl From<Output> for CoreResult<Value> {
 
 /// Synchronous response
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 #[serde(untagged)]
 pub enum Response {
 	/// Single response
@@ -289,4 +293,36 @@ fn notification_deserialize() {
 			params: Params::Array(vec![Value::from(10)]),
 		}))
 	);
+}
+
+#[test]
+fn handle_incorrect_responses() {
+	use serde_json;
+	use serde_json::Value;
+
+	let dsr = r#"
+{
+	"id": 2,
+	"jsonrpc": "2.0",
+	"result": "0x62d3776be72cc7fa62cad6fe8ed873d9bc7ca2ee576e400d987419a3f21079d5",
+	"error": {
+		"message": "VM Exception while processing transaction: revert",
+		"code": -32000,
+		"data": {}
+	}
+}"#;
+
+	let deserialized: Result<Response, _> = serde_json::from_str(dsr);
+	if cfg!(feature = "strict") {
+		assert!(deserialized.is_err(), "Expected error when deserializing invalid payload.");
+	} else {
+		assert_eq!(
+			deserialized.unwrap(),
+			Response::Single(Output::Success(Success {
+				jsonrpc: Some(Version::V2),
+				result: Value::from("0x62d3776be72cc7fa62cad6fe8ed873d9bc7ca2ee576e400d987419a3f21079d5"),
+				id: Id::Num(2)
+			}))
+		);
+	}
 }

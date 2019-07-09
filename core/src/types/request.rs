@@ -4,7 +4,7 @@ use super::{Id, Params, Version};
 
 /// Represents jsonrpc request which is a method call.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 pub struct MethodCall {
 	/// A String specifying the version of the JSON-RPC protocol.
 	pub jsonrpc: Option<Version>,
@@ -22,7 +22,7 @@ pub struct MethodCall {
 
 /// Represents jsonrpc request which is a notification.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 pub struct Notification {
 	/// A String specifying the version of the JSON-RPC protocol.
 	pub jsonrpc: Option<Version>,
@@ -72,6 +72,7 @@ impl From<Notification> for Call {
 
 /// Represents jsonrpc request.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
 #[serde(untagged)]
 pub enum Request {
 	/// Single request (call)
@@ -187,7 +188,11 @@ mod tests {
 
 		let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [1,2], "id": 1}"#;
 		let deserialized: Result<Notification, _> = serde_json::from_str(s);
-		assert!(deserialized.is_err())
+		if cfg!(feature = "strict") {
+			assert!(deserialized.is_err());
+		} else {
+			assert!(deserialized.is_ok());
+		}
 	}
 
 	#[test]
@@ -285,9 +290,17 @@ mod tests {
 
 		let s = r#"{"id":120,"method":"my_method","params":["foo", "bar"],"extra_field":[]}"#;
 		let deserialized: Request = serde_json::from_str(s).unwrap();
-		match deserialized {
-			Request::Single(Call::Invalid { id: Id::Num(120) }) => {}
-			_ => panic!("Request wrongly deserialized: {:?}", deserialized),
+
+		if cfg!(feature = "strict") {
+			match deserialized {
+				Request::Single(Call::Invalid { id: Id::Num(120) }) => {}
+				_ => panic!("Request wrongly deserialized: {:?}", deserialized),
+			}
+		} else {
+			match deserialized {
+				Request::Single(Call::MethodCall(_)) => {}
+				_ => panic!("Request wrongly deserialized: {:?}", deserialized),
+			}
 		}
 	}
 }

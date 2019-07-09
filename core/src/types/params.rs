@@ -8,6 +8,7 @@ use super::{Error, Value};
 
 /// Request parameters
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum Params {
 	/// No parameters
