@@ -32,7 +32,6 @@ before_script:
 script:
   - cargo build --all
   - cargo test --all
-  - cargo test --manifest-path ./core/Cargo.toml --no-default-features
   - |
     ([ $TRAVIS_RUST_VERSION = stable ] && cargo fmt --all -- --check) || true
 

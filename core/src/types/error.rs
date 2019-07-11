@@ -83,7 +83,7 @@ impl Serialize for ErrorCode {
 
 /// Error object as defined in Spec
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "strict", serde(deny_unknown_fields))]
+#[serde(deny_unknown_fields)]
 pub struct Error {
 	/// Code
 	pub code: ErrorCode,
