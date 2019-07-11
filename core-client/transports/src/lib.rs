@@ -432,7 +432,10 @@ mod tests {
 			});
 		tokio::run(fut);
 		assert_eq!(called.load(Ordering::SeqCst), true);
-		assert!(!received.lock().unwrap().is_empty(), "Expected at least one received item.");
+		assert!(
+			!received.lock().unwrap().is_empty(),
+			"Expected at least one received item."
+		);
 	}
 
 }

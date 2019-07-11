@@ -1,5 +1,5 @@
 use jsonrpc_core::*;
-use serde::Deserialize;
+use serde_derive::Deserialize;
 
 #[derive(Deserialize)]
 struct HelloParams {

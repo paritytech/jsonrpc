@@ -61,10 +61,10 @@ impl SubscriptionId {
 				core::Params::Map(map) => match map.get("subscription") {
 					Some(value) => Self::parse_value(value),
 					None => None,
-				}
-				_ => None
-			}
-			_ => None
+				},
+				_ => None,
+			},
+			_ => None,
 		}
 	}
 }

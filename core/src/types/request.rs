@@ -72,6 +72,7 @@ impl From<Notification> for Call {
 
 /// Represents jsonrpc request.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum Request {
 	/// Single request (call)
@@ -187,7 +188,7 @@ mod tests {
 
 		let s = r#"{"jsonrpc": "2.0", "method": "update", "params": [1,2], "id": 1}"#;
 		let deserialized: Result<Notification, _> = serde_json::from_str(s);
-		assert!(deserialized.is_err())
+		assert!(deserialized.is_err());
 	}
 
 	#[test]
@@ -285,6 +286,7 @@ mod tests {
 
 		let s = r#"{"id":120,"method":"my_method","params":["foo", "bar"],"extra_field":[]}"#;
 		let deserialized: Request = serde_json::from_str(s).unwrap();
+
 		match deserialized {
 			Request::Single(Call::Invalid { id: Id::Num(120) }) => {}
 			_ => panic!("Request wrongly deserialized: {:?}", deserialized),
