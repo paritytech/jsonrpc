@@ -298,7 +298,6 @@ fn notification_deserialize() {
 #[test]
 fn handle_incorrect_responses() {
 	use serde_json;
-	use serde_json::Value;
 
 	let dsr = r#"
 {
@@ -313,5 +312,8 @@ fn handle_incorrect_responses() {
 }"#;
 
 	let deserialized: Result<Response, _> = serde_json::from_str(dsr);
-	assert!(deserialized.is_err(), "Expected error when deserializing invalid payload.");
+	assert!(
+		deserialized.is_err(),
+		"Expected error when deserializing invalid payload."
+	);
 }

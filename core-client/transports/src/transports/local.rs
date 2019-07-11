@@ -25,7 +25,7 @@ where
 	/// Creates a new `LocalRpc` with default metadata.
 	pub fn new(handler: THandler) -> Self
 	where
-		TMetadata: Default
+		TMetadata: Default,
 	{
 		Self::with_metadata(handler, Default::default())
 	}
