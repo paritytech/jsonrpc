@@ -155,9 +155,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Extend this `MetaIoHandler` with methods defined elsewhere.
 	pub fn extend_with<F>(&mut self, methods: F)
 	where
-		F: Into<HashMap<String, RemoteProcedure<T>>>,
+		F: IntoIterator<Item = (String, RemoteProcedure<T>)>,
 	{
-		self.methods.extend(methods.into())
+		self.methods.extend(methods)
 	}
 
 	/// Handle given request synchronously - will block until response is available.
@@ -289,6 +289,69 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 }
 
+/// A type that can augment `MetaIoHandler`.
+///
+/// This allows your code to accept generic extensions for `IoHandler`
+/// and compose them to create the RPC server.
+pub trait IoHandlerExtension<M: Metadata = ()> {
+	/// Extend given `handler` with additional methods.
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>);
+}
+
+macro_rules! impl_io_handler_extension {
+	($( $x:ident, )*) => {
+		impl<M, $( $x, )*> IoHandlerExtension<M> for ($( $x, )*) where
+			M: Metadata,
+			$(
+				$x: IoHandlerExtension<M>,
+			)*
+			{
+				#[allow(unused)]
+				fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+					#[allow(non_snake_case)]
+					let (
+						$( $x, )*
+					) = self;
+					$(
+						$x.augment(handler);
+					)*
+				}
+			}
+	}
+}
+
+impl_io_handler_extension!();
+impl_io_handler_extension!(A,);
+impl_io_handler_extension!(A,B,);
+impl_io_handler_extension!(A,B,C,);
+impl_io_handler_extension!(A,B,C,D,);
+impl_io_handler_extension!(A,B,C,D,E,);
+impl_io_handler_extension!(A,B,C,D,E,F,);
+impl_io_handler_extension!(A,B,C,D,E,F,G,);
+impl_io_handler_extension!(A,B,C,D,E,F,G,H,);
+impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,);
+impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,J,);
+impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,J,K,);
+impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,J,K,L,);
+
+impl<M: Metadata> IoHandlerExtension<M> for Vec<(String, RemoteProcedure<M>)> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		handler.methods.extend(self)
+	}
+}
+
+impl<M: Metadata> IoHandlerExtension<M> for HashMap<String, RemoteProcedure<M>> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		handler.methods.extend(self)
+	}
+}
+
+impl<M: Metadata, S2: Middleware<M>> IoHandlerExtension<M> for MetaIoHandler<M, S2> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		handler.methods.extend(self.methods)
+	}
+}
+
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
 #[derive(Debug, Default)]
 pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
@@ -347,6 +410,12 @@ impl<M: Metadata> DerefMut for IoHandler<M> {
 impl From<IoHandler> for MetaIoHandler<()> {
 	fn from(io: IoHandler) -> Self {
 		io.0
+	}
+}
+
+impl<M: Metadata> IoHandlerExtension<M> for IoHandler<M> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		handler.methods.extend(self.0.methods)
 	}
 }
 
@@ -472,5 +541,34 @@ mod tests {
 		let io = IoHandler::new();
 
 		assert!(is_send_sync(io))
+	}
+
+	#[test]
+	fn test_extending_by_multiple_delegates() {
+		use std::sync::Arc;
+		use crate::delegates::IoDelegate;
+		use super::IoHandlerExtension;
+
+		struct Test;
+		impl Test {
+			fn abc(&self, _p: crate::Params) -> Result<Value, crate::Error> {
+				Ok(5.into())
+			}
+		}
+
+		let mut io = IoHandler::new();
+		let mut del1 = IoDelegate::new(Arc::new(Test));
+		del1.add_method("rpc_test", Test::abc);
+		let mut del2 = IoDelegate::new(Arc::new(Test));
+		del2.add_method("rpc_test", Test::abc);
+
+		fn augment<X: IoHandlerExtension>(x: X, io: &mut IoHandler) {
+			x.augment(io);
+		}
+
+		augment(
+			(del1, del2),
+			&mut io
+		);
 	}
 }

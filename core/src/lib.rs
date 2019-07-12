@@ -44,10 +44,13 @@ pub type BoxFuture<T> = Box<dyn futures::Future<Item = T, Error = Error> + Send>
 /// A Result type.
 pub type Result<T> = ::std::result::Result<T, Error>;
 
-pub use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
+pub use crate::calls::{
+	Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcNotification, RpcNotificationSimple
+};
 pub use crate::delegates::IoDelegate;
 pub use crate::io::{
 	Compatibility, FutureOutput, FutureResponse, FutureResult, FutureRpcResult, IoHandler, MetaIoHandler,
+	IoHandlerExtension,
 };
 pub use crate::middleware::{Middleware, Noop as NoopMiddleware};
 pub use crate::types::*;
