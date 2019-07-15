@@ -12,7 +12,7 @@ version = "12.1.0"
 
 [dependencies]
 log = "0.4"
-parking_lot = "0.8"
+parking_lot = "0.9"
 jsonrpc-core = { version = "12.1", path = "../core" }
 serde = "1.0"
 
