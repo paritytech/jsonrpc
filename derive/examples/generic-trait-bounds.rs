@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use jsonrpc_core::futures::future::{self, FutureResult};
-use jsonrpc_core::{Error, IoHandler, Result, IoHandlerExtension};
+use jsonrpc_core::{Error, IoHandler, IoHandlerExtension, Result};
 use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
