@@ -322,17 +322,17 @@ macro_rules! impl_io_handler_extension {
 
 impl_io_handler_extension!();
 impl_io_handler_extension!(A,);
-impl_io_handler_extension!(A,B,);
-impl_io_handler_extension!(A,B,C,);
-impl_io_handler_extension!(A,B,C,D,);
-impl_io_handler_extension!(A,B,C,D,E,);
-impl_io_handler_extension!(A,B,C,D,E,F,);
-impl_io_handler_extension!(A,B,C,D,E,F,G,);
-impl_io_handler_extension!(A,B,C,D,E,F,G,H,);
-impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,);
-impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,J,);
-impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,J,K,);
-impl_io_handler_extension!(A,B,C,D,E,F,G,H,I,J,K,L,);
+impl_io_handler_extension!(A, B,);
+impl_io_handler_extension!(A, B, C,);
+impl_io_handler_extension!(A, B, C, D,);
+impl_io_handler_extension!(A, B, C, D, E,);
+impl_io_handler_extension!(A, B, C, D, E, F,);
+impl_io_handler_extension!(A, B, C, D, E, F, G,);
+impl_io_handler_extension!(A, B, C, D, E, F, G, H,);
+impl_io_handler_extension!(A, B, C, D, E, F, G, H, I,);
+impl_io_handler_extension!(A, B, C, D, E, F, G, H, I, J,);
+impl_io_handler_extension!(A, B, C, D, E, F, G, H, I, J, K,);
+impl_io_handler_extension!(A, B, C, D, E, F, G, H, I, J, K, L,);
 
 impl<M: Metadata> IoHandlerExtension<M> for Vec<(String, RemoteProcedure<M>)> {
 	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
@@ -545,9 +545,9 @@ mod tests {
 
 	#[test]
 	fn test_extending_by_multiple_delegates() {
-		use std::sync::Arc;
-		use crate::delegates::IoDelegate;
 		use super::IoHandlerExtension;
+		use crate::delegates::IoDelegate;
+		use std::sync::Arc;
 
 		struct Test;
 		impl Test {
@@ -566,9 +566,6 @@ mod tests {
 			x.augment(io);
 		}
 
-		augment(
-			(del1, del2),
-			&mut io
-		);
+		augment((del1, del2), &mut io);
 	}
 }
