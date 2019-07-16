@@ -1,4 +1,4 @@
-error: Invalid attribute parameter(s): 'Xmeta'. Expected 'meta'
+error: Invalid attribute parameter(s): 'Xmeta'. Expected 'meta, raw_params'
   --> $DIR/attr-invalid-meta-words.rs:8:2
    |
 8  |       /// Returns a protocol version
