@@ -26,6 +26,7 @@ ws = [
 	"websocket",
 	"tokio",
 ]
+uds = ["tokio", "tokio-uds"]
 
 [dependencies]
 failure = "0.1"
@@ -38,11 +39,13 @@ log = "0.4"
 serde = "1.0"
 serde_json = "1.0"
 tokio = { version = "0.1", optional = true }
+tokio-uds = { version = "0.2", optional = true }
 websocket = { version = "0.23", optional = true }
 
 [dev-dependencies]
 assert_matches = "1.1"
 jsonrpc-http-server = { version = "12.1", path = "../../http" }
+jsonrpc-ipc-server = { path = "../../ipc" }
 lazy_static = "1.0"
 env_logger = "0.6"
 tokio = "0.1"

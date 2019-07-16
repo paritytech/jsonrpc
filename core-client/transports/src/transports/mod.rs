@@ -10,6 +10,8 @@ pub mod duplex;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod local;
+#[cfg(all(unix, feature = "uds"))]
+pub mod uds;
 #[cfg(feature = "ws")]
 pub mod ws;
 
