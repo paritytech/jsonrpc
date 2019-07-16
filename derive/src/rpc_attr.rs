@@ -9,6 +9,7 @@ pub struct RpcMethodAttribute {
 	pub name: String,
 	pub aliases: Vec<String>,
 	pub kind: AttributeKind,
+	pub raw_params: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -35,6 +36,7 @@ const SUBSCRIPTION_NAME_KEY: &str = "subscription";
 const ALIASES_KEY: &str = "alias";
 const PUB_SUB_ATTR_NAME: &str = "pubsub";
 const METADATA_META_WORD: &str = "meta";
+const RAW_PARAMS_META_WORD: &str = "raw_params";
 const SUBSCRIBE_META_WORD: &str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 const RETURNS_META_WORD: &str = "returns";
@@ -79,12 +81,15 @@ impl RpcMethodAttribute {
 						get_meta_list(meta)
 							.and_then(|ml| get_name_value(RPC_NAME_KEY, ml))
 							.map_or(Err(Error::new_spanned(attr, MISSING_NAME_ERR)), |name| {
-								let aliases = get_meta_list(meta).map_or(Vec::new(), |ml| get_aliases(ml));
+								let aliases = get_meta_list(&meta).map_or(Vec::new(), |ml| get_aliases(ml));
+								let raw_params =
+									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
 									name,
 									aliases,
 									kind,
+									raw_params,
 								})
 							})
 					})
@@ -144,7 +149,7 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 
 	match meta.name().to_string().as_ref() {
 		RPC_ATTR_NAME => {
-			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD])?;
+			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
 			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY, RETURNS_META_WORD])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
@@ -152,7 +157,7 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 			validate_idents(
 				&meta,
 				&visitor.meta_words,
-				&[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD],
+				&[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD, RAW_PARAMS_META_WORD],
 			)?;
 			validate_idents(&meta, &visitor.name_value_names, &[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])

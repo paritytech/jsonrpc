@@ -1,3 +1,4 @@
+use jsonrpc_core::types::params::Params;
 use jsonrpc_core::{IoHandler, Response};
 use jsonrpc_derive::rpc;
 use serde_json;
@@ -24,6 +25,9 @@ pub trait Rpc {
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add", alias("add_alias1", "add_alias2"))]
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
+
+	#[rpc(name = "raw", raw_params)]
+	fn raw(&self, params: Params) -> Result<String>;
 }
 
 #[derive(Default)]
@@ -40,6 +44,10 @@ impl Rpc for RpcImpl {
 
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
+	}
+
+	fn raw(&self, _params: Params) -> Result<String> {
+		Ok("OK".into())
 	}
 }
 
@@ -166,4 +174,41 @@ fn should_use_method_name_aliases() {
 		)
 		.unwrap()
 	);
+}
+
+#[test]
+fn should_accept_any_raw_params() {
+	let mut io = IoHandler::new();
+	let rpc = RpcImpl::default();
+	io.extend_with(rpc.to_delegate());
+
+	// when
+	let req1 = r#"{"jsonrpc":"2.0","id":1,"method":"raw","params":[1, 2]}"#;
+	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"raw","params":{"foo":"bar"}}"#;
+	let req3 = r#"{"jsonrpc":"2.0","id":1,"method":"raw","params":null}"#;
+	let req4 = r#"{"jsonrpc":"2.0","id":1,"method":"raw"}"#;
+
+	let res1 = io.handle_request_sync(req1);
+	let res2 = io.handle_request_sync(req2);
+	let res3 = io.handle_request_sync(req3);
+	let res4 = io.handle_request_sync(req4);
+	let expected = r#"{
+		"jsonrpc": "2.0",
+		"result": "OK",
+		"id": 1
+	}"#;
+	let expected: Response = serde_json::from_str(expected).unwrap();
+
+	// then
+	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
+	assert_eq!(expected, result1);
+
+	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
+	assert_eq!(expected, result2);
+
+	let result3: Response = serde_json::from_str(&res3.unwrap()).unwrap();
+	assert_eq!(expected, result3);
+
+	let result4: Response = serde_json::from_str(&res4.unwrap()).unwrap();
+	assert_eq!(expected, result4);
 }

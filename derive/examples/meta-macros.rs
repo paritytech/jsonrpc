@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use jsonrpc_core::futures::future::FutureResult;
+use jsonrpc_core::types::params::Params;
 use jsonrpc_core::{futures, Error, MetaIoHandler, Metadata, Result, Value};
 use jsonrpc_derive::rpc;
 
@@ -16,7 +17,7 @@ pub trait Rpc<One> {
 	#[rpc(name = "getOne")]
 	fn one(&self) -> Result<One>;
 
-	/// Adds two numbers and returns a result
+	/// Adds two numbers and returns a result.
 	#[rpc(name = "add")]
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 
@@ -24,11 +25,15 @@ pub trait Rpc<One> {
 	#[rpc(name = "mul")]
 	fn mul(&self, a: u64, b: Option<u64>) -> Result<u64>;
 
-	/// Performs asynchronous operation
+	/// Retrieves and debug prints the underlying `Params` object.
+	#[rpc(name = "raw", raw_params)]
+	fn raw(&self, params: Params) -> Result<String>;
+
+	/// Performs an asynchronous operation.
 	#[rpc(name = "callAsync")]
 	fn call(&self, a: u64) -> FutureResult<String, Error>;
 
-	/// Performs asynchronous operation with meta
+	/// Performs an asynchronous operation with meta.
 	#[rpc(meta, name = "callAsyncMeta", alias("callAsyncMetaAlias"))]
 	fn call_meta(&self, a: Self::Metadata, b: BTreeMap<String, Value>) -> FutureResult<String, Error>;
 }
@@ -47,6 +52,10 @@ impl Rpc<u64> for RpcImpl {
 
 	fn mul(&self, a: u64, b: Option<u64>) -> Result<u64> {
 		Ok(a * b.unwrap_or(1))
+	}
+
+	fn raw(&self, params: Params) -> Result<String> {
+		Ok(format!("Got: {:?}", params))
 	}
 
 	fn call(&self, x: u64) -> FutureResult<String, Error> {
