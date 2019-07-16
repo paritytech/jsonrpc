@@ -198,6 +198,8 @@ impl RpcMethod {
 				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
+			} else if self.attr.raw_params {
+				quote! { let params = Ok((params,)); }
 			} else {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			}
