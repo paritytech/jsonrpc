@@ -55,14 +55,32 @@ struct DelegateNotification<T, F> {
 
 impl<T, M, F> RpcNotification<M> for DelegateNotification<T, F>
 where
+	M: Metadata,
 	F: Fn(&T, Params) + 'static,
 	F: Send + Sync + 'static,
 	T: Send + Sync + 'static,
-	M: Metadata,
 {
 	fn execute(&self, params: Params, _meta: M) {
 		let closure = &self.closure;
 		closure(&self.delegate, params)
+	}
+}
+
+struct DelegateNotificationWithMeta<T, F> {
+	delegate: Arc<T>,
+	closure: F,
+}
+
+impl<T, M, F> RpcNotification<M> for DelegateNotificationWithMeta<T, F>
+where
+	M: Metadata,
+	F: Fn(&T, Params, M) + 'static,
+	F: Send + Sync + 'static,
+	T: Send + Sync + 'static,
+{
+	fn execute(&self, params: Params, meta: M) {
+		let closure = &self.closure;
+		closure(&self.delegate, params, meta)
 	}
 }
 
@@ -138,6 +156,21 @@ where
 		self.methods.insert(
 			name.into(),
 			RemoteProcedure::Notification(Arc::new(DelegateNotification {
+				delegate: self.delegate.clone(),
+				closure: notification,
+			})),
+		);
+	}
+
+	/// Adds notification with metadata to the delegate.
+	pub fn add_notification_with_meta<F>(&mut self, name: &str, notification: F)
+	where
+		F: Fn(&T, Params, M),
+		F: Send + Sync + 'static,
+	{
+		self.methods.insert(
+			name.into(),
+			RemoteProcedure::Notification(Arc::new(DelegateNotificationWithMeta {
 				delegate: self.delegate.clone(),
 				closure: notification,
 			})),
