@@ -14,20 +14,25 @@ type Result<T> = ::std::result::Result<T, MyError>;
 
 #[rpc]
 pub trait Rpc {
-	/// Returns a protocol version
+	/// Returns a protocol version.
 	#[rpc(name = "protocolVersion")]
 	fn protocol_version(&self) -> Result<String>;
 
-	/// Negates number and returns a result
+	/// Negates number and returns a result.
 	#[rpc(name = "neg")]
 	fn neg(&self, a: i64) -> Result<i64>;
 
-	/// Adds two numbers and returns a result
+	/// Adds two numbers and returns a result.
 	#[rpc(name = "add", alias("add_alias1", "add_alias2"))]
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 
+	/// Retrieves and debug prints the underlying `Params` object.
 	#[rpc(name = "raw", raw_params)]
 	fn raw(&self, params: Params) -> Result<String>;
+
+	/// Responds to a notification.
+	#[notification(name = "notify")]
+	fn notify(&self, a: u64);
 }
 
 #[derive(Default)]
@@ -48,6 +53,10 @@ impl Rpc for RpcImpl {
 
 	fn raw(&self, _params: Params) -> Result<String> {
 		Ok("OK".into())
+	}
+
+	fn notify(&self, a: u64) {
+		println!("Received `notify` with value: {}", a);
 	}
 }
 
