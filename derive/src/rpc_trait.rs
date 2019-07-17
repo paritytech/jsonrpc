@@ -119,6 +119,12 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 					}
 				}
 			}
+			AttributeKind::Notification { has_metadata } => {
+				method_registrations.push(MethodRegistration::Notification {
+					method: method.clone(),
+					has_metadata: *has_metadata,
+				})
+			}
 		}
 	}
 

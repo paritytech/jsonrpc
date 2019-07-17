@@ -22,6 +22,9 @@ pub enum AttributeKind {
 		subscription_name: String,
 		kind: PubSubMethodKind,
 	},
+	Notification {
+		has_metadata: bool,
+	},
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +43,7 @@ const RAW_PARAMS_META_WORD: &str = "raw_params";
 const SUBSCRIBE_META_WORD: &str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 const RETURNS_META_WORD: &str = "returns";
+const NOTIFICATION_ATTR_NAME: &str = "notification";
 
 const MULTIPLE_RPC_ATTRIBUTES_ERR: &str = "Expected only a single rpc attribute per method";
 const INVALID_ATTR_PARAM_NAMES_ERR: &str = "Invalid attribute parameter(s):";
@@ -74,6 +78,11 @@ impl RpcMethodAttribute {
 						Some(Ok(AttributeKind::Rpc { has_metadata, returns }))
 					}
 					PUB_SUB_ATTR_NAME => Some(Self::parse_pubsub(meta)),
+					NOTIFICATION_ATTR_NAME => {
+						let has_metadata =
+							get_meta_list(meta).map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
+						Some(Ok(AttributeKind::Notification { has_metadata }))
+					}
 					_ => None,
 				};
 				attr_kind.map(|kind| {
@@ -122,7 +131,14 @@ impl RpcMethodAttribute {
 	pub fn is_pubsub(&self) -> bool {
 		match self.kind {
 			AttributeKind::PubSub { .. } => true,
-			AttributeKind::Rpc { .. } => false,
+			_ => false,
+		}
+	}
+
+	pub fn is_notification(&self) -> bool {
+		match self.kind {
+			AttributeKind::Notification { .. } => true,
+			_ => false,
 		}
 	}
 }
@@ -160,6 +176,11 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 				&[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD, RAW_PARAMS_META_WORD],
 			)?;
 			validate_idents(&meta, &visitor.name_value_names, &[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY])?;
+			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
+		}
+		NOTIFICATION_ATTR_NAME => {
+			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
+			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
 		_ => Ok(meta), // ignore other attributes - compiler will catch unknown ones

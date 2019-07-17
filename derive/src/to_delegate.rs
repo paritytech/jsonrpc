@@ -19,6 +19,10 @@ pub enum MethodRegistration {
 		subscribe: RpcMethod,
 		unsubscribe: RpcMethod,
 	},
+	Notification {
+		method: RpcMethod,
+		has_metadata: bool,
+	},
 }
 
 impl MethodRegistration {
@@ -69,6 +73,21 @@ impl MethodRegistration {
 					);
 					#sub_aliases
 					#unsub_aliases
+				})
+			}
+			MethodRegistration::Notification { method, has_metadata } => {
+				let name = &method.name();
+				let add_notification = if *has_metadata {
+					quote!(add_notification_with_meta)
+				} else {
+					quote!(add_notification)
+				};
+				let closure = method.generate_delegate_closure(false)?;
+				let add_aliases = method.generate_add_aliases();
+
+				Ok(quote! {
+					del.#add_notification(#name, #closure);
+					#add_aliases
 				})
 			}
 		}
@@ -199,7 +218,7 @@ impl RpcMethod {
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
 			} else if self.attr.raw_params {
-				quote! { let params = Ok((params,)); }
+				quote! { let params: Result<_> = Ok((params,)); }
 			} else {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			}
@@ -209,6 +228,16 @@ impl RpcMethod {
 		let result = &self.trait_item.sig.decl.output;
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
+
+		if self.attr.is_notification() {
+			match result {
+				syn::ReturnType::Default => {}
+				syn::ReturnType::Type(_, ret) => match **ret {
+					syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing() => {}
+					_ => return Err(syn::Error::new_spanned(&result, &"Notifications must return ()")),
+				},
+			}
+		}
 
 		let closure_args = quote! { base, params, #(#extra_closure_args), * };
 		let method_sig = quote! { fn(&Self, #(#extra_method_types, ) * #(#param_types), *) #result };
@@ -223,6 +252,13 @@ impl RpcMethod {
 					let _ = subscriber.reject(e);
 					return
 				}
+			}
+		} else if self.attr.is_notification() {
+			quote! {
+				Ok((#(#tuple_fields, )*)) => {
+					(method)#method_call
+				},
+				Err(_) => return,
 			}
 		} else {
 			quote! {

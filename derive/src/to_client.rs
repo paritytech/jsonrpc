@@ -97,9 +97,7 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				let arg_names = compute_arg_identifiers(&args)?;
 				let returns = match &method.attr.kind {
 					AttributeKind::Rpc { returns, .. } => compute_returns(&method.trait_item, returns)?,
-					AttributeKind::PubSub { .. } => {
-						continue;
-					}
+					_ => continue,
 				};
 				let returns_str = quote!(#returns).to_string();
 				let client_method = syn::parse_quote! {
@@ -134,6 +132,7 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				);
 				client_methods.push(client_method);
 			}
+			_ => continue,
 		}
 	}
 	Ok(client_methods)
