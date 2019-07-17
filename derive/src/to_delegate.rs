@@ -218,7 +218,7 @@ impl RpcMethod {
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
 			} else if self.attr.raw_params {
-				quote! { let params: Result<_> = Ok((params,)); }
+				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
 			} else {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			}
