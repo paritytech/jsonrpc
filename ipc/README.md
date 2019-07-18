@@ -9,7 +9,7 @@ IPC server (Windows & Linux) for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-ipc-server = "12.1"
+jsonrpc-ipc-server = "13.0"
 ```
 
 `main.rs`
