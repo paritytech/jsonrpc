@@ -35,7 +35,7 @@ pub trait Rpc {
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 
 	/// A notification alongside pubsub.
-	#[notification(name = "notify")]
+	#[rpc(name = "notify")]
 	fn notify(&self, a: u64);
 }
 

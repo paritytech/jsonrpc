@@ -31,7 +31,7 @@ pub trait Rpc {
 	fn raw(&self, params: Params) -> Result<String>;
 
 	/// Handles a notification.
-	#[notification(name = "notify")]
+	#[rpc(name = "notify")]
 	fn notify(&self, a: u64);
 }
 

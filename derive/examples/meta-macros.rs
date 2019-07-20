@@ -38,7 +38,7 @@ pub trait Rpc<One> {
 	fn call_meta(&self, a: Self::Metadata, b: BTreeMap<String, Value>) -> FutureResult<String, Error>;
 
 	/// Handles notification.
-	#[notification(name = "notify")]
+	#[rpc(name = "notify")]
 	fn notify(&self, a: u64);
 }
 

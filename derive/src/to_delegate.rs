@@ -229,16 +229,6 @@ impl RpcMethod {
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
 
-		if self.attr.is_notification() {
-			match result {
-				syn::ReturnType::Default => {}
-				syn::ReturnType::Type(_, ret) => match **ret {
-					syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing() => {}
-					_ => return Err(syn::Error::new_spanned(&result, &"Notifications must return ()")),
-				},
-			}
-		}
-
 		let closure_args = quote! { base, params, #(#extra_closure_args), * };
 		let method_sig = quote! { fn(&Self, #(#extra_method_types, ) * #(#param_types), *) #result };
 		let method_call = quote! { (base, #(#extra_closure_args, )* #(#tuple_fields), *) };
