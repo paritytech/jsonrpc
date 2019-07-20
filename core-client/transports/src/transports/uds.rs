@@ -1,8 +1,7 @@
 //! JSON-RPC unix domain socket client implementation.
 use crate::{RpcChannel, RpcError};
-use failure::Error;
 use futures::prelude::*;
-use std::{collections::VecDeque, path::Path};
+use std::path::Path;
 use tokio::codec::{Framed, LinesCodec};
 use tokio_uds::UnixStream;
 
@@ -15,87 +14,14 @@ where
 	UnixStream::connect(path)
 		.map(|unix_stream| {
 			let (sink, stream) = Framed::new(unix_stream, LinesCodec::new()).split();
-			let (sink, stream) = UdsClient::new(sink, stream).split();
+			let sink = sink.sink_map_err(|err| RpcError::Other(err.into()));
+			let stream = stream.map_err(|err| RpcError::Other(err.into()));
 			let (rpc_client, sender) = super::duplex(sink, stream);
 			let rpc_client = rpc_client.map_err(|error| eprintln!("{:?}", error));
 			tokio::spawn(rpc_client);
 			sender.into()
 		})
 		.map_err(|error| RpcError::Other(error.into()))
-}
-
-/// Intermediate step in uds pipeline between tokio-uds and duplex sink and
-/// stream converting between io and rpc errors.
-struct UdsClient<TSink, TStream> {
-	sink: TSink,
-	stream: TStream,
-	queue: VecDeque<String>,
-}
-
-impl<TSink, TStream, TError> UdsClient<TSink, TStream>
-where
-	TSink: Sink<SinkItem = String, SinkError = TError>,
-	TStream: Stream<Item = String, Error = TError>,
-	TError: Into<Error>,
-{
-	pub fn new(sink: TSink, stream: TStream) -> Self {
-		Self {
-			sink,
-			stream,
-			queue: VecDeque::new(),
-		}
-	}
-}
-
-impl<TSink, TStream, TError> Sink for UdsClient<TSink, TStream>
-where
-	TSink: Sink<SinkItem = String, SinkError = TError>,
-	TStream: Stream<Item = String, Error = TError>,
-	TError: Into<Error>,
-{
-	type SinkItem = String;
-	type SinkError = RpcError;
-
-	fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-		self.queue.push_back(request);
-		Ok(AsyncSink::Ready)
-	}
-
-	fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-		loop {
-			match self.queue.pop_front() {
-				Some(request) => match self.sink.start_send(request) {
-					Ok(AsyncSink::Ready) => continue,
-					Ok(AsyncSink::NotReady(request)) => {
-						self.queue.push_front(request);
-						break;
-					}
-					Err(error) => return Err(RpcError::Other(error.into())),
-				},
-				None => break,
-			}
-		}
-		self.sink.poll_complete().map_err(|error| RpcError::Other(error.into()))
-	}
-}
-
-impl<TSink, TStream, TError> Stream for UdsClient<TSink, TStream>
-where
-	TSink: Sink<SinkItem = String, SinkError = TError>,
-	TStream: Stream<Item = String, Error = TError>,
-	TError: Into<Error>,
-{
-	type Item = String;
-	type Error = RpcError;
-
-	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-		match self.stream.poll() {
-			Ok(Async::Ready(Some(data))) => Ok(Async::Ready(Some(data))),
-			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-			Ok(Async::NotReady) => Ok(Async::NotReady),
-			Err(error) => Err(RpcError::Other(error.into())),
-		}
-	}
 }
 
 #[cfg(test)]
