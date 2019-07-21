@@ -22,6 +22,7 @@ categories = [
 tls = ["jsonrpc-client-transports/tls"]
 http = ["jsonrpc-client-transports/http"]
 ws = ["jsonrpc-client-transports/ws"]
+ipc = ["jsonrpc-client-transports/ipc"]
 
 [dependencies]
 jsonrpc-client-transports = { version = "13.0", path = "./transports", default-features = false }
