@@ -166,16 +166,16 @@ where
 				Err(err) => Err(err)?,
 			};
 			log::debug!("incoming: {}", response_str);
-			for (id, result, method, sid) in super::parse_response(&response_str)? {
-				log::debug!(
-					"id: {:?} (sid: {:?}) result: {:?} method: {:?}",
-					id,
-					sid,
-					result,
-					method
-				);
-				self.incoming.push_back((id, result, method, sid));
-			}
+			// we only send one request at the time, so there can only be one response.
+			let (id, result, method, sid) = super::parse_response(&response_str)?;
+			log::debug!(
+				"id: {:?} (sid: {:?}) result: {:?} method: {:?}",
+				id,
+				sid,
+				result,
+				method
+			);
+			self.incoming.push_back((id, result, method, sid));
 		}
 
 		// Handle incoming queue.

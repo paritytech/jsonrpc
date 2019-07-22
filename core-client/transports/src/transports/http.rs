@@ -82,16 +82,7 @@ where
 						let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
 						super::parse_response(&response_str)
 					})
-					.and_then(|responses| {
-						if responses.len() == 1 {
-							responses.into_iter().nth(0).expect("Exactly one response; qed").1
-						} else {
-							Err(RpcError::Other(format_err!(
-								"Transport currently only supports Single requests"
-							)))
-						}
-					});
-
+					.and_then(|r| r.1);
 				if let Err(err) = msg.sender.send(response) {
 					log::warn!("Error resuming asynchronous request: {:?}", err);
 				}

@@ -1,5 +1,5 @@
 //! jsonrpc response
-use super::{Error, ErrorCode, Id, Notification, Params, Value, Version};
+use super::{Error, ErrorCode, Id, Value, Version};
 use crate::Result as CoreResult;
 
 /// Successful response
@@ -33,8 +33,6 @@ pub struct Failure {
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum Output {
-	/// Notification
-	Notification(Notification),
 	/// Success
 	Success(Success),
 	/// Failure
@@ -64,7 +62,6 @@ impl Output {
 		match *self {
 			Output::Success(ref s) => s.jsonrpc,
 			Output::Failure(ref f) => f.jsonrpc,
-			Output::Notification(ref n) => n.jsonrpc,
 		}
 	}
 
@@ -73,15 +70,6 @@ impl Output {
 		match *self {
 			Output::Success(ref s) => &s.id,
 			Output::Failure(ref f) => &f.id,
-			Output::Notification(_) => &Id::Null,
-		}
-	}
-
-	/// Get the method name if the output is a notification.
-	pub fn method(&self) -> Option<String> {
-		match *self {
-			Output::Notification(ref n) => Some(n.method.to_owned()),
-			_ => None,
 		}
 	}
 }
@@ -92,25 +80,6 @@ impl From<Output> for CoreResult<Value> {
 		match output {
 			Output::Success(s) => Ok(s.result),
 			Output::Failure(f) => Err(f.error),
-			Output::Notification(n) => match &n.params {
-				Params::Map(map) => {
-					let subscription = map.get("subscription");
-					let result = map.get("result");
-					let error = map.get("error");
-
-					match (subscription, result, error) {
-						(Some(_), Some(result), _) => Ok(result.to_owned()),
-						(Some(_), _, Some(error)) => {
-							let error = serde_json::from_value::<Error>(error.to_owned())
-								.ok()
-								.unwrap_or_else(|| Error::parse_error());
-							Err(error)
-						}
-						_ => Ok(n.params.into()),
-					}
-				}
-				_ => Ok(n.params.into()),
-			},
 		}
 	}
 }
@@ -274,24 +243,6 @@ fn batch_response_deserialize() {
 				id: Id::Num(1)
 			})
 		])
-	);
-}
-
-#[test]
-fn notification_deserialize() {
-	use super::Params;
-	use serde_json;
-	use serde_json::Value;
-
-	let dsr = r#"{"jsonrpc":"2.0","method":"hello","params":[10]}"#;
-	let deserialized: Response = serde_json::from_str(dsr).unwrap();
-	assert_eq!(
-		deserialized,
-		Response::Single(Output::Notification(Notification {
-			jsonrpc: Some(Version::V2),
-			method: "hello".into(),
-			params: Params::Array(vec![Value::from(10)]),
-		}))
 	);
 }
 
