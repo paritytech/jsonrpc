@@ -41,7 +41,6 @@ const RAW_PARAMS_META_WORD: &str = "raw_params";
 const SUBSCRIBE_META_WORD: &str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 const RETURNS_META_WORD: &str = "returns";
-const NOTIFICATION_ATTR_NAME: &str = "notification";
 
 const MULTIPLE_RPC_ATTRIBUTES_ERR: &str = "Expected only a single rpc attribute per method";
 const INVALID_ATTR_PARAM_NAMES_ERR: &str = "Invalid attribute parameter(s):";
@@ -187,11 +186,6 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 				&[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD, RAW_PARAMS_META_WORD],
 			)?;
 			validate_idents(&meta, &visitor.name_value_names, &[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY])?;
-			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
-		}
-		NOTIFICATION_ATTR_NAME => {
-			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
-			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
 		_ => Ok(meta), // ignore other attributes - compiler will catch unknown ones
