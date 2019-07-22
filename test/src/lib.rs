@@ -131,10 +131,6 @@ impl Rpc {
 				Encoding::Compact => serde_json::to_string(&error),
 				Encoding::Pretty => serde_json::to_string_pretty(&error),
 			},
-			response::Output::Notification(notification) => match encoding {
-				Encoding::Compact => serde_json::to_string(&notification),
-				Encoding::Pretty => serde_json::to_string_pretty(&notification),
-			},
 		}
 		.expect("Serialization is infallible; qed");
 
