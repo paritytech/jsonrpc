@@ -221,3 +221,36 @@ fn should_accept_any_raw_params() {
 	let result4: Response = serde_json::from_str(&res4.unwrap()).unwrap();
 	assert_eq!(expected, result4);
 }
+
+#[test]
+fn should_accept_only_notifications() {
+	let mut io = IoHandler::new();
+	let rpc = RpcImpl::default();
+	io.extend_with(rpc.to_delegate());
+
+	// when
+	let req1 = r#"{"jsonrpc":"2.0","method":"notify","params":[1]}"#;
+	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"notify","params":[1]}"#;
+
+	let res1 = io.handle_request_sync(req1);
+	let res2 = io.handle_request_sync(req2);
+
+	// then
+	assert!(res1.is_none());
+
+	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
+	assert_eq!(
+		result2,
+		serde_json::from_str(
+			r#"{
+		"jsonrpc": "2.0",
+		"error": {
+			"code": -32601,
+			"message": "Method not found"
+		},
+		"id":1
+	}"#
+		)
+		.unwrap()
+	);
+}
