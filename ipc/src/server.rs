@@ -50,7 +50,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	meta_extractor: Arc<dyn MetaExtractor<M>>,
 	session_stats: Option<Arc<dyn session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
-	reactor: Handle,
+	reactor: Option<Handle>,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
 	security_attributes: SecurityAttributes,
@@ -79,7 +79,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(extractor),
 			session_stats: None,
 			executor: reactor::UninitializedExecutor::Unspawned,
-			reactor: Handle::default(),
+			reactor: None,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
 			security_attributes: SecurityAttributes::empty(),
@@ -95,7 +95,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 	/// Sets different event loop I/O reactor.
 	pub fn event_loop_reactor(mut self, reactor: Handle) -> Self {
-		self.reactor = reactor;
+		self.reactor = Some(reactor);
 		self
 	}
 
@@ -160,6 +160,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			}
 
+			// Make sure to construct Handle::default() inside Tokio runtime
+			let reactor = reactor.unwrap_or_else(Handle::default);
 			let connections = match endpoint.incoming(&reactor) {
 				Ok(connections) => connections,
 				Err(e) => {
