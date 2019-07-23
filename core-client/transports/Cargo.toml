@@ -26,6 +26,11 @@ ws = [
 	"websocket",
 	"tokio",
 ]
+ipc = [
+	"parity-tokio-ipc",
+	"jsonrpc-server-utils",
+	"tokio",
+]
 
 [dependencies]
 failure = "0.1"
@@ -34,7 +39,9 @@ hyper = { version = "0.12", optional = true }
 hyper-tls = { version = "0.3.2", optional = true }
 jsonrpc-core = { version = "13.0", path = "../../core" }
 jsonrpc-pubsub = { version = "13.0", path = "../../pubsub" }
+jsonrpc-server-utils = { version = "13.0", path = "../../server-utils", optional = true }
 log = "0.4"
+parity-tokio-ipc = { version = "0.1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "0.1", optional = true }
@@ -43,9 +50,10 @@ websocket = { version = "0.23", optional = true }
 [dev-dependencies]
 assert_matches = "1.1"
 jsonrpc-http-server = { version = "13.0", path = "../../http" }
+jsonrpc-ipc-server = { version = "13.0", path = "../../ipc" }
 lazy_static = "1.0"
 env_logger = "0.6"
 tokio = "0.1"
 
 [badges]
-travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master" }

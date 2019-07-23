@@ -10,6 +10,8 @@ use crate::{CallMessage, RpcError};
 pub mod duplex;
 #[cfg(feature = "http")]
 pub mod http;
+#[cfg(feature = "ipc")]
+pub mod ipc;
 pub mod local;
 #[cfg(feature = "ws")]
 pub mod ws;
