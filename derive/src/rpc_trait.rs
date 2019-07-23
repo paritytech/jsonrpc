@@ -79,10 +79,23 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 
 	for method in methods.iter() {
 		match &method.attr().kind {
-			AttributeKind::Rpc { has_metadata, .. } => method_registrations.push(MethodRegistration::Standard {
-				method: method.clone(),
-				has_metadata: *has_metadata,
-			}),
+			AttributeKind::Rpc {
+				has_metadata,
+				is_notification,
+				..
+			} => {
+				if *is_notification {
+					method_registrations.push(MethodRegistration::Notification {
+						method: method.clone(),
+						has_metadata: *has_metadata,
+					})
+				} else {
+					method_registrations.push(MethodRegistration::Standard {
+						method: method.clone(),
+						has_metadata: *has_metadata,
+					})
+				}
+			}
 			AttributeKind::PubSub {
 				subscription_name,
 				kind,

@@ -36,6 +36,10 @@ pub trait Rpc<One> {
 	/// Performs an asynchronous operation with meta.
 	#[rpc(meta, name = "callAsyncMeta", alias("callAsyncMetaAlias"))]
 	fn call_meta(&self, a: Self::Metadata, b: BTreeMap<String, Value>) -> FutureResult<String, Error>;
+
+	/// Handles notification.
+	#[rpc(name = "notify")]
+	fn notify(&self, a: u64);
 }
 
 struct RpcImpl;
@@ -64,6 +68,10 @@ impl Rpc<u64> for RpcImpl {
 
 	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> FutureResult<String, Error> {
 		futures::finished(format!("From: {}, got: {:?}", meta.0, map))
+	}
+
+	fn notify(&self, a: u64) {
+		println!("Received `notify` with value: {}", a);
 	}
 }
 

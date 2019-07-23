@@ -17,6 +17,7 @@ pub enum AttributeKind {
 	Rpc {
 		has_metadata: bool,
 		returns: Option<String>,
+		is_notification: bool,
 	},
 	PubSub {
 		subscription_name: String,
@@ -50,10 +51,11 @@ const NEITHER_SUB_OR_UNSUB_ERR: &str = "pubsub attribute not annotated with eith
 
 impl RpcMethodAttribute {
 	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>> {
+		let output = &method.sig.decl.output;
 		let attrs = method
 			.attrs
 			.iter()
-			.filter_map(Self::parse_meta)
+			.filter_map(|attr| Self::parse_meta(attr, &output))
 			.collect::<Result<Vec<_>>>()?;
 
 		if attrs.len() <= 1 {
@@ -63,16 +65,11 @@ impl RpcMethodAttribute {
 		}
 	}
 
-	fn parse_meta(attr: &syn::Attribute) -> Option<Result<RpcMethodAttribute>> {
+	fn parse_meta(attr: &syn::Attribute, output: &syn::ReturnType) -> Option<Result<RpcMethodAttribute>> {
 		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
 				let attr_kind = match meta.name().to_string().as_ref() {
-					RPC_ATTR_NAME => {
-						let has_metadata =
-							get_meta_list(meta).map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
-						let returns = get_meta_list(meta).map_or(None, |ml| get_name_value(RETURNS_META_WORD, ml));
-						Some(Ok(AttributeKind::Rpc { has_metadata, returns }))
-					}
+					RPC_ATTR_NAME => Some(Self::parse_rpc(meta, output)),
 					PUB_SUB_ATTR_NAME => Some(Self::parse_pubsub(meta)),
 					_ => None,
 				};
@@ -99,6 +96,28 @@ impl RpcMethodAttribute {
 		}
 	}
 
+	fn parse_rpc(meta: &syn::Meta, output: &syn::ReturnType) -> Result<AttributeKind> {
+		let has_metadata = get_meta_list(meta).map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
+		let returns = get_meta_list(meta).map_or(None, |ml| get_name_value(RETURNS_META_WORD, ml));
+		let is_notification = match output {
+			syn::ReturnType::Default => true,
+			syn::ReturnType::Type(_, ret) => match **ret {
+				syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing() => true,
+				_ => false,
+			},
+		};
+
+		if is_notification && returns.is_some() {
+			return Err(syn::Error::new_spanned(output, &"Notifications must return ()"));
+		}
+
+		Ok(AttributeKind::Rpc {
+			has_metadata,
+			returns,
+			is_notification,
+		})
+	}
+
 	fn parse_pubsub(meta: &syn::Meta) -> Result<AttributeKind> {
 		let name_and_list =
 			get_meta_list(meta).and_then(|ml| get_name_value(SUBSCRIPTION_NAME_KEY, ml).map(|name| (name, ml)));
@@ -123,6 +142,13 @@ impl RpcMethodAttribute {
 		match self.kind {
 			AttributeKind::PubSub { .. } => true,
 			AttributeKind::Rpc { .. } => false,
+		}
+	}
+
+	pub fn is_notification(&self) -> bool {
+		match self.kind {
+			AttributeKind::Rpc { is_notification, .. } => is_notification,
+			AttributeKind::PubSub { .. } => false,
 		}
 	}
 }

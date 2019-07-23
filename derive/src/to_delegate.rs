@@ -19,6 +19,10 @@ pub enum MethodRegistration {
 		subscribe: RpcMethod,
 		unsubscribe: RpcMethod,
 	},
+	Notification {
+		method: RpcMethod,
+		has_metadata: bool,
+	},
 }
 
 impl MethodRegistration {
@@ -69,6 +73,21 @@ impl MethodRegistration {
 					);
 					#sub_aliases
 					#unsub_aliases
+				})
+			}
+			MethodRegistration::Notification { method, has_metadata } => {
+				let name = &method.name();
+				let add_notification = if *has_metadata {
+					quote!(add_notification_with_meta)
+				} else {
+					quote!(add_notification)
+				};
+				let closure = method.generate_delegate_closure(false)?;
+				let add_aliases = method.generate_add_aliases();
+
+				Ok(quote! {
+					del.#add_notification(#name, #closure);
+					#add_aliases
 				})
 			}
 		}
@@ -199,7 +218,7 @@ impl RpcMethod {
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
 			} else if self.attr.raw_params {
-				quote! { let params = Ok((params,)); }
+				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
 			} else {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			}
@@ -223,6 +242,13 @@ impl RpcMethod {
 					let _ = subscriber.reject(e);
 					return
 				}
+			}
+		} else if self.attr.is_notification() {
+			quote! {
+				Ok((#(#tuple_fields, )*)) => {
+					(method)#method_call
+				},
+				Err(_) => return,
 			}
 		} else {
 			quote! {

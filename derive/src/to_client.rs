@@ -97,9 +97,7 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				let arg_names = compute_arg_identifiers(&args)?;
 				let returns = match &method.attr.kind {
 					AttributeKind::Rpc { returns, .. } => compute_returns(&method.trait_item, returns)?,
-					AttributeKind::PubSub { .. } => {
-						continue;
-					}
+					AttributeKind::PubSub { .. } => continue,
 				};
 				let returns_str = quote!(#returns).to_string();
 				let client_method = syn::parse_quote! {
@@ -132,6 +130,20 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 						self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
 					}
 				);
+				client_methods.push(client_method);
+			}
+			MethodRegistration::Notification { method, .. } => {
+				let attrs = get_doc_comments(&method.trait_item.attrs);
+				let name = &method.trait_item.sig.ident;
+				let args = compute_args(&method.trait_item);
+				let arg_names = compute_arg_identifiers(&args)?;
+				let client_method = syn::parse_quote! {
+					#(#attrs)*
+					pub fn #name(&self, #args) {
+						let _args_tuple = (#(#arg_names,)*);
+						unimplemented!()
+					}
+				};
 				client_methods.push(client_method);
 			}
 		}

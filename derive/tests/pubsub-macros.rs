@@ -22,7 +22,7 @@ type Result<T> = ::std::result::Result<T, MyError>;
 pub trait Rpc {
 	type Metadata;
 
-	/// Hello subscription
+	/// Hello subscription.
 	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe", alias("hello_alias"))]
 	fn subscribe(&self, a: Self::Metadata, b: Subscriber<String>, c: u32, d: Option<u64>);
 
@@ -30,9 +30,13 @@ pub trait Rpc {
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
 	fn unsubscribe(&self, a: Option<Self::Metadata>, b: SubscriptionId) -> Result<bool>;
 
-	/// A regular rpc method alongside pubsub
+	/// A regular rpc method alongside pubsub.
 	#[rpc(name = "add")]
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
+
+	/// A notification alongside pubsub.
+	#[rpc(name = "notify")]
+	fn notify(&self, a: u64);
 }
 
 #[derive(Default)]
@@ -51,6 +55,10 @@ impl Rpc for RpcImpl {
 
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
+	}
+
+	fn notify(&self, a: u64) {
+		println!("Received `notify` with value: {}", a);
 	}
 }
 
