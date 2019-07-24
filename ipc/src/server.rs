@@ -50,6 +50,7 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	meta_extractor: Arc<dyn MetaExtractor<M>>,
 	session_stats: Option<Arc<dyn session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
+	reactor: Option<Handle>,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
 	security_attributes: SecurityAttributes,
@@ -78,6 +79,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			meta_extractor: Arc::new(extractor),
 			session_stats: None,
 			executor: reactor::UninitializedExecutor::Unspawned,
+			reactor: None,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
 			security_attributes: SecurityAttributes::empty(),
@@ -88,6 +90,12 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	/// Sets shared different event loop executor.
 	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
 		self.executor = reactor::UninitializedExecutor::Shared(executor);
+		self
+	}
+
+	/// Sets different event loop I/O reactor.
+	pub fn event_loop_reactor(mut self, reactor: Handle) -> Self {
+		self.reactor = Some(reactor);
 		self
 	}
 
@@ -128,6 +136,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let executor = self.executor.initialize()?;
+		let reactor = self.reactor;
 		let rpc_handler = self.handler;
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor;
@@ -151,8 +160,9 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 				}
 			}
 
-			let endpoint_handle = Handle::default();
-			let connections = match endpoint.incoming(&endpoint_handle) {
+			// Make sure to construct Handle::default() inside Tokio runtime
+			let reactor = reactor.unwrap_or_else(Handle::default);
+			let connections = match endpoint.incoming(&reactor) {
 				Ok(connections) => connections,
 				Err(e) => {
 					start_signal
