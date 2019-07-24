@@ -78,9 +78,6 @@ mod tests {
 		rt.shutdown_now().wait().unwrap();
 	}
 
-	// Windows currently panics in `IpcConnection::connect` if a given path doesn't exist.
-	// Should be fixed by https://github.com/NikVolf/parity-tokio-ipc/pull/12
-	#[cfg(not(windows))]
 	#[test]
 	fn should_fail_without_server() {
 		let rt = Runtime::new().unwrap();
