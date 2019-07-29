@@ -155,7 +155,7 @@ impl From<ClientResponse> for Result<Value, Error> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jsonrpc_core::{Value, Version, Params, Failure, Success, Output, Notification};
+	use jsonrpc_core::{Failure, Notification, Output, Params, Success, Value, Version};
 	use serde_json;
 
 	#[test]
