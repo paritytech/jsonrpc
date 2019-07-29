@@ -241,26 +241,3 @@ fn batch_response_deserialize() {
 		])
 	);
 }
-
-#[test]
-fn handle_incorrect_responses() {
-	use serde_json;
-
-	let dsr = r#"
-{
-	"id": 2,
-	"jsonrpc": "2.0",
-	"result": "0x62d3776be72cc7fa62cad6fe8ed873d9bc7ca2ee576e400d987419a3f21079d5",
-	"error": {
-		"message": "VM Exception while processing transaction: revert",
-		"code": -32000,
-		"data": {}
-	}
-}"#;
-
-	let deserialized: Result<Response, _> = serde_json::from_str(dsr);
-	assert!(
-		deserialized.is_err(),
-		"Expected error when deserializing invalid payload."
-	);
-}
