@@ -25,11 +25,7 @@ struct Subscription {
 }
 
 impl Subscription {
-	fn new(
-		channel: mpsc::Sender<Result<Value, RpcError>>,
-		notification: String,
-		unsubscribe: String,
-	) -> Self {
+	fn new(channel: mpsc::Sender<Result<Value, RpcError>>, notification: String, unsubscribe: String) -> Self {
 		Subscription {
 			id: None,
 			notification,
@@ -120,7 +116,11 @@ where
 				RpcMessage::Call(msg) => {
 					let (id, request_str) = self.request_builder.call_request(&msg);
 
-					if self.pending_requests.insert(id.clone(), PendingRequest::Call(msg.sender)).is_some() {
+					if self
+						.pending_requests
+						.insert(id.clone(), PendingRequest::Call(msg.sender))
+						.is_some()
+					{
 						log::error!("reuse of request id {:?}", id);
 					}
 					request_str
@@ -132,13 +132,14 @@ where
 						notification,
 						unsubscribe,
 					} = msg.subscription;
-					let (id, request_str) = self.request_builder.subscribe_request(
-						subscribe,
-						subscribe_params,
-					);
+					let (id, request_str) = self.request_builder.subscribe_request(subscribe, subscribe_params);
 					log::debug!("subscribing to {}", notification);
 					let subscription = Subscription::new(msg.sender, notification, unsubscribe);
-					if self.pending_requests.insert(id.clone(), PendingRequest::Subscription(subscription)).is_some() {
+					if self
+						.pending_requests
+						.insert(id.clone(), PendingRequest::Subscription(subscription))
+						.is_some()
+					{
 						log::error!("reuse of request id {:?}", id);
 					}
 					request_str
@@ -165,10 +166,16 @@ where
 				Err(err) => Err(err)?,
 			};
 			log::debug!("incoming: {}", response_str);
-			for (id, result, method, sid) in super::parse_response(&response_str)? {
-				log::debug!("id: {:?} (sid: {:?}) result: {:?} method: {:?}", id, sid, result, method);
-				self.incoming.push_back((id, result, method, sid));
-			}
+			// we only send one request at the time, so there can only be one response.
+			let (id, result, method, sid) = super::parse_response(&response_str)?;
+			log::debug!(
+				"id: {:?} (sid: {:?}) result: {:?} method: {:?}",
+				id,
+				sid,
+				result,
+				method
+			);
+			self.incoming.push_back((id, result, method, sid));
 		}
 
 		// Handle incoming queue.
@@ -184,7 +191,7 @@ where
 							tx.send(result)
 								.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?;
 							continue;
-						},
+						}
 						// It was a subscription request,
 						// turn it into a proper subscription.
 						Some(PendingRequest::Subscription(mut subscription)) => {
@@ -193,10 +200,14 @@ where
 
 							if let Some(sid) = sid {
 								subscription.id = Some(sid.clone());
-								if self.subscriptions.insert((sid.clone(), method.clone()), subscription).is_some() {
+								if self
+									.subscriptions
+									.insert((sid.clone(), method.clone()), subscription)
+									.is_some()
+								{
 									log::warn!(
 										"Overwriting existing subscription under {:?} ({:?}). \
-										Seems that server returned the same subscription id.",
+										 Seems that server returned the same subscription id.",
 										sid,
 										method,
 									);
@@ -210,12 +221,12 @@ where
 								);
 							}
 							continue;
-						},
+						}
 						// It's not a pending request nor a notification
 						None if sid_and_method.is_none() => {
 							log::warn!("Got unexpected response with id {:?} ({:?})", id, sid_and_method);
 							continue;
-						},
+						}
 						// just fall-through in case it's a notification
 						None => {}
 					};
@@ -229,7 +240,10 @@ where
 					if let Some(subscription) = self.subscriptions.get_mut(&sid_and_method) {
 						match subscription.channel.poll_ready() {
 							Ok(Async::Ready(())) => {
-								subscription.channel.try_send(result).expect("The channel is ready; qed");
+								subscription
+									.channel
+									.try_send(result)
+									.expect("The channel is ready; qed");
 							}
 							Ok(Async::NotReady) => {
 								let (sid, method) = sid_and_method;
@@ -237,12 +251,14 @@ where
 								break;
 							}
 							Err(_) => {
-								let subscription = self.subscriptions
+								let subscription = self
+									.subscriptions
 									.remove(&sid_and_method)
 									.expect("Subscription was just polled; qed");
-								let sid = subscription.id
-									.expect("Every subscription that ends up in `self.subscriptions` has id already \
-									assigned; assignment happens during response to subscribe request.");
+								let sid = subscription.id.expect(
+									"Every subscription that ends up in `self.subscriptions` has id already \
+									 assigned; assignment happens during response to subscribe request.",
+								);
 								let (_id, request_str) =
 									self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
 								log::debug!("outgoing: {}", request_str);
@@ -253,7 +269,7 @@ where
 					} else {
 						log::warn!("Received unexpected subscription notification: {:?}", sid_and_method);
 					}
-				},
+				}
 				None => break,
 			}
 		}

@@ -4,6 +4,7 @@ branches:
   only:
   - master
   - /^parity-.*$/
+  - /^v.*.x$/
 
 cache: cargo
 
