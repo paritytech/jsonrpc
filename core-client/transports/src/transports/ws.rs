@@ -9,11 +9,32 @@ use websocket::{ClientBuilder, OwnedMessage};
 /// Connect to a JSON-RPC websocket server.
 ///
 /// Uses an unbuffered channel to queue outgoing rpc messages.
-pub fn connect<T>(url: &str) -> Result<impl Future<Item = T, Error = RpcError>, Error>
+///
+/// Returns `Err` if the `url` is invalid.
+pub fn try_connect<T>(url: &str) -> Result<impl Future<Item = T, Error = RpcError>, Error>
 where
 	T: From<RpcChannel>,
 {
-	let client = ClientBuilder::new(url)?
+	let client_builder = ClientBuilder::new(url)?;
+	Ok(do_connect(client_builder))
+}
+
+/// Connect to a JSON-RPC websocket server.
+///
+/// Uses an unbuffered channel to queue outgoing rpc messages.
+pub fn connect<T>(url: &url::Url) -> impl Future<Item = T, Error = RpcError>
+where
+	T: From<RpcChannel>,
+{
+	let client_builder = ClientBuilder::from_url(url);
+	do_connect(client_builder)
+}
+
+fn do_connect<T>(client_builder: ClientBuilder) -> impl Future<Item = T, Error = RpcError>
+where
+	T: From<RpcChannel>,
+{
+	client_builder
 		.async_connect(None)
 		.map(|(client, _)| {
 			let (sink, stream) = client.split();
@@ -23,8 +44,7 @@ where
 			tokio::spawn(rpc_client);
 			sender.into()
 		})
-		.map_err(|error| RpcError::Other(error.into()));
-	Ok(client)
+		.map_err(|error| RpcError::Other(error.into()))
 }
 
 struct WebsocketClient<TSink, TStream> {
