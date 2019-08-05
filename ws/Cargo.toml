@@ -15,7 +15,7 @@ jsonrpc-server-utils = { version = "13.0", path = "../server-utils" }
 log = "0.4"
 parking_lot = "0.9"
 slab = "0.4"
-ws = "0.8"
+ws = "0.9"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
