@@ -530,6 +530,24 @@ mod tests {
 	}
 
 	#[test]
+	fn test_batch_notification() {
+		use std::sync::atomic;
+		use std::sync::Arc;
+
+		let mut io = IoHandler::new();
+
+		let called = Arc::new(atomic::AtomicBool::new(false));
+		let c = called.clone();
+		io.add_notification("say_hello", move |_| {
+			c.store(true, atomic::Ordering::SeqCst);
+		});
+
+		let request = r#"[{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23]}]"#;
+		assert_eq!(io.handle_request_sync(request), None);
+		assert_eq!(called.load(atomic::Ordering::SeqCst), true);
+	}
+
+	#[test]
 	fn test_send_sync() {
 		fn is_send_sync<T>(_obj: T) -> bool
 		where
