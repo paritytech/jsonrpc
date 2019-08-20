@@ -247,7 +247,7 @@ where
 							}
 							Ok(Async::NotReady) => {
 								let (sid, method) = sid_and_method;
-								self.incoming.push_front((id, result, Some(method), Some(sid)));
+								self.incoming.push_back((id, result, Some(method), Some(sid)));
 								break;
 							}
 							Err(_) => {
