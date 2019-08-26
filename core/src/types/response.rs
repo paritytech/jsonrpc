@@ -105,6 +105,17 @@ impl Response {
 		}
 		.into()
 	}
+
+	/// Deserialize `Response` from given JSON string.
+	///
+	/// This method will handle an empty string as empty batch response.
+	pub fn from_json(s: &str) -> Result<Self, serde_json::Error> {
+		if s.is_empty() {
+			Ok(Response::Batch(vec![]))
+		} else {
+			serde_json::from_str(s)
+		}
+	}
 }
 
 impl From<Failure> for Response {
@@ -267,4 +278,16 @@ fn handle_incorrect_responses() {
 		deserialized.is_err(),
 		"Expected error when deserializing invalid payload."
 	);
+}
+
+#[test]
+fn should_parse_empty_response_as_batch() {
+	use serde_json;
+
+	let dsr = r#""#;
+
+	let deserialized1: Result<Response, _>= serde_json::from_str(dsr);
+	let deserialized2: Result<Response, _> = Response::from_json(dsr);
+	assert!(deserialized1.is_err(), "Empty string is not valid JSON, so we should get an error.");
+	assert_eq!(deserialized2.unwrap(), Response::Batch(vec![]));
 }
