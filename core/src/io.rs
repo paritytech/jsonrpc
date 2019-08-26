@@ -70,7 +70,7 @@ impl Compatibility {
 /// Request handler
 ///
 /// By default compatible only with jsonrpc v2
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MetaIoHandler<T: Metadata, S: Middleware<T> = middleware::Noop> {
 	middleware: S,
 	compatibility: Compatibility,
@@ -353,7 +353,7 @@ impl<M: Metadata, S2: Middleware<M>> IoHandlerExtension<M> for MetaIoHandler<M, 
 }
 
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
 
 // Type inference helper

@@ -41,7 +41,7 @@ pub type NoopFuture = Box<dyn Future<Item = Option<Response>, Error = ()> + Send
 pub type NoopCallFuture = Box<dyn Future<Item = Option<Output>, Error = ()> + Send>;
 
 /// No-op middleware implementation
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Noop;
 impl<M: Metadata> Middleware<M> for Noop {
 	type Future = NoopFuture;
