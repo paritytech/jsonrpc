@@ -8,12 +8,12 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-server-utils"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "13.0.0"
+version = "13.1.0"
 
 [dependencies]
 bytes = "0.4"
 globset = "0.4"
-jsonrpc-core = { version = "13.0", path = "../core" }
+jsonrpc-core = { version = "13.1", path = "../core" }
 lazy_static = "1.1.0"
 log = "0.4"
 num_cpus = "1.8"
