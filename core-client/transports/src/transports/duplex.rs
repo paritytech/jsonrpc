@@ -144,6 +144,7 @@ where
 					}
 					request_str
 				}
+				RpcMessage::Notify(msg) => self.request_builder.notification(&msg),
 			};
 			log::debug!("outgoing: {}", request_str);
 			self.outgoing.push_back(request_str);
