@@ -388,6 +388,10 @@ mod tests {
 		fn add(&self, a: u64, b: u64) -> impl Future<Item = u64, Error = RpcError> {
 			self.0.call_method("add", "u64", (a, b))
 		}
+
+		fn status(&self, successful: bool) -> impl Future<Item = (), Error = RpcError> {
+			self.0.notify("status", successful)
+		}
 	}
 
 	#[test]
@@ -413,6 +417,23 @@ mod tests {
 				eprintln!("{:?}", err);
 				assert!(false);
 			});
+		tokio::run(fut);
+	}
+
+	#[test]
+	fn should_send_notification() {
+		crate::logger::init_log();
+		let mut handler = IoHandler::new();
+		handler.add_notification("status", |params: Params| {
+			let successful = params.parse::<bool>().expect("expected to receive one boolean");
+			assert_eq!(successful, true);
+		});
+
+		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
+		let fut = client.clone().status(true).join(rpc_client).map(|_| ()).map_err(|err| {
+			eprintln!("{:?}", err);
+			assert!(false);
+		});
 		tokio::run(fut);
 	}
 
