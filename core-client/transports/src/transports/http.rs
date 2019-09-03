@@ -49,6 +49,10 @@ where
 					log::warn!("Unsupported `RpcMessage` type `Subscribe`.");
 					return None;
 				}
+				RpcMessage::Notify(_) => {
+					log::warn!("Unsupported `RpcMessage` type `Notify`.");
+					return None;
+				}
 			};
 			let (_, request) = request_builder.call_request(&msg);
 			let request = Request::post(&url)
