@@ -433,6 +433,7 @@ mod tests {
 		let fut = client
 			.clone()
 			.completed(true)
+			.map(move |()| drop(client))
 			.join(rpc_client)
 			.map(|_| ())
 			.map_err(|err| {
