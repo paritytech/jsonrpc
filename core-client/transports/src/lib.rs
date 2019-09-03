@@ -39,18 +39,26 @@ impl From<Error> for RpcError {
 	}
 }
 
-/// A rpc call message.
+/// An RPC call message.
 struct CallMessage {
-	/// The rpc method name.
+	/// The RPC method name.
 	method: String,
-	/// The rpc method parameters.
+	/// The RPC method parameters.
 	params: Params,
 	/// The oneshot channel to send the result of the rpc
 	/// call to.
 	sender: oneshot::Sender<Result<Value, RpcError>>,
 }
 
-/// A rpc subscription.
+/// An RPC notification.
+struct NotifyMessage {
+	/// The RPC method name.
+	method: String,
+	/// The RPC method paramters.
+	params: Params,
+}
+
+/// An RPC subscription.
 struct Subscription {
 	/// The subscribe method name.
 	subscribe: String,
@@ -62,7 +70,7 @@ struct Subscription {
 	unsubscribe: String,
 }
 
-/// A rpc subscribe message.
+/// An RPC subscribe message.
 struct SubscribeMessage {
 	/// The subscription to subscribe to.
 	subscription: Subscription,
@@ -72,8 +80,10 @@ struct SubscribeMessage {
 
 /// A message sent to the `RpcClient`.
 enum RpcMessage {
-	/// Make a rpc call.
+	/// Make an RPC call.
 	Call(CallMessage),
+	/// Send a notification.
+	Notify(NotifyMessage),
 	/// Subscribe to a notification.
 	Subscribe(SubscribeMessage),
 }
@@ -81,6 +91,12 @@ enum RpcMessage {
 impl From<CallMessage> for RpcMessage {
 	fn from(msg: CallMessage) -> Self {
 		RpcMessage::Call(msg)
+	}
+}
+
+impl From<NotifyMessage> for RpcMessage {
+	fn from(msg: NotifyMessage) -> Self {
+		RpcMessage::Notify(msg)
 	}
 }
 
@@ -208,7 +224,7 @@ impl From<RpcChannel> for RawClient {
 }
 
 impl RawClient {
-	/// Call RPC with raw JSON
+	/// Call RPC method with raw JSON.
 	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item = Value, Error = RpcError> {
 		let (sender, receiver) = oneshot::channel();
 		let msg = CallMessage {
@@ -222,7 +238,19 @@ impl RawClient {
 			.and_then(|_| RpcFuture::new(receiver))
 	}
 
-	/// Subscribe to topic with raw JSON
+	/// Send RPC notification with raw JSON.
+	pub fn notify(&self, method: &str, params: Params) -> impl Future<Item = (), Error = RpcError> {
+		let msg = NotifyMessage {
+			method: method.into(),
+			params,
+		};
+		self.0
+			.send(msg.into())
+			.map(|_| ())
+			.map_err(|error| RpcError::Other(error.into()))
+	}
+
+	/// Subscribe to topic with raw JSON.
 	pub fn subscribe(
 		&self,
 		subscribe: &str,
@@ -258,12 +286,12 @@ impl From<RpcChannel> for TypedClient {
 }
 
 impl TypedClient {
-	/// Create new TypedClient
+	/// Create a new `TypedClient`.
 	pub fn new(raw_cli: RawClient) -> Self {
 		TypedClient(raw_cli)
 	}
 
-	/// Call RPC with serialization of request and deserialization of response
+	/// Call RPC with serialization of request and deserialization of response.
 	pub fn call_method<T: Serialize, R: DeserializeOwned + 'static>(
 		&self,
 		method: &str,
@@ -290,7 +318,24 @@ impl TypedClient {
 		}))
 	}
 
-	/// Subscribe with serialization of request and deserialization of response
+	/// Call RPC with serialization of request only.
+	pub fn notify<T: Serialize>(&self, method: &str, args: T) -> impl Future<Item = (), Error = RpcError> {
+		let args =
+			serde_json::to_value(args).expect("Only types with infallible serialisation can be used for JSON-RPC");
+		let params = match args {
+			Value::Array(vec) => Params::Array(vec),
+			Value::Null => Params::None,
+			_ => {
+				return future::Either::A(future::err(RpcError::Other(format_err!(
+					"RPC params should serialize to a JSON array, or null"
+				))))
+			}
+		};
+
+		future::Either::B(self.0.notify(method, params))
+	}
+
+	/// Subscribe with serialization of request and deserialization of response.
 	pub fn subscribe<T: Serialize, R: DeserializeOwned + 'static>(
 		&self,
 		subscribe: &str,
