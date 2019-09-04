@@ -134,14 +134,15 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 			}
 			MethodRegistration::Notification { method, .. } => {
 				let attrs = get_doc_comments(&method.trait_item.attrs);
+				let rpc_name = method.name();
 				let name = &method.trait_item.sig.ident;
 				let args = compute_args(&method.trait_item);
 				let arg_names = compute_arg_identifiers(&args)?;
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
-					pub fn #name(&self, #args) {
-						let _args_tuple = (#(#arg_names,)*);
-						unimplemented!()
+					pub fn #name(&self, #args) -> impl Future<Item = (), Error = RpcError> {
+						let args_tuple = (#(#arg_names,)*);
+						self.inner.notify(#rpc_name, args_tuple)
 					}
 				};
 				client_methods.push(client_method);

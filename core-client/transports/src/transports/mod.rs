@@ -1,11 +1,11 @@
 //! Client transport implementations
 
-use jsonrpc_core::{Call, Error, Id, MethodCall, Params, Version};
+use jsonrpc_core::{Call, Error, Id, MethodCall, Notification, Params, Version};
 use jsonrpc_pubsub::SubscriptionId;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{CallMessage, RpcError};
+use crate::{CallMessage, NotifyMessage, RpcError};
 
 pub mod duplex;
 #[cfg(feature = "http")]
@@ -60,6 +60,15 @@ impl RequestBuilder {
 
 	fn unsubscribe_request(&mut self, unsubscribe: String, sid: SubscriptionId) -> (Id, String) {
 		self.single_request(unsubscribe, Params::Array(vec![Value::from(sid)]))
+	}
+
+	fn notification(&mut self, msg: &NotifyMessage) -> String {
+		let request = jsonrpc_core::Request::Single(Call::Notification(Notification {
+			jsonrpc: Some(Version::V2),
+			method: msg.method.clone(),
+			params: msg.params.clone(),
+		}));
+		serde_json::to_string(&request).expect("Request serialization is infallible; qed")
 	}
 }
 
@@ -157,7 +166,7 @@ impl From<ClientResponse> for Result<Value, Error> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jsonrpc_core::{Value, Version, Params, Failure, Success, Output, Notification};
+	use jsonrpc_core::{Failure, Notification, Output, Params, Success, Value, Version};
 	use serde_json;
 
 	#[test]

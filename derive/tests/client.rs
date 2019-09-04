@@ -7,6 +7,9 @@ use jsonrpc_derive::rpc;
 pub trait Rpc {
 	#[rpc(name = "add")]
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
+
+	#[rpc(name = "notify")]
+	fn notify(&self, foo: u64);
 }
 
 struct RpcServer;
@@ -14,6 +17,10 @@ struct RpcServer;
 impl Rpc for RpcServer {
 	fn add(&self, a: u64, b: u64) -> Result<u64> {
 		Ok(a + b)
+	}
+
+	fn notify(&self, foo: u64) {
+		println!("received {}", foo);
 	}
 }
 
@@ -25,10 +32,10 @@ fn client_server_roundtrip() {
 	let fut = client
 		.clone()
 		.add(3, 4)
-		.and_then(move |res| client.add(res, 5))
+		.and_then(move |res| client.notify(res).map(move |_| res))
 		.join(rpc_client)
 		.map(|(res, ())| {
-			assert_eq!(res, 12);
+			assert_eq!(res, 7);
 		})
 		.map_err(|err| {
 			eprintln!("{:?}", err);

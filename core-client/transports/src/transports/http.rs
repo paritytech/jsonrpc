@@ -43,14 +43,18 @@ where
 
 	let fut = receiver
 		.filter_map(move |msg: RpcMessage| {
-			let msg = match msg {
-				RpcMessage::Call(call) => call,
+			let (request, sender) = match msg {
+				RpcMessage::Call(call) => {
+					let (_, request) = request_builder.call_request(&call);
+					(request, Some(call.sender))
+				}
+				RpcMessage::Notify(notify) => (request_builder.notification(&notify), None),
 				RpcMessage::Subscribe(_) => {
 					log::warn!("Unsupported `RpcMessage` type `Subscribe`.");
 					return None;
 				}
 			};
-			let (_, request) = request_builder.call_request(&msg);
+
 			let request = Request::post(&url)
 				.header(
 					http::header::CONTENT_TYPE,
@@ -58,10 +62,11 @@ where
 				)
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
-			Some(client.request(request).then(move |response| Ok((response, msg))))
+
+			Some(client.request(request).then(move |response| Ok((response, sender))))
 		})
 		.buffer_unordered(max_parallel)
-		.for_each(|(result, msg)| {
+		.for_each(|(result, sender)| {
 			let future = match result {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
@@ -77,14 +82,16 @@ where
 				Err(err) => A(future::err(RpcError::Other(err.into()))),
 			};
 			future.then(|result| {
-				let response = result
-					.and_then(|response| {
-						let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
-						super::parse_response(&response_str)
-					})
-					.and_then(|r| r.1);
-				if let Err(err) = msg.sender.send(response) {
-					log::warn!("Error resuming asynchronous request: {:?}", err);
+				if let Some(sender) = sender {
+					let response = result
+						.and_then(|response| {
+							let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
+							super::parse_response(&response_str)
+						})
+						.and_then(|r| r.1);
+					if let Err(err) = sender.send(response) {
+						log::warn!("Error resuming asynchronous request: {:?}", err);
+					}
 				}
 				Ok(())
 			})
@@ -159,6 +166,10 @@ mod tests {
 			_ => Ok(Value::String("world".into())),
 		});
 		io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
+		io.add_notification("notify", |params: Params| {
+			let (value,) = params.parse::<(u64,)>().expect("expected one u64 as param");
+			assert_eq!(value, 12);
+		});
 
 		io
 	}
@@ -178,6 +189,9 @@ mod tests {
 		}
 		fn fail(&self) -> impl Future<Item = (), Error = RpcError> {
 			self.0.call_method("fail", "()", ())
+		}
+		fn notify(&self, value: u64) -> impl Future<Item = (), Error = RpcError> {
+			self.0.notify("notify", (value,))
 		}
 	}
 
@@ -205,6 +219,31 @@ mod tests {
 		// then
 		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap();
 		assert_eq!("hello http", result);
+	}
+
+	#[test]
+	fn should_send_notification() {
+		crate::logger::init_log();
+
+		// given
+		let server = TestServer::serve(id);
+		let (tx, rx) = std::sync::mpsc::channel();
+
+		// when
+		let run = connect(&server.uri)
+			.and_then(|client: TestClient| {
+				client.notify(12).and_then(move |result| {
+					drop(client);
+					let _ = tx.send(result);
+					Ok(())
+				})
+			})
+			.map_err(|e| log::error!("RPC Client error: {:?}", e));
+
+		rt::run(run);
+
+		// then
+		rx.recv_timeout(Duration::from_secs(3)).unwrap();
 	}
 
 	#[test]
