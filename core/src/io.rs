@@ -307,7 +307,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Returns an iterator visiting all methods in arbitrary order.
-	pub fn iter(&self) -> impl Iterator<Item=(&String, &RemoteProcedure<T>)> {
+	pub fn iter(&self) -> impl Iterator<Item = (&String, &RemoteProcedure<T>)> {
 		self.methods.iter()
 	}
 }
