@@ -9,7 +9,7 @@ WebSockets server for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-ws-server = "13.1"
+jsonrpc-ws-server = "13.2"
 ```
 
 `main.rs`

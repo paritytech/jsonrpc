@@ -7,11 +7,11 @@ homepage = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-stdio-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "13.1.0"
+version = "13.2.0"
 
 [dependencies]
 futures = "0.1.23"
-jsonrpc-core = { version = "13.1", path = "../core" }
+jsonrpc-core = { version = "13.2", path = "../core" }
 log = "0.4"
 tokio = "0.1.7"
 tokio-codec = "0.1.0"
