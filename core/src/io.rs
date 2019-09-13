@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::{Iter, IntoIter}, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -80,6 +80,24 @@ pub struct MetaIoHandler<T: Metadata, S: Middleware<T> = middleware::Noop> {
 impl<T: Metadata> Default for MetaIoHandler<T> {
 	fn default() -> Self {
 		MetaIoHandler::with_compatibility(Default::default())
+	}
+}
+
+impl<T: Metadata, S: Middleware<T>> IntoIterator for MetaIoHandler<T, S> {
+	type Item = (String, RemoteProcedure<T>);
+	type IntoIter = IntoIter<String, RemoteProcedure<T>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.methods.into_iter()
+	}
+}
+
+impl<'a, T: Metadata, S: Middleware<T>> IntoIterator for &'a MetaIoHandler<T, S> {
+	type Item = (&'a String, &'a RemoteProcedure<T>);
+	type IntoIter = Iter<'a, String, RemoteProcedure<T>>;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.methods.iter()
 	}
 }
 
@@ -287,6 +305,11 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			)))),
 		})
 	}
+
+	/// Returns an iterator visiting all methods in arbitrary order.
+	pub fn iter(&self) -> impl Iterator<Item = (&String, &RemoteProcedure<T>)> {
+		self.methods.iter()
+	}
 }
 
 /// A type that can augment `MetaIoHandler`.
@@ -355,6 +378,15 @@ impl<M: Metadata, S2: Middleware<M>> IoHandlerExtension<M> for MetaIoHandler<M, 
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
 #[derive(Clone, Debug, Default)]
 pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
+
+impl<T: Metadata> IntoIterator for IoHandler<T> {
+	type Item = <MetaIoHandler<T> as IntoIterator>::Item;
+	type IntoIter = <MetaIoHandler<T> as IntoIterator>::IntoIter;
+
+	fn into_iter(self) -> Self::IntoIter {
+		self.0.into_iter()
+	}
+}
 
 // Type inference helper
 impl IoHandler {
