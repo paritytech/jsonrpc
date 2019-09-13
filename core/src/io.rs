@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::{Iter, IntoIter}, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -85,7 +85,7 @@ impl<T: Metadata> Default for MetaIoHandler<T> {
 
 impl<T: Metadata, S: Middleware<T>> IntoIterator for MetaIoHandler<T, S> {
 	type Item = (String, RemoteProcedure<T>);
-	type IntoIter = std::collections::hash_map::IntoIter<String, RemoteProcedure<T>>;
+	type IntoIter = IntoIter<String, RemoteProcedure<T>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.methods.into_iter()
@@ -94,7 +94,7 @@ impl<T: Metadata, S: Middleware<T>> IntoIterator for MetaIoHandler<T, S> {
 
 impl<'a, T: Metadata, S: Middleware<T>> IntoIterator for &'a MetaIoHandler<T, S> {
 	type Item = (&'a String, &'a RemoteProcedure<T>);
-	type IntoIter = std::collections::hash_map::Iter<'a, String, RemoteProcedure<T>>;
+	type IntoIter = Iter<'a, String, RemoteProcedure<T>>;
 
 	fn into_iter(self) -> Self::IntoIter {
 		self.methods.iter()
