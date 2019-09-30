@@ -33,7 +33,7 @@ script:
   - cargo build --all
   - cargo test --all
   - |
-    ([ $TRAVIS_RUST_VERSION = stable ] && cargo fmt --all -- --check) || true
+    ([ $TRAVIS_OS_NAME == 'linux' ] && [ $TRAVIS_RUST_VERSION = stable ] && cargo fmt --all -- --check) || true
 
 after_success: |
   [ $TRAVIS_OS_NAME == 'linux' ] &&
