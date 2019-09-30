@@ -161,7 +161,13 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			}
 
 			// Make sure to construct Handle::default() inside Tokio runtime
-			let reactor = reactor.unwrap_or_else(Handle::default);
+			let reactor = if cfg!(windows) {
+				#[allow(deprecated)]
+				reactor.unwrap_or_else(Handle::current)
+			} else {
+				reactor.unwrap_or_else(Handle::default)
+			};
+
 			let connections = match endpoint.incoming(&reactor) {
 				Ok(connections) => connections,
 				Err(e) => {
