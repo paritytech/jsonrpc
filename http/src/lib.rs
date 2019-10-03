@@ -43,7 +43,7 @@ use std::thread;
 use parking_lot::Mutex;
 
 use crate::jsonrpc::futures::sync::oneshot;
-use crate::jsonrpc::futures::{self, future, Future, Stream};
+use crate::jsonrpc::futures::{self, Future, Stream};
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
 use hyper::{server, Body};
