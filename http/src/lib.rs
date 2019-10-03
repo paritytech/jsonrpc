@@ -546,11 +546,9 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 							max_request_body_size,
 							keep_alive,
 						);
-						tokio::spawn(
-							http.serve_connection(socket, service)
-								.map_err(|e| error!("Error serving connection: {:?}", e)),
-						);
-						Ok(())
+
+						http.serve_connection(socket, service)
+							.map_err(|e| error!("Error serving connection: {:?}", e))
 					})
 					.map_err(|e| {
 						warn!("Incoming streams error, closing sever: {:?}", e);

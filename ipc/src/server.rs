@@ -7,7 +7,7 @@ use tokio_service::{self, Service as TokioService};
 
 use crate::server_utils::{
 	codecs, reactor, session,
-	tokio::{self, reactor::Handle, runtime::TaskExecutor},
+	tokio::{reactor::Handle, runtime::TaskExecutor},
 	tokio_codec::Framed,
 };
 use parking_lot::Mutex;
@@ -228,9 +228,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					Ok(())
 				});
 
-				tokio::spawn(writer);
-
-				Ok(())
+				writer
 			});
 			start_signal
 				.send(Ok(()))

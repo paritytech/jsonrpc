@@ -137,9 +137,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 						Ok(())
 					});
 
-					tokio::spawn(writer);
-
-					Ok(())
+					writer
 				});
 
 				Ok(server)
