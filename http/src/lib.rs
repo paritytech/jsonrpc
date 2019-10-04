@@ -532,7 +532,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			let tcp_stream = SuspendableStream::new(listener.incoming());
 
 			tcp_stream
-				.for_each(move |socket| {
+				.map(move |socket| {
 					let service = ServerHandler::new(
 						jsonrpc_handler.clone(),
 						cors_domains.clone(),
@@ -549,13 +549,14 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					http.serve_connection(socket, service)
 						.map_err(|e| error!("Error serving connection: {:?}", e))
 				})
+				.buffer_unordered(1024)
+				.for_each(|_| Ok(()))
 				.map_err(|e| {
 					warn!("Incoming streams error, closing sever: {:?}", e);
 				})
 				.select(shutdown_signal.map_err(|e| {
 					debug!("Shutdown signaller dropped, closing server: {:?}", e);
 				}))
-				.map(|_| ())
 				.map_err(|_| ())
 		})
 		.and_then(|_| done_tx.send(()))

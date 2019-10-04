@@ -9,6 +9,7 @@ fn main() {
 
 	let server = ServerBuilder::new(io)
 		.cors(DomainsValidation::AllowOnly(vec![AccessControlAllowOrigin::Null]))
+		.threads(8)
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
