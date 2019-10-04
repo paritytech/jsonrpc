@@ -1495,6 +1495,39 @@ fn should_respond_with_close_even_if_client_wants_to_keep_alive() {
 	assert_eq!(response.body, world_batch());
 }
 
+#[test]
+fn should_drop_io_handler_when_server_is_closed() {
+	use std::sync::{Arc, Mutex};
+	// given
+	let (weak, _req) = {
+		let my_ref = Arc::new(Mutex::new(5));
+		let weak = Arc::downgrade(&my_ref);
+		let mut io = IoHandler::default();
+		io.add_method("hello", move |_| {
+			Ok(Value::String(format!("{}", my_ref.lock().unwrap())))
+		});
+		let server = ServerBuilder::new(io)
+			.start_http(&"127.0.0.1:0".parse().unwrap())
+			.unwrap();
+
+		let addr = server.address().clone();
+
+		// when
+		let req = TcpStream::connect(addr).unwrap();
+		server.close();
+		(weak, req)
+	};
+
+	// then
+	for _ in 1..1000 {
+		if weak.upgrade().is_none() {
+			return;
+		}
+		std::thread::sleep(std::time::Duration::from_millis(10));
+	}
+	assert!(false);
+}
+
 fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
 }
