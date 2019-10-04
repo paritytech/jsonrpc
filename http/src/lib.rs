@@ -304,6 +304,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Sets number of threads of the server to run.
 	///
 	/// Panics when set to `0`.
+	/// The first thread will use provided `Executor` instance
+	/// and all other threads will use `UninitializedExecutor` to spawn
+	/// a new runtime for futures.
+	/// So it's also possible to run a multi-threaded server by
+	/// passing the default `tokio::runtime` executor to this builder
+	/// and setting `threads` to 1.
 	#[cfg(unix)]
 	pub fn threads(mut self, threads: usize) -> Self {
 		self.threads = threads;

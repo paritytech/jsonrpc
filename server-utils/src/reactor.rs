@@ -1,5 +1,9 @@
 //! Event Loop Executor
+//!
 //! Either spawns a new event loop, or re-uses provided one.
+//! Spawned event loop is always single threaded (mostly for
+//! historical/backward compatibility reasons) despite the fact
+//! that `tokio::runtime` can be multi-threaded.
 
 use std::io;
 use tokio;
