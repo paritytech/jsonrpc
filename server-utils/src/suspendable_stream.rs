@@ -74,8 +74,8 @@ where
 					} else {
 						self.next_delay
 					};
-					warn!("Error accepting connection: {}", err);
-					warn!("The server will stop accepting connections for {:?}", self.next_delay);
+					debug!("Error accepting connection: {}", err);
+					debug!("The server will stop accepting connections for {:?}", self.next_delay);
 					self.timeout = Some(Delay::new(Instant::now() + self.next_delay));
 				}
 			}
