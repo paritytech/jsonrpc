@@ -1525,7 +1525,8 @@ fn should_drop_io_handler_when_server_is_closed() {
 		}
 		std::thread::sleep(std::time::Duration::from_millis(10));
 	}
-	assert!(false);
+
+	panic!("expected server to be closed and io handler to be dropped")
 }
 
 fn invalid_host() -> String {
