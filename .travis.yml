@@ -5,8 +5,6 @@ branches:
   - master
   - /^parity-.*$/
 
-cache: cargo
-
 os:
   - linux
   - osx
