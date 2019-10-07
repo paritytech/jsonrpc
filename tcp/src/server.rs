@@ -87,7 +87,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 				let listener = tokio::net::TcpListener::bind(&address)?;
 				let connections = SuspendableStream::new(listener.incoming());
 
-				let server = connections.for_each(move |socket| {
+				let server = connections.map(move |socket| {
 					let peer_addr = socket.peer_addr().expect("Unable to determine socket peer address");
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
 					let (sender, receiver) = mpsc::channel(65536);
@@ -137,9 +137,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 						Ok(())
 					});
 
-					tokio::spawn(writer);
-
-					Ok(())
+					writer
 				});
 
 				Ok(server)
@@ -149,9 +147,16 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 			match start() {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
-					future::Either::A(server.select(stop).map(|_| ()).map_err(|(e, _)| {
-						error!("Error while executing the server: {:?}", e);
-					}))
+					future::Either::A(
+						server
+							.buffer_unordered(1024)
+							.for_each(|_| Ok(()))
+							.select(stop)
+							.map(|_| ())
+							.map_err(|(e, _)| {
+								error!("Error while executing the server: {:?}", e);
+							})
+					)
 				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");

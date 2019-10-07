@@ -43,7 +43,7 @@ use std::thread;
 use parking_lot::Mutex;
 
 use crate::jsonrpc::futures::sync::oneshot;
-use crate::jsonrpc::futures::{self, future, Future, Stream};
+use crate::jsonrpc::futures::{self, Future, Stream};
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
 use hyper::{server, Body};
@@ -304,6 +304,12 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 	/// Sets number of threads of the server to run.
 	///
 	/// Panics when set to `0`.
+	/// The first thread will use provided `Executor` instance
+	/// and all other threads will use `UninitializedExecutor` to spawn
+	/// a new runtime for futures.
+	/// So it's also possible to run a multi-threaded server by
+	/// passing the default `tokio::runtime` executor to this builder
+	/// and setting `threads` to 1.
 	#[cfg(unix)]
 	pub fn threads(mut self, threads: usize) -> Self {
 		self.threads = threads;
@@ -481,89 +487,86 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	max_request_body_size: usize,
 ) {
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
-	executor.spawn(
-		future::lazy(move || {
-			let handle = tokio::reactor::Handle::default();
+	executor.spawn({
+		let handle = tokio::reactor::Handle::default();
 
-			let bind = move || {
-				let listener = match addr {
-					SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
-					SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
-				};
-				configure_port(reuse_port, &listener)?;
-				listener.reuse_address(true)?;
-				listener.bind(&addr)?;
-				let listener = listener.listen(1024)?;
-				let listener = tokio::net::TcpListener::from_std(listener, &handle)?;
-				// Add current host to allowed headers.
-				// NOTE: we need to use `l.local_addr()` instead of `addr`
-				// it might be different!
-				let local_addr = listener.local_addr()?;
-
-				Ok((listener, local_addr))
+		let bind = move || {
+			let listener = match addr {
+				SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
+				SocketAddr::V6(_) => net2::TcpBuilder::new_v6()?,
 			};
+			configure_port(reuse_port, &listener)?;
+			listener.reuse_address(true)?;
+			listener.bind(&addr)?;
+			let listener = listener.listen(1024)?;
+			let listener = tokio::net::TcpListener::from_std(listener, &handle)?;
+			// Add current host to allowed headers.
+			// NOTE: we need to use `l.local_addr()` instead of `addr`
+			// it might be different!
+			let local_addr = listener.local_addr()?;
 
-			let bind_result = match bind() {
-				Ok((listener, local_addr)) => {
-					// Send local address
-					match local_addr_tx.send(Ok(local_addr)) {
-						Ok(_) => futures::future::ok((listener, local_addr)),
-						Err(_) => {
-							warn!(
-								"Thread {:?} unable to reach receiver, closing server",
-								thread::current().name()
-							);
-							futures::future::err(())
-						}
+			Ok((listener, local_addr))
+		};
+
+		let bind_result = match bind() {
+			Ok((listener, local_addr)) => {
+				// Send local address
+				match local_addr_tx.send(Ok(local_addr)) {
+					Ok(_) => futures::future::ok((listener, local_addr)),
+					Err(_) => {
+						warn!(
+							"Thread {:?} unable to reach receiver, closing server",
+							thread::current().name()
+						);
+						futures::future::err(())
 					}
 				}
-				Err(err) => {
-					// Send error
-					let _send_result = local_addr_tx.send(Err(err));
+			}
+			Err(err) => {
+				// Send error
+				let _send_result = local_addr_tx.send(Err(err));
 
-					futures::future::err(())
-				}
-			};
+				futures::future::err(())
+			}
+		};
 
-			bind_result.and_then(move |(listener, local_addr)| {
-				let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
+		bind_result.and_then(move |(listener, local_addr)| {
+			let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-				let mut http = server::conn::Http::new();
-				http.keep_alive(keep_alive);
-				let tcp_stream = SuspendableStream::new(listener.incoming());
+			let mut http = server::conn::Http::new();
+			http.keep_alive(keep_alive);
+			let tcp_stream = SuspendableStream::new(listener.incoming());
 
-				tcp_stream
-					.for_each(move |socket| {
-						let service = ServerHandler::new(
-							jsonrpc_handler.clone(),
-							cors_domains.clone(),
-							cors_max_age,
-							allowed_headers.clone(),
-							allowed_hosts.clone(),
-							request_middleware.clone(),
-							rest_api,
-							health_api.clone(),
-							max_request_body_size,
-							keep_alive,
-						);
-						tokio::spawn(
-							http.serve_connection(socket, service)
-								.map_err(|e| error!("Error serving connection: {:?}", e)),
-						);
-						Ok(())
-					})
-					.map_err(|e| {
-						warn!("Incoming streams error, closing sever: {:?}", e);
-					})
-					.select(shutdown_signal.map_err(|e| {
-						debug!("Shutdown signaller dropped, closing server: {:?}", e);
-					}))
-					.map(|_| ())
-					.map_err(|_| ())
-			})
+			tcp_stream
+				.map(move |socket| {
+					let service = ServerHandler::new(
+						jsonrpc_handler.clone(),
+						cors_domains.clone(),
+						cors_max_age,
+						allowed_headers.clone(),
+						allowed_hosts.clone(),
+						request_middleware.clone(),
+						rest_api,
+						health_api.clone(),
+						max_request_body_size,
+						keep_alive,
+					);
+
+					http.serve_connection(socket, service)
+						.map_err(|e| error!("Error serving connection: {:?}", e))
+				})
+				.buffer_unordered(1024)
+				.for_each(|_| Ok(()))
+				.map_err(|e| {
+					warn!("Incoming streams error, closing sever: {:?}", e);
+				})
+				.select(shutdown_signal.map_err(|e| {
+					debug!("Shutdown signaller dropped, closing server: {:?}", e);
+				}))
+				.map_err(|_| ())
 		})
-		.and_then(|_| done_tx.send(())),
-	);
+		.and_then(|_| done_tx.send(()))
+	});
 }
 
 #[cfg(unix)]

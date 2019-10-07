@@ -7,7 +7,7 @@ use tokio_service::{self, Service as TokioService};
 
 use crate::server_utils::{
 	codecs, reactor, session,
-	tokio::{self, reactor::Handle, runtime::TaskExecutor},
+	tokio::{reactor::Handle, runtime::TaskExecutor},
 	tokio_codec::Framed,
 };
 use parking_lot::Mutex;
@@ -180,7 +180,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 
 			let mut id = 0u64;
 
-			let server = connections.for_each(move |(io_stream, remote_id)| {
+			let server = connections.map(move |(io_stream, remote_id)| {
 				id = id.wrapping_add(1);
 				let session_id = id;
 				let session_stats = session_stats.clone();
@@ -228,9 +228,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					Ok(())
 				});
 
-				tokio::spawn(writer);
-
-				Ok(())
+				writer
 			});
 			start_signal
 				.send(Ok(()))
@@ -239,6 +237,8 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
 			future::Either::B(
 				server
+					.buffer_unordered(1024)
+					.for_each(|_| Ok(()))
 					.select(stop)
 					.map(|_| {
 						let _ = wait_signal.send(());
