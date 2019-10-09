@@ -236,7 +236,6 @@ pub fn rpc_impl(input: syn::Item, options: DeriveOptions) -> Result<proc_macro2:
 	let mod_name_ident = rpc_wrapper_mod_name(&rpc_trait);
 
 	let core_name = crate_name("jsonrpc-core")?;
-	let serde_name = crate_name("serde")?;
 
 	let mut submodules = Vec::new();
 	let mut exports = Vec::new();
@@ -256,7 +255,6 @@ pub fn rpc_impl(input: syn::Item, options: DeriveOptions) -> Result<proc_macro2:
 	}
 	Ok(quote!(
 		mod #mod_name_ident {
-			use #serde_name as _serde;
 			use #core_name as _jsonrpc_core;
 			use super::*;
 

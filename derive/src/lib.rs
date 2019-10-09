@@ -9,7 +9,7 @@
 //! use jsonrpc_core::{IoHandler, Error, Result};
 //! use jsonrpc_core::futures::future::{self, FutureResult};
 //!
-//! #[rpc]
+//! #[rpc(server)]
 //! pub trait Rpc {
 //! 	#[rpc(name = "protocolVersion")]
 //! 	fn protocol_version(&self) -> Result<String>;
