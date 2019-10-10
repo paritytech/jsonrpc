@@ -153,10 +153,10 @@ impl RpcEventLoop {
 mod tests {
 	use super::*;
 
-	fn send_and_sync<T: Send + Sync>(_: T) {}
-
 	#[test]
 	fn make_sure_rpc_event_loop_is_send_and_sync() {
-		send_and_sync(RpcEventLoop::spawn().unwrap());
+		fn is_send_and_sync<T: Send + Sync>() {}
+
+		is_send_and_sync::<RpcEventLoop>();
 	}
 }
