@@ -148,3 +148,15 @@ impl RpcEventLoop {
 			});
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn make_sure_rpc_event_loop_is_send_and_sync() {
+		fn is_send_and_sync<T: Send + Sync>() {}
+
+		is_send_and_sync::<RpcEventLoop>();
+	}
+}

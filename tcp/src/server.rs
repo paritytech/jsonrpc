@@ -208,3 +208,15 @@ impl Drop for Server {
 		}
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn server_is_send_and_sync() {
+		fn is_send_and_sync<T: Send + Sync>() {}
+
+		is_send_and_sync::<Server>();
+	}
+}

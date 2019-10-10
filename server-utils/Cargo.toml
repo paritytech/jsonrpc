@@ -16,7 +16,7 @@ globset = "0.4"
 jsonrpc-core = { version = "14.0", path = "../core" }
 lazy_static = "1.1.0"
 log = "0.4"
-tokio = { version = "0.1" }
+tokio = { version = "0.1.15" }
 tokio-codec = { version = "0.1" }
 unicase = "2.0"
 
