@@ -449,17 +449,17 @@ pub fn generate_where_clause_serialization_predicates(
 			// add json serialization trait bounds
 			if client {
 				if visitor.server_to_client_type_params.contains(&ty.ident) {
-					bounds.push(parse_quote!(_serde::de::DeserializeOwned))
+					bounds.push(parse_quote!(_jsonrpc_core::serde::de::DeserializeOwned))
 				}
 				if visitor.client_to_server_type_params.contains(&ty.ident) {
-					bounds.push(parse_quote!(_serde::Serialize))
+					bounds.push(parse_quote!(_jsonrpc_core::serde::Serialize))
 				}
 			} else {
 				if visitor.server_to_client_type_params.contains(&ty.ident) {
-					bounds.push(parse_quote!(_serde::Serialize))
+					bounds.push(parse_quote!(_jsonrpc_core::serde::Serialize))
 				}
 				if visitor.client_to_server_type_params.contains(&ty.ident) {
-					bounds.push(parse_quote!(_serde::de::DeserializeOwned))
+					bounds.push(parse_quote!(_jsonrpc_core::serde::de::DeserializeOwned))
 				}
 			}
 			syn::WherePredicate::Type(syn::PredicateType {

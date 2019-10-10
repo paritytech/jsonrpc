@@ -30,6 +30,8 @@ pub use futures;
 
 #[doc(hidden)]
 pub extern crate serde_json;
+#[doc(hidden)]
+pub extern crate serde;
 
 mod calls;
 mod io;

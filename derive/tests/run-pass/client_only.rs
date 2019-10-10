@@ -1,4 +1,3 @@
-extern crate serde;
 extern crate jsonrpc_core;
 extern crate jsonrpc_core_client;
 #[macro_use]

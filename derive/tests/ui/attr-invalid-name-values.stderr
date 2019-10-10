@@ -1,8 +1,8 @@
 error: Invalid attribute parameter(s): 'Xname'. Expected 'name, returns'
-  --> $DIR/attr-invalid-name-values.rs:8:2
-   |
-8  |       /// Returns a protocol version
-   |  _____^
-9  | |     #[rpc(Xname = "protocolVersion")]
-10 | |     fn protocol_version(&self) -> Result<String>;
-   | |_________________________________________________^
+ --> $DIR/attr-invalid-name-values.rs:7:2
+  |
+7 |       /// Returns a protocol version
+  |  _____^
+8 | |     #[rpc(Xname = "protocolVersion")]
+9 | |     fn protocol_version(&self) -> Result<String>;
+  | |_________________________________________________^
