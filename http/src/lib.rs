@@ -45,7 +45,7 @@ use parking_lot::Mutex;
 use crate::jsonrpc::futures::sync::oneshot;
 use crate::jsonrpc::futures::{self, Future, Stream};
 use crate::jsonrpc::MetaIoHandler;
-use crate::server_utils::reactor::{Executor, UninitializedExecutor};
+use crate::server_utils::reactor::{Executor, ExecutorCloseHandle, UninitializedExecutor};
 use hyper::{server, Body};
 use jsonrpc_core as jsonrpc;
 
@@ -386,12 +386,11 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 		let (local_addr_tx, local_addr_rx) = mpsc::channel();
 		let (close, shutdown_signal) = oneshot::channel();
-		let (done_tx, done_rx) = oneshot::channel();
 		let eloop = self.executor.init_with_name("http.worker0")?;
 		let req_max_size = self.max_request_body_size;
 		// The first threads `Executor` is initialised differently from the others
 		serve(
-			(shutdown_signal, local_addr_tx, done_tx),
+			(shutdown_signal, local_addr_tx),
 			eloop.executor(),
 			addr.to_owned(),
 			cors_domains.clone(),
@@ -410,10 +409,9 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 			.map(|i| {
 				let (local_addr_tx, local_addr_rx) = mpsc::channel();
 				let (close, shutdown_signal) = oneshot::channel();
-				let (done_tx, done_rx) = oneshot::channel();
 				let eloop = UninitializedExecutor::Unspawned.init_with_name(format!("http.worker{}", i + 1))?;
 				serve(
-					(shutdown_signal, local_addr_tx, done_tx),
+					(shutdown_signal, local_addr_tx),
 					eloop.executor(),
 					addr.to_owned(),
 					cors_domains.clone(),
@@ -428,34 +426,34 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 					reuse_port,
 					req_max_size,
 				);
-				Ok((eloop, close, local_addr_rx, done_rx))
+				Ok((eloop, close, local_addr_rx))
 			})
 			.collect::<io::Result<Vec<_>>>()?;
 
 		// Wait for server initialization
 		let local_addr = recv_address(local_addr_rx);
 		// Wait for other threads as well.
-		let mut handles: Vec<(Executor, oneshot::Sender<()>, oneshot::Receiver<()>)> = handles
+		let mut handles: Vec<(Executor, oneshot::Sender<()>)> = handles
 			.into_iter()
-			.map(|(eloop, close, local_addr_rx, done_rx)| {
+			.map(|(eloop, close, local_addr_rx)| {
 				let _ = recv_address(local_addr_rx)?;
-				Ok((eloop, close, done_rx))
+				Ok((eloop, close))
 			})
 			.collect::<io::Result<(Vec<_>)>>()?;
-		handles.push((eloop, close, done_rx));
+		handles.push((eloop, close));
 
-		let (executors, done_rxs) = handles
+		let (inner_handles, executors) = handles
 			.into_iter()
-			.fold((vec![], vec![]), |mut acc, (eloop, closer, done_rx)| {
-				acc.0.push((eloop, closer));
-				acc.1.push(done_rx);
+			.fold((vec![], vec![]), |mut acc, (eloop, closer)| {
+				acc.0.push((eloop.close_handle(), closer));
+				acc.1.push(eloop);
 				acc
 			});
 
 		Ok(Server {
 			address: local_addr?,
-			executors: Arc::new(Mutex::new(Some(executors))),
-			done: Some(done_rxs),
+			executors,
+			close_handle: CloseHandle(Arc::new(Mutex::new(inner_handles))),
 		})
 	}
 }
@@ -467,11 +465,7 @@ fn recv_address(local_addr_rx: mpsc::Receiver<io::Result<SocketAddr>>) -> io::Re
 }
 
 fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
-	signals: (
-		oneshot::Receiver<()>,
-		mpsc::Sender<io::Result<SocketAddr>>,
-		oneshot::Sender<()>,
-	),
+	signals: (oneshot::Receiver<()>, mpsc::Sender<io::Result<SocketAddr>>),
 	executor: tokio::runtime::TaskExecutor,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
@@ -486,7 +480,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	reuse_port: bool,
 	max_request_body_size: usize,
 ) {
-	let (shutdown_signal, local_addr_tx, done_tx) = signals;
+	let (shutdown_signal, local_addr_tx) = signals;
 	executor.spawn({
 		let handle = tokio::reactor::Handle::default();
 
@@ -565,7 +559,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				}))
 				.map_err(|_| ())
 		})
-		.and_then(|_| done_tx.send(()))
+		.and_then(|_| futures::future::ok(()))
 	});
 }
 
@@ -587,18 +581,15 @@ fn configure_port(_reuse: bool, _tcp: &net2::TcpBuilder) -> io::Result<()> {
 
 /// Handle used to close the server. Can be cloned and passed around to different threads and be used
 /// to close a server that is `wait()`ing.
-
-#[derive(Clone)]
-pub struct CloseHandle(Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>);
+#[derive(Debug, Clone)]
+pub struct CloseHandle(Arc<Mutex<Vec<(ExecutorCloseHandle, oneshot::Sender<()>)>>>);
 
 impl CloseHandle {
 	/// Shutdown a running server
 	pub fn close(self) {
-		if let Some(executors) = self.0.lock().take() {
-			for (executor, closer) in executors {
-				executor.close();
-				let _ = closer.send(());
-			}
+		for (inner_handle, closer) in self.0.lock().drain(..) {
+			inner_handle.close();
+			let _ = closer.send(());
 		}
 	}
 }
@@ -606,8 +597,8 @@ impl CloseHandle {
 /// jsonrpc http server instance
 pub struct Server {
 	address: SocketAddr,
-	executors: Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>,
-	done: Option<Vec<oneshot::Receiver<()>>>,
+	executors: Vec<Executor>,
+	close_handle: CloseHandle,
 }
 
 impl Server {
@@ -623,22 +614,20 @@ impl Server {
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) {
-		if let Some(receivers) = self.done.take() {
-			for receiver in receivers {
-				let _ = receiver.wait();
-			}
+		for executor in self.executors.drain(..) {
+			executor.wait();
 		}
 	}
 
 	/// Get a handle that allows us to close the server from a different thread and/or while the
 	/// server is `wait()`ing.
 	pub fn close_handle(&self) -> CloseHandle {
-		CloseHandle(self.executors.clone())
+		self.close_handle.clone()
 	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
-		self.close_handle().close();
+		self.close_handle().close()
 	}
 }

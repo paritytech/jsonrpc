@@ -1,12 +1,12 @@
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::{cmp, fmt};
 
 use crate::core;
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::{self, Host};
-use crate::server_utils::reactor::{Executor, UninitializedExecutor};
+use crate::server_utils::reactor::{Executor, ExecutorCloseHandle, UninitializedExecutor};
 use crate::server_utils::session::SessionStats;
 use crate::ws;
 
@@ -18,7 +18,7 @@ use crate::session;
 pub struct Server {
 	addr: SocketAddr,
 	handle: Option<thread::JoinHandle<Result<()>>>,
-	executor: Arc<Mutex<Option<Executor>>>,
+	executor: Executor,
 	broadcaster: ws::Sender,
 }
 
@@ -113,7 +113,7 @@ impl Server {
 		Ok(Server {
 			addr: local_addr,
 			handle: Some(handle),
-			executor: Arc::new(Mutex::new(Some(eloop))),
+			executor: eloop,
 			broadcaster,
 		})
 	}
@@ -129,7 +129,7 @@ impl Server {
 			.expect("Non-panic exit")
 	}
 
-	/// Closes the server and waits for it to finish
+	/// Closes the server
 	pub fn close(self) {
 		self.close_handle().close();
 	}
@@ -138,7 +138,7 @@ impl Server {
 	/// blocking in `wait`.
 	pub fn close_handle(&self) -> CloseHandle {
 		CloseHandle {
-			executor: self.executor.clone(),
+			inner_handle: self.executor.close_handle(),
 			broadcaster: self.broadcaster.clone(),
 		}
 	}
@@ -154,7 +154,7 @@ impl Drop for Server {
 /// A handle that allows closing of a server even if it owned by a thread blocked in `wait`.
 #[derive(Clone)]
 pub struct CloseHandle {
-	executor: Arc<Mutex<Option<Executor>>>,
+	inner_handle: ExecutorCloseHandle,
 	broadcaster: ws::Sender,
 }
 
@@ -162,9 +162,7 @@ impl CloseHandle {
 	/// Closes the `Server`.
 	pub fn close(self) {
 		let _ = self.broadcaster.shutdown();
-		if let Some(executor) = self.executor.lock().unwrap().take() {
-			executor.close()
-		}
+		self.inner_handle.close();
 	}
 }
 

@@ -145,7 +145,6 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 		let outgoing_separator = self.outgoing_separator;
 		let (stop_signal, stop_receiver) = oneshot::channel();
 		let (start_signal, start_receiver) = oneshot::channel();
-		let (wait_signal, wait_receiver) = oneshot::channel();
 		let security_attributes = self.security_attributes;
 		let client_buffer_size = self.client_buffer_size;
 
@@ -240,23 +239,21 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					.buffer_unordered(1024)
 					.for_each(|_| Ok(()))
 					.select(stop)
-					.map(|_| {
-						let _ = wait_signal.send(());
-					})
-					.map_err(|_| ()),
+					.map_err(|_| ())
+					.and_then(|_| future::ok(())),
 			)
 		}));
 
-		let handle = InnerHandles {
-			executor: Some(executor),
-			stop: Some(stop_signal),
+		let close_handle = CloseHandle {
+			inner_handle: executor.close_handle(),
+			stop: Arc::new(Mutex::new(Some(stop_signal))),
 			path: path.to_owned(),
 		};
 
 		match start_receiver.wait().expect("Message should always be sent") {
 			Ok(()) => Ok(Server {
-				handles: Arc::new(Mutex::new(handle)),
-				wait_handle: Some(wait_receiver),
+				executor: Some(executor),
+				close_handle,
 			}),
 			Err(e) => Err(e),
 		}
@@ -266,61 +263,47 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 /// IPC Server handle
 #[derive(Debug)]
 pub struct Server {
-	handles: Arc<Mutex<InnerHandles>>,
-	wait_handle: Option<oneshot::Receiver<()>>,
+	executor: Option<reactor::Executor>,
+	close_handle: CloseHandle,
 }
 
 impl Server {
-	/// Closes the server (waits for finish)
+	/// Closes the server
 	pub fn close(self) {
-		self.handles.lock().close();
+		self.close_handle().close();
 	}
 
 	/// Creates a close handle that can be used to stop the server remotely
 	pub fn close_handle(&self) -> CloseHandle {
-		CloseHandle {
-			inner: self.handles.clone(),
-		}
+		self.close_handle.clone()
 	}
 
 	/// Wait for the server to finish
 	pub fn wait(mut self) {
-		self.wait_handle.take().map(|wait_receiver| wait_receiver.wait());
+		self.executor.take().map(|wait_receiver| wait_receiver.wait());
 	}
 }
 
-#[derive(Debug)]
-struct InnerHandles {
-	executor: Option<reactor::Executor>,
-	stop: Option<oneshot::Sender<()>>,
-	path: String,
-}
-
-impl InnerHandles {
-	pub fn close(&mut self) {
-		let _ = self.stop.take().map(|stop| stop.send(()));
-		if let Some(executor) = self.executor.take() {
-			executor.close()
-		}
-		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
-	}
-}
-
-impl Drop for InnerHandles {
+impl Drop for Server {
 	fn drop(&mut self) {
-		self.close();
+		self.close_handle().close();
 	}
 }
+
 /// `CloseHandle` allows one to stop an `IpcServer` remotely.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CloseHandle {
-	inner: Arc<Mutex<InnerHandles>>,
+	inner_handle: reactor::ExecutorCloseHandle,
+	stop: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+	path: String,
 }
 
 impl CloseHandle {
 	/// `close` closes the corresponding `IpcServer` instance.
 	pub fn close(self) {
-		self.inner.lock().close();
+		let _ = self.stop.lock().take().map(|stop| stop.send(()));
+		self.inner_handle.close();
+		let _ = ::std::fs::remove_file(&self.path); // ignore error, file could have been gone somewhere
 	}
 }
 

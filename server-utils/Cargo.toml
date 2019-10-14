@@ -19,6 +19,7 @@ log = "0.4"
 tokio = { version = "0.1.15" }
 tokio-codec = { version = "0.1" }
 unicase = "2.0"
+parking_lot = "0.9"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

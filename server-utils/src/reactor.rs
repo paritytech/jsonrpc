@@ -6,7 +6,10 @@
 //! that `tokio::runtime` can be multi-threaded.
 
 use std::io;
+use std::sync::Arc;
+
 use tokio;
+use parking_lot::Mutex;
 
 use crate::core::futures::{self, Future};
 
@@ -77,19 +80,44 @@ impl Executor {
 			let _ = eloop.wait();
 		}
 	}
+
+	/// Creates a close handle that can be used to stop the server remotely
+	pub fn close_handle(&self) -> ExecutorCloseHandle {
+		let inner_handle = if let Executor::Spawned(eloop) = self {
+			Some(eloop.close_handle())
+		} else {
+			None
+		};
+		ExecutorCloseHandle { inner_handle }
+	}
+}
+
+/// `CloseHandle` allows one to stop an `Executor` remotely.
+#[derive(Debug, Clone)]
+pub struct ExecutorCloseHandle {
+	inner_handle: Option<RpcEventLoopCloseHandle>,
+}
+
+impl ExecutorCloseHandle {
+	/// `close` closes the corresponding `Executor` instance.
+	pub fn close(mut self) {
+		if let Some(closer) = self.inner_handle.take() {
+			closer.close()
+		}
+	}
 }
 
 /// A handle to running event loop. Dropping the handle will cause event loop to finish.
 #[derive(Debug)]
 pub struct RpcEventLoop {
 	executor: tokio::runtime::TaskExecutor,
-	close: Option<futures::Complete<()>>,
+	close_handle: RpcEventLoopCloseHandle,
 	handle: Option<tokio::runtime::Shutdown>,
 }
 
 impl Drop for RpcEventLoop {
 	fn drop(&mut self) {
-		self.close.take().map(|v| v.send(()));
+		self.close_handle().close()
 	}
 }
 
@@ -118,7 +146,9 @@ impl RpcEventLoop {
 
 		Ok(RpcEventLoop {
 			executor,
-			close: Some(stop),
+			close_handle: RpcEventLoopCloseHandle {
+				closer: Arc::new(Mutex::new(Some(stop))),
+			},
 			handle: Some(handle),
 		})
 	}
@@ -137,15 +167,30 @@ impl RpcEventLoop {
 	}
 
 	/// Finishes this event loop.
-	pub fn close(mut self) {
-		let _ = self
-			.close
-			.take()
-			.expect("Close is always set before self is consumed.")
-			.send(())
-			.map_err(|e| {
+	pub fn close(self) {
+		self.close_handle().close()
+	}
+
+	/// close handle
+	pub fn close_handle(&self) -> RpcEventLoopCloseHandle {
+		self.close_handle.clone()
+	}
+}
+
+/// `CloseHandle` allows one to stop an `RpcEventLoop` remotely.
+#[derive(Debug, Clone)]
+pub struct RpcEventLoopCloseHandle {
+	closer: Arc<Mutex<Option<futures::Complete<()>>>>,
+}
+
+impl RpcEventLoopCloseHandle {
+	/// `close` closes the corresponding `RpcEventLoop` instance.
+	pub fn close(self) {
+		if let Some(closer) = self.closer.lock().take() {
+			let _ = closer.send(()).map_err(|e| {
 				warn!("Event Loop is already finished. {:?}", e);
 			});
+		}
 	}
 }
 
