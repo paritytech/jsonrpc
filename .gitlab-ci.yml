@@ -12,7 +12,7 @@ test-linux-stable:
   stage:                           test
   script:
     - rustup update stable
-    - time cargo test --all --release --locked
+    - time cargo test --all --release
   only:
     - /^integrate_gitlab-ci/
   except:
@@ -23,7 +23,7 @@ test-linux-stable:
 test-windows-stable:
   stage:                           test
   script:
-    - time cargo test --all --release --locked
+    - time cargo test --all --release
   only:
     - /^integrate_gitlab-ci/
   except:
@@ -34,7 +34,7 @@ test-windows-stable:
 test-mac-stable:
   stage:                           test
   script:
-    - time cargo test --all --release --locked
+    - time cargo test --all --release
   only:
     - /^integrate_gitlab-ci/
   except:
