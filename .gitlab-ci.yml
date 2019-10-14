@@ -1,0 +1,61 @@
+stages:
+  - test
+  #- build
+
+image:                             parity/rust-builder:latest
+
+variables:
+
+#### stage:                        test
+
+test-linux-stable:
+  stage:                           test
+  script:
+    - rustup update stable
+    - time cargo test --all --release --locked
+  only:
+    - /^integrate_gitlab-ci/
+  except:
+    - master
+  tags:
+    - linux-docker
+
+test-windows-stable:
+  stage:                           test
+  script:
+    - time cargo test --all --release --locked
+  only:
+    - /^integrate_gitlab-ci/
+  except:
+    - master
+  tags:
+    - rust-windows
+
+test-mac-stable:
+  stage:                           test
+  script:
+    - time cargo test --all --release --locked
+  only:
+    - /^integrate_gitlab-ci/
+  except:
+    - master
+  tags:
+    - rust-mac
+
+#### stage:                        build
+
+# build-linux:
+#   stage:                           build
+#   <<:                              *compiler_info
+#   script:
+#     - ./scripts/init.sh
+#     - ./scripts/build.sh
+#     - time cargo build --release
+#     - cd substrate && time cargo build --release
+#     - sccache -s
+#   tags:
+#     - linux-docker
+#   only:
+#     - master
+#     - tags
+#     - web
