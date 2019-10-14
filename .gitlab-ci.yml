@@ -1,18 +1,27 @@
 stages:
+  - checkstyle
   - test
-  #- build
 
 image:                             parity/rust-builder:latest
 
-variables:
-
-#### stage:                        test
+checkstyle-linux-stable:
+  stage:                           checkstyle
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+  allow_failure: true
+  only:
+    - /^integrate_gitlab-ci/
+  except:
+    - master
+  tags:
+    - linux-docker
 
 test-linux-stable:
   stage:                           test
   script:
-    - rustup update stable
-    - time cargo test --all --release
+    - time cargo build --all
+    - time cargo test --all
   only:
     - /^integrate_gitlab-ci/
   except:
@@ -23,7 +32,8 @@ test-linux-stable:
 test-windows-stable:
   stage:                           test
   script:
-    - cargo test --all --release
+    - cargo build --all
+    - cargo test --all
   only:
     - /^integrate_gitlab-ci/
   except:
@@ -34,28 +44,11 @@ test-windows-stable:
 test-mac-stable:
   stage:                           test
   script:
-    - time cargo test --all --release
+    - time cargo build --all
+    - time cargo test --all
   only:
     - /^integrate_gitlab-ci/
   except:
     - master
   tags:
     - rust-mac
-
-#### stage:                        build
-
-# build-linux:
-#   stage:                           build
-#   <<:                              *compiler_info
-#   script:
-#     - ./scripts/init.sh
-#     - ./scripts/build.sh
-#     - time cargo build --release
-#     - cd substrate && time cargo build --release
-#     - sccache -s
-#   tags:
-#     - linux-docker
-#   only:
-#     - master
-#     - tags
-#     - web
