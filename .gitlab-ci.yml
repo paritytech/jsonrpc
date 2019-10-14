@@ -23,7 +23,7 @@ test-linux-stable:
 test-windows-stable:
   stage:                           test
   script:
-    - time cargo test --all --release
+    - cargo test --all --release
   only:
     - /^integrate_gitlab-ci/
   except:
