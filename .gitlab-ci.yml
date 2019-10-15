@@ -9,7 +9,12 @@ stages:
 
 .only:                             &only
   only:
-    - /^integrate_gitlab-ci/
+    - triggers
+    - tags
+    - master
+    - schedules
+    - web
+    - /^[0-9]+$/
 
 # test rust stable
 test-linux-stable:
