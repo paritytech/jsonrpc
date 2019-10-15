@@ -1,6 +1,6 @@
 stages:
-  - test
   - checkstyle
+  - test
 
 .test_and_build:                 &test_and_build
   script:
