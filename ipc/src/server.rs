@@ -240,7 +240,10 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					.buffer_unordered(1024)
 					.for_each(|_| Ok(()))
 					.select(stop)
-					.map(|_| {
+					.map(|(_, server)| {
+						// We drop the server first to prevent a situation where main thread terminates
+						// before the server is properly dropped (see #504 for more details)
+						drop(server);
 						let _ = wait_signal.send(());
 					})
 					.map_err(|_| ()),
