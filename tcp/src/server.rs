@@ -91,7 +91,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					let peer_addr = match socket.peer_addr() {
 						Ok(addr) => addr,
 						Err(e) => {
-							trace!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
+							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
 							return future::Either::A(future::ok(()))
 						}
 					};
