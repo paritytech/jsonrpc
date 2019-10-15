@@ -1,14 +1,42 @@
 stages:
-  - checkstyle
   - test
+  - checkstyle
 
-image:                             parity/rust-builder:latest
+.test_and_build:                 &test_and_build
+  script:
+    - cargo build --all
+    - cargo test --all
 
 .only:                             &only
   only:
     - /^integrate_gitlab-ci/
 
+# test rust stable
+test-linux-stable:
+  image:                           parity/rust-builder:latest
+  stage:                           test
+  <<:                             *test_and_build
+  <<:                             *only
+  tags:
+    - linux-docker
+
+test-windows-stable:
+  stage:                           test
+  <<:                             *test_and_build
+  <<:                             *only
+  tags:
+    - rust-windows
+
+test-mac-stable:
+  stage:                           test
+  <<:                             *test_and_build
+  <<:                             *only
+  tags:
+    - rust-mac
+
+# check style 
 checkstyle-linux-stable:
+  image:                           parity/rust-builder:latest
   stage:                           checkstyle
   script:
     - rustup component add rustfmt
@@ -17,30 +45,3 @@ checkstyle-linux-stable:
   <<:                             *only
   tags:
     - linux-docker
-
-test-linux-stable:
-  stage:                           test
-  script:
-    - time cargo build --all
-    - time cargo test --all
-  <<:                             *only
-  tags:
-    - linux-docker
-
-test-windows-stable:
-  stage:                           test
-  script:
-    - cargo build --all
-    - cargo test --all
-  <<:                             *only
-  tags:
-    - rust-windows
-
-test-mac-stable:
-  stage:                           test
-  script:
-    - time cargo build --all
-    - time cargo test --all
-  <<:                             *only
-  tags:
-    - rust-mac
