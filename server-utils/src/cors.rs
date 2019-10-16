@@ -590,5 +590,4 @@ mod tests {
 		// then
 		assert_eq!(res, AllowCors::NotRequired);
 	}
-
 }

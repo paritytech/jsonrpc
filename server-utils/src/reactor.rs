@@ -130,10 +130,7 @@ impl RpcEventLoop {
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> Result<(), ()> {
-		self.handle
-			.take()
-			.ok_or(())?
-			.wait()
+		self.handle.take().ok_or(())?.wait()
 	}
 
 	/// Finishes this event loop.

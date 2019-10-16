@@ -164,7 +164,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 							.map(|_| ())
 							.map_err(|(e, _)| {
 								error!("Error while executing the server: {:?}", e);
-							})
+							}),
 					)
 				}
 				Err(e) => {

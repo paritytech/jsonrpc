@@ -1,0 +1,52 @@
+stages:
+  - checkstyle
+  - test
+
+.test_and_build:                 &test_and_build
+  script:
+    - cargo build --all
+    - cargo test --all
+
+.only:                             &only
+  only:
+    - triggers
+    - tags
+    - master
+    - schedules
+    - web
+    - /^[0-9]+$/
+
+# test rust stable
+test-linux-stable:
+  image:                           parity/rust-builder:latest
+  stage:                           test
+  <<:                             *test_and_build
+  <<:                             *only
+  tags:
+    - linux-docker
+
+test-windows-stable:
+  stage:                           test
+  <<:                             *test_and_build
+  <<:                             *only
+  tags:
+    - rust-windows
+
+test-mac-stable:
+  stage:                           test
+  <<:                             *test_and_build
+  <<:                             *only
+  tags:
+    - rust-mac
+
+# check style 
+checkstyle-linux-stable:
+  image:                           parity/rust-builder:latest
+  stage:                           checkstyle
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+  allow_failure: true
+  <<:                             *only
+  tags:
+    - linux-docker
