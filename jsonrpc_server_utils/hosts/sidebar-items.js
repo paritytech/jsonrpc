@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["DomainsValidation","Specifies if domains should be validated."],["Port","Port pattern"]],"fn":[["is_host_valid","Returns `true` when `Host` header is whitelisted in `allowed_hosts`."],["update","Updates given list of hosts with the address."]],"struct":[["Host","Host type"]]});

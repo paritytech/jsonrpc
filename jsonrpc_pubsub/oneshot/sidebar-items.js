@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["channel","Create a new future-base rendezvous channel."]],"struct":[["Receiver","Receiving end of the channel."],["Sender","A sender part of the channel."]]});

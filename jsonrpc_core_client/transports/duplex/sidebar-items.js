@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["duplex","Creates a new `Duplex`, along with a channel to communicate"]],"struct":[["Duplex","The Duplex handles sending and receiving asynchronous messages through an underlying transport."]]});

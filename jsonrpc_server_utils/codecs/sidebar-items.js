@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["Separator","Separator for enveloping messages in streaming codecs"]],"struct":[["StreamCodec","Stream codec for streaming protocols (ipc, tcp)"]]});

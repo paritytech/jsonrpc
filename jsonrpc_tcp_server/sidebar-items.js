@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["PushMessageError","Push Message Error"],["Separator","Separator for enveloping messages in streaming codecs"]],"struct":[["Dispatcher","Peer-messages dispatcher."],["RequestContext","Request context"],["Server","TCP Server handle"],["ServerBuilder","TCP server builder"]],"trait":[["MetaExtractor","Metadata extractor (per session)"]]});

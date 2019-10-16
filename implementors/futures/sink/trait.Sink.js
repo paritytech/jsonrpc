@@ -1,0 +1,11 @@
+(function() {var implementors = {};
+implementors["jsonrpc_client_transports"] = [{text:"impl&lt;TMetadata, THandler&gt; <a class=\"trait\" href=\"https://docs.rs/futures/0.1/futures/sink/trait.Sink.html\" title=\"trait futures::sink::Sink\">Sink</a> for <a class=\"struct\" href=\"jsonrpc_client_transports/transports/local/struct.LocalRpc.html\" title=\"struct jsonrpc_client_transports::transports::local::LocalRpc\">LocalRpc</a>&lt;THandler, TMetadata&gt; <span class=\"where fmt-newline\">where<br>&nbsp;&nbsp;&nbsp;&nbsp;TMetadata: <a class=\"trait\" href=\"jsonrpc_core/calls/trait.Metadata.html\" title=\"trait jsonrpc_core::calls::Metadata\">Metadata</a>,<br>&nbsp;&nbsp;&nbsp;&nbsp;THandler: <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/ops/deref/trait.Deref.html\" title=\"trait core::ops::deref::Deref\">Deref</a>&lt;Target = <a class=\"struct\" href=\"jsonrpc_core/io/struct.MetaIoHandler.html\" title=\"struct jsonrpc_core::io::MetaIoHandler\">MetaIoHandler</a>&lt;TMetadata&gt;&gt;,&nbsp;</span>",synthetic:false,types:["jsonrpc_client_transports::transports::local::LocalRpc"]},];
+implementors["jsonrpc_pubsub"] = [{text:"impl <a class=\"trait\" href=\"https://docs.rs/futures/0.1/futures/sink/trait.Sink.html\" title=\"trait futures::sink::Sink\">Sink</a> for <a class=\"struct\" href=\"jsonrpc_pubsub/struct.Sink.html\" title=\"struct jsonrpc_pubsub::Sink\">Sink</a>",synthetic:false,types:["jsonrpc_pubsub::subscription::Sink"]},{text:"impl&lt;T:&nbsp;<a class=\"trait\" href=\"https://docs.rs/serde/1.0.101/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a>, E:&nbsp;<a class=\"trait\" href=\"https://docs.rs/serde/1.0.101/serde/ser/trait.Serialize.html\" title=\"trait serde::ser::Serialize\">Serialize</a>&gt; <a class=\"trait\" href=\"https://docs.rs/futures/0.1/futures/sink/trait.Sink.html\" title=\"trait futures::sink::Sink\">Sink</a> for <a class=\"struct\" href=\"jsonrpc_pubsub/typed/struct.Sink.html\" title=\"struct jsonrpc_pubsub::typed::Sink\">Sink</a>&lt;T, E&gt;",synthetic:false,types:["jsonrpc_pubsub::typed::Sink"]},];
+
+            if (window.register_implementors) {
+                window.register_implementors(implementors);
+            } else {
+                window.pending_implementors = implementors;
+            }
+        
+})()

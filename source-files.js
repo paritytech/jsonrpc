@@ -1,0 +1,15 @@
+var N = null;var sourcesIndex = {};
+sourcesIndex["jsonrpc_client_transports"] = {"name":"","dirs":[{"name":"transports","files":["duplex.rs","http.rs","local.rs","mod.rs","ws.rs"]}],"files":["lib.rs"]};
+sourcesIndex["jsonrpc_core"] = {"name":"","dirs":[{"name":"types","files":["error.rs","id.rs","mod.rs","params.rs","request.rs","response.rs","version.rs"]}],"files":["calls.rs","delegates.rs","io.rs","lib.rs","middleware.rs"]};
+sourcesIndex["jsonrpc_core_client"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["jsonrpc_derive"] = {"name":"","files":["lib.rs","options.rs","rpc_attr.rs","rpc_trait.rs","to_client.rs","to_delegate.rs"]};
+sourcesIndex["jsonrpc_http_server"] = {"name":"","files":["handler.rs","lib.rs","response.rs","utils.rs"]};
+sourcesIndex["jsonrpc_ipc_server"] = {"name":"","files":["lib.rs","meta.rs","select_with_weak.rs","server.rs"]};
+sourcesIndex["jsonrpc_pubsub"] = {"name":"","files":["delegates.rs","handler.rs","lib.rs","oneshot.rs","subscription.rs","typed.rs","types.rs"]};
+sourcesIndex["jsonrpc_pubsub_examples"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["jsonrpc_server_utils"] = {"name":"","files":["cors.rs","hosts.rs","lib.rs","matcher.rs","reactor.rs","session.rs","stream_codec.rs","suspendable_stream.rs"]};
+sourcesIndex["jsonrpc_stdio_server"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["jsonrpc_tcp_server"] = {"name":"","files":["dispatch.rs","lib.rs","meta.rs","server.rs","service.rs"]};
+sourcesIndex["jsonrpc_test"] = {"name":"","files":["lib.rs"]};
+sourcesIndex["jsonrpc_ws_server"] = {"name":"","files":["error.rs","lib.rs","metadata.rs","server.rs","server_builder.rs","session.rs"]};
+createSourceSidebar();

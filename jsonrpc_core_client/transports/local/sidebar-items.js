@@ -1,0 +1,1 @@
+initSidebarItems({"fn":[["connect","Connects to a `Deref<Target = MetaIoHandler<Metadata + Default>`."],["connect_with_metadata","Connects to a `Deref<Target = MetaIoHandler<Metadata>`."],["connect_with_pubsub","Connects with pubsub."]],"struct":[["LocalRpc","Implements a rpc client for `MetaIoHandler`."]],"type":[["LocalMeta","Metadata for LocalRpc."]]});
