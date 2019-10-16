@@ -566,7 +566,12 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					}))
 					.map_err(|_| ())
 			})
-			.and_then(|_| done_tx.send(()))
+			.and_then(|(_, server)| {
+				// We drop the server first to prevent a situation where main thread terminates
+				// before the server is properly dropped (see #504 for more details)
+				drop(server);
+				done_tx.send(())
+			})
 	});
 }
 
