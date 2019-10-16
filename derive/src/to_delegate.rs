@@ -380,8 +380,7 @@ fn is_option_type(ty: &syn::Type) -> bool {
 		path.path
 			.segments
 			.first()
-			.map(|t| t.ident == "Option")
-			.unwrap_or(false)
+			.map_or(false, |t| t.ident == "Option")
 	} else {
 		false
 	}

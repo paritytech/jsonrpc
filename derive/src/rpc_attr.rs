@@ -68,13 +68,7 @@ impl RpcMethodAttribute {
 	fn parse_meta(attr: &syn::Attribute, output: &syn::ReturnType) -> Option<Result<RpcMethodAttribute>> {
 		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
-				let attr_kind = match meta
-					.path()
-					.get_ident()
-					.map(|i| i.to_string())
-					.as_ref()
-					.map(|i| i.as_str())
-				{
+				let attr_kind = match path_to_str(meta.path()).as_ref().map(String::as_str) {
 					Some(RPC_ATTR_NAME) => Some(Self::parse_rpc(meta, output)),
 					Some(PUB_SUB_ATTR_NAME) => Some(Self::parse_pubsub(meta)),
 					_ => None,
@@ -168,13 +162,12 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	}
 	impl<'a> Visit<'a> for Visitor {
 		fn visit_meta(&mut self, meta: &syn::Meta) {
-			let ident = meta.path().get_ident().map(|i| i.to_string())
-				// TODO [ToDr] Maybe better fail?
-				.unwrap_or_else(|| "Unknown".into());
-			match meta {
-				syn::Meta::Path(_) => self.meta_words.push(ident),
-				syn::Meta::List(_) => self.meta_list_names.push(ident),
-				syn::Meta::NameValue(_) => self.name_value_names.push(ident),
+			if let Some(ident) = path_to_str(meta.path()) {
+				match meta {
+					syn::Meta::Path(_) => self.meta_words.push(ident),
+					syn::Meta::List(_) => self.meta_list_names.push(ident),
+					syn::Meta::NameValue(_) => self.name_value_names.push(ident),
+				}
 			}
 		}
 	}
@@ -182,8 +175,8 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	let mut visitor = Visitor::default();
 	visit::visit_meta(&mut visitor, &meta);
 
-	let ident = meta.path().get_ident().map(|i| i.to_string());
-	match ident.as_ref().map(|i| i.as_str()) {
+	let ident = path_to_str(meta.path());
+	match ident.as_ref().map(String::as_str) {
 		Some(RPC_ATTR_NAME) => {
 			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
 			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY, RETURNS_META_WORD])?;
@@ -287,5 +280,9 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 }
 
 fn path_eq_str(path: &syn::Path, s: &str) -> bool {
-	path.get_ident().map(|i| i == s).unwrap_or(false)
+	path.get_ident().map_or(false, |i| i == s)
+}
+
+fn path_to_str(path: &syn::Path) -> Option<String> {
+	Some(path.get_ident()?.to_string())
 }
