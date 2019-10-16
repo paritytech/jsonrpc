@@ -530,42 +530,43 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			}
 		};
 
-		bind_result.and_then(move |(listener, local_addr)| {
-			let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
+		bind_result
+			.and_then(move |(listener, local_addr)| {
+				let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-			let mut http = server::conn::Http::new();
-			http.keep_alive(keep_alive);
-			let tcp_stream = SuspendableStream::new(listener.incoming());
+				let mut http = server::conn::Http::new();
+				http.keep_alive(keep_alive);
+				let tcp_stream = SuspendableStream::new(listener.incoming());
 
-			tcp_stream
-				.map(move |socket| {
-					let service = ServerHandler::new(
-						jsonrpc_handler.clone(),
-						cors_domains.clone(),
-						cors_max_age,
-						allowed_headers.clone(),
-						allowed_hosts.clone(),
-						request_middleware.clone(),
-						rest_api,
-						health_api.clone(),
-						max_request_body_size,
-						keep_alive,
-					);
+				tcp_stream
+					.map(move |socket| {
+						let service = ServerHandler::new(
+							jsonrpc_handler.clone(),
+							cors_domains.clone(),
+							cors_max_age,
+							allowed_headers.clone(),
+							allowed_hosts.clone(),
+							request_middleware.clone(),
+							rest_api,
+							health_api.clone(),
+							max_request_body_size,
+							keep_alive,
+						);
 
-					http.serve_connection(socket, service)
-						.map_err(|e| error!("Error serving connection: {:?}", e))
-				})
-				.buffer_unordered(1024)
-				.for_each(|_| Ok(()))
-				.map_err(|e| {
-					warn!("Incoming streams error, closing sever: {:?}", e);
-				})
-				.select(shutdown_signal.map_err(|e| {
-					debug!("Shutdown signaller dropped, closing server: {:?}", e);
-				}))
-				.map_err(|_| ())
-		})
-		.and_then(|_| done_tx.send(()))
+						http.serve_connection(socket, service)
+							.map_err(|e| error!("Error serving connection: {:?}", e))
+					})
+					.buffer_unordered(1024)
+					.for_each(|_| Ok(()))
+					.map_err(|e| {
+						warn!("Incoming streams error, closing sever: {:?}", e);
+					})
+					.select(shutdown_signal.map_err(|e| {
+						debug!("Shutdown signaller dropped, closing server: {:?}", e);
+					}))
+					.map_err(|_| ())
+			})
+			.and_then(|_| done_tx.send(()))
 	});
 }
 

@@ -146,5 +146,4 @@ mod tests {
 		assert_eq!(res, Some(response.into()));
 		assert_eq!(called.load(Ordering::SeqCst), true);
 	}
-
 }

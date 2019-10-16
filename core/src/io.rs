@@ -1,4 +1,7 @@
-use std::collections::{hash_map::{Iter, IntoIter}, HashMap};
+use std::collections::{
+	hash_map::{IntoIter, Iter},
+	HashMap,
+};
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 

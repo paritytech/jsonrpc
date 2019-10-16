@@ -286,8 +286,11 @@ fn should_parse_empty_response_as_batch() {
 
 	let dsr = r#""#;
 
-	let deserialized1: Result<Response, _>= serde_json::from_str(dsr);
+	let deserialized1: Result<Response, _> = serde_json::from_str(dsr);
 	let deserialized2: Result<Response, _> = Response::from_json(dsr);
-	assert!(deserialized1.is_err(), "Empty string is not valid JSON, so we should get an error.");
+	assert!(
+		deserialized1.is_err(),
+		"Empty string is not valid JSON, so we should get an error."
+	);
 	assert_eq!(deserialized2.unwrap(), Response::Batch(vec![]));
 }
