@@ -88,7 +88,13 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 				let connections = SuspendableStream::new(listener.incoming());
 
 				let server = connections.map(move |socket| {
-					let peer_addr = socket.peer_addr().expect("Unable to determine socket peer address");
+					let peer_addr = match socket.peer_addr() {
+						Ok(addr) => addr,
+						Err(e) => {
+							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
+							return future::Either::A(future::ok(()))
+						}
+					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
 					let (sender, receiver) = mpsc::channel(65536);
 
@@ -101,7 +107,10 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
 					let (writer, reader) = Framed::new(
 						socket,
-						codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
+						codecs::StreamCodec::new(
+							incoming_separator.clone(),
+							outgoing_separator.clone()
+						),
 					)
 					.split();
 
@@ -137,7 +146,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 						Ok(())
 					});
 
-					writer
+					future::Either::B(writer)
 				});
 
 				Ok(server)
