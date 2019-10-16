@@ -92,7 +92,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
-							return future::Either::A(future::ok(()))
+							return future::Either::A(future::ok(()));
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
@@ -107,10 +107,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
 					let (writer, reader) = Framed::new(
 						socket,
-						codecs::StreamCodec::new(
-							incoming_separator.clone(),
-							outgoing_separator.clone()
-						),
+						codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
 					)
 					.split();
 
@@ -164,7 +161,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 							.map(|_| ())
 							.map_err(|(e, _)| {
 								error!("Error while executing the server: {:?}", e);
-							})
+							}),
 					)
 				}
 				Err(e) => {

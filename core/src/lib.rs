@@ -29,9 +29,9 @@ extern crate serde_derive;
 pub use futures;
 
 #[doc(hidden)]
-pub extern crate serde_json;
-#[doc(hidden)]
 pub extern crate serde;
+#[doc(hidden)]
+pub extern crate serde_json;
 
 mod calls;
 mod io;
