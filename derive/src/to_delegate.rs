@@ -144,7 +144,6 @@ pub fn generate_trait_item_method(
 	let mut method = method.clone();
 	method
 		.sig
-		.decl
 		.generics
 		.make_where_clause()
 		.predicates
@@ -183,13 +182,11 @@ impl RpcMethod {
 		let mut param_types: Vec<_> = self
 			.trait_item
 			.sig
-			.decl
 			.inputs
 			.iter()
 			.cloned()
 			.filter_map(|arg| match arg {
-				syn::FnArg::Captured(arg_captured) => Some(arg_captured.ty),
-				syn::FnArg::Ignored(ty) => Some(ty),
+				syn::FnArg::Typed(ty) => Some(*ty.ty),
 				_ => None,
 			})
 			.collect();
@@ -225,7 +222,7 @@ impl RpcMethod {
 		};
 
 		let method_ident = self.ident();
-		let result = &self.trait_item.sig.decl.output;
+		let result = &self.trait_item.sig.output;
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
 
@@ -383,7 +380,7 @@ fn is_option_type(ty: &syn::Type) -> bool {
 		path.path
 			.segments
 			.first()
-			.map(|t| t.value().ident == "Option")
+			.map(|t| t.ident == "Option")
 			.unwrap_or(false)
 	} else {
 		false
