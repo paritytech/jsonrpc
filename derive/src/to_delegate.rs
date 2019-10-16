@@ -142,12 +142,7 @@ pub fn generate_trait_item_method(
 
 	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
 	let mut method = method.clone();
-	method
-		.sig
-		.generics
-		.make_where_clause()
-		.predicates
-		.extend(predicates);
+	method.sig.generics.make_where_clause().predicates.extend(predicates);
 	Ok(method)
 }
 
@@ -377,10 +372,7 @@ fn ident(s: &str) -> syn::Ident {
 
 fn is_option_type(ty: &syn::Type) -> bool {
 	if let syn::Type::Path(path) = ty {
-		path.path
-			.segments
-			.first()
-			.map_or(false, |t| t.ident == "Option")
+		path.path.segments.first().map_or(false, |t| t.ident == "Option")
 	} else {
 		false
 	}
