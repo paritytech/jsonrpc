@@ -142,13 +142,7 @@ pub fn generate_trait_item_method(
 
 	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
 	let mut method = method.clone();
-	method
-		.sig
-		.decl
-		.generics
-		.make_where_clause()
-		.predicates
-		.extend(predicates);
+	method.sig.generics.make_where_clause().predicates.extend(predicates);
 	Ok(method)
 }
 
@@ -183,13 +177,11 @@ impl RpcMethod {
 		let mut param_types: Vec<_> = self
 			.trait_item
 			.sig
-			.decl
 			.inputs
 			.iter()
 			.cloned()
 			.filter_map(|arg| match arg {
-				syn::FnArg::Captured(arg_captured) => Some(arg_captured.ty),
-				syn::FnArg::Ignored(ty) => Some(ty),
+				syn::FnArg::Typed(ty) => Some(*ty.ty),
 				_ => None,
 			})
 			.collect();
@@ -225,7 +217,7 @@ impl RpcMethod {
 		};
 
 		let method_ident = self.ident();
-		let result = &self.trait_item.sig.decl.output;
+		let result = &self.trait_item.sig.output;
 		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
 		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
 
@@ -380,11 +372,7 @@ fn ident(s: &str) -> syn::Ident {
 
 fn is_option_type(ty: &syn::Type) -> bool {
 	if let syn::Type::Path(path) = ty {
-		path.path
-			.segments
-			.first()
-			.map(|t| t.value().ident == "Option")
-			.unwrap_or(false)
+		path.path.segments.first().map_or(false, |t| t.ident == "Option")
 	} else {
 		false
 	}

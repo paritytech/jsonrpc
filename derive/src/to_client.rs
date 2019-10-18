@@ -173,14 +173,14 @@ fn get_doc_comments(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
 
 fn compute_args(method: &syn::TraitItemMethod) -> Punctuated<syn::FnArg, syn::token::Comma> {
 	let mut args = Punctuated::new();
-	for arg in &method.sig.decl.inputs {
+	for arg in &method.sig.inputs {
 		let ty = match arg {
-			syn::FnArg::Captured(syn::ArgCaptured { ty, .. }) => ty,
+			syn::FnArg::Typed(syn::PatType { ty, .. }) => ty,
 			_ => continue,
 		};
-		let segments = match ty {
+		let segments = match &**ty {
 			syn::Type::Path(syn::TypePath {
-				path: syn::Path { segments, .. },
+				path: syn::Path { ref segments, .. },
 				..
 			}) => segments,
 			_ => continue,
@@ -200,12 +200,12 @@ fn compute_arg_identifiers(args: &Punctuated<syn::FnArg, syn::token::Comma>) -> 
 	let mut arg_names = vec![];
 	for arg in args {
 		let pat = match arg {
-			syn::FnArg::Captured(syn::ArgCaptured { pat, .. }) => pat,
+			syn::FnArg::Typed(syn::PatType { pat, .. }) => pat,
 			_ => continue,
 		};
-		let ident = match pat {
-			syn::Pat::Ident(syn::PatIdent { ident, .. }) => ident,
-			syn::Pat::Wild(wild) => {
+		let ident = match **pat {
+			syn::Pat::Ident(syn::PatIdent { ref ident, .. }) => ident,
+			syn::Pat::Wild(ref wild) => {
 				let span = wild.underscore_token.spans[0];
 				let msg = "No wildcard patterns allowed in rpc trait.";
 				return Err(syn::Error::new(span, msg));
@@ -223,7 +223,7 @@ fn compute_returns(method: &syn::TraitItemMethod, returns: &Option<String>) -> R
 		None => None,
 	};
 	let returns = match returns {
-		None => try_infer_returns(&method.sig.decl.output),
+		None => try_infer_returns(&method.sig.output),
 		_ => returns,
 	};
 	let returns = match returns {
@@ -276,8 +276,8 @@ fn get_first_type_argument(args: &syn::PathArguments) -> Option<syn::Type> {
 
 fn compute_subscription_type(arg: &syn::FnArg) -> syn::Type {
 	let ty = match arg {
-		syn::FnArg::Captured(cap) => match &cap.ty {
-			syn::Type::Path(path) => {
+		syn::FnArg::Typed(cap) => match *cap.ty {
+			syn::Type::Path(ref path) => {
 				let last = &path.path.segments[&path.path.segments.len() - 1];
 				get_first_type_argument(&last.arguments)
 			}

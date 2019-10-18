@@ -51,7 +51,7 @@ const NEITHER_SUB_OR_UNSUB_ERR: &str = "pubsub attribute not annotated with eith
 
 impl RpcMethodAttribute {
 	pub fn parse_attr(method: &syn::TraitItemMethod) -> Result<Option<RpcMethodAttribute>> {
-		let output = &method.sig.decl.output;
+		let output = &method.sig.output;
 		let attrs = method
 			.attrs
 			.iter()
@@ -68,9 +68,9 @@ impl RpcMethodAttribute {
 	fn parse_meta(attr: &syn::Attribute, output: &syn::ReturnType) -> Option<Result<RpcMethodAttribute>> {
 		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
-				let attr_kind = match meta.name().to_string().as_ref() {
-					RPC_ATTR_NAME => Some(Self::parse_rpc(meta, output)),
-					PUB_SUB_ATTR_NAME => Some(Self::parse_pubsub(meta)),
+				let attr_kind = match path_to_str(meta.path()).as_ref().map(String::as_str) {
+					Some(RPC_ATTR_NAME) => Some(Self::parse_rpc(meta, output)),
+					Some(PUB_SUB_ATTR_NAME) => Some(Self::parse_pubsub(meta)),
 					_ => None,
 				};
 				attr_kind.map(|kind| {
@@ -162,10 +162,12 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	}
 	impl<'a> Visit<'a> for Visitor {
 		fn visit_meta(&mut self, meta: &syn::Meta) {
-			match meta {
-				syn::Meta::List(list) => self.meta_list_names.push(list.ident.to_string()),
-				syn::Meta::Word(ident) => self.meta_words.push(ident.to_string()),
-				syn::Meta::NameValue(nv) => self.name_value_names.push(nv.ident.to_string()),
+			if let Some(ident) = path_to_str(meta.path()) {
+				match meta {
+					syn::Meta::Path(_) => self.meta_words.push(ident),
+					syn::Meta::List(_) => self.meta_list_names.push(ident),
+					syn::Meta::NameValue(_) => self.name_value_names.push(ident),
+				}
 			}
 		}
 	}
@@ -173,13 +175,14 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	let mut visitor = Visitor::default();
 	visit::visit_meta(&mut visitor, &meta);
 
-	match meta.name().to_string().as_ref() {
-		RPC_ATTR_NAME => {
+	let ident = path_to_str(meta.path());
+	match ident.as_ref().map(String::as_str) {
+		Some(RPC_ATTR_NAME) => {
 			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
 			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY, RETURNS_META_WORD])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
-		PUB_SUB_ATTR_NAME => {
+		Some(PUB_SUB_ATTR_NAME) => {
 			validate_idents(
 				&meta,
 				&visitor.meta_words,
@@ -223,7 +226,7 @@ fn get_meta_list(meta: &syn::Meta) -> Option<&syn::MetaList> {
 fn get_name_value(key: &str, ml: &syn::MetaList) -> Option<String> {
 	ml.nested.iter().find_map(|nested| {
 		if let syn::NestedMeta::Meta(syn::Meta::NameValue(mnv)) = nested {
-			if mnv.ident == key {
+			if path_eq_str(&mnv.path, key) {
 				if let syn::Lit::Str(ref lit) = mnv.lit {
 					Some(lit.value())
 				} else {
@@ -240,8 +243,8 @@ fn get_name_value(key: &str, ml: &syn::MetaList) -> Option<String> {
 
 fn has_meta_word(word: &str, ml: &syn::MetaList) -> bool {
 	ml.nested.iter().any(|nested| {
-		if let syn::NestedMeta::Meta(syn::Meta::Word(w)) = nested {
-			w == word
+		if let syn::NestedMeta::Meta(syn::Meta::Path(p)) = nested {
+			path_eq_str(&p, word)
 		} else {
 			false
 		}
@@ -253,7 +256,7 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 		.iter()
 		.find_map(|nested| {
 			if let syn::NestedMeta::Meta(syn::Meta::List(list)) = nested {
-				if list.ident == ALIASES_KEY {
+				if path_eq_str(&list.path, ALIASES_KEY) {
 					Some(list)
 				} else {
 					None
@@ -266,7 +269,7 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 			list.nested
 				.iter()
 				.filter_map(|nm| {
-					if let syn::NestedMeta::Literal(syn::Lit::Str(alias)) = nm {
+					if let syn::NestedMeta::Lit(syn::Lit::Str(alias)) = nm {
 						Some(alias.value())
 					} else {
 						None
@@ -274,4 +277,12 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 				})
 				.collect()
 		})
+}
+
+fn path_eq_str(path: &syn::Path, s: &str) -> bool {
+	path.get_ident().map_or(false, |i| i == s)
+}
+
+fn path_to_str(path: &syn::Path) -> Option<String> {
+	Some(path.get_ident()?.to_string())
 }
