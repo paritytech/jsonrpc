@@ -53,7 +53,13 @@ impl Rpc for RpcImpl {
 		let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 	}
 
-	fn subscribe_second(&self, _meta: Self::Metadata, subscriber: Subscriber<String>, _pre: u32, _trailing: Option<u64>) {
+	fn subscribe_second(
+		&self,
+		_meta: Self::Metadata,
+		subscriber: Subscriber<String>,
+		_pre: u32,
+		_trailing: Option<u64>,
+	) {
 		let _sink = subscriber.assign_id(SubscriptionId::Number(6));
 	}
 
@@ -124,7 +130,6 @@ fn test_subscribe_with_alias() {
 	let result: jsonrpc_core::Response = serde_json::from_str(&res.unwrap()).unwrap();
 	assert_eq!(expected, result);
 }
-
 
 #[test]
 fn test_subscribe_alternate_method() {

@@ -104,9 +104,7 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 					.entry(subscription_name.clone())
 					.or_insert((vec![], None));
 				match kind {
-					PubSubMethodKind::Subscribe => {
-						sub.push(method.clone())
-					}
+					PubSubMethodKind::Subscribe => sub.push(method.clone()),
 					PubSubMethodKind::Unsubscribe => {
 						if unsub.is_none() {
 							*unsub = Some(method.clone())
@@ -140,7 +138,7 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 					subscribes: subscribers.clone(),
 					unsubscribe: unsubscribe.clone(),
 				});
-			},
+			}
 			(_, None) => {
 				return Err(syn::Error::new_spanned(
 					&item_trait,
