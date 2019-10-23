@@ -28,7 +28,7 @@ pub trait Rpc {
 
 	/// Hello subscription through different method.
 	#[pubsub(subscription = "hello", subscribe, name = "hello_subscribe_second")]
-	fn subscribe_second(&self, a: Self::Metadata, b: Subscriber<String>, c: u32, d: Option<u64>);
+	fn subscribe_second(&self, a: Self::Metadata, b: Subscriber<String>, e: String);
 
 	/// Unsubscribe from hello subscription.
 	#[pubsub(subscription = "hello", unsubscribe, name = "hello_unsubscribe")]
@@ -53,13 +53,7 @@ impl Rpc for RpcImpl {
 		let _sink = subscriber.assign_id(SubscriptionId::Number(5));
 	}
 
-	fn subscribe_second(
-		&self,
-		_meta: Self::Metadata,
-		subscriber: Subscriber<String>,
-		_pre: u32,
-		_trailing: Option<u64>,
-	) {
+	fn subscribe_second(&self, _meta: Self::Metadata, subscriber: Subscriber<String>, _e: String) {
 		let _sink = subscriber.assign_id(SubscriptionId::Number(6));
 	}
 
@@ -139,7 +133,7 @@ fn test_subscribe_alternate_method() {
 
 	// when
 	let meta = Metadata;
-	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_subscribe_second","params":[1]}"#;
+	let req = r#"{"jsonrpc":"2.0","id":1,"method":"hello_subscribe_second","params":["Data"]}"#;
 	let res = io.handle_request_sync(req, meta);
 	let expected = r#"{
 		"jsonrpc": "2.0",
