@@ -183,6 +183,25 @@ impl RpcMethod {
 		self.attr.is_pubsub()
 	}
 
+	pub fn subscriber_arg(&self) -> Option<syn::Type> {
+		self.trait_item
+			.sig
+			.inputs
+			.iter()
+			.filter_map(|arg| match arg {
+				syn::FnArg::Typed(ty) => Some(*ty.ty.clone()),
+				_ => None,
+			})
+			.find(|ty| {
+				if let syn::Type::Path(path) = ty {
+					if path.path.segments.iter().any(|s| s.ident == SUBSCRIBER_TYPE_IDENT) {
+						return true;
+					}
+				}
+				false
+			})
+	}
+
 	fn generate_delegate_closure(&self, is_subscribe: bool) -> Result<proc_macro2::TokenStream> {
 		let mut param_types: Vec<_> = self
 			.trait_item
@@ -299,10 +318,10 @@ impl RpcMethod {
 		});
 
 		let mut special_args = Vec::new();
-		if let Some(ref meta) = meta_arg {
+		if let Some(meta) = meta_arg {
 			special_args.push((ident(METADATA_CLOSURE_ARG), meta.clone()));
 		}
-		if let Some(ref subscriber) = subscriber_arg {
+		if let Some(subscriber) = subscriber_arg {
 			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber.clone()));
 		}
 		special_args

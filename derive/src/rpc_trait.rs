@@ -3,7 +3,7 @@ use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
 use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::collections::HashMap;
 use syn::{
 	fold::{self, Fold},
@@ -131,6 +131,22 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 						&unsubscribe.trait_item,
 						format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR),
 					));
+				}
+
+				let mut subscriber_args = subscribers.iter().filter_map(|s| s.subscriber_arg());
+				if let Some(subscriber_arg) = subscriber_args.next() {
+					for next_method_arg in subscriber_args {
+						if next_method_arg != subscriber_arg {
+							return Err(syn::Error::new_spanned(
+								&next_method_arg,
+								format!(
+									"Inconsistent signature for 'Subscriber' argument: {}, previously defined: {}",
+									next_method_arg.clone().into_token_stream(),
+									subscriber_arg.clone().into_token_stream()
+								),
+							));
+						}
+					}
 				}
 
 				method_registrations.push(MethodRegistration::PubSub {
