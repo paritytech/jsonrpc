@@ -74,7 +74,7 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 		.collect();
 	let methods = methods_result?;
 
-	let mut pubsub_method_pairs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
+	let mut pubsub_method_pairs: HashMap<String, (Vec<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
 	let mut method_registrations: Vec<MethodRegistration> = Vec::new();
 
 	for method in methods.iter() {
@@ -102,20 +102,10 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 			} => {
 				let (ref mut sub, ref mut unsub) = pubsub_method_pairs
 					.entry(subscription_name.clone())
-					.or_insert((None, None));
+					.or_insert((vec![], None));
 				match kind {
 					PubSubMethodKind::Subscribe => {
-						if sub.is_none() {
-							*sub = Some(method.clone())
-						} else {
-							return Err(syn::Error::new_spanned(
-								&method.trait_item,
-								format!(
-									"Subscription '{}' subscribe method is already defined",
-									subscription_name
-								),
-							));
-						}
+						sub.push(method.clone())
 					}
 					PubSubMethodKind::Unsubscribe => {
 						if unsub.is_none() {
@@ -137,24 +127,26 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 
 	for (name, pair) in pubsub_method_pairs {
 		match pair {
-			(Some(subscribe), Some(unsubscribe)) => method_registrations.push(MethodRegistration::PubSub {
-				name: name.clone(),
-				subscribe: subscribe.clone(),
-				unsubscribe: unsubscribe.clone(),
-			}),
-			(Some(method), None) => {
+			(subscribers, Some(unsubscribe)) => {
+				if subscribers.is_empty() {
+					return Err(syn::Error::new_spanned(
+						&unsubscribe.trait_item,
+						format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR),
+					));
+				}
+
+				method_registrations.push(MethodRegistration::PubSub {
+					name: name.clone(),
+					subscribes: subscribers.clone(),
+					unsubscribe: unsubscribe.clone(),
+				});
+			},
+			(_, None) => {
 				return Err(syn::Error::new_spanned(
-					&method.trait_item,
+					&item_trait,
 					format!("subscription '{}'. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR),
 				));
 			}
-			(None, Some(method)) => {
-				return Err(syn::Error::new_spanned(
-					&method.trait_item,
-					format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR),
-				));
-			}
-			(None, None) => unreachable!(),
 		}
 	}
 

@@ -111,26 +111,28 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 			}
 			MethodRegistration::PubSub {
 				name: subscription,
-				subscribe,
+				subscribes,
 				unsubscribe,
 			} => {
-				let attrs = get_doc_comments(&subscribe.trait_item.attrs);
-				let name = &subscribe.trait_item.sig.ident;
-				let mut args = compute_args(&subscribe.trait_item).into_iter();
-				let returns = compute_subscription_type(&args.next().unwrap());
-				let returns_str = quote!(#returns).to_string();
-				let args = args.collect();
-				let arg_names = compute_arg_identifiers(&args)?;
-				let subscribe = subscribe.name();
-				let unsubscribe = unsubscribe.name();
-				let client_method = syn::parse_quote!(
-					#(#attrs)*
-					pub fn #name(&self, #args) -> impl Future<Item=TypedSubscriptionStream<#returns>, Error=RpcError> {
-						let args_tuple = (#(#arg_names,)*);
-						self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
-					}
-				);
-				client_methods.push(client_method);
+				for subscribe in subscribes {
+					let attrs = get_doc_comments(&subscribe.trait_item.attrs);
+					let name = &subscribe.trait_item.sig.ident;
+					let mut args = compute_args(&subscribe.trait_item).into_iter();
+					let returns = compute_subscription_type(&args.next().unwrap());
+					let returns_str = quote!(#returns).to_string();
+					let args = args.collect();
+					let arg_names = compute_arg_identifiers(&args)?;
+					let subscribe = subscribe.name();
+					let unsubscribe = unsubscribe.name();
+					let client_method = syn::parse_quote!(
+						#(#attrs)*
+						pub fn #name(&self, #args) -> impl Future<Item=TypedSubscriptionStream<#returns>, Error=RpcError> {
+							let args_tuple = (#(#arg_names,)*);
+							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
+						}
+					);
+					client_methods.push(client_method);
+				}
 			}
 			MethodRegistration::Notification { method, .. } => {
 				let attrs = get_doc_comments(&method.trait_item.attrs);
