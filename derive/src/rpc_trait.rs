@@ -3,7 +3,7 @@ use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
 use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::collections::HashMap;
 use syn::{
 	fold::{self, Fold},
@@ -74,7 +74,7 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 		.collect();
 	let methods = methods_result?;
 
-	let mut pubsub_method_pairs: HashMap<String, (Option<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
+	let mut pubsub_method_pairs: HashMap<String, (Vec<RpcMethod>, Option<RpcMethod>)> = HashMap::new();
 	let mut method_registrations: Vec<MethodRegistration> = Vec::new();
 
 	for method in methods.iter() {
@@ -102,21 +102,9 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 			} => {
 				let (ref mut sub, ref mut unsub) = pubsub_method_pairs
 					.entry(subscription_name.clone())
-					.or_insert((None, None));
+					.or_insert((vec![], None));
 				match kind {
-					PubSubMethodKind::Subscribe => {
-						if sub.is_none() {
-							*sub = Some(method.clone())
-						} else {
-							return Err(syn::Error::new_spanned(
-								&method.trait_item,
-								format!(
-									"Subscription '{}' subscribe method is already defined",
-									subscription_name
-								),
-							));
-						}
-					}
+					PubSubMethodKind::Subscribe => sub.push(method.clone()),
 					PubSubMethodKind::Unsubscribe => {
 						if unsub.is_none() {
 							*unsub = Some(method.clone())
@@ -137,24 +125,42 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 
 	for (name, pair) in pubsub_method_pairs {
 		match pair {
-			(Some(subscribe), Some(unsubscribe)) => method_registrations.push(MethodRegistration::PubSub {
-				name: name.clone(),
-				subscribe: subscribe.clone(),
-				unsubscribe: unsubscribe.clone(),
-			}),
-			(Some(method), None) => {
+			(subscribers, Some(unsubscribe)) => {
+				if subscribers.is_empty() {
+					return Err(syn::Error::new_spanned(
+						&unsubscribe.trait_item,
+						format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR),
+					));
+				}
+
+				let mut subscriber_args = subscribers.iter().filter_map(|s| s.subscriber_arg());
+				if let Some(subscriber_arg) = subscriber_args.next() {
+					for next_method_arg in subscriber_args {
+						if next_method_arg != subscriber_arg {
+							return Err(syn::Error::new_spanned(
+								&next_method_arg,
+								format!(
+									"Inconsistent signature for 'Subscriber' argument: {}, previously defined: {}",
+									next_method_arg.clone().into_token_stream(),
+									subscriber_arg.clone().into_token_stream()
+								),
+							));
+						}
+					}
+				}
+
+				method_registrations.push(MethodRegistration::PubSub {
+					name: name.clone(),
+					subscribes: subscribers.clone(),
+					unsubscribe: unsubscribe.clone(),
+				});
+			}
+			(_, None) => {
 				return Err(syn::Error::new_spanned(
-					&method.trait_item,
+					&item_trait,
 					format!("subscription '{}'. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR),
 				));
 			}
-			(None, Some(method)) => {
-				return Err(syn::Error::new_spanned(
-					&method.trait_item,
-					format!("subscription '{}'. {}", name, MISSING_SUBSCRIBE_METHOD_ERR),
-				));
-			}
-			(None, None) => unreachable!(),
 		}
 	}
 

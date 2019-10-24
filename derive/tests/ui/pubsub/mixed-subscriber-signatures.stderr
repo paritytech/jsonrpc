@@ -1,0 +1,5 @@
+error: Inconsistent signature for 'Subscriber' argument: typed :: Subscriber < usize >, previously defined: typed :: Subscriber < String >
+  --> $DIR/mixed-subscriber-signatures.rs:16:52
+   |
+16 |     fn another_subscribe(&self, _: Self::Metadata, _: typed::Subscriber<usize>, _: u64);
+   |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^

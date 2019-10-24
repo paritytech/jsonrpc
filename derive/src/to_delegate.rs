@@ -16,7 +16,7 @@ pub enum MethodRegistration {
 	},
 	PubSub {
 		name: String,
-		subscribe: RpcMethod,
+		subscribes: Vec<RpcMethod>,
 		unsubscribe: RpcMethod,
 	},
 	Notification {
@@ -45,13 +45,9 @@ impl MethodRegistration {
 			}
 			MethodRegistration::PubSub {
 				name,
-				subscribe,
+				subscribes,
 				unsubscribe,
 			} => {
-				let sub_name = subscribe.name();
-				let sub_closure = subscribe.generate_delegate_closure(true)?;
-				let sub_aliases = subscribe.generate_add_aliases();
-
 				let unsub_name = unsubscribe.name();
 				let unsub_method_ident = unsubscribe.ident();
 				let unsub_closure = quote! {
@@ -63,15 +59,29 @@ impl MethodRegistration {
 							.map_err(Into::into)
 					}
 				};
+
+				let mut add_subscriptions = proc_macro2::TokenStream::new();
+
+				for subscribe in subscribes.iter() {
+					let sub_name = subscribe.name();
+					let sub_closure = subscribe.generate_delegate_closure(true)?;
+					let sub_aliases = subscribe.generate_add_aliases();
+
+					add_subscriptions = quote! {
+						#add_subscriptions
+						del.add_subscription(
+							#name,
+							(#sub_name, #sub_closure),
+							(#unsub_name, #unsub_closure),
+						);
+						#sub_aliases
+					};
+				}
+
 				let unsub_aliases = unsubscribe.generate_add_aliases();
 
 				Ok(quote! {
-					del.add_subscription(
-						#name,
-						(#sub_name, #sub_closure),
-						(#unsub_name, #unsub_closure),
-					);
-					#sub_aliases
+					#add_subscriptions
 					#unsub_aliases
 				})
 			}
@@ -171,6 +181,25 @@ impl RpcMethod {
 
 	pub fn is_pubsub(&self) -> bool {
 		self.attr.is_pubsub()
+	}
+
+	pub fn subscriber_arg(&self) -> Option<syn::Type> {
+		self.trait_item
+			.sig
+			.inputs
+			.iter()
+			.filter_map(|arg| match arg {
+				syn::FnArg::Typed(ty) => Some(*ty.ty.clone()),
+				_ => None,
+			})
+			.find(|ty| {
+				if let syn::Type::Path(path) = ty {
+					if path.path.segments.iter().any(|s| s.ident == SUBSCRIBER_TYPE_IDENT) {
+						return true;
+					}
+				}
+				false
+			})
 	}
 
 	fn generate_delegate_closure(&self, is_subscribe: bool) -> Result<proc_macro2::TokenStream> {
@@ -289,10 +318,10 @@ impl RpcMethod {
 		});
 
 		let mut special_args = Vec::new();
-		if let Some(ref meta) = meta_arg {
+		if let Some(meta) = meta_arg {
 			special_args.push((ident(METADATA_CLOSURE_ARG), meta.clone()));
 		}
-		if let Some(ref subscriber) = subscriber_arg {
+		if let Some(subscriber) = subscriber_arg {
 			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber.clone()));
 		}
 		special_args
