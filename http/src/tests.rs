@@ -1529,6 +1529,43 @@ fn should_drop_io_handler_when_server_is_closed() {
 	panic!("expected server to be closed and io handler to be dropped")
 }
 
+#[test]
+fn should_not_close_server_when_serving_errors() {
+	// given
+	let server = serve(|builder| builder.keep_alive(false));
+	let addr = server.address().clone();
+
+	// when
+	let req = "{}";
+	let request = format!(
+		"\
+		 POST / HTTP/1.1\r\n\
+		 Host: localhost:{}\r\n\
+		 Content-Type: application/json\r\n\
+		 Content-Length: {}\r\n\
+		 😈: 😈\r\n\
+		 \r\n\
+		 {}\r\n\
+		 ",
+		addr.port(),
+		req.as_bytes().len(),
+		req
+	);
+
+	let mut req = TcpStream::connect(addr).unwrap();
+	req.write_all(request.as_bytes()).unwrap();
+	let mut response = String::new();
+	req.read_to_string(&mut response).unwrap();
+	assert!(!response.is_empty(), "Response should not be empty: {}", response);
+
+	// then make a second request and it must not fail.
+	let mut req = TcpStream::connect(addr).unwrap();
+	req.write_all(request.as_bytes()).unwrap();
+	let mut response = String::new();
+	req.read_to_string(&mut response).unwrap();
+	assert!(!response.is_empty(), "Response should not be empty: {}", response);
+}
+
 fn invalid_host() -> String {
 	"Provided Host header is not whitelisted.\n".into()
 }
