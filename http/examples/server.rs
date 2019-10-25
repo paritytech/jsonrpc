@@ -2,6 +2,8 @@ use jsonrpc_http_server::jsonrpc_core::*;
 use jsonrpc_http_server::{AccessControlAllowOrigin, DomainsValidation, RestApi, ServerBuilder};
 
 fn main() {
+	env_logger::init();
+
 	let mut io = IoHandler::default();
 	io.add_method("say_hello", |_params: Params| Ok(Value::String("hello".to_string())));
 

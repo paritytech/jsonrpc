@@ -555,6 +555,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 
 						http.serve_connection(socket, service)
 							.map_err(|e| error!("Error serving connection: {:?}", e))
+							.then(|_| Ok(()))
 					})
 					.buffer_unordered(1024)
 					.for_each(|_| Ok(()))
