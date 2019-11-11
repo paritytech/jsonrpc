@@ -80,7 +80,7 @@ fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
 			io::read_to_end(stream, vec![])
 		})
 		.and_then(move |(_stream, read_buf)| ret_tx.send(read_buf).map_err(|err| panic!("Unable to send {:?}", err)))
-		.map_err(|err| panic!("Error connecting or closing connection: {:?}", err));;
+		.map_err(|err| panic!("Error connecting or closing connection: {:?}", err));
 
 	tokio::run(stream);
 	ret_rx.wait().expect("Unable to receive result")
