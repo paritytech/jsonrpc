@@ -34,7 +34,7 @@ ipc = [
 
 [dependencies]
 failure = "0.1"
-futures = "0.1.26"
+futures = "0.3.1"
 hyper = { version = "0.12", optional = true }
 hyper-tls = { version = "0.3.2", optional = true }
 jsonrpc-core = { version = "14.0", path = "../../core" }
