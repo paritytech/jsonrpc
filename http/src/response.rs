@@ -108,6 +108,11 @@ impl Response {
 			content: msg.into(),
 		}
 	}
+
+	/// Create a 500 response when server is closing.
+	pub(crate) fn closing() -> Self {
+		Self::internal_error(format!("Server is closing."))
+	}
 }
 
 fn plain_text() -> HeaderValue {
