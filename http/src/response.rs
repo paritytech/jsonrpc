@@ -111,7 +111,11 @@ impl Response {
 
 	/// Create a 500 response when server is closing.
 	pub(crate) fn closing() -> Self {
-		Self::internal_error(format!("Server is closing."))
+		Response {
+			code: StatusCode::SERVICE_UNAVAILABLE,
+			content_type: plain_text(),
+			content: "Server is closing.",
+		}
 	}
 }
 

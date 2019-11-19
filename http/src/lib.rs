@@ -596,7 +596,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						tokio::spawn(
 							http.serve_connection(socket, service)
 								.map_err(|e| error!("Error serving connection: {:?}", e))
-								.then(|_| Ok(()))
+								.then(|_| Ok(())),
 						)
 					})
 					.for_each(|_| Ok(()))
