@@ -114,7 +114,7 @@ impl Response {
 		Response {
 			code: StatusCode::SERVICE_UNAVAILABLE,
 			content_type: plain_text(),
-			content: "Server is closing.",
+			content: "Server is closing.".into(),
 		}
 	}
 }
