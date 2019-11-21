@@ -23,6 +23,7 @@ tls = ["jsonrpc-client-transports/tls"]
 http = ["jsonrpc-client-transports/http"]
 ws = ["jsonrpc-client-transports/ws"]
 ipc = ["jsonrpc-client-transports/ipc"]
+arbitrary_precision = ["jsonrpc-client-transports/arbitrary_precision"]
 
 [dependencies]
 jsonrpc-client-transports = { version = "14.0", path = "./transports", default-features = false }
