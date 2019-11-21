@@ -55,14 +55,14 @@ pub use crate::io::{
 pub use crate::middleware::{Middleware, Noop as NoopMiddleware};
 pub use crate::types::*;
 
-use serde_json::{Error as SerdeError};
+use serde_json::Error as SerdeError;
 
 /// workaround for https://github.com/serde-rs/json/issues/505
 /// Arbitrary precision confuses serde when deserializing into untagged enums,
 /// this is a workaround
 pub fn serde_from_str<'a, T>(input: &'a str) -> ::std::result::Result<T, SerdeError>
 where
-	T: serde::de::Deserialize<'a>
+	T: serde::de::Deserialize<'a>,
 {
 	if cfg!(feature = "arbitrary_precision") {
 		let val = serde_json::from_str::<Value>(input)?;
