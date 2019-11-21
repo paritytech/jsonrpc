@@ -119,8 +119,16 @@ impl Rpc {
 			.handle_request_sync(&request)
 			.expect("We are sending a method call not notification.");
 
+		// arbitrary precision workaround, https://github.com/serde-rs/json/issues/505
+		let response = if cfg!(feature = "arbitrary_precision") {
+			let val = serde_json::from_str::<serde_json::Value>(&response).expect("We will always get a single output.");
+			serde_json::from_value(val)
+		} else {
+			serde_json::from_str(&response)
+		};
+
 		// extract interesting part from the response
-		let extracted = match serde_json::from_str(&response).expect("We will always get a single output.") {
+		let extracted = match response.expect("We will always get a single output.") {
 			response::Output::Success(response::Success { result, .. }) => match encoding {
 				Encoding::Compact => serde_json::to_string(&result),
 				Encoding::Pretty => serde_json::to_string_pretty(&result),

@@ -178,10 +178,20 @@ mod tests {
 	use jsonrpc_core::{Failure, Notification, Output, Params, Success, Value, Version};
 	use serde_json;
 
+	fn arbitrary_precision_fix(input: &str) -> ClientResponse {
+		if cfg!(feature = "arbitrary_precision") {
+			let val: serde_json::Value = serde_json::from_str(input).unwrap();
+			serde_json::from_value(val).unwrap()
+		} else {
+			serde_json::from_str(input).unwrap()
+		}
+	}
+
 	#[test]
 	fn notification_deserialize() {
 		let dsr = r#"{"jsonrpc":"2.0","method":"hello","params":[10]}"#;
-		let deserialized: ClientResponse = serde_json::from_str(dsr).unwrap();
+
+		let deserialized: ClientResponse = arbitrary_precision_fix(dsr);
 		assert_eq!(
 			deserialized,
 			ClientResponse::Notification(Notification {
@@ -195,7 +205,8 @@ mod tests {
 	#[test]
 	fn success_deserialize() {
 		let dsr = r#"{"jsonrpc":"2.0","result":1,"id":1}"#;
-		let deserialized: ClientResponse = serde_json::from_str(dsr).unwrap();
+
+		let deserialized: ClientResponse = arbitrary_precision_fix(dsr);
 		assert_eq!(
 			deserialized,
 			ClientResponse::Output(Output::Success(Success {
@@ -210,7 +221,7 @@ mod tests {
 	fn failure_output_deserialize() {
 		let dfo = r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#;
 
-		let deserialized: ClientResponse = serde_json::from_str(dfo).unwrap();
+		let deserialized: ClientResponse = arbitrary_precision_fix(dfo);
 		assert_eq!(
 			deserialized,
 			ClientResponse::Output(Output::Failure(Failure {

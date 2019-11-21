@@ -10,7 +10,7 @@ use serde_json;
 
 use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
 use crate::middleware::{self, Middleware};
-use crate::types::{Call, Output, Request, Response};
+use crate::types::{Call, Output, Request, Response, Value};
 use crate::types::{Error, ErrorCode, Version};
 
 /// A type representing middleware or RPC response before serialization.
@@ -455,7 +455,12 @@ impl<M: Metadata> IoHandlerExtension<M> for IoHandler<M> {
 }
 
 fn read_request(request_str: &str) -> Result<Request, Error> {
-	serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
+	if cfg!(feature = "arbitrary_precision") {
+		let val: Value = serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))?;
+		serde_json::from_value(val).map_err(|_| Error::new(ErrorCode::ParseError))
+	} else {
+		serde_json::from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
+	}
 }
 
 fn write_response(response: Response) -> String {

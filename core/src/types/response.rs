@@ -113,7 +113,12 @@ impl Response {
 		if s.is_empty() {
 			Ok(Response::Batch(vec![]))
 		} else {
-			serde_json::from_str(s)
+			if cfg!(feature = "arbitrary_precision") {
+				let val = serde_json::from_str::<Value>(s)?;
+				serde_json::from_value(val)
+			} else {
+				serde_json::from_str(s)
+			}
 		}
 	}
 }
