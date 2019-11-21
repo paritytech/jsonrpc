@@ -81,25 +81,16 @@ impl RequestBuilder {
 pub fn parse_response(
 	response: &str,
 ) -> Result<(Id, Result<Value, RpcError>, Option<String>, Option<SubscriptionId>), RpcError> {
-	// https://github.com/serde-rs/json/issues/505
-	// Arbitrary precision confuses serde when deserializing into untagged enums,
-	// this is a workaround
-	let response = if cfg!(feature = "arbitrary_precision") {
-		let value =
-			serde_json::from_str::<Value>(&response).map_err(|e| RpcError::ParseError(e.to_string(), e.into()))?;
-		serde_json::from_value::<ClientResponse>(value).map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
-	} else {
-		serde_json::from_str::<ClientResponse>(&response).map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
-	};
-
-	response.map(|response| {
-		let id = response.id().unwrap_or(Id::Null);
-		let sid = response.subscription_id();
-		let method = response.method();
-		let value: Result<Value, Error> = response.into();
-		let result = value.map_err(RpcError::JsonRpcError);
-		(id, result, method, sid)
-	})
+	jsonrpc_core::serde_from_str::<ClientResponse>(response)
+		.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+		.map(|response| {
+			let id = response.id().unwrap_or(Id::Null);
+			let sid = response.subscription_id();
+			let method = response.method();
+			let value: Result<Value, Error> = response.into();
+			let result = value.map_err(RpcError::JsonRpcError);
+			(id, result, method, sid)
+		})
 }
 
 /// A type representing all possible values sent from the server to the client.
@@ -176,22 +167,12 @@ impl From<ClientResponse> for Result<Value, Error> {
 mod tests {
 	use super::*;
 	use jsonrpc_core::{Failure, Notification, Output, Params, Success, Value, Version};
-	use serde_json;
-
-	fn arbitrary_precision_fix(input: &str) -> ClientResponse {
-		if cfg!(feature = "arbitrary_precision") {
-			let val: serde_json::Value = serde_json::from_str(input).unwrap();
-			serde_json::from_value(val).unwrap()
-		} else {
-			serde_json::from_str(input).unwrap()
-		}
-	}
 
 	#[test]
 	fn notification_deserialize() {
 		let dsr = r#"{"jsonrpc":"2.0","method":"hello","params":[10]}"#;
 
-		let deserialized: ClientResponse = arbitrary_precision_fix(dsr);
+		let deserialized: ClientResponse = jsonrpc_core::serde_from_str(dsr).unwrap();
 		assert_eq!(
 			deserialized,
 			ClientResponse::Notification(Notification {
@@ -206,7 +187,7 @@ mod tests {
 	fn success_deserialize() {
 		let dsr = r#"{"jsonrpc":"2.0","result":1,"id":1}"#;
 
-		let deserialized: ClientResponse = arbitrary_precision_fix(dsr);
+		let deserialized: ClientResponse = jsonrpc_core::serde_from_str(dsr).unwrap();
 		assert_eq!(
 			deserialized,
 			ClientResponse::Output(Output::Success(Success {
@@ -221,7 +202,7 @@ mod tests {
 	fn failure_output_deserialize() {
 		let dfo = r#"{"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"},"id":1}"#;
 
-		let deserialized: ClientResponse = arbitrary_precision_fix(dfo);
+		let deserialized: ClientResponse = jsonrpc_core::serde_from_str(dfo).unwrap();
 		assert_eq!(
 			deserialized,
 			ClientResponse::Output(Output::Failure(Failure {
