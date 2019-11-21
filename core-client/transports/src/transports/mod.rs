@@ -85,13 +85,11 @@ pub fn parse_response(
 	// Arbitrary precision confuses serde when deserializing into untagged enums,
 	// this is a workaround
 	let response = if cfg!(feature = "arbitrary_precision") {
-		let value = serde_json::from_str::<Value>(&response)
-			.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))?;
-		serde_json::from_value::<ClientResponse>(value)
-			.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+		let value =
+			serde_json::from_str::<Value>(&response).map_err(|e| RpcError::ParseError(e.to_string(), e.into()))?;
+		serde_json::from_value::<ClientResponse>(value).map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
 	} else {
-		serde_json::from_str::<ClientResponse>(&response)
-			.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+		serde_json::from_str::<ClientResponse>(&response).map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
 	};
 
 	response.map(|response| {
