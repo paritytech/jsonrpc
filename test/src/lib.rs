@@ -120,7 +120,7 @@ impl Rpc {
 			.expect("We are sending a method call not notification.");
 
 		// extract interesting part from the response
-		let extracted = match serde_json::from_str(&response).expect("We will always get a single output.") {
+		let extracted = match rpc::serde_from_str(&response).expect("We will always get a single output.") {
 			response::Output::Success(response::Success { result, .. }) => match encoding {
 				Encoding::Compact => serde_json::to_string(&result),
 				Encoding::Pretty => serde_json::to_string_pretty(&result),

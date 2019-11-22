@@ -113,7 +113,7 @@ impl Response {
 		if s.is_empty() {
 			Ok(Response::Batch(vec![]))
 		} else {
-			serde_json::from_str(s)
+			crate::serde_from_str(s)
 		}
 	}
 }
