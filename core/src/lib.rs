@@ -60,7 +60,7 @@ use serde_json::Error as SerdeError;
 /// workaround for https://github.com/serde-rs/json/issues/505
 /// Arbitrary precision confuses serde when deserializing into untagged enums,
 /// this is a workaround
-pub fn serde_from_str<'a, T>(input: &'a str) -> ::std::result::Result<T, SerdeError>
+pub fn serde_from_str<'a, T>(input: &'a str) -> std::result::Result<T, SerdeError>
 where
 	T: serde::de::Deserialize<'a>,
 {
