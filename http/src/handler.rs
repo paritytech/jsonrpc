@@ -1,4 +1,4 @@
-use crate::Rpc;
+use crate::WeakRpc;
 
 use std::sync::Arc;
 use std::{fmt, mem, str};
@@ -16,7 +16,7 @@ use crate::{utils, AllowedHosts, CorsDomains, RequestMiddleware, RequestMiddlewa
 
 /// jsonrpc http request handler.
 pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
-	jsonrpc_handler: Rpc<M, S>,
+	jsonrpc_handler: WeakRpc<M, S>,
 	allowed_hosts: AllowedHosts,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
@@ -31,7 +31,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	/// Create new request handler.
 	pub fn new(
-		jsonrpc_handler: Rpc<M, S>,
+		jsonrpc_handler: WeakRpc<M, S>,
 		cors_domains: CorsDomains,
 		cors_max_age: Option<u32>,
 		cors_allowed_headers: cors::AccessControlAllowHeaders,
@@ -217,7 +217,7 @@ where
 }
 
 pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
-	jsonrpc_handler: Rpc<M, S>,
+	jsonrpc_handler: WeakRpc<M, S>,
 	state: RpcHandlerState<M, S::Future, S::CallFuture>,
 	is_options: bool,
 	cors_allow_origin: cors::AllowCors<header::HeaderValue>,
@@ -352,7 +352,11 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 		}
 
 		// Read metadata
-		let metadata = self.jsonrpc_handler.extractor.read_metadata(&request);
+		let handler = match self.jsonrpc_handler.upgrade() {
+			Some(handler) => handler,
+			None => return RpcHandlerState::Writing(Response::closing()),
+		};
+		let metadata = handler.extractor.read_metadata(&request);
 
 		// Proceed
 		match *request.method() {
@@ -412,8 +416,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			id: Id::Num(1),
 		}));
 
+		let response = match self.jsonrpc_handler.upgrade() {
+			Some(h) => h.handler.handle_rpc_request(call, metadata),
+			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
+		};
+
 		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(
-			future::Either::B(self.jsonrpc_handler.handler.handle_rpc_request(call, metadata)).map(|res| match res {
+			future::Either::B(response).map(|res| match res {
 				Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
 					let result = serde_json::to_string(&result).expect("Serialization of result is infallible;qed");
 
@@ -457,8 +466,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 			id: Id::Num(1),
 		}));
 
+		let response = match self.jsonrpc_handler.upgrade() {
+			Some(h) => h.handler.handle_rpc_request(call, metadata),
+			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
+		};
+
 		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
-			future::Either::B(self.jsonrpc_handler.handler.handle_rpc_request(call, metadata)).map(|res| {
+			future::Either::B(response).map(|res| {
 				res.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed"))
 			}),
 		)))
@@ -497,10 +511,13 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> {
 						}
 					};
 
+					let response = match self.jsonrpc_handler.upgrade() {
+						Some(h) => h.handler.handle_request(content, metadata),
+						None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
+					};
+
 					// Content is ready
-					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(
-						self.jsonrpc_handler.handler.handle_request(content, metadata),
-					)));
+					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(response)));
 				}
 				Async::NotReady => {
 					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {

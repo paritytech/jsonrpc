@@ -37,7 +37,7 @@ mod utils;
 
 use std::io;
 use std::net::SocketAddr;
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 
 use parking_lot::Mutex;
@@ -166,6 +166,46 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for Rpc<M, S> {
 			handler: self.handler.clone(),
 			extractor: self.extractor.clone(),
 		}
+	}
+}
+
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Rpc<M, S> {
+	/// Downgrade the `Rpc` to `WeakRpc`.
+	///
+	/// Downgrades internal `Arc`s to `Weak` references.
+	pub fn downgrade(&self) -> WeakRpc<M, S> {
+		WeakRpc {
+			handler: Arc::downgrade(&self.handler),
+			extractor: Arc::downgrade(&self.extractor),
+		}
+	}
+}
+/// A weak handle to the RPC server.
+///
+/// Since request handling futures are spawned directly on the executor,
+/// whenever the server is closed we want to make sure that existing
+/// tasks are not blocking the server and are dropped as soon as the server stops.
+pub struct WeakRpc<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = jsonrpc::middleware::Noop> {
+	handler: Weak<MetaIoHandler<M, S>>,
+	extractor: Weak<dyn MetaExtractor<M>>,
+}
+
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> Clone for WeakRpc<M, S> {
+	fn clone(&self) -> Self {
+		WeakRpc {
+			handler: self.handler.clone(),
+			extractor: self.extractor.clone(),
+		}
+	}
+}
+
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> WeakRpc<M, S> {
+	/// Upgrade the handle to a strong one (`Rpc`) if  possible.
+	pub fn upgrade(&self) -> Option<Rpc<M, S>> {
+		let handler = self.handler.upgrade()?;
+		let extractor = self.extractor.upgrade()?;
+
+		Some(Rpc { handler, extractor })
 	}
 }
 
@@ -541,7 +581,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				tcp_stream
 					.map(move |socket| {
 						let service = ServerHandler::new(
-							jsonrpc_handler.clone(),
+							jsonrpc_handler.downgrade(),
 							cors_domains.clone(),
 							cors_max_age,
 							allowed_headers.clone(),
@@ -553,11 +593,12 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 							keep_alive,
 						);
 
-						http.serve_connection(socket, service)
-							.map_err(|e| error!("Error serving connection: {:?}", e))
-							.then(|_| Ok(()))
+						tokio::spawn(
+							http.serve_connection(socket, service)
+								.map_err(|e| error!("Error serving connection: {:?}", e))
+								.then(|_| Ok(())),
+						)
 					})
-					.buffer_unordered(1024)
 					.for_each(|_| Ok(()))
 					.map_err(|e| {
 						warn!("Incoming streams error, closing sever: {:?}", e);
