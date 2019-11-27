@@ -57,7 +57,7 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 ### Basic Usage (with HTTP transport)
 
 ```rust
-use jsonrpc_core::{IoHandler, Value, Params};
+use jsonrpc_http_server::jsonrpc_core::{IoHandler, Value, Params};
 use jsonrpc_http_server::{ServerBuilder};
 
 fn main() {
@@ -71,7 +71,7 @@ fn main() {
 		.start_http(&"127.0.0.1:3030".parse().unwrap())
 		.unwrap();
 
-	server.wait().unwrap();
+	server.wait();
 }
 ```
 
