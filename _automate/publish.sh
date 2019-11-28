@@ -2,20 +2,15 @@
 
 set -exu
 
-VERSION=$(grep "^version" ./core/Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-ORDER=(core server-utils tcp ws http ipc stdio pubsub core-client/transports core-client derive test)
+# NOTE https://github.com/sunng87/cargo-release is required.
 
+VERSION=$(grep "^version" ./core/Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
 echo "Publishing version $VERSION"
 cargo clean
-
-for crate in ${ORDER[@]}; do
-	cd $crate
-	echo "Publishing $crate@$VERSION"
-	sleep 5
-	cargo publish $@ || read -p "\n\t Publishing $crate failed. Press [enter] to continue."
-	cd -
-done
-
-echo "Tagging version $VERSION"
-git tag -a v$VERSION -m "Version $VERSION"
+read -p "\n\t Press [enter] to continue."
+cargo release --dry-run --sign --skip-push --no-dev-version
+read -p "\n\t Press [enter] to confirm release the plan."
+cargo release --sign --skip-push --no-dev-version
+echo "Release finished."
+git push
 git push --tags
