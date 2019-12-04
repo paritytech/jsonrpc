@@ -25,7 +25,15 @@ for crate in ${ORDER[@]}; do
 	echo "Publishing $crate@$VERSION"
 	sleep 5
 	cargo publish $@ || read -p ">>>>> Publishing $crate failed. Press [enter] to continue. "
-	git tag -a "$crate-$VERSION" -m "$crate $VERSION"
+	cd -
+done
+
+# Make tags in one go
+for crate in ${ORDER[@]}; do
+	cd $crate
+	VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
+	echo "Tagging $crate@$VERSION"
+	git tag -a "$crate-$VERSION" -m "$crate $VERSION" || true
 	cd -
 done
 
