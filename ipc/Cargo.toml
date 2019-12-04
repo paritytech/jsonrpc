@@ -7,14 +7,14 @@ homepage = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-ipc-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.0.5"
+version = "14.0.6"
 
 [dependencies]
 log = "0.4"
 tokio-service = "0.1"
 jsonrpc-core = { version = "14.0", path = "../core" }
 jsonrpc-server-utils = { version = "14.0", path = "../server-utils" }
-parity-tokio-ipc = "0.3"
+parity-tokio-ipc = "0.4"
 parking_lot = "0.9"
 
 [dev-dependencies]
