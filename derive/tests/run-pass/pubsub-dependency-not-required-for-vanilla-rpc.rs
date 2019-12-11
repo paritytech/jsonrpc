@@ -1,8 +1,4 @@
-extern crate jsonrpc_core;
-extern crate jsonrpc_core_client;
-#[macro_use]
-extern crate jsonrpc_derive;
-
+use jsonrpc_derive::rpc;
 use jsonrpc_core::{Result, IoHandler};
 
 #[rpc]
