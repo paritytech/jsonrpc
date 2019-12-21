@@ -1,12 +1,12 @@
 error: Maximum supported number of params is 16
-  --> $DIR/too-many-params.rs:7:2
+  --> $DIR/too-many-params.rs:5:2
    |
-7  |       /// Has too many params
+5  |       /// Has too many params
    |  _____^
-8  | |     #[rpc(name = "tooManyParams")]
-9  | |     fn to_many_params(
-10 | |         &self,
-11 | |         a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64,
-12 | |         k: u64, l: u64, m: u64, n: u64, o: u64, p: u64, q: u64,
-13 | |     ) -> Result<String>;
+6  | |     #[rpc(name = "tooManyParams")]
+7  | |     fn to_many_params(
+8  | |         &self,
+9  | |         a: u64, b: u64, c: u64, d: u64, e: u64, f: u64, g: u64, h: u64, i: u64, j: u64,
+10 | |         k: u64, l: u64, m: u64, n: u64, o: u64, p: u64, q: u64,
+11 | |     ) -> Result<String>;
    | |________________________^

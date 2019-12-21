@@ -1,8 +1,8 @@
 error: Invalid attribute parameter(s): 'Xalias'. Expected 'alias'
- --> $DIR/attr-invalid-meta-list-names.rs:7:2
+ --> $DIR/attr-invalid-meta-list-names.rs:5:2
   |
-7 |       /// Returns a protocol version
+5 |       /// Returns a protocol version
   |  _____^
-8 | |     #[rpc(name = "protocolVersion", Xalias("alias"))]
-9 | |     fn protocol_version(&self) -> Result<String>;
+6 | |     #[rpc(name = "protocolVersion", Xalias("alias"))]
+7 | |     fn protocol_version(&self) -> Result<String>;
   | |_________________________________________________^

@@ -1,6 +1,4 @@
-extern crate jsonrpc_core;
-#[macro_use]
-extern crate jsonrpc_derive;
+use jsonrpc_derive::rpc;
 
 #[rpc]
 pub trait Rpc {
