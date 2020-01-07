@@ -230,7 +230,7 @@ where
 									Ok(Async::NotReady) => {
 										self.incoming.push_back((id, result, Some(method), sid));
 										break;
-									},
+									}
 									Err(_) => {
 										log::warn!("aj-cli{}, but the reply channel has closed.", err);
 									}
