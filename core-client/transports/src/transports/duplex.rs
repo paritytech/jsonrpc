@@ -232,7 +232,7 @@ where
 										break;
 									}
 									Err(_) => {
-										log::warn!("aj-cli{}, but the reply channel has closed.", err);
+										log::warn!("{}, but the reply channel has closed.", err);
 									}
 								};
 							}
