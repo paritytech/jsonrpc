@@ -214,12 +214,27 @@ where
 									);
 								}
 							} else {
-								log::warn!(
-									"The response does not have expected subscription id in response: {:?} ({:?}): {:?}",
+								let err = RpcError::Other(format_err!(
+									"Subscription {:?} ({:?}) rejected: {:?}",
 									id,
 									method,
 									result,
-								);
+								));
+								match subscription.channel.poll_ready() {
+									Ok(Async::Ready(())) => {
+										subscription
+											.channel
+											.try_send(result)
+											.expect("The channel is ready; qed");
+									}
+									Ok(Async::NotReady) => {
+										self.incoming.push_back((id, result, Some(method), sid));
+										break;
+									}
+									Err(_) => {
+										log::warn!("{}, but the reply channel has closed.", err);
+									}
+								};
 							}
 							continue;
 						}
