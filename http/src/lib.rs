@@ -481,7 +481,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 				let _ = recv_address(local_addr_rx)?;
 				Ok((eloop, close, done_rx))
 			})
-			.collect::<io::Result<(Vec<_>)>>()?;
+			.collect::<io::Result<Vec<_>>>()?;
 		handles.push((eloop, close, done_rx));
 
 		let (executors, done_rxs) = handles
