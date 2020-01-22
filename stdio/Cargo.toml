@@ -13,10 +13,10 @@ version = "14.0.1"
 futures = "0.1.23"
 jsonrpc-core = { version = "14.0", path = "../core" }
 log = "0.4"
-tokio = "0.1.7"
 tokio-codec = "0.1.0"
 tokio-io = "0.1.7"
 tokio-stdin-stdout = "0.1.4"
+tokio-compat = { version = "0.1.4", features = ["rt-full"] }
 
 [dev-dependencies]
 lazy_static = "1.0"

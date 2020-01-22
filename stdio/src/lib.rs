@@ -17,16 +17,14 @@
 
 #![deny(missing_docs)]
 
-use tokio;
-use tokio_stdin_stdout;
 #[macro_use]
 extern crate log;
 
 pub use jsonrpc_core;
 
+use futures::prelude::{Future, Stream};
 use jsonrpc_core::IoHandler;
 use std::sync::Arc;
-use tokio::prelude::{Future, Stream};
 use tokio_codec::{FramedRead, FramedWrite, LinesCodec};
 
 /// Stdio server builder
@@ -62,7 +60,7 @@ impl ServerBuilder {
 			.map(|_| ())
 			.map_err(|e| panic!("{:?}", e));
 
-		tokio::run(future);
+		tokio_compat::run(future);
 	}
 }
 
