@@ -378,6 +378,14 @@ impl<M: Metadata, S2: Middleware<M>> IoHandlerExtension<M> for MetaIoHandler<M, 
 	}
 }
 
+impl<M: Metadata, T: IoHandlerExtension<M>> IoHandlerExtension<M> for Option<T> {
+	fn augment<S: Middleware<M>>(self, handler: &mut MetaIoHandler<M, S>) {
+		if let Some(x) = self {
+			x.augment(handler)
+		}
+	}
+}
+
 /// Simplified `IoHandler` with no `Metadata` associated with each request.
 #[derive(Clone, Debug, Default)]
 pub struct IoHandler<M: Metadata = ()>(MetaIoHandler<M>);
