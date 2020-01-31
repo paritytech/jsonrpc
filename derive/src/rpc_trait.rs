@@ -14,8 +14,7 @@ use syn::{
 
 const METADATA_TYPE: &str = "Metadata";
 
-const MISSING_SUBSCRIBE_METHOD_ERR: &str =
-	"Can't find subscribe method, expected a method annotated with `subscribe` \
+const MISSING_SUBSCRIBE_METHOD_ERR: &str = "Can't find subscribe method, expected a method annotated with `subscribe` \
 	 e.g. `#[pubsub(subscription = \"hello\", subscribe, name = \"hello_subscribe\")]`";
 
 const MISSING_UNSUBSCRIBE_METHOD_ERR: &str =
