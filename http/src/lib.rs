@@ -364,8 +364,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
 
 	/// Configure CORS `AccessControlMaxAge` header returned.
 	///
-	/// Passing `Some(millis)` informs the client that the CORS preflight request is not necessary
-	/// for at least `millis` ms.
+	/// Informs the client that the CORS preflight request is not necessary for `cors_max_age` seconds.
 	/// Disabled by default.
 	pub fn cors_max_age<T: Into<Option<u32>>>(mut self, cors_max_age: T) -> Self {
 		self.cors_max_age = cors_max_age.into();
