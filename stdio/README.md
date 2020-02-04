@@ -16,7 +16,7 @@ jsonrpc-stdio-server = "14.0"
 `main.rs`
 
 ```rust
-use jsonrpc_stdio_server::server;
+use jsonrpc_stdio_server::ServerBuilder;
 use jsonrpc_stdio_server::jsonrpc_core::*;
 
 fn main() {
