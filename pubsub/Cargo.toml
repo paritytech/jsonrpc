@@ -8,11 +8,11 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 license = "MIT"
 name = "jsonrpc-pubsub"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.0.5"
+version = "14.0.6"
 
 [dependencies]
 log = "0.4"
-parking_lot = "0.9"
+parking_lot = "0.10.0"
 jsonrpc-core = { version = "14.0", path = "../core" }
 serde = "1.0"
 
