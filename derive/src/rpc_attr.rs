@@ -10,6 +10,7 @@ pub struct RpcMethodAttribute {
 	pub aliases: Vec<String>,
 	pub kind: AttributeKind,
 	pub raw_params: bool,
+	pub named_params: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -38,6 +39,7 @@ const ALIASES_KEY: &str = "alias";
 const PUB_SUB_ATTR_NAME: &str = "pubsub";
 const METADATA_META_WORD: &str = "meta";
 const RAW_PARAMS_META_WORD: &str = "raw_params";
+const USE_NAMED_PARAMS_META_WORD: &str = "named_params";
 const SUBSCRIBE_META_WORD: &str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 const RETURNS_META_WORD: &str = "returns";
@@ -81,12 +83,15 @@ impl RpcMethodAttribute {
 								let aliases = get_meta_list(&meta).map_or(Vec::new(), |ml| get_aliases(ml));
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
+								let named_params =
+									get_meta_list(meta).map_or(false, |ml| has_meta_word(USE_NAMED_PARAMS_META_WORD, ml));
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
 									name,
 									aliases,
 									kind,
 									raw_params,
+									named_params,
 								})
 							})
 					})
@@ -178,7 +183,7 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	let ident = path_to_str(meta.path());
 	match ident.as_ref().map(String::as_str) {
 		Some(RPC_ATTR_NAME) => {
-			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
+			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD, USE_NAMED_PARAMS_META_WORD])?;
 			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY, RETURNS_META_WORD])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
