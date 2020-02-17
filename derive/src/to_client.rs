@@ -100,11 +100,23 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 					AttributeKind::PubSub { .. } => continue,
 				};
 				let returns_str = quote!(#returns).to_string();
+
+				let args_serialized = match method.attr.named_params {
+					true => quote! {  // use object style serialization with field names taken from the function param names
+						serde_json::json!({
+							#(stringify!(#arg_names): #arg_names,)*
+						})
+					}, 
+					false => quote! {  // use tuple style serialization
+						(#(#arg_names,)*)
+					}, 
+				};
+
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
 					pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
-						let args_tuple = (#(#arg_names,)*);
-						self.inner.call_method(#rpc_name, #returns_str, args_tuple)
+						let args = #args_serialized;
+						self.inner.call_method(#rpc_name, #returns_str, args)
 					}
 				};
 				client_methods.push(client_method);
