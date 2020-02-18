@@ -46,9 +46,7 @@ mod client_server {
 			});
 		tokio::run(fut);
 	}
-
 }
-
 
 mod named_params {
 	use super::*;
@@ -75,9 +73,7 @@ mod named_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_method("call_with_named", |params: Params| {
-			Ok(params.into())
-		});
+		handler.add_method("call_with_named", |params: Params| Ok(params.into()));
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
@@ -94,5 +90,4 @@ mod named_params {
 			});
 		tokio::run(fut);
 	}
-
 }

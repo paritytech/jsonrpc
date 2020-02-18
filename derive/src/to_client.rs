@@ -102,14 +102,16 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				let returns_str = quote!(#returns).to_string();
 
 				let args_serialized = match method.attr.named_params {
-					true => quote! {  // use object style serialization with field names taken from the function param names
-						serde_json::json!({
-							#(stringify!(#arg_names): #arg_names,)*
-						})
-					}, 
+					true => {
+						quote! {  // use object style serialization with field names taken from the function param names
+							serde_json::json!({
+								#(stringify!(#arg_names): #arg_names,)*
+							})
+						}
+					}
 					false => quote! {  // use tuple style serialization
 						(#(#arg_names,)*)
-					}, 
+					},
 				};
 
 				let client_method = syn::parse_quote! {

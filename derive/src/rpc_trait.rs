@@ -223,9 +223,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 }
 
 fn has_named_params(methods: &[RpcMethod]) -> bool {
-	methods.iter().any(|method| {
-		method.attr.named_params
-	})
+	methods.iter().any(|method| method.attr.named_params)
 }
 
 pub fn crate_name(name: &str) -> Result<Ident> {
@@ -263,10 +261,7 @@ pub fn rpc_impl(input: syn::Item, options: DeriveOptions) -> Result<proc_macro2:
 	}
 	if options.enable_server {
 		if has_named_params(&methods) {
-			return Err(syn::Error::new_spanned(
-				rpc_trait,
-				USING_NAMED_PARAMS_WITH_SERVER_ERR,
-			));
+			return Err(syn::Error::new_spanned(rpc_trait, USING_NAMED_PARAMS_WITH_SERVER_ERR));
 		}
 		let rpc_server_module = generate_server_module(&method_registrations, &rpc_trait, &methods)?;
 		submodules.push(rpc_server_module);
