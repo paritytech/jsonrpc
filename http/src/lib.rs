@@ -670,11 +670,7 @@ impl Server {
 
 	/// Will block, waiting for the server to finish.
 	pub fn wait(mut self) {
-		if let Some(receivers) = self.done.take() {
-			for receiver in receivers {
-				let _ = receiver.wait();
-			}
-		}
+		self.wait_internal();
 	}
 
 	/// Get a handle that allows us to close the server from a different thread and/or while the
@@ -682,10 +678,19 @@ impl Server {
 	pub fn close_handle(&self) -> CloseHandle {
 		CloseHandle(self.executors.clone())
 	}
+
+	fn wait_internal(&mut self) {
+		if let Some(receivers) = self.done.take() {
+			for receiver in receivers {
+				let _ = receiver.wait();
+			}
+		}
+	}
 }
 
 impl Drop for Server {
 	fn drop(&mut self) {
 		self.close_handle().close();
+		self.wait_internal();
 	}
 }
