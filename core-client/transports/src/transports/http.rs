@@ -60,6 +60,10 @@ where
 					http::header::CONTENT_TYPE,
 					http::header::HeaderValue::from_static("application/json"),
 				)
+				.header(
+					http::header::ACCEPT,
+					http::header::HeaderValue::from_static("application/json"),
+				)
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
 
