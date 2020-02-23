@@ -186,11 +186,11 @@ use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
 mod options;
+mod params_style;
 mod rpc_attr;
 mod rpc_trait;
 mod to_client;
 mod to_delegate;
-mod params_style;
 
 /// Apply `#[rpc]` to a trait, and a `to_delegate` method is generated which
 /// wires up methods decorated with `#[rpc]` or `#[pubsub]` attributes.

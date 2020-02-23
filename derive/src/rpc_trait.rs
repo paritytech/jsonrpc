@@ -1,8 +1,8 @@
 use crate::options::DeriveOptions;
+use crate::params_style::ParamStyle;
 use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
 use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
-use crate::params_style::ParamStyle;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::collections::HashMap;
@@ -224,7 +224,9 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 }
 
 fn has_named_params(methods: &[RpcMethod]) -> bool {
-	methods.iter().any(|method| method.attr.params_style == ParamStyle::Named)
+	methods
+		.iter()
+		.any(|method| method.attr.params_style == ParamStyle::Named)
 }
 
 pub fn crate_name(name: &str) -> Result<Ident> {

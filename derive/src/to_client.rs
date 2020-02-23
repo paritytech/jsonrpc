@@ -1,7 +1,7 @@
+use crate::params_style::ParamStyle;
 use crate::rpc_attr::AttributeKind;
 use crate::rpc_trait::crate_name;
 use crate::to_delegate::{generate_where_clause_serialization_predicates, MethodRegistration};
-use crate::params_style::ParamStyle;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::punctuated::Punctuated;
@@ -110,8 +110,12 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 							})
 						}
 					}
-					ParamStyle::Positional | ParamStyle::Raw => quote! {  // use tuple style serialization
+					ParamStyle::Positional => quote! {  // use tuple style serialization
 						(#(#arg_names,)*)
+					},
+					ParamStyle::Raw => match arg_names.first() {
+						Some(arg_name) => quote! {#arg_name},
+						None => quote! {serde_json::Value::Null},
 					},
 				};
 

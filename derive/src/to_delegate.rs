@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
-use crate::rpc_attr::RpcMethodAttribute;
 use crate::params_style::ParamStyle;
+use crate::rpc_attr::RpcMethodAttribute;
 use quote::quote;
 use syn::{
 	parse_quote,
