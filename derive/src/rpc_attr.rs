@@ -2,6 +2,8 @@ use syn::{
 	visit::{self, Visit},
 	Error, Result,
 };
+use crate::params_style::ParamStyle;
+use std::str::FromStr;
 
 #[derive(Clone, Debug)]
 pub struct RpcMethodAttribute {
@@ -10,7 +12,7 @@ pub struct RpcMethodAttribute {
 	pub aliases: Vec<String>,
 	pub kind: AttributeKind,
 	pub raw_params: bool,
-	pub named_params: bool,
+	pub params_style: ParamStyle,
 }
 
 #[derive(Clone, Debug)]
@@ -38,11 +40,11 @@ const SUBSCRIPTION_NAME_KEY: &str = "subscription";
 const ALIASES_KEY: &str = "alias";
 const PUB_SUB_ATTR_NAME: &str = "pubsub";
 const METADATA_META_WORD: &str = "meta";
-const RAW_PARAMS_META_WORD: &str = "raw_params";
-const USE_NAMED_PARAMS_META_WORD: &str = "named_params";
+const RAW_PARAMS_META_WORD: &str = "raw_params"; // to be deprecated in favor of `params = "raw"`
 const SUBSCRIBE_META_WORD: &str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 const RETURNS_META_WORD: &str = "returns";
+const PARAMS_STYLE_KEY : &str = "params";
 
 const MULTIPLE_RPC_ATTRIBUTES_ERR: &str = "Expected only a single rpc attribute per method";
 const INVALID_ATTR_PARAM_NAMES_ERR: &str = "Invalid attribute parameter(s):";
@@ -83,15 +85,16 @@ impl RpcMethodAttribute {
 								let aliases = get_meta_list(&meta).map_or(Vec::new(), |ml| get_aliases(ml));
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
-								let named_params = get_meta_list(meta)
-									.map_or(false, |ml| has_meta_word(USE_NAMED_PARAMS_META_WORD, ml));
+								let params_style = get_meta_list(meta)
+									.map_or(ParamStyle::default(), |ml| get_params_style(ml).unwrap_or(ParamStyle::default()));
+								// TODO: Error on invalid value
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
 									name,
 									aliases,
 									kind,
 									raw_params,
-									named_params,
+									params_style,
 								})
 							})
 					})
@@ -186,9 +189,9 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 			validate_idents(
 				&meta,
 				&visitor.meta_words,
-				&[METADATA_META_WORD, RAW_PARAMS_META_WORD, USE_NAMED_PARAMS_META_WORD],
+				&[METADATA_META_WORD, RAW_PARAMS_META_WORD],
 			)?;
-			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY, RETURNS_META_WORD])?;
+			validate_idents(&meta, &visitor.name_value_names, &[RPC_NAME_KEY, RETURNS_META_WORD, PARAMS_STYLE_KEY])?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
 		Some(PUB_SUB_ATTR_NAME) => {
@@ -286,6 +289,14 @@ fn get_aliases(ml: &syn::MetaList) -> Vec<String> {
 				})
 				.collect()
 		})
+}
+
+fn get_params_style(ml: &syn::MetaList) -> Result<ParamStyle> {
+	get_name_value(PARAMS_STYLE_KEY, ml).map_or(Ok(ParamStyle::default()), |s| {
+		ParamStyle::from_str(&s).map_err(|e| {
+			Error::new_spanned(ml, e)
+		}) 
+	})
 }
 
 fn path_eq_str(path: &syn::Path, s: &str) -> bool {
