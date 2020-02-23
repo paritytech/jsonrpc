@@ -1,6 +1,7 @@
 use crate::rpc_attr::AttributeKind;
 use crate::rpc_trait::crate_name;
 use crate::to_delegate::{generate_where_clause_serialization_predicates, MethodRegistration};
+use crate::params_style::ParamStyle;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::punctuated::Punctuated;
@@ -101,15 +102,15 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				};
 				let returns_str = quote!(#returns).to_string();
 
-				let args_serialized = match method.attr.named_params {
-					true => {
+				let args_serialized = match method.attr.params_style {
+					ParamStyle::Named => {
 						quote! {  // use object style serialization with field names taken from the function param names
 							serde_json::json!({
 								#(stringify!(#arg_names): #arg_names,)*
 							})
 						}
 					}
-					false => quote! {  // use tuple style serialization
+					ParamStyle::Positional | ParamStyle::Raw => quote! {  // use tuple style serialization
 						(#(#arg_names,)*)
 					},
 				};

@@ -55,7 +55,7 @@ mod named_params {
 
 	#[rpc(client)]
 	pub trait Rpc {
-		#[rpc(name = "call_with_named", named_params)]
+		#[rpc(name = "call_with_named", params = "named")]
 		fn call_with_named(&self, number: u64, string: String, json: serde_json::Value) -> Result<serde_json::Value>;
 
 		#[rpc(name = "notify")]

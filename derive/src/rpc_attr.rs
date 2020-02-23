@@ -11,7 +11,6 @@ pub struct RpcMethodAttribute {
 	pub name: String,
 	pub aliases: Vec<String>,
 	pub kind: AttributeKind,
-	pub raw_params: bool,
 	pub params_style: ParamStyle,
 }
 
@@ -85,15 +84,16 @@ impl RpcMethodAttribute {
 								let aliases = get_meta_list(&meta).map_or(Vec::new(), |ml| get_aliases(ml));
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
-								let params_style = get_meta_list(meta)
-									.map_or(ParamStyle::default(), |ml| get_params_style(ml).unwrap_or(ParamStyle::default()));
-								// TODO: Error on invalid value
+								let params_style = match raw_params {
+									true => ParamStyle::Raw,
+									false => get_meta_list(meta)
+										.map_or(ParamStyle::default(), |ml| get_params_style(ml).unwrap_or(ParamStyle::default()))
+								};
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
 									name,
 									aliases,
 									kind,
-									raw_params,
 									params_style,
 								})
 							})

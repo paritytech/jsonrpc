@@ -2,6 +2,7 @@ use crate::options::DeriveOptions;
 use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
 use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
+use crate::params_style::ParamStyle;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::collections::HashMap;
@@ -22,7 +23,7 @@ const MISSING_UNSUBSCRIBE_METHOD_ERR: &str =
 	 e.g. `#[pubsub(subscription = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
 
 const USING_NAMED_PARAMS_WITH_SERVER_ERR: &str =
-	"The named_params switch can only be used to generate a client (on a trait annotated with #[rpc(client)]). \
+	"`params = \"named\"` can only be used to generate a client (on a trait annotated with #[rpc(client)]). \
 	 At this time the server does not support named parameters.";
 
 const RPC_MOD_NAME_PREFIX: &str = "rpc_impl_";
@@ -223,7 +224,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 }
 
 fn has_named_params(methods: &[RpcMethod]) -> bool {
-	methods.iter().any(|method| method.attr.named_params)
+	methods.iter().any(|method| method.attr.params_style == ParamStyle::Named)
 }
 
 pub fn crate_name(name: &str) -> Result<Ident> {

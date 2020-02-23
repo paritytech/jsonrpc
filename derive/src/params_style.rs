@@ -4,7 +4,7 @@ const POSITIONAL: &str = "positional";
 const NAMED: &str = "named";
 const RAW: &str = "raw";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ParamStyle {
 	Positional,
 	Named,
