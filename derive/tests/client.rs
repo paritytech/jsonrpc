@@ -6,7 +6,7 @@ use jsonrpc_derive::rpc;
 mod client_server {
 	use super::*;
 
-	#[rpc]
+	#[rpc(params = "positional")]
 	pub trait Rpc {
 		#[rpc(name = "add")]
 		fn add(&self, a: u64, b: u64) -> Result<u64>;

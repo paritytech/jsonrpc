@@ -22,7 +22,7 @@ const MISSING_UNSUBSCRIBE_METHOD_ERR: &str =
 	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
 	 e.g. `#[pubsub(subscription = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
 
-const USING_NAMED_PARAMS_WITH_SERVER_ERR: &str =
+pub const USING_NAMED_PARAMS_WITH_SERVER_ERR: &str =
 	"`params = \"named\"` can only be used to generate a client (on a trait annotated with #[rpc(client)]). \
 	 At this time the server does not support named parameters.";
 
