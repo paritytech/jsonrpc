@@ -226,7 +226,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 fn has_named_params(methods: &[RpcMethod]) -> bool {
 	methods
 		.iter()
-		.any(|method| method.attr.params_style == ParamStyle::Named)
+		.any(|method| method.attr.params_style == std::option::Option::Some(ParamStyle::Named))
 }
 
 pub fn crate_name(name: &str) -> Result<Ident> {
@@ -235,7 +235,7 @@ pub fn crate_name(name: &str) -> Result<Ident> {
 		.map_err(|e| Error::new(Span::call_site(), &e))
 }
 
-pub fn rpc_impl(input: syn::Item, options: DeriveOptions) -> Result<proc_macro2::TokenStream> {
+pub fn rpc_impl(input: syn::Item, options: &DeriveOptions) -> Result<proc_macro2::TokenStream> {
 	let rpc_trait = match input {
 		syn::Item::Trait(item_trait) => item_trait,
 		item => {
@@ -256,7 +256,7 @@ pub fn rpc_impl(input: syn::Item, options: DeriveOptions) -> Result<proc_macro2:
 	let mut submodules = Vec::new();
 	let mut exports = Vec::new();
 	if options.enable_client {
-		let rpc_client_module = generate_client_module(&method_registrations, &rpc_trait)?;
+		let rpc_client_module = generate_client_module(&method_registrations, &rpc_trait, options)?;
 		submodules.push(rpc_client_module);
 		exports.push(quote! {
 			pub use self::#mod_name_ident::gen_client;

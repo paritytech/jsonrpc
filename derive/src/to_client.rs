@@ -1,3 +1,4 @@
+use crate::options::DeriveOptions;
 use crate::params_style::ParamStyle;
 use crate::rpc_attr::AttributeKind;
 use crate::rpc_trait::crate_name;
@@ -7,8 +8,12 @@ use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::Result;
 
-pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::ItemTrait) -> Result<TokenStream> {
-	let client_methods = generate_client_methods(methods)?;
+pub fn generate_client_module(
+	methods: &[MethodRegistration],
+	item_trait: &syn::ItemTrait,
+	options: &DeriveOptions,
+) -> Result<TokenStream> {
+	let client_methods = generate_client_methods(methods, &options)?;
 	let generics = &item_trait.generics;
 	let where_clause = generate_where_clause_serialization_predicates(&item_trait, true);
 	let where_clause2 = where_clause.clone();
@@ -86,7 +91,7 @@ pub fn generate_client_module(methods: &[MethodRegistration], item_trait: &syn::
 	})
 }
 
-fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::ImplItem>> {
+fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptions) -> Result<Vec<syn::ImplItem>> {
 	let mut client_methods = vec![];
 	for method in methods {
 		match method {
@@ -102,7 +107,7 @@ fn generate_client_methods(methods: &[MethodRegistration]) -> Result<Vec<syn::Im
 				};
 				let returns_str = quote!(#returns).to_string();
 
-				let args_serialized = match method.attr.params_style {
+				let args_serialized = match method.attr.params_style.clone().unwrap_or(options.params_style.clone()) {
 					ParamStyle::Named => {
 						quote! {  // use object style serialization with field names taken from the function param names
 							serde_json::json!({

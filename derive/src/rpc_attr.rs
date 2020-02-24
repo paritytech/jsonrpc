@@ -11,7 +11,7 @@ pub struct RpcMethodAttribute {
 	pub name: String,
 	pub aliases: Vec<String>,
 	pub kind: AttributeKind,
-	pub params_style: ParamStyle,
+	pub params_style: Option<ParamStyle>, // None means do not overrite the top level default
 }
 
 #[derive(Clone, Debug)]
@@ -85,9 +85,9 @@ impl RpcMethodAttribute {
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
 								let params_style = match raw_params {
-									true => Ok(ParamStyle::Raw),
+									true => Ok(Some(ParamStyle::Raw)),
 									false => {
-										get_meta_list(meta).map_or(Ok(ParamStyle::default()), |ml| get_params_style(ml))
+										get_meta_list(meta).map_or(Ok(None), |ml| get_params_style(ml).map(|s| Some(s)))
 									}
 								}?;
 								Ok(RpcMethodAttribute {

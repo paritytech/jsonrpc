@@ -238,7 +238,7 @@ impl RpcMethod {
 				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
-			} else if self.attr.params_style == ParamStyle::Raw {
+			} else if self.attr.params_style == Some(ParamStyle::Raw) {
 				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
 			} else {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }

@@ -54,6 +54,9 @@ impl DeriveOptions {
 			options.enable_client = true;
 			options.enable_server = true;
 		}
+		if options.enable_server && options.params_style == ParamStyle::Named {
+			panic!()
+		}
 		Ok(options)
 	}
 }

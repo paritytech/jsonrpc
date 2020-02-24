@@ -206,7 +206,7 @@ pub fn rpc(args: TokenStream, input: TokenStream) -> TokenStream {
 		Err(error) => return error.to_compile_error().into(),
 	};
 
-	match rpc_trait::rpc_impl(input_toks, options) {
+	match rpc_trait::rpc_impl(input_toks, &options) {
 		Ok(output) => output.into(),
 		Err(err) => err.to_compile_error().into(),
 	}
