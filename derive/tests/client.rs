@@ -56,10 +56,10 @@ mod named_params {
 	#[rpc(client)]
 	pub trait Rpc {
 		#[rpc(name = "call_with_named", params = "named")]
-		fn call_with_named(&self, number: u64, string: String, json: serde_json::Value) -> Result<serde_json::Value>;
+		fn call_with_named(&self, number: u64, string: String, json: Value) -> Result<Value>;
 
 		#[rpc(name = "notify")]
-		fn notify(&self, payload: serde_json::Value);
+		fn notify(&self, payload: Value);
 	}
 
 	#[test]
@@ -79,6 +79,48 @@ mod named_params {
 		let fut = client
 			.clone()
 			.call_with_named(3, String::from("test string"), json!({"key": ["value"]}))
+			.and_then(move |res| client.notify(res.clone()).map(move |_| res))
+			.join(rpc_client)
+			.map(move |(res, ())| {
+				assert_eq!(res, expected);
+			})
+			.map_err(|err| {
+				eprintln!("{:?}", err);
+				assert!(false);
+			});
+		tokio::run(fut);
+	}
+}
+
+mod raw_params {
+	use super::*;
+	use jsonrpc_core::Params;
+	use serde_json::json;
+
+	#[rpc(client)]
+	pub trait Rpc {
+		#[rpc(name = "call_raw", params = "raw")]
+		fn call_raw_single_param(&self, params: Value) -> Result<Value>;
+
+		#[rpc(name = "notify")]
+		fn notify(&self, payload: Value);
+	}
+
+	#[test]
+	fn client_generates_correct_raw_params_payload() {
+		let expected = json!({
+			"sub_object": {
+				"key": ["value"]
+			}
+		});
+
+		let mut handler = IoHandler::new();
+		handler.add_method("call_raw", |params: Params| Ok(params.into()));
+
+		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
+		let fut = client
+			.clone()
+			.call_raw_single_param(expected.clone())
 			.and_then(move |res| client.notify(res.clone()).map(move |_| res))
 			.join(rpc_client)
 			.map(move |(res, ())| {
