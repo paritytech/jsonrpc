@@ -85,11 +85,11 @@ impl RpcMethodAttribute {
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
 								let params_style = match raw_params {
-									true => ParamStyle::Raw,
-									false => get_meta_list(meta).map_or(ParamStyle::default(), |ml| {
-										get_params_style(ml).unwrap_or(ParamStyle::default())
-									}),
-								};
+									true => Ok(ParamStyle::Raw),
+									false => {
+										get_meta_list(meta).map_or(Ok(ParamStyle::default()), |ml| get_params_style(ml))
+									}
+								}?;
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
 									name,
