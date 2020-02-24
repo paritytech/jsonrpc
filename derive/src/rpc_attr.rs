@@ -11,7 +11,7 @@ pub struct RpcMethodAttribute {
 	pub name: String,
 	pub aliases: Vec<String>,
 	pub kind: AttributeKind,
-	pub params_style: Option<ParamStyle>, // None means do not overrite the top level default
+	pub params_style: Option<ParamStyle>, // None means do not override the top level default
 }
 
 #[derive(Clone, Debug)]
