@@ -53,12 +53,12 @@ mod named_params {
 	use jsonrpc_core::Params;
 	use serde_json::json;
 
-	#[rpc(client)]
+	#[rpc(client, params = "named")]
 	pub trait Rpc {
-		#[rpc(name = "call_with_named", params = "named")]
+		#[rpc(name = "call_with_named")]
 		fn call_with_named(&self, number: u64, string: String, json: Value) -> Result<Value>;
 
-		#[rpc(name = "notify")]
+		#[rpc(name = "notify", params = "raw")]
 		fn notify(&self, payload: Value);
 	}
 

@@ -199,6 +199,7 @@ mod to_delegate;
 #[proc_macro_attribute]
 pub fn rpc(args: TokenStream, input: TokenStream) -> TokenStream {
 	let input_toks = parse_macro_input!(input as syn::Item);
+	let args = syn::parse_macro_input!(args as syn::AttributeArgs);
 
 	let options = match options::DeriveOptions::try_from(args) {
 		Ok(options) => options,

@@ -39,7 +39,7 @@ const SUBSCRIPTION_NAME_KEY: &str = "subscription";
 const ALIASES_KEY: &str = "alias";
 const PUB_SUB_ATTR_NAME: &str = "pubsub";
 const METADATA_META_WORD: &str = "meta";
-const RAW_PARAMS_META_WORD: &str = "raw_params"; // to be deprecated in favor of `params = "raw"`
+const RAW_PARAMS_META_WORD: &str = "raw_params"; // to be deprecated and replaced with `params = "raw"`
 const SUBSCRIBE_META_WORD: &str = "subscribe";
 const UNSUBSCRIBE_META_WORD: &str = "unsubscribe";
 const RETURNS_META_WORD: &str = "returns";
@@ -298,7 +298,7 @@ fn get_params_style(ml: &syn::MetaList) -> Result<ParamStyle> {
 	})
 }
 
-fn path_eq_str(path: &syn::Path, s: &str) -> bool {
+pub fn path_eq_str(path: &syn::Path, s: &str) -> bool {
 	path.get_ident().map_or(false, |i| i == s)
 }
 
