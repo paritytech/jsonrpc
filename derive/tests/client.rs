@@ -102,7 +102,7 @@ mod raw_params {
 		#[rpc(name = "call_raw", params = "raw")]
 		fn call_raw_single_param(&self, params: Value) -> Result<Value>;
 
-		#[rpc(name = "notify")]
+		#[rpc(name = "notify", params = "raw")]
 		fn notify(&self, payload: Value);
 	}
 
