@@ -226,7 +226,7 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 fn has_named_params(methods: &[RpcMethod]) -> bool {
 	methods
 		.iter()
-		.any(|method| method.attr.params_style == std::option::Option::Some(ParamStyle::Named))
+		.any(|method| method.attr.params_style == Some(ParamStyle::Named))
 }
 
 pub fn crate_name(name: &str) -> Result<Ident> {
