@@ -28,8 +28,16 @@ impl DeriveOptions {
 		for arg in args {
 			if let syn::NestedMeta::Meta(meta) = arg {
 				match meta {
-					syn::Meta::Path(p) => {
-						match p.get_ident().unwrap().to_string().as_ref() {
+					syn::Meta::Path(ref p) => {
+						match p
+							.get_ident()
+							.ok_or(syn::Error::new_spanned(
+								p,
+								format!("Expecting identifier `{}` or `{}`", CLIENT_META_WORD, SERVER_META_WORD),
+							))?
+							.to_string()
+							.as_ref()
+						{
 							CLIENT_META_WORD => options.enable_client = true,
 							SERVER_META_WORD => options.enable_server = true,
 							_ => {}
