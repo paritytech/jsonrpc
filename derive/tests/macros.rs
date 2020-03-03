@@ -27,7 +27,7 @@ pub trait Rpc {
 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 
 	/// Retrieves and debug prints the underlying `Params` object.
-	#[rpc(name = "raw", raw_params)]
+	#[rpc(name = "raw", params = "raw")]
 	fn raw(&self, params: Params) -> Result<String>;
 
 	/// Handles a notification.
