@@ -4,4 +4,4 @@ error: custom attribute panicked
 3 | #[rpc(server, params = "named")]
   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
-  = help: message: Server code generation only supports `params = "positional"` at this time. This is the default setting.
+  = help: message: Server code generation only supports `params = "positional"` (default) or `params = "raw" at this time.

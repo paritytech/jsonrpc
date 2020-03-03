@@ -64,7 +64,7 @@ impl DeriveOptions {
 		}
 		if options.enable_server && options.params_style == ParamStyle::Named {
 			// This is not allowed at this time
-			panic!("Server code generation only supports `params = \"positional\"` at this time. This is the default setting.")
+			panic!("Server code generation only supports `params = \"positional\"` (default) or `params = \"raw\" at this time.")
 		}
 		Ok(options)
 	}
