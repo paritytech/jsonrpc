@@ -242,7 +242,9 @@ impl RpcMethod {
 				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
 			} else if self.attr.params_style == Some(ParamStyle::Positional) {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
-			} else /* if self.attr.params_style == Some(ParamStyle::Named) */ {
+			} else
+			/* if self.attr.params_style == Some(ParamStyle::Named) */
+			{
 				unimplemented!("Server side named parameters are not implemented");
 			}
 		};
