@@ -85,7 +85,10 @@ impl RpcMethodAttribute {
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
 								let params_style = match raw_params {
-									true => Ok(Some(ParamStyle::Raw)),
+									true => {
+										// "`raw_params` will be deprecated in a future release. Use `params = \"raw\" instead`"
+										Ok(Some(ParamStyle::Raw))
+									}
 									false => {
 										get_meta_list(meta).map_or(Ok(None), |ml| get_params_style(ml).map(|s| Some(s)))
 									}
