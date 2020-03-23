@@ -1,0 +1,9 @@
+error: `params = "named"` can only be used to generate a client (on a trait annotated with #[rpc(client)]). At this time the server does not support named parameters.
+ --> $DIR/attr-named-params-on-server.rs:4:1
+  |
+4 | / pub trait Rpc {
+5 | |     /// Returns a protocol version
+6 | |     #[rpc(name = "add", params = "named")]
+7 | |     fn add(&self, a: u32, b: u32) -> Result<String>;
+8 | | }
+  | |_^

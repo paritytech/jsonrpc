@@ -303,9 +303,10 @@ impl TypedClient {
 		let params = match args {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
+			Value::Object(map) => Params::Map(map),
 			_ => {
 				return future::Either::A(future::err(RpcError::Other(format_err!(
-					"RPC params should serialize to a JSON array, or null"
+					"RPC params should serialize to a JSON array, JSON object or null"
 				))))
 			}
 		};

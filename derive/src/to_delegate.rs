@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::params_style::ParamStyle;
 use crate::rpc_attr::RpcMethodAttribute;
 use quote::quote;
 use syn::{
@@ -218,7 +219,6 @@ impl RpcMethod {
 		// special args are those which are not passed directly via rpc params: metadata, subscriber
 		let special_args = Self::special_args(&param_types);
 		param_types.retain(|ty| special_args.iter().find(|(_, sty)| sty == ty).is_none());
-
 		if param_types.len() > TUPLE_FIELD_NAMES.len() {
 			return Err(syn::Error::new_spanned(
 				&self.trait_item,
@@ -238,10 +238,14 @@ impl RpcMethod {
 				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
 			} else if param_types.is_empty() {
 				quote! { let params = params.expect_no_params(); }
-			} else if self.attr.raw_params {
+			} else if self.attr.params_style == Some(ParamStyle::Raw) {
 				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
-			} else {
+			} else if self.attr.params_style == Some(ParamStyle::Positional) {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
+			} else
+			/* if self.attr.params_style == Some(ParamStyle::Named) */
+			{
+				unimplemented!("Server side named parameters are not implemented");
 			}
 		};
 
