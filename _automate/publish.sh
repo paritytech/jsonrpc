@@ -23,6 +23,7 @@ for crate in ${ORDER[@]}; do
 	cd $crate
 	VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
 	echo "Publishing $crate@$VERSION"
+	sleep 5 # give the user an opportunity to abort before publishing
 	cargo publish $@ || read -p ">>>>> Publishing $crate failed. Press [enter] to continue. "
   echo "  Waiting for published version $VERSION to be available..."
 	CRATE_NAME=$(grep "^name" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
