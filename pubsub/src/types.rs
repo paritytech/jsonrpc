@@ -3,6 +3,7 @@ use crate::core::futures::sync::mpsc;
 use std::sync::Arc;
 
 use crate::subscription::Session;
+use crate::manager::IdProvider;
 
 /// Raw transport sink for specific client.
 pub type TransportSender = mpsc::Sender<String>;
@@ -35,46 +36,67 @@ impl<T: PubSubMetadata> PubSubMetadata for Option<T> {
 }
 
 /// Unique subscription id.
+///
 /// NOTE Assigning same id to different requests will cause the previous request to be unsubscribed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SubscriptionId {
-	/// U64 number
-	Number(u64),
+pub enum SubscriptionId<N> {
+	/// Number
+	Number(N),
 	/// String
 	String(String),
 }
 
-impl SubscriptionId {
+impl<N> SubscriptionId<N> {
 	/// Parses `core::Value` into unique subscription id.
-	pub fn parse_value(val: &core::Value) -> Option<SubscriptionId> {
+	pub fn parse_value(val: &core::Value) -> Option<SubscriptionId<N>> {
 		match *val {
 			core::Value::String(ref val) => Some(SubscriptionId::String(val.clone())),
-			core::Value::Number(ref val) => val.as_u64().map(SubscriptionId::Number),
+			core::Value::Number(ref val) => val.as_u64().map(SubscriptionId::Number), // TODO: Fix
 			_ => None,
 		}
 	}
 }
 
-impl From<String> for SubscriptionId {
+impl<N> From<String> for SubscriptionId<N> {
 	fn from(other: String) -> Self {
 		SubscriptionId::String(other)
 	}
 }
 
-impl From<u64> for SubscriptionId {
-	fn from(other: u64) -> Self {
+impl<N, I: IdProvider> From<I> for SubscriptionId<N> {
+	fn from(other: I::Id) -> Self {
 		SubscriptionId::Number(other)
 	}
 }
 
-impl From<SubscriptionId> for core::Value {
-	fn from(sub: SubscriptionId) -> Self {
+impl<N> From<SubscriptionId<N>> for core::Value {
+	fn from(sub: SubscriptionId<N>) -> Self {
 		match sub {
 			SubscriptionId::Number(val) => core::Value::Number(val.into()),
 			SubscriptionId::String(val) => core::Value::String(val),
 		}
 	}
 }
+
+macro_rules! impl_from_num {
+	($num:ty) => {
+		impl<N> From<$num> for SubscriptionId<N> {
+			fn from(other: $num) -> Self {
+				SubscriptionId::Number(other)
+			}
+		}
+	}
+}
+
+impl_from_num!(u8);
+impl_from_num!(u16);
+impl_from_num!(u32);
+impl_from_num!(u64);
+
+impl_from_num!(i8);
+impl_from_num!(i16);
+impl_from_num!(i32);
+impl_from_num!(i64);
 
 #[cfg(test)]
 mod tests {
