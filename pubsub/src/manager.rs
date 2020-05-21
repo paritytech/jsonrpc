@@ -2,10 +2,7 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::sync::{
-	atomic::{self, AtomicUsize},
-	Arc,
-};
+use std::sync::Arc;
 
 use crate::core::futures::sync::oneshot;
 use crate::core::futures::{future, Future};
@@ -21,35 +18,11 @@ pub type TaskExecutor = Arc<dyn future::Executor<Box<dyn Future<Item = (), Error
 
 /// Trait used to provide unique subscription ids.
 pub trait IdProvider {
-	// TODO: Maybe have this impl Into<u64>?
-	type Id: Clone + Default + Eq + Hash;
+	/// A unique ID used to identify a subscription.
+	type Id: Copy + Clone + Default + Eq + Hash + Into<SubscriptionId> + From<SubscriptionId>;
 
 	/// Returns next id for the subscription.
 	fn next_id(&self) -> Self::Id;
-}
-
-/// Trait used to drive subscription Futures to completion.
-pub trait SubscriptionManager {
-	/// Create a new `SubscriptionManager`.
-	fn new(&self) -> Self;
-	/// Borrows the internal task executor.
-	///
-	/// This can be used to spawn additional tasks on the underlying event loop.
-	fn executor(&self) -> &TaskExecutor;
-	/// Create new subscription for given subscriber.
-	///
-	/// Second parameter is a function that converts Subscriber sink into a future.
-	/// This future will be driven to completion by the underlying event loop
-	/// or will be cancelled in case #cancel is invoked.
-	fn add<T, E, G, R, F, N>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId<N>
-	where
-		G: FnOnce(Sink<T, E>) -> R,
-		R: future::IntoFuture<Future = F, Item = (), Error = ()>,
-		F: future::Future<Item = (), Error = ()> + Send + 'static;
-	/// Cancel subscription.
-	///
-	/// Should true if subscription existed or false otherwise.
-	fn cancel<N>(&self, id: SubscriptionId<N>) -> bool;
 }
 
 /// Subscriptions manager.
@@ -57,18 +30,19 @@ pub trait SubscriptionManager {
 /// Takes care of assigning unique subscription ids and
 /// driving the sinks into completion.
 #[derive(Clone)]
-pub struct Manager<I: Default + IdProvider> {
+pub struct SubscriptionManager<I: Default + IdProvider> {
 	next_id: I,
 	active_subscriptions: Arc<Mutex<HashMap<I::Id, oneshot::Sender<()>>>>,
 	executor: TaskExecutor, // Make generic?
 }
 
-impl<I: Default + IdProvider> SubscriptionManager for Manager<I> {
-	fn new(&self) -> Self {
+impl<I: Default + IdProvider> SubscriptionManager<I> {
+	/// Creates a new SubscriptionManager.
+	pub fn new(executor: TaskExecutor) -> Self {
 		Self {
 			next_id: Default::default(),
 			active_subscriptions: Default::default(),
-			executor: self.executor,
+			executor,
 		}
 	}
 
@@ -76,7 +50,7 @@ impl<I: Default + IdProvider> SubscriptionManager for Manager<I> {
 		&self.executor
 	}
 
-	fn add<T, E, G, R, F, N>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId<N>
+	fn add<T, E, G, R, F>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId
 	where
 		G: FnOnce(Sink<T, E>) -> R,
 		R: future::IntoFuture<Future = F, Item = (), Error = ()>,
@@ -103,13 +77,12 @@ impl<I: Default + IdProvider> SubscriptionManager for Manager<I> {
 	/// Cancel subscription.
 	///
 	/// Returns true if subscription existed or false otherwise.
-	fn cancel<N>(&self, id: SubscriptionId<N>) -> bool {
-		if let SubscriptionId::Number(id) = id {
-			if let Some(tx) = self.active_subscriptions.lock().remove(&id) {
-				let _ = tx.send(());
-				return true;
-			}
+	fn cancel(&self, id: SubscriptionId) -> bool {
+		if let Some(tx) = self.active_subscriptions.lock().remove(&id.into()) {
+			let _ = tx.send(());
+			return true;
 		}
+
 		false
 	}
 }

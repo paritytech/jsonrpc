@@ -3,7 +3,6 @@ use crate::core::futures::sync::mpsc;
 use std::sync::Arc;
 
 use crate::subscription::Session;
-use crate::manager::IdProvider;
 
 /// Raw transport sink for specific client.
 pub type TransportSender = mpsc::Sender<String>;
@@ -39,38 +38,32 @@ impl<T: PubSubMetadata> PubSubMetadata for Option<T> {
 ///
 /// NOTE Assigning same id to different requests will cause the previous request to be unsubscribed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SubscriptionId<N> {
+pub enum SubscriptionId {
 	/// Number
-	Number(N),
+	Number(u64),
 	/// String
 	String(String),
 }
 
-impl<N> SubscriptionId<N> {
+impl SubscriptionId {
 	/// Parses `core::Value` into unique subscription id.
-	pub fn parse_value(val: &core::Value) -> Option<SubscriptionId<N>> {
+	pub fn parse_value(val: &core::Value) -> Option<SubscriptionId> {
 		match *val {
 			core::Value::String(ref val) => Some(SubscriptionId::String(val.clone())),
-			core::Value::Number(ref val) => val.as_u64().map(SubscriptionId::Number), // TODO: Fix
+			core::Value::Number(ref val) => val.as_u64().map(SubscriptionId::Number),
 			_ => None,
 		}
 	}
 }
 
-impl<N> From<String> for SubscriptionId<N> {
+impl From<String> for SubscriptionId {
 	fn from(other: String) -> Self {
 		SubscriptionId::String(other)
 	}
 }
 
-impl<N, I: IdProvider> From<I> for SubscriptionId<N> {
-	fn from(other: I::Id) -> Self {
-		SubscriptionId::Number(other)
-	}
-}
-
-impl<N> From<SubscriptionId<N>> for core::Value {
-	fn from(sub: SubscriptionId<N>) -> Self {
+impl From<SubscriptionId> for core::Value {
+	fn from(sub: SubscriptionId) -> Self {
 		match sub {
 			SubscriptionId::Number(val) => core::Value::Number(val.into()),
 			SubscriptionId::String(val) => core::Value::String(val),
@@ -80,9 +73,9 @@ impl<N> From<SubscriptionId<N>> for core::Value {
 
 macro_rules! impl_from_num {
 	($num:ty) => {
-		impl<N> From<$num> for SubscriptionId<N> {
+		impl From<$num> for SubscriptionId {
 			fn from(other: $num) -> Self {
-				SubscriptionId::Number(other)
+				SubscriptionId::Number(other.into())
 			}
 		}
 	}
@@ -92,11 +85,6 @@ impl_from_num!(u8);
 impl_from_num!(u16);
 impl_from_num!(u32);
 impl_from_num!(u64);
-
-impl_from_num!(i8);
-impl_from_num!(i16);
-impl_from_num!(i32);
-impl_from_num!(i64);
 
 #[cfg(test)]
 mod tests {
