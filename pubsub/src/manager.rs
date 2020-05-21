@@ -1,4 +1,18 @@
-//! Provides an executor for subscription Futures.
+//! The SubscriptionManager used to manage subscription based RPCs.
+//!
+//! The manager provides four main things in terms of functionality:
+//!
+//! 1. The ability to create unique subscription IDs through the
+//! use of the `IdProvider` trait. Two implementations are availble
+//! out of the box, a `NumericIdProvider` and a `RandomStringIdProvider`.
+//!
+//! 2. An executor with which to drive `Future`s to completion.
+//!
+//! 3. A way to add new subscriptions. Subscriptions should come in the form
+//! of a `Stream`. These subscriptions will be transformed into notifications
+//! by the manager, which can be consumed by the client.
+//!
+//! 4. A way to cancel any currently active subscription.
 
 use std::collections::HashMap;
 use std::iter;
@@ -129,11 +143,18 @@ impl<I: IdProvider> SubscriptionManager<I> {
 		}
 	}
 
-	fn executor(&self) -> &TaskExecutor {
+	/// Borrows the internal task executor.
+	///
+	/// This can be used to spawn additional tasks on the underlying event loop.
+	pub fn executor(&self) -> &TaskExecutor {
 		&self.executor
 	}
 
-	fn add<T, E, G, R, F>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId
+	/// Creates new subscription for given subscriber.
+	///
+	/// Second parameter is a function that converts Subscriber Sink into a Future.
+	/// This future will be driven to completion by the underlying event loop
+	pub fn add<T, E, G, R, F>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId
 	where
 		G: FnOnce(Sink<T, E>) -> R,
 		R: future::IntoFuture<Future = F, Item = (), Error = ()>,
@@ -160,7 +181,7 @@ impl<I: IdProvider> SubscriptionManager<I> {
 	/// Cancel subscription.
 	///
 	/// Returns true if subscription existed or false otherwise.
-	fn cancel(&self, id: SubscriptionId) -> bool {
+	pub fn cancel(&self, id: SubscriptionId) -> bool {
 		if let Some(tx) = self.active_subscriptions.lock().remove(&id) {
 			let _ = tx.send(());
 			return true;
