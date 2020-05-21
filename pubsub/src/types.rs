@@ -78,7 +78,7 @@ macro_rules! impl_from_num {
 				SubscriptionId::Number(other.into())
 			}
 		}
-	}
+	};
 }
 
 impl_from_num!(u8);
