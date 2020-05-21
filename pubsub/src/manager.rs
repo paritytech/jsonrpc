@@ -1,7 +1,6 @@
 //! Provides an executor for subscription Futures.
 
 use std::collections::HashMap;
-use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::core::futures::sync::oneshot;
@@ -19,7 +18,7 @@ pub type TaskExecutor = Arc<dyn future::Executor<Box<dyn Future<Item = (), Error
 /// Trait used to provide unique subscription ids.
 pub trait IdProvider {
 	/// A unique ID used to identify a subscription.
-	type Id: Copy + Clone + Default + Eq + Hash + Into<SubscriptionId> + From<SubscriptionId>;
+	type Id: Copy + Clone + Default + Into<SubscriptionId>;
 
 	/// Returns next id for the subscription.
 	fn next_id(&self) -> Self::Id;
@@ -32,7 +31,7 @@ pub trait IdProvider {
 #[derive(Clone)]
 pub struct SubscriptionManager<I: Default + IdProvider> {
 	next_id: I,
-	active_subscriptions: Arc<Mutex<HashMap<I::Id, oneshot::Sender<()>>>>,
+	active_subscriptions: Arc<Mutex<HashMap<SubscriptionId, oneshot::Sender<()>>>>,
 	executor: TaskExecutor, // Make generic?
 }
 
@@ -65,7 +64,7 @@ impl<I: Default + IdProvider> SubscriptionManager<I> {
 				.select(rx.map_err(|e| warn!("Error timing out: {:?}", e)))
 				.then(|_| Ok(()));
 
-			self.active_subscriptions.lock().insert(id, tx);
+			self.active_subscriptions.lock().insert(subscription_id.clone(), tx);
 			if self.executor.execute(Box::new(future)).is_err() {
 				error!("Failed to spawn RPC subscription task");
 			}
@@ -78,7 +77,7 @@ impl<I: Default + IdProvider> SubscriptionManager<I> {
 	///
 	/// Returns true if subscription existed or false otherwise.
 	fn cancel(&self, id: SubscriptionId) -> bool {
-		if let Some(tx) = self.active_subscriptions.lock().remove(&id.into()) {
+		if let Some(tx) = self.active_subscriptions.lock().remove(&id) {
 			let _ = tx.send(());
 			return true;
 		}
