@@ -15,6 +15,7 @@ log = "0.4"
 parking_lot = "0.10.0"
 jsonrpc-core = { version = "14.1", path = "../core" }
 serde = "1.0"
+rand = "0.7"
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "14.1", path = "../tcp" }

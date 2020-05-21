@@ -62,6 +62,14 @@ impl From<String> for SubscriptionId {
 	}
 }
 
+// TODO: Don't unwrap, and probably implement TryFrom instead of From
+use std::convert::TryInto;
+impl From<usize> for SubscriptionId {
+	fn from(id: usize) -> Self {
+		SubscriptionId::Number(id.try_into().unwrap())
+	}
+}
+
 impl From<SubscriptionId> for core::Value {
 	fn from(sub: SubscriptionId) -> Self {
 		match sub {

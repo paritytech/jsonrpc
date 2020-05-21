@@ -1,7 +1,11 @@
 //! Provides an executor for subscription Futures.
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::iter;
+use std::sync::{
+	atomic::{AtomicUsize, Ordering},
+	Arc,
+};
 
 use crate::core::futures::sync::oneshot;
 use crate::core::futures::{future, Future};
@@ -9,19 +13,99 @@ use crate::{
 	typed::{Sink, Subscriber},
 	SubscriptionId,
 };
+
 use log::{error, warn};
 use parking_lot::Mutex;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 
 /// Alias for an implementation of `futures::future::Executor`.
 pub type TaskExecutor = Arc<dyn future::Executor<Box<dyn Future<Item = (), Error = ()> + Send>> + Send + Sync>;
 
-/// Trait used to provide unique subscription ids.
+type ActiveSubscriptions = Arc<Mutex<HashMap<SubscriptionId, oneshot::Sender<()>>>>;
+
+/// Trait used to provide unique subscription IDs.
 pub trait IdProvider {
 	/// A unique ID used to identify a subscription.
-	type Id: Copy + Clone + Default + Into<SubscriptionId>;
+	type Id: Default + Into<SubscriptionId>;
 
-	/// Returns next id for the subscription.
+	/// Returns the next ID for the subscription.
 	fn next_id(&self) -> Self::Id;
+}
+
+/// Provides a thread-safe incrementing integer which
+/// can be used as a subscription ID.
+#[derive(Debug)]
+pub struct NumericIdProvider {
+	current_id: AtomicUsize,
+}
+
+impl NumericIdProvider {
+	/// Create a new NumericIdProvider.
+	pub fn new() -> Self {
+		Default::default()
+	}
+
+	/// Create a new NumericIdProvider starting from
+	/// the given ID.
+	pub fn with_id(id: AtomicUsize) -> Self {
+		Self { current_id: id }
+	}
+}
+
+impl IdProvider for NumericIdProvider {
+	type Id = usize;
+
+	fn next_id(&self) -> Self::Id {
+		self.current_id.fetch_add(1, Ordering::AcqRel)
+	}
+}
+
+impl Default for NumericIdProvider {
+	fn default() -> Self {
+		NumericIdProvider {
+			current_id: AtomicUsize::new(1),
+		}
+	}
+}
+
+/// Used to generate random strings for use as
+/// subscription IDs.
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub struct RandomStringIdProvider {
+	len: usize,
+}
+
+impl RandomStringIdProvider {
+	/// Create a new RandomStringIdProvider.
+	pub fn new() -> Self {
+		Default::default()
+	}
+
+	/// Create a new RandomStringIdProvider, which will generate
+	/// random id strings of the given length.
+	pub fn with_len(len: usize) -> Self {
+		Self { len }
+	}
+}
+
+impl IdProvider for RandomStringIdProvider {
+	type Id = String;
+
+	fn next_id(&self) -> Self::Id {
+		let mut rng = thread_rng();
+		let id: String = iter::repeat(())
+			.map(|()| rng.sample(Alphanumeric))
+			.take(self.len)
+			.collect();
+		id
+	}
+}
+
+impl Default for RandomStringIdProvider {
+	fn default() -> Self {
+		Self { len: 16 }
+	}
 }
 
 /// Subscriptions manager.
@@ -29,17 +113,17 @@ pub trait IdProvider {
 /// Takes care of assigning unique subscription ids and
 /// driving the sinks into completion.
 #[derive(Clone)]
-pub struct SubscriptionManager<I: Default + IdProvider> {
-	next_id: I,
-	active_subscriptions: Arc<Mutex<HashMap<SubscriptionId, oneshot::Sender<()>>>>,
+pub struct SubscriptionManager<I: IdProvider = RandomStringIdProvider> {
+	id_provider: I,
+	active_subscriptions: ActiveSubscriptions,
 	executor: TaskExecutor, // Make generic?
 }
 
-impl<I: Default + IdProvider> SubscriptionManager<I> {
+impl<I: IdProvider> SubscriptionManager<I> {
 	/// Creates a new SubscriptionManager.
-	pub fn new(executor: TaskExecutor) -> Self {
+	pub fn new_with_id_provider(id_provider: I, executor: TaskExecutor) -> Self {
 		Self {
-			next_id: Default::default(),
+			id_provider,
 			active_subscriptions: Default::default(),
 			executor,
 		}
@@ -55,7 +139,7 @@ impl<I: Default + IdProvider> SubscriptionManager<I> {
 		R: future::IntoFuture<Future = F, Item = (), Error = ()>,
 		F: future::Future<Item = (), Error = ()> + Send + 'static,
 	{
-		let id = self.next_id.next_id();
+		let id = self.id_provider.next_id();
 		let subscription_id: SubscriptionId = id.into();
 		if let Ok(sink) = subscriber.assign_id(subscription_id.clone()) {
 			let (tx, rx) = oneshot::channel();
@@ -83,5 +167,16 @@ impl<I: Default + IdProvider> SubscriptionManager<I> {
 		}
 
 		false
+	}
+}
+
+impl<I: Default + IdProvider> SubscriptionManager<I> {
+	/// Creates a new SubscriptionManager.
+	pub fn new(executor: TaskExecutor) -> Self {
+		Self {
+			id_provider: Default::default(),
+			active_subscriptions: Default::default(),
+			executor,
+		}
 	}
 }
