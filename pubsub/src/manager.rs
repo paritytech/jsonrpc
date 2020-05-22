@@ -130,12 +130,12 @@ impl Default for RandomStringIdProvider {
 pub struct SubscriptionManager<I: IdProvider = RandomStringIdProvider> {
 	id_provider: I,
 	active_subscriptions: ActiveSubscriptions,
-	executor: TaskExecutor, // Make generic?
+	executor: TaskExecutor,
 }
 
 impl<I: IdProvider> SubscriptionManager<I> {
 	/// Creates a new SubscriptionManager.
-	pub fn new_with_id_provider(id_provider: I, executor: TaskExecutor) -> Self {
+	pub fn with_id_provider(id_provider: I, executor: TaskExecutor) -> Self {
 		Self {
 			id_provider,
 			active_subscriptions: Default::default(),
