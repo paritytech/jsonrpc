@@ -68,10 +68,10 @@ impl NumericIdProvider {
 }
 
 impl IdProvider for NumericIdProvider {
-	type Id = usize;
+	type Id = u64;
 
 	fn next_id(&self) -> Self::Id {
-		self.current_id.fetch_add(1, Ordering::AcqRel)
+		self.current_id.fetch_add(1, Ordering::AcqRel) as u64
 	}
 }
 
