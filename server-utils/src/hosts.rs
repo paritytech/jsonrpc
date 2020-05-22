@@ -160,11 +160,20 @@ pub fn is_host_valid(host: Option<&str>, allowed_hosts: &Option<Vec<Host>>) -> b
 
 /// Updates given list of hosts with the address.
 pub fn update(hosts: Option<Vec<Host>>, address: &SocketAddr) -> Option<Vec<Host>> {
+	use std::net::{IpAddr, Ipv4Addr};
+
 	hosts.map(|current_hosts| {
 		let mut new_hosts = current_hosts.into_iter().collect::<HashSet<_>>();
-		let address = address.to_string();
-		new_hosts.insert(address.clone().into());
-		new_hosts.insert(address.replace("127.0.0.1", "localhost").into());
+		let address_string = address.to_string();
+
+		if address.ip() == IpAddr::V4(Ipv4Addr::UNSPECIFIED) {
+			new_hosts.insert(address_string.replace("0.0.0.0", "127.0.0.1").into());
+			new_hosts.insert(address_string.replace("0.0.0.0", "localhost").into());
+		} else if address.ip() == IpAddr::V4(Ipv4Addr::LOCALHOST) {
+			new_hosts.insert(address_string.replace("127.0.0.1", "localhost").into());
+		}
+
+		new_hosts.insert(address_string.into());
 		new_hosts.into_iter().collect()
 	})
 }
