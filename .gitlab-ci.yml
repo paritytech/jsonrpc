@@ -37,9 +37,9 @@ test-mac-stable:
   <<:                             *test_and_build
   <<:                             *only
   tags:
-    - rust-mac
+    - osx
 
-# check style 
+# check style
 checkstyle-linux-stable:
   image:                           parity/rust-builder:latest
   stage:                           checkstyle
