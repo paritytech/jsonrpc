@@ -22,7 +22,7 @@ use std::sync::{
 };
 
 use crate::core::futures::sync::oneshot;
-use crate::core::futures::{future, Future};
+use crate::core::futures::{future as future01, Future as Future01};
 use crate::{
 	typed::{Sink, Subscriber},
 	SubscriptionId,
@@ -34,7 +34,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
 /// Alias for an implementation of `futures::future::Executor`.
-pub type TaskExecutor = Arc<dyn future::Executor<Box<dyn Future<Item = (), Error = ()> + Send>> + Send + Sync>;
+pub type TaskExecutor = Arc<dyn future01::Executor<Box<dyn Future01<Item = (), Error = ()> + Send>> + Send + Sync>;
 
 type ActiveSubscriptions = Arc<Mutex<HashMap<SubscriptionId, oneshot::Sender<()>>>>;
 
@@ -127,7 +127,7 @@ impl Default for RandomStringIdProvider {
 /// Takes care of assigning unique subscription ids and
 /// driving the sinks into completion.
 #[derive(Clone)]
-pub struct SubscriptionManager<I: IdProvider = RandomStringIdProvider> {
+pub struct SubscriptionManager<I: IdProvider> {
 	id_provider: I,
 	active_subscriptions: ActiveSubscriptions,
 	executor: TaskExecutor,
@@ -157,8 +157,8 @@ impl<I: IdProvider> SubscriptionManager<I> {
 	pub fn add<T, E, G, R, F>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId
 	where
 		G: FnOnce(Sink<T, E>) -> R,
-		R: future::IntoFuture<Future = F, Item = (), Error = ()>,
-		F: future::Future<Item = (), Error = ()> + Send + 'static,
+		R: future01::IntoFuture<Future = F, Item = (), Error = ()>,
+		F: future01::Future<Item = (), Error = ()> + Send + 'static,
 	{
 		let id = self.id_provider.next_id();
 		let subscription_id: SubscriptionId = id.into();
@@ -170,6 +170,7 @@ impl<I: IdProvider> SubscriptionManager<I> {
 				.then(|_| Ok(()));
 
 			self.active_subscriptions.lock().insert(subscription_id.clone(), tx);
+			dbg!(&self.active_subscriptions.lock().get(&subscription_id));
 			if self.executor.execute(Box::new(future)).is_err() {
 				error!("Failed to spawn RPC subscription task");
 			}
@@ -182,6 +183,7 @@ impl<I: IdProvider> SubscriptionManager<I> {
 	///
 	/// Returns true if subscription existed or false otherwise.
 	pub fn cancel(&self, id: SubscriptionId) -> bool {
+		dbg!(&self.active_subscriptions.lock().get(&id));
 		if let Some(tx) = self.active_subscriptions.lock().remove(&id) {
 			let _ = tx.send(());
 			return true;
@@ -199,5 +201,136 @@ impl<I: Default + IdProvider> SubscriptionManager<I> {
 			active_subscriptions: Default::default(),
 			executor,
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use crate::typed::Subscriber;
+	use futures::{compat::Future01CompatExt, executor, FutureExt};
+	use futures::{stream, StreamExt, TryStreamExt};
+
+	use crate::core::futures::sink::Sink as Sink01;
+	use crate::core::futures::stream::Stream as Stream01;
+
+	pub struct TestTaskExecutor;
+	type Boxed01Future01 = Box<dyn future01::Future<Item = (), Error = ()> + Send + 'static>;
+
+	impl future01::Executor<Boxed01Future01> for TestTaskExecutor {
+		fn execute(&self, future: Boxed01Future01) -> std::result::Result<(), future01::ExecuteError<Boxed01Future01>> {
+			let executor = executor::ThreadPool::new().expect("Failed to create thread pool executor for tests");
+			executor.spawn_ok(future.compat().map(drop));
+			Ok(())
+		}
+	}
+
+	#[test]
+	fn making_a_numeric_id_provider_works() {
+		let provider = NumericIdProvider::new();
+		let expected_id = 1;
+		let actual_id = provider.next_id();
+
+		assert_eq!(actual_id, expected_id);
+	}
+
+	#[test]
+	fn default_numeric_id_provider_works() {
+		let provider: NumericIdProvider = Default::default();
+		let expected_id = 1;
+		let actual_id = provider.next_id();
+
+		assert_eq!(actual_id, expected_id);
+	}
+
+	#[test]
+	fn numeric_id_provider_with_id_works() {
+		let provider = NumericIdProvider::with_id(AtomicUsize::new(5));
+		let expected_id = 5;
+		let actual_id = provider.next_id();
+
+		assert_eq!(actual_id, expected_id);
+	}
+
+	#[test]
+	fn random_string_provider_returns_id_with_correct_default_len() {
+		let provider = RandomStringIdProvider::new();
+		let expected_len = 16;
+		let actual_len = provider.next_id().len();
+
+		assert_eq!(actual_len, expected_len);
+	}
+
+	#[test]
+	fn random_string_provider_returns_id_with_correct_user_given_len() {
+		let expected_len = 10;
+		let provider = RandomStringIdProvider::with_len(expected_len);
+		let actual_len = provider.next_id().len();
+
+		assert_eq!(actual_len, expected_len);
+	}
+
+	#[test]
+	fn new_subscription_manager_works_with_numeric_id_provider() {
+		let manager = SubscriptionManager::<NumericIdProvider>::new(Arc::new(TestTaskExecutor));
+		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
+		let stream = stream::iter(vec![Ok(1)]).compat();
+
+		let id = manager.add(subscriber, |sink| {
+			let stream = stream.map(|res| Ok(res));
+
+			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
+		});
+
+		assert!(matches!(id, SubscriptionId::Number(_)))
+	}
+
+	#[test]
+	fn new_subscription_manager_works_with_random_string_provider() {
+		let id_provider = RandomStringIdProvider::default();
+		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
+		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
+		let stream = stream::iter(vec![Ok(1)]).compat();
+
+		let id = manager.add(subscriber, |sink| {
+			let stream = stream.map(|res| Ok(res));
+
+			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
+		});
+
+		assert!(matches!(id, SubscriptionId::String(_)))
+	}
+
+	#[test]
+	fn subscription_is_canceled_if_it_existed() {
+		let id_provider = RandomStringIdProvider::default();
+		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
+		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
+
+		let (mut tx, rx) = futures::channel::mpsc::channel(8);
+		tx.start_send(1).unwrap();
+		let stream = rx.map(|v| Ok::<_, ()>(v)).compat();
+
+		let id = manager.add(subscriber, |sink| {
+			let stream = stream.map(|res| Ok(res));
+
+			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
+		});
+
+		let is_cancelled = manager.cancel(id);
+		dbg!(is_cancelled);
+
+		assert!(is_cancelled);
+	}
+
+	#[test]
+	fn subscription_is_not_canceled_because_it_didnt_exist() {
+		let manager = SubscriptionManager::<NumericIdProvider>::new(Arc::new(TestTaskExecutor));
+
+		let id: SubscriptionId = 23u32.into();
+		let is_cancelled = manager.cancel(id);
+		let is_not_cancelled = !is_cancelled;
+
+		assert!(is_not_cancelled);
 	}
 }

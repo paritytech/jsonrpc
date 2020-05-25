@@ -19,6 +19,7 @@ rand = "0.7"
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "14.1", path = "../tcp" }
+futures = { version = "0.3", features = ["compat", "thread-pool"] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
