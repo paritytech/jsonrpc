@@ -127,14 +127,28 @@ impl Default for RandomStringIdProvider {
 /// Takes care of assigning unique subscription ids and
 /// driving the sinks into completion.
 #[derive(Clone)]
-pub struct SubscriptionManager<I: IdProvider> {
+pub struct SubscriptionManager<I: IdProvider=RandomStringIdProvider> {
 	id_provider: I,
 	active_subscriptions: ActiveSubscriptions,
 	executor: TaskExecutor,
 }
 
-impl<I: IdProvider> SubscriptionManager<I> {
+impl SubscriptionManager {
 	/// Creates a new SubscriptionManager.
+	///
+	/// Uses `RandomStringIdProvider` as the ID provider.
+	pub fn new(executor: TaskExecutor) -> Self {
+		Self {
+			id_provider: RandomStringIdProvider::default(),
+			active_subscriptions: Default::default(),
+			executor,
+		}
+	}
+}
+
+impl<I: IdProvider> SubscriptionManager<I> {
+	/// Creates a new SubscriptionManager with the specified
+	/// ID provider.
 	pub fn with_id_provider(id_provider: I, executor: TaskExecutor) -> Self {
 		Self {
 			id_provider,
@@ -195,7 +209,7 @@ impl<I: IdProvider> SubscriptionManager<I> {
 
 impl<I: Default + IdProvider> SubscriptionManager<I> {
 	/// Creates a new SubscriptionManager.
-	pub fn new(executor: TaskExecutor) -> Self {
+	pub fn with_executor(executor: TaskExecutor) -> Self {
 		Self {
 			id_provider: Default::default(),
 			active_subscriptions: Default::default(),
@@ -271,8 +285,25 @@ mod tests {
 	}
 
 	#[test]
+	fn new_subscription_manager_defaults_to_random_string_provider() {
+		let manager = SubscriptionManager::new(Arc::new(TestTaskExecutor));
+		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
+		let stream = stream::iter(vec![Ok(1)]).compat();
+
+		let id = manager.add(subscriber, |sink| {
+			let stream = stream.map(|res| Ok(res));
+
+			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
+		});
+
+		assert!(matches!(id, SubscriptionId::String(_)))
+	}
+
+	#[test]
 	fn new_subscription_manager_works_with_numeric_id_provider() {
-		let manager = SubscriptionManager::<NumericIdProvider>::new(Arc::new(TestTaskExecutor));
+		let id_provider = NumericIdProvider::default();
+		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
+
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
 		let stream = stream::iter(vec![Ok(1)]).compat();
 
@@ -289,6 +320,7 @@ mod tests {
 	fn new_subscription_manager_works_with_random_string_provider() {
 		let id_provider = RandomStringIdProvider::default();
 		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
+
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
 		let stream = stream::iter(vec![Ok(1)]).compat();
 
@@ -303,8 +335,7 @@ mod tests {
 
 	#[test]
 	fn subscription_is_canceled_if_it_existed() {
-		let id_provider = RandomStringIdProvider::default();
-		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
+		let manager = SubscriptionManager::<NumericIdProvider>::with_executor(Arc::new(TestTaskExecutor));
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
 
 		let (mut tx, rx) = futures::channel::mpsc::channel(8);
@@ -325,7 +356,7 @@ mod tests {
 
 	#[test]
 	fn subscription_is_not_canceled_because_it_didnt_exist() {
-		let manager = SubscriptionManager::<NumericIdProvider>::new(Arc::new(TestTaskExecutor));
+		let manager = SubscriptionManager::new(Arc::new(TestTaskExecutor));
 
 		let id: SubscriptionId = 23u32.into();
 		let is_cancelled = manager.cancel(id);
