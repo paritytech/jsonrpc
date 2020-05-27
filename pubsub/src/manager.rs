@@ -127,7 +127,7 @@ impl Default for RandomStringIdProvider {
 /// Takes care of assigning unique subscription ids and
 /// driving the sinks into completion.
 #[derive(Clone)]
-pub struct SubscriptionManager<I: IdProvider=RandomStringIdProvider> {
+pub struct SubscriptionManager<I: IdProvider = RandomStringIdProvider> {
 	id_provider: I,
 	active_subscriptions: ActiveSubscriptions,
 	executor: TaskExecutor,
