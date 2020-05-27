@@ -302,7 +302,11 @@ mod tests {
 			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
 		});
 
-		assert!(matches!(id, SubscriptionId::String(_)))
+		if let SubscriptionId::String(_) = id {
+			assert!(true)
+		} else {
+			assert!(false, "Expected SubscriptionId::String");
+		}
 	}
 
 	#[test]
@@ -319,7 +323,11 @@ mod tests {
 			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
 		});
 
-		assert!(matches!(id, SubscriptionId::Number(_)))
+		if let SubscriptionId::Number(_) = id {
+			assert!(true)
+		} else {
+			assert!(false, "Expected SubscriptionId::Number");
+		}
 	}
 
 	#[test]
@@ -336,7 +344,11 @@ mod tests {
 			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
 		});
 
-		assert!(matches!(id, SubscriptionId::String(_)))
+		if let SubscriptionId::String(_) = id {
+			assert!(true)
+		} else {
+			assert!(false, "Expected SubscriptionId::String");
+		}
 	}
 
 	#[test]
