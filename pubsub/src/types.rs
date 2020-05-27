@@ -35,12 +35,13 @@ impl<T: PubSubMetadata> PubSubMetadata for Option<T> {
 }
 
 /// Unique subscription id.
+///
 /// NOTE Assigning same id to different requests will cause the previous request to be unsubscribed.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SubscriptionId {
-	/// U64 number
+	/// A numerical ID, represented by a `u64`.
 	Number(u64),
-	/// String
+	/// A non-numerical ID, for example a hash.
 	String(String),
 }
 
@@ -61,12 +62,6 @@ impl From<String> for SubscriptionId {
 	}
 }
 
-impl From<u64> for SubscriptionId {
-	fn from(other: u64) -> Self {
-		SubscriptionId::Number(other)
-	}
-}
-
 impl From<SubscriptionId> for core::Value {
 	fn from(sub: SubscriptionId) -> Self {
 		match sub {
@@ -76,30 +71,83 @@ impl From<SubscriptionId> for core::Value {
 	}
 }
 
+macro_rules! impl_from_num {
+	($num:ty) => {
+		impl From<$num> for SubscriptionId {
+			fn from(other: $num) -> Self {
+				SubscriptionId::Number(other.into())
+			}
+		}
+	};
+}
+
+impl_from_num!(u8);
+impl_from_num!(u16);
+impl_from_num!(u32);
+impl_from_num!(u64);
+
 #[cfg(test)]
 mod tests {
 	use super::SubscriptionId;
 	use crate::core::Value;
 
 	#[test]
-	fn should_convert_between_value_and_subscription_id() {
-		// given
-		let val1 = Value::Number(5.into());
-		let val2 = Value::String("asdf".into());
-		let val3 = Value::Null;
+	fn should_convert_between_number_value_and_subscription_id() {
+		let val = Value::Number(5.into());
+		let res = SubscriptionId::parse_value(&val);
 
-		// when
-		let res1 = SubscriptionId::parse_value(&val1);
-		let res2 = SubscriptionId::parse_value(&val2);
-		let res3 = SubscriptionId::parse_value(&val3);
+		assert_eq!(res, Some(SubscriptionId::Number(5)));
+		assert_eq!(Value::from(res.unwrap()), val);
+	}
 
-		// then
-		assert_eq!(res1, Some(SubscriptionId::Number(5)));
-		assert_eq!(res2, Some(SubscriptionId::String("asdf".into())));
-		assert_eq!(res3, None);
+	#[test]
+	fn should_convert_between_string_value_and_subscription_id() {
+		let val = Value::String("asdf".into());
+		let res = SubscriptionId::parse_value(&val);
 
-		// and back
-		assert_eq!(Value::from(res1.unwrap()), val1);
-		assert_eq!(Value::from(res2.unwrap()), val2);
+		assert_eq!(res, Some(SubscriptionId::String("asdf".into())));
+		assert_eq!(Value::from(res.unwrap()), val);
+	}
+
+	#[test]
+	fn should_convert_between_null_value_and_subscription_id() {
+		let val = Value::Null;
+		let res = SubscriptionId::parse_value(&val);
+		assert_eq!(res, None);
+	}
+
+	#[test]
+	fn should_convert_from_u8_to_subscription_id() {
+		let val = 5u8;
+		let res: SubscriptionId = val.into();
+		assert_eq!(res, SubscriptionId::Number(5));
+	}
+
+	#[test]
+	fn should_convert_from_u16_to_subscription_id() {
+		let val = 5u16;
+		let res: SubscriptionId = val.into();
+		assert_eq!(res, SubscriptionId::Number(5));
+	}
+
+	#[test]
+	fn should_convert_from_u32_to_subscription_id() {
+		let val = 5u32;
+		let res: SubscriptionId = val.into();
+		assert_eq!(res, SubscriptionId::Number(5));
+	}
+
+	#[test]
+	fn should_convert_from_u64_to_subscription_id() {
+		let val = 5u64;
+		let res: SubscriptionId = val.into();
+		assert_eq!(res, SubscriptionId::Number(5));
+	}
+
+	#[test]
+	fn should_convert_from_string_to_subscription_id() {
+		let val = "String".to_string();
+		let res: SubscriptionId = val.into();
+		assert_eq!(res, SubscriptionId::String("String".to_string()));
 	}
 }

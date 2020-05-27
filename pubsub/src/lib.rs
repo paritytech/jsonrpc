@@ -9,6 +9,7 @@ extern crate log;
 
 mod delegates;
 mod handler;
+pub mod manager;
 pub mod oneshot;
 mod subscription;
 pub mod typed;
