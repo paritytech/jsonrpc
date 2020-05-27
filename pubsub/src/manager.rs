@@ -184,7 +184,6 @@ impl<I: IdProvider> SubscriptionManager<I> {
 				.then(|_| Ok(()));
 
 			self.active_subscriptions.lock().insert(subscription_id.clone(), tx);
-			dbg!(&self.active_subscriptions.lock().get(&subscription_id));
 			if self.executor.execute(Box::new(future)).is_err() {
 				error!("Failed to spawn RPC subscription task");
 			}
@@ -197,7 +196,6 @@ impl<I: IdProvider> SubscriptionManager<I> {
 	///
 	/// Returns true if subscription existed or false otherwise.
 	pub fn cancel(&self, id: SubscriptionId) -> bool {
-		dbg!(&self.active_subscriptions.lock().get(&id));
 		if let Some(tx) = self.active_subscriptions.lock().remove(&id) {
 			let _ = tx.send(());
 			return true;
@@ -228,13 +226,21 @@ mod tests {
 	use crate::core::futures::sink::Sink as Sink01;
 	use crate::core::futures::stream::Stream as Stream01;
 
+	// Executor shared by all tests.
+	//
+	// This shared executor is used to prevent `Too many open files` errors
+	// on systems with a lot of cores.
+	lazy_static::lazy_static! {
+		static ref EXECUTOR: executor::ThreadPool = executor::ThreadPool::new()
+			.expect("Failed to create thread pool executor for tests");
+	}
+
 	pub struct TestTaskExecutor;
 	type Boxed01Future01 = Box<dyn future01::Future<Item = (), Error = ()> + Send + 'static>;
 
 	impl future01::Executor<Boxed01Future01> for TestTaskExecutor {
 		fn execute(&self, future: Boxed01Future01) -> std::result::Result<(), future01::ExecuteError<Boxed01Future01>> {
-			let executor = executor::ThreadPool::new().expect("Failed to create thread pool executor for tests");
-			executor.spawn_ok(future.compat().map(drop));
+			EXECUTOR.spawn_ok(future.compat().map(drop));
 			Ok(())
 		}
 	}
@@ -349,8 +355,6 @@ mod tests {
 		});
 
 		let is_cancelled = manager.cancel(id);
-		dbg!(is_cancelled);
-
 		assert!(is_cancelled);
 	}
 
