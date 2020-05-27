@@ -336,7 +336,7 @@ mod tests {
 	#[test]
 	fn subscription_is_canceled_if_it_existed() {
 		let manager = SubscriptionManager::<NumericIdProvider>::with_executor(Arc::new(TestTaskExecutor));
-		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
+		let (subscriber, _recv, _) = Subscriber::<u64>::new_test("test_subTest");
 
 		let (mut tx, rx) = futures::channel::mpsc::channel(8);
 		tx.start_send(1).unwrap();
