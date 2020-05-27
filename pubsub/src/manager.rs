@@ -342,6 +342,8 @@ mod tests {
 	#[test]
 	fn subscription_is_canceled_if_it_existed() {
 		let manager = SubscriptionManager::<NumericIdProvider>::with_executor(Arc::new(TestTaskExecutor));
+		// Need to bind receiver here (unlike the other tests) or else the subscriber
+		// will think the client has disconnected and not update `active_subscriptions`
 		let (subscriber, _recv, _) = Subscriber::<u64>::new_test("test_subTest");
 
 		let (mut tx, rx) = futures::channel::mpsc::channel(8);
