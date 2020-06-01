@@ -49,9 +49,9 @@ pub trait IdProvider {
 
 /// Provides a thread-safe incrementing integer which
 /// can be used as a subscription ID.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct NumericIdProvider {
-	current_id: AtomicUsize,
+	current_id: Arc<AtomicUsize>,
 }
 
 impl NumericIdProvider {
@@ -63,7 +63,9 @@ impl NumericIdProvider {
 	/// Create a new NumericIdProvider starting from
 	/// the given ID.
 	pub fn with_id(id: AtomicUsize) -> Self {
-		Self { current_id: id }
+		Self {
+			current_id: Arc::new(id),
+		}
 	}
 }
 
@@ -78,7 +80,7 @@ impl IdProvider for NumericIdProvider {
 impl Default for NumericIdProvider {
 	fn default() -> Self {
 		NumericIdProvider {
-			current_id: AtomicUsize::new(1),
+			current_id: Arc::new(AtomicUsize::new(1)),
 		}
 	}
 }
