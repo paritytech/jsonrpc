@@ -18,13 +18,29 @@ set -x
 
 cargo clean
 
+set +x
+
 # Then actually perform publishing.
 for crate in ${ORDER[@]}; do
 	cd $crate
-	VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-	echo "Publishing $crate@$VERSION"
-	sleep 5 # give the user an opportunity to abort before publishing
-	cargo publish $@ || read -p ">>>>> Publishing $crate failed. Press [enter] to continue. "
+	while : ; do
+		VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
+		# give the user an opportunity to abort or skip before publishing
+		RET=""
+		read -t 5 -p "Publishing $crate@$VERSION. Type [s] to skip. " RET || true
+		if [ "$RET" != "s" ]; then
+			set -x
+			cargo publish $@ || read -p ">>>>> Publishing $crate failed. Press [enter] to continue or type [r] to retry. " CHOICE
+			set +x
+			if [ "$CHOICE" != "r" ]; then
+				break
+			fi
+		else
+			echo "Skipping $crate@$VERSION"
+			break
+		fi
+	done
+
   echo "  Waiting for published version $VERSION to be available..."
 	CRATE_NAME=$(grep "^name" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
 	LATEST_VERSION=0
@@ -42,9 +58,13 @@ for crate in ${ORDER[@]}; do
 	cd $crate
 	VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
 	echo "Tagging $crate@$VERSION"
+	set -x
 	git tag -a "$crate-$VERSION" -m "$crate $VERSION" || true
+	set +x
 	cd -
 done
+
+set -x
 
 git push --tags
 
