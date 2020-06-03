@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-server-utils"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.2.0"
+version = "14.2.1"
 
 [dependencies]
 bytes = "0.4"
