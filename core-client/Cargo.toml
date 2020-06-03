@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-core-client"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.2.1"
+version = "14.2.0"
 
 categories = [
 	"asynchronous",
