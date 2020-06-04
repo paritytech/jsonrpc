@@ -27,7 +27,7 @@ for crate in ${ORDER[@]}; do
 		VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
 		# give the user an opportunity to abort or skip before publishing
 		RET=""
-		read -t 5 -p "Publishing $crate@$VERSION. Type [s] to skip. " RET || true
+		read -t 5 -p "Publishing $crate@$VERSION. Type [s] to skip, or any key to proceed. " RET || true
 		if [ "$RET" != "s" ]; then
 			set -x
 			cargo publish $@ || read -p ">>>>> Publishing $crate failed. Press [enter] to continue or type [r] to retry. " CHOICE
