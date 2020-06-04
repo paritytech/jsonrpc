@@ -4,11 +4,22 @@ set -eu
 
 ORDER=(core server-utils tcp ws http ipc stdio pubsub core-client/transports core-client derive test)
 
-# First display the plan
-for crate in ${ORDER[@]}; do
-	cd $crate > /dev/null
+function read_toml () {
+	NAME=""
+	VERSION=""
+	NAME=$(grep "^name" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
 	VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-	echo "$crate@$VERSION"
+}
+function remote_version () {
+	REMOTE_VERSION=""
+	REMOTE_VERSION=$(cargo search "$NAME" | grep "^$NAME =" | sed -e 's/.*"\(.*\)".*/\1/')
+}
+
+# First display the plan
+for CRATE_DIR in ${ORDER[@]}; do
+	cd $CRATE_DIR > /dev/null
+	read_toml
+	echo "$NAME@$VERSION"
 	cd - > /dev/null
 done
 
@@ -21,54 +32,80 @@ cargo clean
 set +x
 
 # Then actually perform publishing.
-for crate in ${ORDER[@]}; do
-	cd $crate
-	while : ; do
-		VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-		# give the user an opportunity to abort or skip before publishing
+for CRATE_DIR in ${ORDER[@]}; do
+	cd $CRATE_DIR > /dev/null
+	read_toml
+	remote_version
+	# Seems the latest version matches, skip by default.
+	if [ "$REMOTE_VERSION" = "$VERSION" ] || [[ "$REMOTE_VERSION" > "$VERSION" ]]; then
 		RET=""
-		read -t 5 -p "Publishing $crate@$VERSION. Type [s] to skip, or any key to proceed. " RET || true
-		if [ "$RET" != "s" ]; then
-			set -x
-			cargo publish $@ || read -p ">>>>> Publishing $crate failed. Press [enter] to continue or type [r] to retry. " CHOICE
-			set +x
-			if [ "$CHOICE" != "r" ]; then
+		echo "Seems that $NAME@$REMOTE_VERSION is available. Continuing in 5s. "
+		read -t 5 -p ">>>> Type [r][enter] to retry, or [enter] to continue... " RET || true
+		if [ "$RET" != "r" ]; then
+			echo "Skipping $NAME@$VERSION"
+			cd - > /dev/null
+			continue
+		fi
+	fi
+
+	# Attempt to publish (allow retries)
+	while : ; do
+		# give the user an opportunity to abort or skip before publishing
+		echo "🚀 Publishing $NAME@$VERSION..."
+		sleep 3
+
+		set +e && set -x
+		cargo publish $@
+		RES=$?
+		set +x && set -e
+		# Check if it succeeded
+		if [ "$RES" != "0" ]; then
+			CHOICE=""
+			echo "##### Publishing $NAME failed"
+			read -p ">>>>> Type [s][enter] to skip, or [enter] to retry.. " CHOICE
+			if [ "$CHOICE" = "s" ]; then
 				break
 			fi
-		else
-			echo "Skipping $crate@$VERSION"
-			break
 		fi
 	done
 
-  echo "  Waiting for published version $VERSION to be available..."
-	CRATE_NAME=$(grep "^name" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-	LATEST_VERSION=0
-	while [[ $LATEST_VERSION != $VERSION ]]
-	do
-	  sleep 3
-	  LATEST_VERSION=$(cargo search "$CRATE_NAME" | grep "^$CRATE_NAME =" | sed -e 's/.*"\(.*\)".*/\1/')
-	  echo "    Latest available version: $LATEST_VERSION"
+	# Wait again to make sure the published version is already available.
+	echo "Waiting for $NAME@$VERSION to be available..."
+	while : ; do
+		sleep 3
+		remote_version
+		if [ "$REMOTE_VERSION" = "$VERSION" ]; then
+			echo "🥳 $NAME@$VERSION published succesfuly."
+			sleep 3
+			break
+		else
+			echo "#### Got $NAME@$REMOTE_VERSION but expected $NAME@$VERSION. Retrying..."
+		fi
 	done
-	cd -
+	cd - > /dev/null
 done
 
 # Make tags in one go
-for crate in ${ORDER[@]}; do
-	cd $crate
-	VERSION=$(grep "^version" ./Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
-	echo "Tagging $crate@$VERSION"
+for CRATE_DIR in ${ORDER[@]}; do
+	cd $CRATE_DIR > /dev/null
+	read_toml
+	echo "Tagging $NAME@$VERSION"
 	set -x
-	git tag -a "$crate-$VERSION" -m "$crate $VERSION" || true
+	git tag -a "$NAME-$VERSION" -m "$NAME $VERSION" || true
 	set +x
-	cd -
+	cd - > /dev/null
 done
 
 set -x
-
+sleep 3
 git push --tags
+set +x
 
-VERSION=$(grep "^version" ./core/Cargo.toml | sed -e 's/.*"\(.*\)"/\1/')
+cd core > /dev/null
+read_toml
+cd - > /dev/null
 echo "Tagging main $VERSION"
+set -x
 git tag -a v$VERSION -m "Version $VERSION"
+sleep 3
 git push --tags
