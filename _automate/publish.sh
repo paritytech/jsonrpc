@@ -108,7 +108,7 @@ set +x
 cd core > /dev/null
 read_toml
 cd - > /dev/null
-echo "Tagging main $VERSION"
+echo "Tagging jsonrpc@$VERSION"
 set -x
 git tag -a v$VERSION -m "Version $VERSION"
 sleep 3
