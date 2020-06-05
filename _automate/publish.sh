@@ -39,7 +39,7 @@ for CRATE_DIR in ${ORDER[@]}; do
 	# Seems the latest version matches, skip by default.
 	if [ "$REMOTE_VERSION" = "$VERSION" ] || [[ "$REMOTE_VERSION" > "$VERSION" ]]; then
 		RET=""
-		echo "Seems that $NAME@$REMOTE_VERSION is available. Continuing in 5s. "
+		echo "Seems like $NAME@$REMOTE_VERSION is already published. Continuing in 5s. "
 		read -t 5 -p ">>>> Type [r][enter] to retry, or [enter] to continue... " RET || true
 		if [ "$RET" != "r" ]; then
 			echo "Skipping $NAME@$VERSION"
@@ -69,13 +69,13 @@ for CRATE_DIR in ${ORDER[@]}; do
 		fi
 	done
 
-	# Wait again to make sure the published version is already available.
-	echo "Waiting for $NAME@$VERSION to be available..."
+	# Wait again to make sure that the new version is published and available.
+	echo "Waiting for $NAME@$VERSION to become available at the registry..."
 	while : ; do
 		sleep 3
 		remote_version
 		if [ "$REMOTE_VERSION" = "$VERSION" ]; then
-			echo "🥳 $NAME@$VERSION published succesfuly."
+			echo "🥳 $NAME@$VERSION published succesfully."
 			sleep 3
 			break
 		else
