@@ -86,6 +86,10 @@ for CRATE_DIR in ${ORDER[@]}; do
 done
 
 # Make tags in one go
+set -x
+git fetch --tags
+set +x
+
 for CRATE_DIR in ${ORDER[@]}; do
 	cd $CRATE_DIR > /dev/null
 	read_toml
