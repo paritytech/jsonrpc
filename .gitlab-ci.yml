@@ -1,8 +1,12 @@
 stages:
   - checkstyle
   - test
+variables:                         &default-vars
+  GIT_STRATEGY:                    fetch
+  GIT_DEPTH:                       100
+  CARGO_INCREMENTAL:               0
 
-.test_and_build:                 &test_and_build
+.test_and_build:                   &test_and_build
   script:
     - cargo build --all
     - cargo test --all
@@ -16,37 +20,52 @@ stages:
     - web
     - /^[0-9]+$/
 
-# test rust stable
-test-linux-stable:
-  image:                           parity/rust-builder:latest
-  stage:                           test
-  <<:                             *test_and_build
-  <<:                             *only
+.docker-env:                       &docker-env
+  image:                           paritytech/ci-linux:production
+  before_script:
+    - rustup show
+    - cargo --version
+    - sccache -s
+  variables:
+    <<:                            *default-vars
+    CARGO_TARGET_DIR:              "/ci-cache/${CI_PROJECT_NAME}/targets/${CI_COMMIT_REF_NAME}/${CI_JOB_NAME}"
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - unknown_failure
+      - api_failure
+  interruptible:                   true
   tags:
     - linux-docker
 
+# check style
+checkstyle-linux-stable:
+  stage:                           checkstyle
+  <<:                              *only
+  <<:                              *docker-env
+  script:
+    - rustup component add rustfmt
+    - cargo fmt --all -- --check
+  allow_failure:                   true
+
+# test rust stable
+test-linux-stable:
+  stage:                           test
+  <<:                              *docker-env
+  <<:                              *only
+  <<:                              *test_and_build
+
 test-windows-stable:
   stage:                           test
-  <<:                             *test_and_build
-  <<:                             *only
+  <<:                              *test_and_build
+  <<:                              *only
   tags:
     - rust-windows
 
 test-mac-stable:
   stage:                           test
-  <<:                             *test_and_build
-  <<:                             *only
+  <<:                              *test_and_build
+  <<:                              *only
   tags:
     - osx
-
-# check style
-checkstyle-linux-stable:
-  image:                           parity/rust-builder:latest
-  stage:                           checkstyle
-  script:
-    - rustup component add rustfmt
-    - cargo fmt --all -- --check
-  allow_failure: true
-  <<:                             *only
-  tags:
-    - linux-docker
