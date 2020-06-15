@@ -1,0 +1,193 @@
+name:                  Check, Test and Build cross-compilation Suite
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - stable
+      - web
+    tags:
+      - /^[0-9]+$/
+    paths-ignore:
+      - 'README.md'
+jobs:
+  check:
+    name:              Check cross
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - nightly
+        target:        #List of [supported targets](https://github.com/rust-embedded/cross#supported-targets)
+          - aarch64-unknown-linux-gnu
+          - armv7-unknown-linux-gnueabihf
+          - x86_64-unknown-linux-musl
+    runs-on:           ubuntu-latest
+    container:         rustembedded/cross:${{matrix.target}}
+    env:
+      RUST_BACKTRACE:  full
+    steps:
+      - name:          Update Git
+        run:           |
+          apt-get update -y;
+          apt-get install -y --no-install-recommends software-properties-common;
+          add-apt-repository -y -u ppa:git-core/ppa;
+          apt-get install -y --no-install-recommends git;
+        shell:       bash
+      - name:          Checkout sources & submodules
+        uses:          actions/checkout@master
+        with:
+          fetch-depth: 5
+          submodules:  recursive
+      - name:          Install toolchain
+        uses:          actions-rs/toolchain@master
+        with:
+          profile:     minimal
+          toolchain:   ${{ matrix.toolchain }}
+          target:      ${{ matrix.target }}
+          components:  clippy, rustfmt
+          override:    true
+      - name:          Cache cargo registry
+        uses:          actions/cache@master
+        with:
+          path:        $HOME/.cargo/registry
+          key:         cargo-registry-${{ env['cache_hash'] }}
+      - name:          Cache cargo index
+        uses:          actions/cache@master
+        with:
+          path:        $HOME/.cargo/git
+          key:         cargo-git-${{ env['cache_hash'] }}
+      - name:          Cache cargo build
+        uses:          actions/cache@master
+        with:
+          path:        target
+          key:         cargo-target-${{ env['cache_hash'] }}
+      - name:          Checking ${{ matrix.target }}-${{ matrix.toolchain }}
+        uses:          actions-rs/cargo@master
+        with:
+          command:     check
+          args:        --target ${{ matrix.target }} --all --verbose
+  test:
+    name:              Test cross
+    needs:             [check]
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - nightly
+        target:        #List of [supported targets](https://github.com/rust-embedded/cross#supported-targets)
+          - aarch64-unknown-linux-gnu
+          - armv7-unknown-linux-gnueabihf
+          - x86_64-unknown-linux-musl
+    runs-on:           ubuntu-latest
+    container:         rustembedded/cross:${{matrix.target}}
+    env:
+      RUST_BACKTRACE:  full
+    steps:
+      - name:          Update Git
+        run:           |
+          apt-get update -y;
+          apt-get install -y --no-install-recommends software-properties-common;
+          add-apt-repository -y -u ppa:git-core/ppa;
+          apt-get install -y --no-install-recommends git;
+        shell:       bash
+      - name:          Checkout sources & submodules
+        uses:          actions/checkout@master
+        with:
+          fetch-depth: 5
+          submodules:  recursive
+      - name:          Install toolchain
+        uses:          actions-rs/toolchain@master
+        with:
+          profile:     minimal
+          toolchain:   ${{ matrix.toolchain }}
+          target:      ${{ matrix.target }}
+          components:  clippy, rustfmt
+          override:    true
+      - name:          Cache cargo registry
+        uses:          actions/cache@master
+        with:
+          path:        $HOME/.cargo/registry
+          key:         cargo-registry-${{ env['cache_hash'] }}
+      - name:          Cache cargo index
+        uses:          actions/cache@master
+        with:
+          path:        $HOME/.cargo/git
+          key:         cargo-git-${{ env['cache_hash'] }}
+      - name:          Cache cargo build
+        uses:          actions/cache@master
+        with:
+          path:        target
+          key:         cargo-target-${{ env['cache_hash'] }}
+      - name:          Testing ${{ matrix.target }}-${{ matrix.toolchain }}
+        uses:          actions-rs/cargo@master
+        with:
+          command:     test
+          args:        --target ${{ matrix.target }} --all --verbose
+  build:
+    name:              Build cross
+    needs:             [check,test]
+    strategy:
+      matrix:
+        toolchain:
+          - stable
+          - nightly
+        target:        #List of [supported targets](https://github.com/rust-embedded/cross#supported-targets)
+          - aarch64-unknown-linux-gnu
+          - armv7-unknown-linux-gnueabihf
+          - x86_64-unknown-linux-musl
+    runs-on:           ubuntu-latest
+    container:         rustembedded/cross:${{matrix.target}}
+    env:
+      RUST_BACKTRACE:  full
+      RUSTFLAGS:       "-C link-arg=-s" #Strip binaries
+    steps:
+      - name:          Update Git
+        run:           |
+          apt-get update -y;
+          apt-get install -y --no-install-recommends software-properties-common;
+          add-apt-repository -y -u ppa:git-core/ppa;
+          apt-get install -y --no-install-recommends git;
+        shell:       bash
+      - name:          Checkout sources & submodules
+        uses:          actions/checkout@master
+        with:
+          fetch-depth: 5
+          submodules:  recursive
+      - name:          Install toolchain
+        uses:          actions-rs/toolchain@master
+        with:
+          profile:     minimal
+          toolchain:   ${{ matrix.toolchain }}
+          target:      ${{ matrix.target }}
+          components:  clippy, rustfmt
+          override:    true
+      - name:          Cache cargo registry
+        uses:          actions/cache@master
+        with:
+          path:        $HOME/.cargo/registry
+          key:         cargo-registry-${{ env['cache_hash'] }}
+      - name:          Cache cargo index
+        uses:          actions/cache@master
+        with:
+          path:        $HOME/.cargo/git
+          key:         cargo-git-${{ env['cache_hash'] }}
+      - name:          Cache cargo build
+        uses:          actions/cache@master
+        with:
+          path:        target
+          key:         cargo-target-${{ env['cache_hash'] }}
+      - name:          Building ${{ matrix.target }}-${{ matrix.toolchain }}
+        uses:          actions-rs/cargo@master
+        with:
+          command:     build
+          args:        --target ${{ matrix.target }} --all --verbose --release
+      - name:          Prepare artifact's
+        run:           .github/workflows/prepare_artifacts.sh ${{ matrix.target }}
+        shell:         bash
+      - name:          Upload artifact's
+        uses:          actions/upload-artifact@v1
+        with:
+          name:        ${{ matrix.toolchain }}.${{ matrix.target }}.zip
+          path:        artifacts/

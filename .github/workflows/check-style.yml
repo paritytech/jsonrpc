@@ -1,0 +1,38 @@
+name:                  Check style
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - stable
+      - web
+    tags:
+      - /^[0-9]+$/
+    paths-ignore:
+      - 'README.md'
+jobs:
+  check-style:
+    name:              Check style
+    runs-on:           ubuntu-latest
+    env:
+      RUST_BACKTRACE:  full
+    steps:
+      - name:          Checkout sources & submodules
+        uses:          actions/checkout@master
+        with:
+          fetch-depth: 5
+          submodules:  recursive
+      - name:          Install toolchain
+        uses:          actions-rs/toolchain@master
+        with:
+          profile:     minimal
+          toolchain:   stable
+          components:  clippy, rustfmt
+          override:    true
+      - name:          Checking style
+        uses:          actions-rs/cargo@master
+        with:
+          command:     fmt
+          toolchain:   stable
+          args:        --all -- --check
