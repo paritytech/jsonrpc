@@ -14,10 +14,10 @@ use crate::types::{Call, Output, Request, Response};
 use crate::types::{Error, ErrorCode, Version};
 
 /// A type representing middleware or RPC response before serialization.
-pub type FutureResponse = Box<dyn Future<Item = Option<Response>, Error = ()> + Send>;
+pub type FutureResponse = Box<dyn Future<Output = Result<Option<Response>, ()> + Send>>;
 
 /// A type representing middleware or RPC call output.
-pub type FutureOutput = Box<dyn Future<Item = Option<Output>, Error = ()> + Send>;
+pub type FutureOutput = Box<dyn Future<Output = Result<Option<Output>, ()> + Send>>;
 
 /// A type representing future string response.
 pub type FutureResult<F, G> = future::Map<

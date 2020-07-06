@@ -14,7 +14,7 @@ impl<T: Sync + Send + 'static> Metadata for Arc<T> {}
 /// Asynchronous Method
 pub trait RpcMethodSimple: Send + Sync + 'static {
 	/// Output future
-	type Out: Future<Item = Value, Error = Error> + Send;
+	type Out: Future<Output = Result<Value, Error>> + Send;
 	/// Call method
 	fn call(&self, params: Params) -> Self::Out;
 }
@@ -62,8 +62,8 @@ impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
 impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F
 where
 	F: Fn(Params) -> I,
-	X: Future<Item = Value, Error = Error>,
-	I: IntoFuture<Item = Value, Error = Error, Future = X>,
+	X: Future<Output = Result<Value, Error>>,
+	I: IntoFuture<Output = Result<Value, Error, Future = X>>,
 {
 	type Out = X;
 	fn call(&self, params: Params) -> Self::Out {
@@ -84,8 +84,8 @@ impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F
 where
 	T: Metadata,
 	F: Fn(Params, T) -> I,
-	I: IntoFuture<Item = Value, Error = Error, Future = X>,
-	X: Future<Item = Value, Error = Error>,
+	I: IntoFuture<Output = Result<Value, Error, Future = X>>,
+	X: Future<Output = Result<Value, Error>>,
 {
 	fn call(&self, params: Params, meta: T) -> BoxFuture<Value> {
 		Box::new(self(params, meta).into_future())

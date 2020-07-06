@@ -7,10 +7,10 @@ use futures::{future::Either, Future};
 /// RPC middleware
 pub trait Middleware<M: Metadata>: Send + Sync + 'static {
 	/// A returned request future.
-	type Future: Future<Item = Option<Response>, Error = ()> + Send + 'static;
+	type Future: Future<Output = Result<Option<Response>, ()>> + Send + 'static;
 
 	/// A returned call future.
-	type CallFuture: Future<Item = Option<Output>, Error = ()> + Send + 'static;
+	type CallFuture: Future<Output = Result<Option<Output>, ()>> + Send + 'static;
 
 	/// Method invoked on each request.
 	/// Allows you to either respond directly (without executing RPC call)
@@ -18,7 +18,7 @@ pub trait Middleware<M: Metadata>: Send + Sync + 'static {
 	fn on_request<F, X>(&self, request: Request, meta: M, next: F) -> Either<Self::Future, X>
 	where
 		F: Fn(Request, M) -> X + Send + Sync,
-		X: Future<Item = Option<Response>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Response>, ()>> + Send + 'static,
 	{
 		Either::B(next(request, meta))
 	}
@@ -29,16 +29,16 @@ pub trait Middleware<M: Metadata>: Send + Sync + 'static {
 	fn on_call<F, X>(&self, call: Call, meta: M, next: F) -> Either<Self::CallFuture, X>
 	where
 		F: Fn(Call, M) -> X + Send + Sync,
-		X: Future<Item = Option<Output>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Output>, ()>> + Send + 'static,
 	{
 		Either::B(next(call, meta))
 	}
 }
 
 /// Dummy future used as a noop result of middleware.
-pub type NoopFuture = Box<dyn Future<Item = Option<Response>, Error = ()> + Send>;
+pub type NoopFuture = Box<dyn Future<Output = Result<Option<Response>, ()> + Send>>;
 /// Dummy future used as a noop call result of middleware.
-pub type NoopCallFuture = Box<dyn Future<Item = Option<Output>, Error = ()> + Send>;
+pub type NoopCallFuture = Box<dyn Future<Output = Result<Option<Output>, ()> + Send>>;
 
 /// No-op middleware implementation
 #[derive(Clone, Debug, Default)]
@@ -55,7 +55,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>> Middleware<M> for (A, B) {
 	fn on_request<F, X>(&self, request: Request, meta: M, process: F) -> Either<Self::Future, X>
 	where
 		F: Fn(Request, M) -> X + Send + Sync,
-		X: Future<Item = Option<Response>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Response>, ()>> + Send + 'static,
 	{
 		repack(self.0.on_request(request, meta, |request, meta| {
 			self.1.on_request(request, meta, &process)
@@ -65,7 +65,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>> Middleware<M> for (A, B) {
 	fn on_call<F, X>(&self, call: Call, meta: M, process: F) -> Either<Self::CallFuture, X>
 	where
 		F: Fn(Call, M) -> X + Send + Sync,
-		X: Future<Item = Option<Output>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Output>, ()>> + Send + 'static,
 	{
 		repack(
 			self.0
@@ -81,7 +81,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>> Middlewa
 	fn on_request<F, X>(&self, request: Request, meta: M, process: F) -> Either<Self::Future, X>
 	where
 		F: Fn(Request, M) -> X + Send + Sync,
-		X: Future<Item = Option<Response>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Response>, ()>> + Send + 'static,
 	{
 		repack(self.0.on_request(request, meta, |request, meta| {
 			repack(self.1.on_request(request, meta, |request, meta| {
@@ -93,7 +93,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>> Middlewa
 	fn on_call<F, X>(&self, call: Call, meta: M, process: F) -> Either<Self::CallFuture, X>
 	where
 		F: Fn(Call, M) -> X + Send + Sync,
-		X: Future<Item = Option<Output>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Output>, ()>> + Send + 'static,
 	{
 		repack(self.0.on_call(call, meta, |call, meta| {
 			repack(
@@ -113,7 +113,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>, D: Middl
 	fn on_request<F, X>(&self, request: Request, meta: M, process: F) -> Either<Self::Future, X>
 	where
 		F: Fn(Request, M) -> X + Send + Sync,
-		X: Future<Item = Option<Response>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Response>, ()>> + Send + 'static,
 	{
 		repack(self.0.on_request(request, meta, |request, meta| {
 			repack(self.1.on_request(request, meta, |request, meta| {
@@ -127,7 +127,7 @@ impl<M: Metadata, A: Middleware<M>, B: Middleware<M>, C: Middleware<M>, D: Middl
 	fn on_call<F, X>(&self, call: Call, meta: M, process: F) -> Either<Self::CallFuture, X>
 	where
 		F: Fn(Call, M) -> X + Send + Sync,
-		X: Future<Item = Option<Output>, Error = ()> + Send + 'static,
+		X: Future<Output = Result<Option<Output>, ()>> + Send + 'static,
 	{
 		repack(self.0.on_call(call, meta, |call, meta| {
 			repack(self.1.on_call(call, meta, |call, meta| {

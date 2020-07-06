@@ -17,7 +17,7 @@ impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F>
 where
 	M: Metadata,
 	F: Fn(&T, Params) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	I: IntoFuture<Output = Result<Value, Error>>,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 	I::Future: Send + 'static,
@@ -37,7 +37,7 @@ impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F>
 where
 	M: Metadata,
 	F: Fn(&T, Params, M) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	I: IntoFuture<Output = Result<Value, Error>>,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 	I::Future: Send + 'static,
@@ -117,7 +117,7 @@ where
 	pub fn add_method<F, I>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: IntoFuture<Output = Result<Value, Error>>,
 		F: Send + Sync + 'static,
 		I::Future: Send + 'static,
 	{
@@ -134,7 +134,7 @@ where
 	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params, M) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: IntoFuture<Output = Result<Value, Error>>,
 		F: Send + Sync + 'static,
 		I::Future: Send + 'static,
 	{
