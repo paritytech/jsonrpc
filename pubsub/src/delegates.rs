@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::core::futures::IntoFuture;
-use crate::core::{self, Error, Metadata, Params, RemoteProcedure, RpcMethod, Value};
+use crate::core::futures::Future;
+use crate::core::{self, Metadata, Params, RemoteProcedure, RpcMethod, Value};
 use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
 use crate::subscription::{new_subscription, Subscriber};
 use crate::types::{PubSubMetadata, SubscriptionId};
@@ -29,15 +29,14 @@ impl<M, T, F, I> UnsubscribeRpcMethod<M> for DelegateSubscription<T, F>
 where
 	M: PubSubMetadata,
 	F: Fn(&T, SubscriptionId, Option<M>) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	I: Future<Output = core::Result<Value>> + Send + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
 {
-	type Out = I::Future;
+	type Out = I;
 	fn call(&self, id: SubscriptionId, meta: Option<M>) -> Self::Out {
 		let closure = &self.closure;
-		closure(&self.delegate, id, meta).into_future()
+		closure(&self.delegate, id, meta)
 	}
 }
 
@@ -72,9 +71,8 @@ where
 		Sub: Fn(&T, Params, M, Subscriber),
 		Sub: Send + Sync + 'static,
 		Unsub: Fn(&T, SubscriptionId, Option<M>) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: Future<Output = core::Result<Value>> + Send + 'static,
 		Unsub: Send + Sync + 'static,
-		I::Future: Send + 'static,
 	{
 		let (sub, unsub) = new_subscription(
 			name,
@@ -98,13 +96,13 @@ where
 		self.inner.add_alias(from, to)
 	}
 
+	// TODO [ToDr] Consider sync?
 	/// Adds async method to the delegate.
 	pub fn add_method<F, I>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: Future<Output = core::Result<Value>> + Send + 'static,
 		F: Send + Sync + 'static,
-		I::Future: Send + 'static,
 	{
 		self.inner.add_method(name, method)
 	}
@@ -113,9 +111,8 @@ where
 	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params, M) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: Future<Output = core::Result<Value>> + Send + 'static,
 		F: Send + Sync + 'static,
-		I::Future: Send + 'static,
 	{
 		self.inner.add_method_with_meta(name, method)
 	}

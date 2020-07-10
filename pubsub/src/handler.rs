@@ -1,5 +1,5 @@
 use crate::core;
-use crate::core::futures::{Future, IntoFuture};
+use crate::core::futures::Future;
 
 use crate::subscription::{new_subscription, Subscriber};
 use crate::types::{PubSubMetadata, SubscriptionId};
@@ -23,7 +23,7 @@ where
 /// Unsubscribe handler
 pub trait UnsubscribeRpcMethod<M>: Send + Sync + 'static {
 	/// Output type
-	type Out: Future<Item = core::Value, Error = core::Error> + Send + 'static;
+	type Out: Future<Output = core::Result<core::Value>> + Send + 'static;
 	/// Called when client is requesting to cancel existing subscription.
 	///
 	/// Metadata is not available if the session was closed without unsubscribing.
@@ -33,12 +33,11 @@ pub trait UnsubscribeRpcMethod<M>: Send + Sync + 'static {
 impl<M, F, I> UnsubscribeRpcMethod<M> for F
 where
 	F: Fn(SubscriptionId, Option<M>) -> I + Send + Sync + 'static,
-	I: IntoFuture<Item = core::Value, Error = core::Error>,
-	I::Future: Send + 'static,
+	I: Future<Output = core::Result<core::Value>> + Send + 'static,
 {
-	type Out = I::Future;
+	type Out = I;
 	fn call(&self, id: SubscriptionId, meta: Option<M>) -> Self::Out {
-		(*self)(id, meta).into_future()
+		(*self)(id, meta)
 	}
 }
 
