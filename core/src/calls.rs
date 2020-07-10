@@ -1,6 +1,6 @@
 use crate::types::{Error, Params, Value};
 use crate::BoxFuture;
-use futures::{Future, IntoFuture};
+use futures::Future;
 use std::fmt;
 use std::sync::Arc;
 
@@ -59,15 +59,15 @@ impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, I> RpcMethodSimple for F
+// TODO [ToDr] Check all the bounds
+impl<F: Send + Sync + 'static, X: Send + 'static> RpcMethodSimple for F
 where
-	F: Fn(Params) -> I,
+	F: Fn(Params) -> X,
 	X: Future<Output = Result<Value, Error>>,
-	I: IntoFuture<Output = Result<Value, Error, Future = X>>,
 {
 	type Out = X;
 	fn call(&self, params: Params) -> Self::Out {
-		self(params).into_future()
+		self(params)
 	}
 }
 
@@ -80,15 +80,14 @@ where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, T, I> RpcMethod<T> for F
+impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethod<T> for F
 where
 	T: Metadata,
-	F: Fn(Params, T) -> I,
-	I: IntoFuture<Output = Result<Value, Error, Future = X>>,
+	F: Fn(Params, T) -> X,
 	X: Future<Output = Result<Value, Error>>,
 {
 	fn call(&self, params: Params, meta: T) -> BoxFuture<Value> {
-		Box::new(self(params, meta).into_future())
+		Box::pin(self(params, meta))
 	}
 }
 
