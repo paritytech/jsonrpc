@@ -12,6 +12,7 @@ version = "14.2.0"
 
 [dependencies]
 bytes = "0.4"
+futures = "0.1"
 globset = "0.4"
 jsonrpc-core = { version = "14.2", path = "../core" }
 lazy_static = "1.1.0"

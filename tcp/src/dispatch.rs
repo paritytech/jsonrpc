@@ -3,24 +3,25 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::jsonrpc::futures::sync::mpsc;
-use crate::jsonrpc::futures::{Async, Future, Poll, Sink, Stream};
+use crate::jsonrpc::futures::{self as futures03, channel::mpsc, StreamExt};
+use futures::{Async, Poll, Stream};
 
 use parking_lot::Mutex;
 
-pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::Sender<String>>>;
+pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::UnboundedSender<String>>>;
 
 pub struct PeerMessageQueue<S: Stream> {
 	up: S,
-	receiver: Option<mpsc::Receiver<String>>,
+	receiver: Option<Box<dyn Stream<Item = String, Error = ()> + Send>>,
 	_addr: SocketAddr,
 }
 
 impl<S: Stream> PeerMessageQueue<S> {
-	pub fn new(response_stream: S, receiver: mpsc::Receiver<String>, addr: SocketAddr) -> Self {
+	pub fn new(response_stream: S, receiver: mpsc::UnboundedReceiver<String>, addr: SocketAddr) -> Self {
+		let receiver = futures03::compat::Compat::new(receiver.map(|v| Ok(v)));
 		PeerMessageQueue {
 			up: response_stream,
-			receiver: Some(receiver),
+			receiver: Some(Box::new(receiver)),
 			_addr: addr,
 		}
 	}
@@ -32,11 +33,11 @@ pub enum PushMessageError {
 	/// Invalid peer
 	NoSuchPeer,
 	/// Send error
-	Send(mpsc::SendError<String>),
+	Send(mpsc::TrySendError<String>),
 }
 
-impl From<mpsc::SendError<String>> for PushMessageError {
-	fn from(send_err: mpsc::SendError<String>) -> Self {
+impl From<mpsc::TrySendError<String>> for PushMessageError {
+	fn from(send_err: mpsc::TrySendError<String>) -> Self {
 		PushMessageError::Send(send_err)
 	}
 }
@@ -59,8 +60,7 @@ impl Dispatcher {
 
 		match channels.get_mut(peer_addr) {
 			Some(channel) => {
-				// todo: maybe async here later?
-				channel.send(msg).wait().map_err(PushMessageError::from)?;
+				channel.unbounded_send(msg).map_err(PushMessageError::from)?;
 				Ok(())
 			}
 			None => Err(PushMessageError::NoSuchPeer),

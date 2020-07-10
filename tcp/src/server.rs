@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use tokio_service::Service as TokioService;
 
-use crate::jsonrpc::futures::sync::{mpsc, oneshot};
-use crate::jsonrpc::futures::{future, Future, Sink, Stream};
+use futures::sync::oneshot;
+use futures::{future, Future, Sink, Stream};
+
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio, tokio_codec::Framed, SuspendableStream};
 
@@ -23,7 +24,10 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	outgoing_separator: codecs::Separator,
 }
 
-impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
+impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn new<T>(handler: T) -> Self
 	where
@@ -33,7 +37,10 @@ impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
+impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new `ServerBuilder` wih given `IoHandler`
 	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self
 	where
@@ -96,7 +103,7 @@ impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> {
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
-					let (sender, receiver) = mpsc::channel(65536);
+					let (sender, receiver) = crate::jsonrpc::futures::channel::mpsc::unbounded();
 
 					let context = RequestContext {
 						peer_addr,

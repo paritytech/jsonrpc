@@ -13,6 +13,11 @@ use crate::core::{self, BoxFuture};
 use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
 use crate::types::{PubSubMetadata, SinkResult, SubscriptionId, TransportError, TransportSender};
 
+lazy_static::lazy_static! {
+	static ref UNSUBSCRIBE_POOL: futures::executor::ThreadPool = futures::executor::ThreadPool::new()
+		.expect("Unable to spawn background pool for unsubscribe tasks.");
+}
+
 /// RPC client session
 /// Keeps track of active subscriptions and unsubscribes from them upon dropping.
 pub struct Session {
@@ -290,7 +295,13 @@ where
 					futures::future::ready(match result {
 						Ok(id) => {
 							session.add_subscription(&notification, &id, move |id| {
-								let _ = futures::executor::block_on(unsub.call(id, None));
+								// TODO [ToDr] We currently run unsubscribe tasks on a shared thread pool.
+								// In the future we should use some kind of `::spawn` method
+								// that spawns a task on an existing executor or pass the spawner handle here.
+								let f = unsub.call(id, None);
+								UNSUBSCRIBE_POOL.spawn_ok(async move {
+									let _ = f.await;
+								});
 							});
 							Ok(id.into())
 						}
@@ -334,8 +345,7 @@ where
 #[cfg(test)]
 mod tests {
 	use crate::core;
-	use crate::core::futures::sync::mpsc;
-	use crate::core::futures::{Async, Future, Stream};
+	use crate::core::futures::channel::mpsc;
 	use crate::core::RpcMethod;
 	use crate::types::{PubSubMetadata, SubscriptionId};
 	use std::sync::atomic::{AtomicBool, Ordering};
@@ -417,13 +427,13 @@ mod tests {
 
 		// when
 		sink.notify(core::Params::Array(vec![core::Value::Number(10.into())]))
-			.wait()
 			.unwrap();
 
+		let val = rx.try_next().unwrap();
 		// then
 		assert_eq!(
-			rx.poll().unwrap(),
-			Async::Ready(Some(r#"{"jsonrpc":"2.0","method":"test","params":[10]}"#.into()))
+			val,
+			Some(r#"{"jsonrpc":"2.0","method":"test","params":[10]}"#.into())
 		);
 	}
 
@@ -431,7 +441,7 @@ mod tests {
 	fn should_assign_id() {
 		// given
 		let (transport, _) = mpsc::unbounded();
-		let (tx, mut rx) = crate::oneshot::channel();
+		let (tx, rx) = crate::oneshot::channel();
 		let subscriber = Subscriber {
 			notification: "test".into(),
 			transport,
@@ -442,16 +452,19 @@ mod tests {
 		let sink = subscriber.assign_id_async(SubscriptionId::Number(5));
 
 		// then
-		assert_eq!(rx.poll().unwrap(), Async::Ready(Ok(SubscriptionId::Number(5))));
-		let sink = sink.wait().unwrap();
-		assert_eq!(sink.notification, "test".to_owned());
+		futures::executor::block_on(async move {
+			let id = rx.await;
+			assert_eq!(id, Ok(Ok(SubscriptionId::Number(5))));
+			let sink = sink.await.unwrap();
+			assert_eq!(sink.notification, "test".to_owned());
+		})
 	}
 
 	#[test]
 	fn should_reject() {
 		// given
 		let (transport, _) = mpsc::unbounded();
-		let (tx, mut rx) = crate::oneshot::channel();
+		let (tx, rx) = crate::oneshot::channel();
 		let subscriber = Subscriber {
 			notification: "test".into(),
 			transport,
@@ -467,8 +480,10 @@ mod tests {
 		let reject = subscriber.reject_async(error.clone());
 
 		// then
-		assert_eq!(rx.poll().unwrap(), Async::Ready(Err(error)));
-		reject.wait().unwrap();
+		futures::executor::block_on(async move {
+			assert_eq!(rx.await.unwrap(), Err(error));
+			reject.await.unwrap();
+		});
 	}
 
 	#[derive(Clone, Default)]
@@ -491,7 +506,7 @@ mod tests {
 				assert_eq!(params, core::Params::None);
 				called2.store(true, Ordering::SeqCst);
 			},
-			|_id, _meta| Ok(core::Value::Bool(true)),
+			|_id, _meta| async { Ok(core::Value::Bool(true)) },
 		);
 		let meta = Metadata;
 
@@ -501,7 +516,7 @@ mod tests {
 		// then
 		assert_eq!(called.load(Ordering::SeqCst), true);
 		assert_eq!(
-			result.wait(),
+			futures::executor::block_on(result),
 			Err(core::Error {
 				code: core::ErrorCode::ServerError(-32091),
 				message: "Subscription rejected".into(),

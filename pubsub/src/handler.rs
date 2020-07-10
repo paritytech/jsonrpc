@@ -99,7 +99,7 @@ mod tests {
 
 	use crate::core;
 	use crate::core::futures::future;
-	use crate::core::futures::sync::mpsc;
+	use crate::core::futures::channel::mpsc;
 	use crate::subscription::{Session, Subscriber};
 	use crate::types::{PubSubMetadata, SubscriptionId};
 
@@ -135,7 +135,7 @@ mod tests {
 		);
 
 		// when
-		let (tx, _rx) = mpsc::channel(1);
+		let (tx, _rx) = mpsc::unbounded();
 		let meta = Metadata(Arc::new(Session::new(tx)));
 		let req = r#"{"jsonrpc":"2.0","id":1,"method":"subscribe_hello","params":null}"#;
 		let res = handler.handle_request_sync(req, meta);

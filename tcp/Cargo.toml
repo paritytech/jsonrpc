@@ -10,11 +10,13 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "14.2.0"
 
 [dependencies]
+futures = "0.1"
+futures03 = { version = "0.3", features = ["compat"], package = "futures" }
+jsonrpc-core = { version = "14.2", path = "../core" }
+jsonrpc-server-utils = { version = "14.2", path = "../server-utils" }
 log = "0.4"
 parking_lot = "0.10.0"
 tokio-service = "0.1"
-jsonrpc-core = { version = "14.2", path = "../core" }
-jsonrpc-server-utils = { version = "14.2", path = "../server-utils" }
 
 [dev-dependencies]
 lazy_static = "1.0"

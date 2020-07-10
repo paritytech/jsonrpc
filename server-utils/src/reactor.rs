@@ -8,7 +8,7 @@
 use std::io;
 use tokio;
 
-use crate::core::futures::{self, Future};
+use futures::{self, Future};
 
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]
