@@ -1,4 +1,4 @@
-use crate::jsonrpc::futures::sync::mpsc;
+use crate::jsonrpc::futures::channel::mpsc;
 use crate::jsonrpc::Metadata;
 use crate::server_utils::session;
 
@@ -9,7 +9,7 @@ pub struct RequestContext<'a> {
 	/// Remote UDS endpoint
 	pub endpoint_addr: &'a ::parity_tokio_ipc::RemoteId,
 	/// Direct pipe sender
-	pub sender: mpsc::Sender<String>,
+	pub sender: mpsc::UnboundedSender<String>,
 }
 
 /// Metadata extractor (per session)

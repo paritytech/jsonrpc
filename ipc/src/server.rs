@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
-use crate::jsonrpc::futures::sync::{mpsc, oneshot};
-use crate::jsonrpc::futures::{future, Future, Sink, Stream};
-use crate::jsonrpc::{middleware, FutureResult, MetaIoHandler, Metadata, Middleware};
+use crate::jsonrpc::futures::channel::mpsc;
+use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
+use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
+use crate::select_with_weak::SelectWithWeakExt;
+use futures01::{future, Future, Stream, Sink, sync::oneshot};
+use parity_tokio_ipc::Endpoint;
+use parking_lot::Mutex;
 use tokio_service::{self, Service as TokioService};
 
 use crate::server_utils::{
@@ -10,11 +14,7 @@ use crate::server_utils::{
 	tokio::{reactor::Handle, runtime::TaskExecutor},
 	tokio_codec::Framed,
 };
-use parking_lot::Mutex;
 
-use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
-use crate::select_with_weak::SelectWithWeakExt;
-use parity_tokio_ipc::Endpoint;
 pub use parity_tokio_ipc::SecurityAttributes;
 
 /// IPC server session
@@ -30,17 +30,25 @@ impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> {
+impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	type Request = String;
 	type Response = Option<String>;
 
 	type Error = ();
 
-	type Future = FutureResult<S::Future, S::CallFuture>;
+	type Future = Box<dyn Future<Item = Option<String>, Error = ()> + Send>;
 
 	fn call(&self, req: Self::Request) -> Self::Future {
+		use futures03::{FutureExt, TryFutureExt};
 		trace!(target: "ipc", "Received request: {}", req);
-		self.handler.handle_request(&req, self.meta.clone())
+		Box::new(
+			self.handler.handle_request(&req, self.meta.clone())
+				.map(Ok)
+				.compat()
+		)
 	}
 }
 
@@ -57,7 +65,10 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	client_buffer_size: usize,
 }
 
-impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
+impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new IPC server build given the `IoHandler`.
 	pub fn new<T>(io_handler: T) -> ServerBuilder<M, S>
 	where
@@ -67,7 +78,10 @@ impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
+impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new IPC server build given the `IoHandler` and metadata extractor.
 	pub fn with_meta_extractor<T, E>(io_handler: T, extractor: E) -> ServerBuilder<M, S>
 	where
@@ -189,7 +203,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					stats.open_session(session_id)
 				}
 
-				let (sender, receiver) = mpsc::channel(16);
+				let (sender, receiver) = mpsc::unbounded();
 				let meta = meta_extractor.extract(&RequestContext {
 					endpoint_addr: &remote_id,
 					session_id,
@@ -215,10 +229,9 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> {
 					.filter_map(|x| x)
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
-					.select_with_weak(receiver.map_err(|e| {
-						warn!(target: "ipc", "Notification error: {:?}", e);
-						std::io::ErrorKind::Other.into()
-					}));
+					.select_with_weak(
+						futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, Ok))
+					);
 
 				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
@@ -332,23 +345,10 @@ impl CloseHandle {
 mod tests {
 	use tokio_uds;
 
+	use super::*;
 	use self::tokio_uds::UnixStream;
-	use super::SecurityAttributes;
-	use super::{Server, ServerBuilder};
-	use crate::jsonrpc::futures::sync::{mpsc, oneshot};
-	use crate::jsonrpc::futures::{future, Future, Sink, Stream};
-	use crate::jsonrpc::{MetaIoHandler, Value};
-	use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
-	use crate::server_utils::codecs;
-	use crate::server_utils::{
-		tokio::{self, timer::Delay},
-		tokio_codec::Decoder,
-	};
-	use parking_lot::Mutex;
-	use std::sync::Arc;
 	use std::thread;
-	use std::time;
-	use std::time::{Duration, Instant};
+	use std::time::{self, Duration, Instant};
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();

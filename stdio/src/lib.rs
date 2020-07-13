@@ -68,9 +68,10 @@ impl<M: Metadata, T: Middleware<M>> ServerBuilder<M, T> where
 
 	/// Process a request asynchronously
 	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl Future<Item = String, Error = ()> + Send {
-		use jsonrpc_core::futures::FutureExt;
+		use jsonrpc_core::futures::{FutureExt, TryFutureExt};
 		let f = io.handle_request(&input, Default::default());
-		futures::compat::Compat::new(f.map(Ok))
+		f.map(Ok)
+			.compat()
 			.map(move |result| match result {
 				Some(res) => res,
 				None => {
