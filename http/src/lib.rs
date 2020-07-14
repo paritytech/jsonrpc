@@ -42,8 +42,8 @@ use std::thread;
 
 use parking_lot::Mutex;
 
-use crate::jsonrpc::futures::sync::oneshot;
-use crate::jsonrpc::futures::{self, Future, Stream};
+use futures01::sync::oneshot;
+use futures01::{future, Future, Stream};
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
 use hyper::{server, Body};
@@ -79,7 +79,7 @@ impl From<Response> for RequestMiddlewareAction {
 	fn from(o: Response) -> Self {
 		RequestMiddlewareAction::Respond {
 			should_validate_hosts: true,
-			response: Box::new(futures::future::ok(o.into())),
+			response: Box::new(future::ok(o.into())),
 		}
 	}
 }
@@ -88,7 +88,7 @@ impl From<hyper::Response<Body>> for RequestMiddlewareAction {
 	fn from(response: hyper::Response<Body>) -> Self {
 		RequestMiddlewareAction::Respond {
 			should_validate_hosts: true,
-			response: Box::new(futures::future::ok(response)),
+			response: Box::new(future::ok(response)),
 		}
 	}
 }
@@ -247,7 +247,10 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	max_request_body_size: usize,
 }
 
-impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
+impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
 	/// By default:
@@ -261,7 +264,10 @@ impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M,
 	}
 }
 
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> {
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
 	/// By default:
@@ -524,7 +530,10 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	keep_alive: bool,
 	reuse_port: bool,
 	max_request_body_size: usize,
-) {
+) where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
 	executor.spawn({
 		let handle = tokio::reactor::Handle::default();
@@ -551,13 +560,13 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			Ok((listener, local_addr)) => {
 				// Send local address
 				match local_addr_tx.send(Ok(local_addr)) {
-					Ok(_) => futures::future::ok((listener, local_addr)),
+					Ok(_) => future::ok((listener, local_addr)),
 					Err(_) => {
 						warn!(
 							"Thread {:?} unable to reach receiver, closing server",
 							thread::current().name()
 						);
-						futures::future::err(())
+						future::err(())
 					}
 				}
 			}
@@ -565,7 +574,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				// Send error
 				let _send_result = local_addr_tx.send(Err(err));
 
-				futures::future::err(())
+				future::err(())
 			}
 		};
 

@@ -1,7 +1,7 @@
 //! JSON-RPC websocket client implementation.
 use crate::{RpcChannel, RpcError};
 use failure::Error;
-use futures::prelude::*;
+use futures01::prelude::*;
 use log::info;
 use std::collections::VecDeque;
 use websocket::{ClientBuilder, OwnedMessage};

@@ -1,8 +1,8 @@
 //! Duplex transport
 
 use failure::format_err;
-use futures::prelude::*;
-use futures::sync::{mpsc, oneshot};
+use futures01::prelude::*;
+use futures01::sync::{mpsc, oneshot};
 use jsonrpc_core::Id;
 use jsonrpc_pubsub::SubscriptionId;
 use log::debug;

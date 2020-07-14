@@ -3,8 +3,8 @@
 #![deny(missing_docs)]
 
 use failure::{format_err, Fail};
-use futures::sync::{mpsc, oneshot};
-use futures::{future, prelude::*};
+use futures01::sync::{mpsc, oneshot};
+use futures01::{future, prelude::*};
 use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
 use serde::Serialize;

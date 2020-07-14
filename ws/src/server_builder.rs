@@ -26,7 +26,10 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	max_payload_bytes: usize,
 }
 
-impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
+impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new `ServerBuilder`
 	pub fn new<T>(handler: T) -> Self
 	where
@@ -36,7 +39,10 @@ impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> {
 	}
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> {
+impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	/// Creates new `ServerBuilder`
 	pub fn with_meta_extractor<T, E>(handler: T, extractor: E) -> Self
 	where

@@ -3,7 +3,7 @@
 
 use crate::transports::duplex::duplex;
 use crate::{RpcChannel, RpcError};
-use futures::prelude::*;
+use futures01::prelude::*;
 use jsonrpc_server_utils::codecs::StreamCodec;
 use parity_tokio_ipc::IpcConnection;
 use std::io;
@@ -17,7 +17,7 @@ pub fn connect<P: AsRef<Path>, Client: From<RpcChannel>>(
 ) -> Result<impl Future<Item = Client, Error = RpcError>, io::Error> {
 	let connection = IpcConnection::connect(path, reactor)?;
 
-	Ok(futures::lazy(move || {
+	Ok(futures01::lazy(move || {
 		let (sink, stream) = StreamCodec::stream_incoming().framed(connection).split();
 		let sink = sink.sink_map_err(|e| RpcError::Other(e.into()));
 		let stream = stream.map_err(|e| RpcError::Other(e.into()));

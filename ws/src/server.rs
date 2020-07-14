@@ -58,7 +58,10 @@ impl Server {
 		executor: UninitializedExecutor,
 		max_connections: usize,
 		max_payload_bytes: usize,
-	) -> Result<Server> {
+	) -> Result<Server> where
+		S::Future: Unpin,
+		S::CallFuture: Unpin,
+	{
 		let config = {
 			let mut config = ws::Settings::default();
 			config.max_connections = max_connections;

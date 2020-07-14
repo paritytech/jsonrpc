@@ -79,10 +79,11 @@ impl RequestContext {
 	/// Get this session as a `Sink` spawning a new future
 	/// in the underlying event loop.
 	pub fn sender(&self) -> mpsc::UnboundedSender<String> {
-		futures03::{FutureExt, TryFutureExt};
+		use futures03::{StreamExt, TryStreamExt};
 		let out = self.out.clone();
 		let (sender, receiver) = mpsc::unbounded();
-		self.executor.spawn(SenderFuture(out, receiver.map(Ok).compat()));
+		let receiver = receiver.map(Ok).compat();
+		self.executor.spawn(SenderFuture(out, Box::new(receiver)));
 		sender
 	}
 }
@@ -122,7 +123,7 @@ impl<M: core::Metadata + Default> MetaExtractor<M> for NoopExtractor {
 	}
 }
 
-struct SenderFuture(Sender, Box<dyn futures01::Stream<Item = String> + Send>);
+struct SenderFuture(Sender, Box<dyn futures01::Stream<Item = String, Error = ()> + Send>);
 impl futures01::Future for SenderFuture {
 	type Item = ();
 	type Error = ();

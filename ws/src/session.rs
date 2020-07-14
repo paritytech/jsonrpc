@@ -2,8 +2,8 @@ use std;
 use std::sync::{atomic, Arc};
 
 use crate::core;
-use crate::core::futures::sync::oneshot;
-use crate::core::futures::{Async, Future, Poll};
+use futures01::sync::oneshot;
+use futures01::{Async, Future, Poll};
 
 use parking_lot::Mutex;
 use slab::Slab;
@@ -205,7 +205,10 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 	}
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
+impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	fn on_request(&mut self, req: &ws::Request) -> ws::Result<ws::Response> {
 		// Run middleware
 		let action = if let Some(ref middleware) = self.request_middleware {
@@ -264,9 +267,13 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> {
 		let poll_liveness = LivenessPoll::create(self.task_slab.clone());
 
 		let active_lock = self.active.clone();
-		let future = self
+		let response = self
 			.handler
-			.handle_request(req, metadata)
+			.handle_request(req, metadata);
+
+		use futures03::{FutureExt, TryFutureExt};
+		let response = response.map(Ok).compat();
+		let future = response
 			.map(move |response| {
 				if !active_lock.load(atomic::Ordering::SeqCst) {
 					return;
@@ -328,7 +335,10 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	}
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> {
+impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
 	type Handler = Session<M, S>;
 
 	fn connection_made(&mut self, sender: ws::Sender) -> Self::Handler {

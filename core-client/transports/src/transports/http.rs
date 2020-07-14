@@ -5,7 +5,7 @@
 use super::RequestBuilder;
 use crate::{RpcChannel, RpcError, RpcMessage};
 use failure::format_err;
-use futures::{
+use futures01::{
 	future::{
 		self,
 		Either::{A, B},

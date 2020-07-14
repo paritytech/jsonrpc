@@ -1,9 +1,8 @@
 //! Rpc client implementation for `Deref<Target=MetaIoHandler<Metadata>>`.
 
 use crate::{RpcChannel, RpcError};
-use failure::format_err;
-use futures::prelude::*;
-use futures::sync::mpsc;
+use futures01::prelude::*;
+use futures03::channel::mpsc;
 use jsonrpc_core::{MetaIoHandler, Metadata};
 use jsonrpc_pubsub::Session;
 use std::collections::VecDeque;
@@ -112,10 +111,13 @@ where
 	TClient: From<RpcChannel>,
 	THandler: Deref<Target = MetaIoHandler<LocalMeta>>,
 {
-	let (tx, rx) = mpsc::channel(0);
+	use futures03::{StreamExt, TryStreamExt};
+
+	let (tx, rx) = mpsc::unbounded();
 	let meta = Arc::new(Session::new(tx));
 	let (sink, stream) = LocalRpc::with_metadata(handler, meta).split();
-	let stream = stream.select(rx.map_err(|_| RpcError::Other(format_err!("Pubsub channel returned an error"))));
+	let rx = rx.map(Ok).compat();
+	let stream = stream.select(rx.map_err(|()| unreachable!()));
 	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
 	let client = TClient::from(sender);
 	(client, rpc_client)
