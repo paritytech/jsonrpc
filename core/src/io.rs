@@ -9,7 +9,7 @@ use std::sync::Arc;
 use futures::{self, future, Future, FutureExt};
 use serde_json;
 
-use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
+use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSync, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
 use crate::middleware::{self, Middleware};
 use crate::types::{Call, Output, Request, Response};
 use crate::types::{Error, ErrorCode, Version};
@@ -146,13 +146,11 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Adds new supported synchronous method.
 	///
 	/// A backward-compatible wrapper.
-	///
-	/// TODO [ToDr] Remove in favour of conversion trait!
-	pub fn add_sync_method<F>(&mut self, name: &str, method: F)
+	pub fn add_sync_method<F, X>(&mut self, name: &str, method: F)
 	where
-		F: Fn(crate::Params) -> crate::Result<crate::Value> + Send + Sync + 'static,
+		F: RpcMethodSync,
 	{
-		self.add_method(name, move |params| future::ready(method(params)))
+		self.add_method(name, move |params| method.call(params))
 	}
 
 	/// Adds new supported asynchronous method.

@@ -4,7 +4,7 @@ use serde_json;
 #[macro_use]
 extern crate jsonrpc_derive;
 
-use jsonrpc_core::futures::sync::mpsc;
+use jsonrpc_core::futures::channel::mpsc;
 use jsonrpc_pubsub::typed::Subscriber;
 use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, SubscriptionId};
 use std::sync::Arc;

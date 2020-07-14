@@ -64,6 +64,8 @@ mod named_params {
 
 	#[test]
 	fn client_generates_correct_named_params_payload() {
+		use jsonrpc_core::futures::{FutureExt, TryFutureExt};
+
 		let expected = json!({ // key names are derived from function parameter names in the trait
 			"number": 3,
 			"string": String::from("test string"),
@@ -73,7 +75,7 @@ mod named_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_method("call_with_named", |params: Params| Ok(params.into()));
+		handler.add_sync_method("call_with_named", |params: Params| Ok(params.into()));
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
@@ -115,7 +117,7 @@ mod raw_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_method("call_raw", |params: Params| Ok(params.into()));
+		handler.add_sync_method("call_raw", |params: Params| Ok(params.into()));
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client

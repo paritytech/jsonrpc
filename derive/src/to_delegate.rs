@@ -53,9 +53,11 @@ impl MethodRegistration {
 				let unsub_method_ident = unsubscribe.ident();
 				let unsub_closure = quote! {
 					move |base, id, meta| {
-						use self::_futures::{Future, IntoFuture};
-						Self::#unsub_method_ident(base, meta, id)
-							.map(|value| _jsonrpc_core::to_value(value)
+						use self::_futures::FutureExt;
+						self::_jsonrpc_core::WrapFuture::into_future(
+							Self::#unsub_method_ident(base, meta, id)
+						)
+							.map_ok(|value| _jsonrpc_core::to_value(value)
 									.expect("Expected always-serializable type; qed"))
 							.map_err(Into::into)
 					}
@@ -278,14 +280,14 @@ impl RpcMethod {
 		} else {
 			quote! {
 				Ok((#(#tuple_fields, )*)) => {
-					use self::_futures::{Future, IntoFuture};
-					let fut = (method)#method_call
-						.map(|value| _jsonrpc_core::to_value(value)
+					use self::_futures::{FutureExt, TryFutureExt};
+					let fut = self::_jsonrpc_core::WrapFuture::into_future((method)#method_call)
+						.map_ok(|value| _jsonrpc_core::to_value(value)
 							.expect("Expected always-serializable type; qed"))
 						.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
-					_futures::future::Either::A(fut)
+					_futures::future::Either::Left(fut)
 				},
-				Err(e) => _futures::future::Either::B(_futures::failed(e)),
+				Err(e) => _futures::future::Either::Right(_futures::future::ready(Err(e))),
 			}
 		};
 

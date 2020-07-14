@@ -47,7 +47,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// A `Future` trait object.
 pub type BoxFuture<T> = Pin<Box<dyn futures::Future<Output = T> + Send>>;
 
-pub use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
+pub use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSync, RpcMethodSimple, RpcNotification, RpcNotificationSimple, WrapFuture};
 pub use crate::delegates::IoDelegate;
 pub use crate::io::{
 	Compatibility, FutureOutput, FutureResponse, FutureResult, FutureRpcResult, IoHandler, IoHandlerExtension,

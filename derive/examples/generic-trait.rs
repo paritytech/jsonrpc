@@ -31,7 +31,7 @@ impl Rpc<u64, String> for RpcImpl {
 	}
 
 	fn call(&self, num: u64) -> BoxFuture<Result<(u64, String)>> {
-		crate::future::finished((num + 999, "hello".into()))
+		Box::pin(jsonrpc_core::futures::future::ready(Ok((num + 999, "hello".into()))))
 	}
 }
 

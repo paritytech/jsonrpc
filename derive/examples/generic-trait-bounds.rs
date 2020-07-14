@@ -49,7 +49,7 @@ impl Rpc<InAndOut, In, Out> for RpcImpl {
 	}
 
 	fn call(&self, num: InAndOut) -> BoxFuture<Result<(InAndOut, u64)>> {
-		crate::future::finished((InAndOut { foo: num.foo + 999 }, num.foo))
+		jsonrpc_core::futures::future::ready(Ok((InAndOut { foo: num.foo + 999 }, num.foo)))
 	}
 }
 

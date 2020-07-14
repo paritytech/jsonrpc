@@ -6,7 +6,7 @@
 //!
 //! ```
 //! use jsonrpc_derive::rpc;
-//! use jsonrpc_core::{IoHandler, Error, Result};
+//! use jsonrpc_core::{IoHandler, Result};
 //! use jsonrpc_core::futures::future;
 //!
 //! #[rpc(server)]
@@ -18,7 +18,7 @@
 //! 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 //!
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, a: u64) -> future::Ready<Result<String, Error>>;
+//! 	fn call(&self, a: u64) -> future::Ready<Result<String>>;
 //! }
 //!
 //! struct RpcImpl;
@@ -31,7 +31,7 @@
 //! 		Ok(a + b)
 //! 	}
 //!
-//! 	fn call(&self, _: u64) -> future::Ready<Result<String, Error>> {
+//! 	fn call(&self, _: u64) -> future::Ready<Result<String>> {
 //! 		future::ready(Ok("OK".to_owned()).into())
 //! 	}
 //! }
@@ -128,7 +128,7 @@
 //! ```
 //! use jsonrpc_core_client::transports::local;
 //! use jsonrpc_core::futures::future;
-//! use jsonrpc_core::{Error, IoHandler, Result};
+//! use jsonrpc_core::{IoHandler, Result};
 //! use jsonrpc_derive::rpc;
 //!
 //! /// Rpc trait
@@ -144,7 +144,7 @@
 //!
 //! 	/// Performs asynchronous operation
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, a: u64) -> future::Ready<Result<String, Error>>;
+//! 	fn call(&self, a: u64) -> future::Ready<Result<String>>;
 //! }
 //!
 //! struct RpcImpl;
@@ -158,7 +158,7 @@
 //! 		Ok(a + b)
 //! 	}
 //!
-//! 	fn call(&self, _: u64) -> future::Ready<Result<String, Error>> {
+//! 	fn call(&self, _: u64) -> future::Ready<Result<String>> {
 //! 		future::ready(Ok("OK".to_owned()))
 //! 	}
 //! }
