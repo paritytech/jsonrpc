@@ -39,6 +39,9 @@ impl From<Error> for RpcError {
 	}
 }
 
+/// A result returned by the client.
+pub type RpcResult<T> = Result<T, RpcError>;
+
 /// An RPC call message.
 struct CallMessage {
 	/// The RPC method name.
@@ -399,7 +402,7 @@ mod tests {
 	fn test_client_terminates() {
 		crate::logger::init_log();
 		let mut handler = IoHandler::new();
-		handler.add_method("add", |params: Params| {
+		handler.add_sync_method("add", |params: Params| {
 			let (a, b) = params.parse::<(u64, u64)>()?;
 			let res = a + b;
 			Ok(jsonrpc_core::to_value(res).unwrap())
@@ -466,7 +469,6 @@ mod tests {
 							"result": vec![i],
 						});
 						sink.notify(serde_json::from_value(value).unwrap())
-							.wait()
 							.expect("sent notification");
 					}
 				});
@@ -475,7 +477,7 @@ mod tests {
 				// Should be called because session is dropped.
 				called2.store(true, Ordering::SeqCst);
 				assert_eq!(id, SubscriptionId::Number(5));
-				future::ok(core::Value::Bool(true))
+				futures03::future::ready(Ok(core::Value::Bool(true)))
 			}),
 		);
 

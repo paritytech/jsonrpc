@@ -27,6 +27,9 @@ arbitrary_precision = ["jsonrpc-client-transports/arbitrary_precision"]
 
 [dependencies]
 jsonrpc-client-transports = { version = "14.2", path = "./transports", default-features = false }
+# Only for jsonrpc-derive, should be removed when we fully transition to futures=0.3
+futures01 = { version = "0.1", package = "futures" }
+futures03 = { version = "0.3", package = "futures", features = [ "compat" ] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

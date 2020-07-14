@@ -165,11 +165,11 @@ mod tests {
 
 	fn io() -> IoHandler {
 		let mut io = IoHandler::default();
-		io.add_method("hello", |params: Params| match params.parse::<(String,)>() {
+		io.add_sync_method("hello", |params: Params| match params.parse::<(String,)>() {
 			Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
 			_ => Ok(Value::String("world".into())),
 		});
-		io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
+		io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
 		io.add_notification("notify", |params: Params| {
 			let (value,) = params.parse::<(u64,)>().expect("expected one u64 as param");
 			assert_eq!(value, 12);

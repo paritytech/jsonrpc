@@ -9,8 +9,6 @@ use jsonrpc_core::*;
 use jsonrpc_pubsub::{PubSubHandler, Session, Subscriber, SubscriptionId};
 use jsonrpc_ws_server::{RequestContext, ServerBuilder};
 
-use jsonrpc_core::futures::Future;
-
 /// Use following node.js code to test:
 ///
 /// ```js
@@ -36,7 +34,7 @@ use jsonrpc_core::futures::Future;
 /// ```
 fn main() {
 	let mut io = PubSubHandler::new(MetaIoHandler::default());
-	io.add_method("say_hello", |_params: Params| Ok(Value::String("hello".to_string())));
+	io.add_sync_method("say_hello", |_params: Params| Ok(Value::String("hello".to_string())));
 
 	io.add_subscription(
 		"hello",
@@ -53,13 +51,13 @@ fn main() {
 			}
 
 			thread::spawn(move || {
-				let sink = subscriber.assign_id_async(SubscriptionId::Number(5)).wait().unwrap();
+				let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
 				// or subscriber.reject(Error {} );
 				// or drop(subscriber)
 
 				loop {
 					thread::sleep(time::Duration::from_millis(1000));
-					match sink.notify(Params::Array(vec![Value::Number(10.into())])).wait() {
+					match sink.notify(Params::Array(vec![Value::Number(10.into())])) {
 						Ok(_) => {}
 						Err(_) => {
 							println!("Subscription has ended, finishing.");
@@ -69,9 +67,9 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId, _meta| -> BoxFuture<Value> {
+		("remove_hello", |_id: SubscriptionId, _meta| -> BoxFuture<Result<Value>> {
 			println!("Closing subscription");
-			Box::new(futures::future::ok(Value::Bool(true)))
+			Box::pin(futures::future::ready(Ok(Value::Bool(true))))
 		}),
 	);
 

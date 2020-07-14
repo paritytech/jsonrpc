@@ -11,6 +11,7 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "14.2.0"
 
 [dependencies]
+futures = { version = "0.3", features = ["thread-pool"] }
 jsonrpc-core = { version = "14.2", path = "../core" }
 lazy_static = "1.4"
 log = "0.4"
@@ -20,7 +21,6 @@ serde = "1.0"
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "14.2", path = "../tcp" }
-futures = { version = "0.3", features = ["thread-pool"] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

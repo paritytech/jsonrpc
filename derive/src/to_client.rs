@@ -52,10 +52,11 @@ pub fn generate_client_module(
 				Call, Error, ErrorCode, Id, MethodCall, Params, Request,
 				Response, Version,
 			};
-			use _jsonrpc_core::futures::prelude::*;
-			use _jsonrpc_core::futures::sync::{mpsc, oneshot};
 			use _jsonrpc_core::serde_json::{self, Value};
-			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, TypedClient, TypedSubscriptionStream};
+			use _jsonrpc_core_client::futures01::Future;
+			use _jsonrpc_core_client::futures01::channel::{mpsc, oneshot};
+			use _jsonrpc_core_client::futures03::FutureExt;
+			use _jsonrpc_core_client::{RpcChannel, RpcResult, RpcFuture, TypedClient, TypedSubscriptionStream};
 
 			/// The Client.
 			#[derive(Clone)]
@@ -126,7 +127,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
-					pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
+					pub fn #name(&self, #args) -> impl Future<Output = RpcResult<#returns>> {
 						let args = #args_serialized;
 						self.inner.call_method(#rpc_name, #returns_str, args)
 					}
@@ -150,7 +151,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					let unsubscribe = unsubscribe.name();
 					let client_method = syn::parse_quote!(
 						#(#attrs)*
-						pub fn #name(&self, #args) -> impl Future<Item=TypedSubscriptionStream<#returns>, Error=RpcError> {
+						pub fn #name(&self, #args) -> impl Future<Output = RpcResult<TypedSubscriptionStream<#returns>> {
 							let args_tuple = (#(#arg_names,)*);
 							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
 						}
@@ -166,7 +167,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 				let arg_names = compute_arg_identifiers(&args)?;
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
-					pub fn #name(&self, #args) -> impl Future<Item = (), Error = RpcError> {
+					pub fn #name(&self, #args) -> impl Future<Output = RpcResult<()>> {
 						let args_tuple = (#(#arg_names,)*);
 						self.inner.notify(#rpc_name, args_tuple)
 					}

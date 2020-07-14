@@ -1,6 +1,6 @@
 //! A simple example
 #![deny(missing_docs)]
-use jsonrpc_core::futures::future::{self, Future, FutureResult};
+use jsonrpc_core::futures::future::{self, Future};
 use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_core_client::transports::local;
 use jsonrpc_derive::rpc;
@@ -18,7 +18,7 @@ pub trait Rpc {
 
 	/// Performs asynchronous operation.
 	#[rpc(name = "callAsync")]
-	fn call(&self, a: u64) -> FutureResult<String, Error>;
+	fn call(&self, a: u64) -> future::Ready<Result<String, Error>>;
 
 	/// Handles a notification.
 	#[rpc(name = "notify")]
@@ -36,8 +36,8 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-	fn call(&self, _: u64) -> FutureResult<String, Error> {
-		future::ok("OK".to_owned())
+	fn call(&self, _: u64) -> future::Ready<Result<String, Error>> {
+		future::ready(Ok("OK".to_owned()))
 	}
 
 	fn notify(&self, a: u64) {

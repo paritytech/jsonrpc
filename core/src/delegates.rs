@@ -21,7 +21,7 @@ where
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 {
-	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value> {
+	fn call(&self, params: Params, _meta: M) -> BoxFuture<crate::Result<Value>> {
 		let closure = &self.closure;
 		Box::pin(closure(&self.delegate, params))
 	}
@@ -40,7 +40,7 @@ where
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 {
-	fn call(&self, params: Params, meta: M) -> BoxFuture<Value> {
+	fn call(&self, params: Params, meta: M) -> BoxFuture<crate::Result<Value>> {
 		let closure = &self.closure;
 		Box::pin(closure(&self.delegate, params, meta))
 	}

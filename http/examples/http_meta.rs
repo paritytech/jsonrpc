@@ -13,13 +13,13 @@ fn main() {
 
 	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
 		let auth = meta.auth.unwrap_or_else(String::new);
-		if auth.as_str() == "let-me-in" {
+		futures::future::ready(if auth.as_str() == "let-me-in" {
 			Ok(Value::String("Hello World!".to_owned()))
 		} else {
 			Ok(Value::String(
 				"Please send a valid Bearer token in Authorization header.".to_owned(),
 			))
-		}
+		})
 	});
 
 	let server = ServerBuilder::new(io)

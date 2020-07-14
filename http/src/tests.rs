@@ -6,7 +6,7 @@ use std::net::TcpStream;
 use std::str::Lines;
 use std::time::Duration;
 
-use self::jsonrpc_core::futures::{self, Future};
+use self::jsonrpc_core::futures;
 use super::*;
 
 fn serve_hosts(hosts: Vec<Host>) -> Server {
@@ -38,7 +38,7 @@ fn serve<F: FnOnce(ServerBuilder) -> ServerBuilder>(alter: F) -> Server {
 
 fn serve_allow_headers(cors_allow_headers: cors::AccessControlAllowHeaders) -> Server {
 	let mut io = IoHandler::default();
-	io.add_method("hello", |params: Params| match params.parse::<(u64,)>() {
+	io.add_sync_method("hello", |params: Params| match params.parse::<(u64,)>() {
 		Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
 		_ => Ok(Value::String("world".into())),
 	});
@@ -54,16 +54,17 @@ fn serve_allow_headers(cors_allow_headers: cors::AccessControlAllowHeaders) -> S
 
 fn io() -> IoHandler {
 	let mut io = IoHandler::default();
-	io.add_method("hello", |params: Params| match params.parse::<(u64,)>() {
+	io.add_sync_method("hello", |params: Params| match params.parse::<(u64,)>() {
 		Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
 		_ => Ok(Value::String("world".into())),
 	});
-	io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
+	io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
 	io.add_method("hello_async", |_params: Params| {
-		futures::finished(Value::String("world".into()))
+		futures::future::ready(Ok(Value::String("world".into())))
 	});
 	io.add_method("hello_async2", |_params: Params| {
-		let (c, p) = futures::oneshot();
+		use futures::TryFutureExt;
+		let (c, p) = futures::channel::oneshot::channel();
 		thread::spawn(move || {
 			thread::sleep(Duration::from_millis(10));
 			c.send(Value::String("world".into())).unwrap();
@@ -1503,7 +1504,7 @@ fn should_drop_io_handler_when_server_is_closed() {
 		let my_ref = Arc::new(Mutex::new(5));
 		let weak = Arc::downgrade(&my_ref);
 		let mut io = IoHandler::default();
-		io.add_method("hello", move |_| {
+		io.add_sync_method("hello", move |_| {
 			Ok(Value::String(format!("{}", my_ref.lock().unwrap())))
 		});
 		let server = ServerBuilder::new(io)

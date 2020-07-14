@@ -22,7 +22,7 @@ pub trait RpcMethodSimple: Send + Sync + 'static {
 /// Asynchronous Method with Metadata
 pub trait RpcMethod<T: Metadata>: Send + Sync + 'static {
 	/// Call method
-	fn call(&self, params: Params, meta: T) -> BoxFuture<Value>;
+	fn call(&self, params: Params, meta: T) -> BoxFuture<crate::Result<Value>>;
 }
 
 /// Notification
@@ -86,7 +86,7 @@ where
 	F: Fn(Params, T) -> X,
 	X: Future<Output = Result<Value, Error>>,
 {
-	fn call(&self, params: Params, meta: T) -> BoxFuture<Value> {
+	fn call(&self, params: Params, meta: T) -> BoxFuture<crate::Result<Value>> {
 		Box::pin(self(params, meta))
 	}
 }

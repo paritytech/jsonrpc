@@ -276,7 +276,7 @@ where
 	F: SubscribeRpcMethod<M>,
 	G: UnsubscribeRpcMethod<M>,
 {
-	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value> {
+	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Result<core::Value>> {
 		match meta.session() {
 			Some(session) => {
 				let (tx, rx) = crate::oneshot::channel();
@@ -326,7 +326,7 @@ where
 	M: PubSubMetadata,
 	G: UnsubscribeRpcMethod<M>,
 {
-	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Value> {
+	fn call(&self, params: core::Params, meta: M) -> BoxFuture<core::Result<core::Value>> {
 		let id = match params {
 			core::Params::Array(ref vec) if vec.len() == 1 => SubscriptionId::parse_value(&vec[0]),
 			_ => None,

@@ -54,7 +54,7 @@ impl MethodRegistration {
 				let unsub_closure = quote! {
 					move |base, id, meta| {
 						use self::_futures::{Future, IntoFuture};
-						Self::#unsub_method_ident(base, meta, id).into_future()
+						Self::#unsub_method_ident(base, meta, id)
 							.map(|value| _jsonrpc_core::to_value(value)
 									.expect("Expected always-serializable type; qed"))
 							.map_err(Into::into)
@@ -280,7 +280,6 @@ impl RpcMethod {
 				Ok((#(#tuple_fields, )*)) => {
 					use self::_futures::{Future, IntoFuture};
 					let fut = (method)#method_call
-						.into_future()
 						.map(|value| _jsonrpc_core::to_value(value)
 							.expect("Expected always-serializable type; qed"))
 						.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);

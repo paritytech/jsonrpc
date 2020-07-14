@@ -7,7 +7,7 @@
 //! ```
 //! use jsonrpc_derive::rpc;
 //! use jsonrpc_core::{IoHandler, Error, Result};
-//! use jsonrpc_core::futures::future::{self, FutureResult};
+//! use jsonrpc_core::futures::future;
 //!
 //! #[rpc(server)]
 //! pub trait Rpc {
@@ -18,7 +18,7 @@
 //! 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 //!
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, a: u64) -> FutureResult<String, Error>;
+//! 	fn call(&self, a: u64) -> future::Ready<Result<String, Error>>;
 //! }
 //!
 //! struct RpcImpl;
@@ -31,8 +31,8 @@
 //! 		Ok(a + b)
 //! 	}
 //!
-//! 	fn call(&self, _: u64) -> FutureResult<String, Error> {
-//! 		future::ok("OK".to_owned()).into()
+//! 	fn call(&self, _: u64) -> future::Ready<Result<String, Error>> {
+//! 		future::ready(Ok("OK".to_owned()).into())
 //! 	}
 //! }
 //!
@@ -56,7 +56,6 @@
 //! use std::collections::HashMap;
 //!
 //! use jsonrpc_core::{Error, ErrorCode, Result};
-//! use jsonrpc_core::futures::Future;
 //! use jsonrpc_derive::rpc;
 //! use jsonrpc_pubsub::{Session, PubSubHandler, SubscriptionId, typed::{Subscriber, Sink}};
 //!
@@ -128,7 +127,7 @@
 //!
 //! ```
 //! use jsonrpc_core_client::transports::local;
-//! use jsonrpc_core::futures::future::{self, Future, FutureResult};
+//! use jsonrpc_core::futures::future;
 //! use jsonrpc_core::{Error, IoHandler, Result};
 //! use jsonrpc_derive::rpc;
 //!
@@ -145,7 +144,7 @@
 //!
 //! 	/// Performs asynchronous operation
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, a: u64) -> FutureResult<String, Error>;
+//! 	fn call(&self, a: u64) -> future::Ready<Result<String, Error>>;
 //! }
 //!
 //! struct RpcImpl;
@@ -159,8 +158,8 @@
 //! 		Ok(a + b)
 //! 	}
 //!
-//! 	fn call(&self, _: u64) -> FutureResult<String, Error> {
-//! 		future::ok("OK".to_owned())
+//! 	fn call(&self, _: u64) -> future::Ready<Result<String, Error>> {
+//! 		future::ready(Ok("OK".to_owned()))
 //! 	}
 //! }
 //!

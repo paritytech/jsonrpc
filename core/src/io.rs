@@ -146,6 +146,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Adds new supported synchronous method.
 	///
 	/// A backward-compatible wrapper.
+	///
+	/// TODO [ToDr] Remove in favour of conversion trait!
 	pub fn add_sync_method<F>(&mut self, name: &str, method: F)
 	where
 		F: Fn(crate::Params) -> crate::Result<crate::Value> + Send + Sync + 'static,
@@ -630,7 +632,7 @@ mod tests {
 
 		struct Test;
 		impl Test {
-			fn abc(&self, _p: crate::Params) -> crate::BoxFuture<Value> {
+			fn abc(&self, _p: crate::Params) -> crate::BoxFuture<crate::Result<Value>> {
 				Box::pin(async { Ok(5.into()) })
 			}
 		}

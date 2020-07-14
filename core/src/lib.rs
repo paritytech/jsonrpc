@@ -45,7 +45,7 @@ pub mod types;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A `Future` trait object.
-pub type BoxFuture<T> = Pin<Box<dyn futures::Future<Output = Result<T>> + Send>>;
+pub type BoxFuture<T> = Pin<Box<dyn futures::Future<Output = T> + Send>>;
 
 pub use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
 pub use crate::delegates::IoDelegate;

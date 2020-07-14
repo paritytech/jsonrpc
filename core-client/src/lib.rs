@@ -8,3 +8,6 @@
 #![deny(missing_docs)]
 
 pub use jsonrpc_client_transports::*;
+
+pub use futures01;
+pub use futures03;

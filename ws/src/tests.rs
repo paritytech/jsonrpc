@@ -7,7 +7,6 @@ use std::thread;
 use std::time::Duration;
 
 use crate::core;
-use crate::core::futures::Future;
 use crate::server_utils::hosts::DomainsValidation;
 use crate::ws;
 
@@ -61,28 +60,27 @@ fn request(server: Server, request: &str) -> Response {
 }
 
 fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
-	use crate::core::futures::sync::oneshot;
-
+	use futures03::{FutureExt, channel::oneshot, future};
 	let pending = Arc::new(AtomicUsize::new(0));
 
 	let counter = pending.clone();
 
 	let mut io = core::IoHandler::default();
-	io.add_method("hello", |_params: core::Params| Ok(core::Value::String("world".into())));
+	io.add_sync_method("hello", |_params: core::Params| Ok(core::Value::String("world".into())));
 	io.add_method("hello_async", |_params: core::Params| {
-		core::futures::finished(core::Value::String("world".into()))
+		future::ready(Ok(core::Value::String("world".into())))
 	});
 	io.add_method("record_pending", move |_params: core::Params| {
 		counter.fetch_add(1, Ordering::SeqCst);
 		let (send, recv) = oneshot::channel();
-		::std::thread::spawn(move || {
-			::std::thread::sleep(Duration::from_millis(500));
+		std::thread::spawn(move || {
+			std::thread::sleep(Duration::from_millis(500));
 
 			let _ = send.send(());
 		});
 
 		let counter = counter.clone();
-		recv.then(move |res| {
+		recv.map(move |res| {
 			if res.is_ok() {
 				counter.fetch_sub(1, Ordering::SeqCst);
 			}

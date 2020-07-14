@@ -343,16 +343,19 @@ impl CloseHandle {
 #[cfg(test)]
 #[cfg(not(windows))]
 mod tests {
-	use tokio_uds;
-
 	use super::*;
-	use self::tokio_uds::UnixStream;
+
+	use futures01::{Stream, Future, Sink};
+	use jsonrpc_core::Value;
+	use jsonrpc_server_utils::tokio::{self, timer::Delay};
+	use jsonrpc_server_utils::tokio_codec::Decoder;
+	use tokio_uds::UnixStream;
 	use std::thread;
 	use std::time::{self, Duration, Instant};
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
-		io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
+		io.add_sync_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 		ServerBuilder::new(io)
 	}
 
@@ -381,7 +384,7 @@ mod tests {
 		crate::logger::init_log();
 
 		let mut io = MetaIoHandler::<()>::default();
-		io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
+		io.add_sync_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 		let server = ServerBuilder::new(io);
 
 		let _server = server
@@ -430,7 +433,7 @@ mod tests {
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
 		let server = run(path);
-		let (stop_signal, stop_receiver) = mpsc::channel(400);
+		let (stop_signal, stop_receiver) = futures01::sync::mpsc::channel(400);
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
@@ -505,7 +508,7 @@ mod tests {
 		let path = "/tmp/test-ipc-60000";
 
 		let mut io = MetaIoHandler::<()>::default();
-		io.add_method("say_huge_hello", |_params| Ok(Value::String(huge_response_test_str())));
+		io.add_sync_method("say_huge_hello", |_params| Ok(Value::String(huge_response_test_str())));
 		let builder = ServerBuilder::new(io);
 
 		let server = builder.start(path).expect("Server must run with no issues");
@@ -547,7 +550,7 @@ mod tests {
 		}
 
 		struct SessionEndExtractor {
-			drop_receivers: Arc<Mutex<mpsc::Sender<oneshot::Receiver<()>>>>,
+			drop_receivers: Arc<Mutex<futures01::sync::mpsc::Sender<oneshot::Receiver<()>>>>,
 		}
 
 		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
@@ -563,7 +566,7 @@ mod tests {
 
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-30009";
-		let (signal, receiver) = mpsc::channel(16);
+		let (signal, receiver) = futures01::sync::mpsc::channel(16);
 		let session_metadata_extractor = SessionEndExtractor {
 			drop_receivers: Arc::new(Mutex::new(signal)),
 		};
