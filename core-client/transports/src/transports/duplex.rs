@@ -1,17 +1,18 @@
 //! Duplex transport
 
 use failure::format_err;
-use futures01::prelude::*;
-use futures01::sync::{mpsc, oneshot};
+use futures::{Future, Stream, Sink, StreamExt, task::{Context, Poll}};
+use futures::channel::{mpsc, oneshot};
 use jsonrpc_core::Id;
 use jsonrpc_pubsub::SubscriptionId;
 use log::debug;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::collections::VecDeque;
+use std::pin::Pin;
 
 use super::RequestBuilder;
-use crate::{RpcChannel, RpcError, RpcMessage};
+use crate::{RpcChannel, RpcResult, RpcError, RpcMessage};
 
 struct Subscription {
 	/// Subscription id received when subscribing.
@@ -21,11 +22,15 @@ struct Subscription {
 	/// Rpc method to unsubscribe.
 	unsubscribe: String,
 	/// Where to send messages to.
-	channel: mpsc::Sender<Result<Value, RpcError>>,
+	channel: mpsc::UnboundedSender<RpcResult<Value>>,
 }
 
 impl Subscription {
-	fn new(channel: mpsc::Sender<Result<Value, RpcError>>, notification: String, unsubscribe: String) -> Self {
+	fn new(
+		channel: mpsc::UnboundedSender<RpcResult<Value>>,
+		notification: String,
+		unsubscribe: String
+	) -> Self {
 		Subscription {
 			id: None,
 			notification,
@@ -36,7 +41,7 @@ impl Subscription {
 }
 
 enum PendingRequest {
-	Call(oneshot::Sender<Result<Value, RpcError>>),
+	Call(oneshot::Sender<RpcResult<Value>>),
 	Subscription(Subscription),
 }
 
@@ -45,24 +50,28 @@ enum PendingRequest {
 pub struct Duplex<TSink, TStream> {
 	request_builder: RequestBuilder,
 	/// Channel from the client.
-	channel: Option<mpsc::Receiver<RpcMessage>>,
+	channel: Option<mpsc::UnboundedReceiver<RpcMessage>>,
 	/// Requests that haven't received a response yet.
 	pending_requests: HashMap<Id, PendingRequest>,
 	/// A map from the subscription name to the subscription.
 	subscriptions: HashMap<(SubscriptionId, String), Subscription>,
 	/// Incoming messages from the underlying transport.
-	stream: TStream,
+	stream: Pin<Box<TStream>>,
 	/// Unprocessed incoming messages.
-	incoming: VecDeque<(Id, Result<Value, RpcError>, Option<String>, Option<SubscriptionId>)>,
+	incoming: VecDeque<(Id, RpcResult<Value>, Option<String>, Option<SubscriptionId>)>,
 	/// Unprocessed outgoing messages.
 	outgoing: VecDeque<String>,
 	/// Outgoing messages from the underlying transport.
-	sink: TSink,
+	sink: Pin<Box<TSink>>,
 }
 
 impl<TSink, TStream> Duplex<TSink, TStream> {
 	/// Creates a new `Duplex`.
-	fn new(sink: TSink, stream: TStream, channel: mpsc::Receiver<RpcMessage>) -> Self {
+	fn new(
+		sink: Pin<Box<TSink>>,
+		stream: Pin<Box<TStream>>,
+		channel: mpsc::UnboundedReceiver<RpcMessage>
+	) -> Self {
 		log::debug!("open");
 		Duplex {
 			request_builder: RequestBuilder::new(),
@@ -78,21 +87,23 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 }
 
 /// Creates a new `Duplex`, along with a channel to communicate
-pub fn duplex<TSink, TStream>(sink: TSink, stream: TStream) -> (Duplex<TSink, TStream>, RpcChannel) {
-	let (sender, receiver) = mpsc::channel(0);
+pub fn duplex<TSink, TStream>(
+	sink: Pin<Box<TSink>>,
+	stream: Pin<Box<TStream>>,
+) -> (Duplex<TSink, TStream>, RpcChannel) {
+	let (sender, receiver) = mpsc::unbounded();
 	let client = Duplex::new(sink, stream, receiver);
 	(client, sender.into())
 }
 
 impl<TSink, TStream> Future for Duplex<TSink, TStream>
 where
-	TSink: Sink<SinkItem = String, SinkError = RpcError>,
-	TStream: Stream<Item = String, Error = RpcError>,
+	TSink: Sink<String>,
+	TStream: Stream<Item = String>,
 {
-	type Item = ();
-	type Error = RpcError;
+	type Output = RpcResult<()>;
 
-	fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
 		// Handle requests from the client.
 		log::debug!("handle requests from client");
 		loop {
@@ -101,16 +112,15 @@ where
 				Some(channel) => channel,
 				None => break,
 			};
-			let msg = match channel.poll() {
-				Ok(Async::Ready(Some(msg))) => msg,
-				Ok(Async::Ready(None)) => {
+			let msg = match channel.poll_next_unpin(cx) {
+				Poll::Ready(Some(msg)) => msg,
+				Poll::Ready(None) => {
 					// When the channel is dropped we still need to finish
 					// outstanding requests.
 					self.channel.take();
 					break;
 				}
-				Ok(Async::NotReady) => break,
-				Err(()) => continue,
+				Poll::Pending => break,
 			};
 			let request_str = match msg {
 				RpcMessage::Call(msg) => {
@@ -154,17 +164,16 @@ where
 		// Reads from stream and queues to incoming queue.
 		log::debug!("handle stream");
 		loop {
-			let response_str = match self.stream.poll() {
-				Ok(Async::Ready(Some(response_str))) => response_str,
-				Ok(Async::Ready(None)) => {
+			let response_str = match self.stream.as_mut().poll_next(cx) {
+				Poll::Ready(Some(response_str)) => response_str,
+				Poll::Ready(None) => {
 					// The websocket connection was closed so the client
 					// can be shutdown. Reopening closed connections must
 					// be handled by the transport.
 					debug!("connection closed");
-					return Ok(Async::Ready(()));
+					return Poll::Ready(Ok(()));
 				}
-				Ok(Async::NotReady) => break,
-				Err(err) => Err(err)?,
+				Poll::Pending => break,
 			};
 			log::debug!("incoming: {}", response_str);
 			// we only send one request at the time, so there can only be one response.
@@ -215,26 +224,19 @@ where
 								}
 							} else {
 								let err = RpcError::Other(format_err!(
-									"Subscription {:?} ({:?}) rejected: {:?}",
-									id,
-									method,
-									result,
+										"Subscription {:?} ({:?}) rejected: {:?}",
+										id,
+										method,
+										result,
 								));
-								match subscription.channel.poll_ready() {
-									Ok(Async::Ready(())) => {
-										subscription
-											.channel
-											.try_send(result)
-											.expect("The channel is ready; qed");
-									}
-									Ok(Async::NotReady) => {
-										self.incoming.push_back((id, result, Some(method), sid));
-										break;
-									}
-									Err(_) => {
-										log::warn!("{}, but the reply channel has closed.", err);
-									}
-								};
+
+								if subscription
+									.channel
+										.unbounded_send(result)
+										.is_err()
+								{
+									log::warn!("{}, but the reply channel has closed.", err);
+								}
 							}
 							continue;
 						}
@@ -254,33 +256,23 @@ where
 					};
 
 					if let Some(subscription) = self.subscriptions.get_mut(&sid_and_method) {
-						match subscription.channel.poll_ready() {
-							Ok(Async::Ready(())) => {
-								subscription
-									.channel
-									.try_send(result)
-									.expect("The channel is ready; qed");
-							}
-							Ok(Async::NotReady) => {
-								let (sid, method) = sid_and_method;
-								self.incoming.push_back((id, result, Some(method), Some(sid)));
-								break;
-							}
-							Err(_) => {
-								let subscription = self
-									.subscriptions
-									.remove(&sid_and_method)
-									.expect("Subscription was just polled; qed");
-								let sid = subscription.id.expect(
-									"Every subscription that ends up in `self.subscriptions` has id already \
-									 assigned; assignment happens during response to subscribe request.",
-								);
-								let (_id, request_str) =
-									self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
-								log::debug!("outgoing: {}", request_str);
-								self.outgoing.push_back(request_str);
-								log::debug!("unsubscribed from {:?}", sid_and_method);
-							}
+						let res = subscription
+							.channel
+							.unbounded_send(result);
+						if res.is_err() {
+							let subscription = self
+								.subscriptions
+								.remove(&sid_and_method)
+								.expect("Subscription was just polled; qed");
+							let sid = subscription.id.expect(
+								"Every subscription that ends up in `self.subscriptions` has id already \
+								 assigned; assignment happens during response to subscribe request.",
+							);
+							let (_id, request_str) =
+								self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
+							log::debug!("outgoing: {}", request_str);
+							self.outgoing.push_back(request_str);
+							log::debug!("unsubscribed from {:?}", sid_and_method);
 						}
 					} else {
 						log::warn!("Received unexpected subscription notification: {:?}", sid_and_method);
@@ -294,21 +286,25 @@ where
 		// Writes queued messages to sink.
 		log::debug!("handle outgoing");
 		loop {
+			let err = || Err(RpcError::Other(failure::format_err!("closing")));
+			match self.sink.as_mut().poll_ready(cx) {
+				Poll::Ready(Ok(())) => {},
+				Poll::Ready(Err(_)) => return err().into(),
+				_ => break,
+			}
 			match self.outgoing.pop_front() {
-				Some(request) => match self.sink.start_send(request)? {
-					AsyncSink::Ready => {}
-					AsyncSink::NotReady(request) => {
-						self.outgoing.push_front(request);
-						break;
-					}
+				Some(request) => if let Err(_) = self.sink.as_mut().start_send(request) {
+					// the channel is disconnected.
+					return err().into();
 				},
 				None => break,
 			}
 		}
 		log::debug!("handle sink");
-		let sink_empty = match self.sink.poll_complete()? {
-			Async::Ready(()) => true,
-			Async::NotReady => false,
+		let sink_empty = match self.sink.as_mut().poll_flush(cx) {
+			Poll::Ready(Ok(())) => true,
+			Poll::Ready(Err(_)) => true,
+			Poll::Pending => false,
 		};
 
 		log::debug!("{:?}", self);
@@ -321,9 +317,9 @@ where
 			&& sink_empty
 		{
 			log::debug!("close");
-			Ok(Async::Ready(()))
+			Poll::Ready(Ok(()))
 		} else {
-			Ok(Async::NotReady)
+			Poll::Pending
 		}
 	}
 }

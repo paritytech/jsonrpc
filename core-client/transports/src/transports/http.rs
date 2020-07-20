@@ -2,34 +2,30 @@
 //!
 //! HTTPS support is enabled with the `tls` feature.
 
-use super::RequestBuilder;
-use crate::{RpcChannel, RpcError, RpcMessage};
+use crate::{RpcChannel, RpcError, RpcResult, RpcMessage};
 use failure::format_err;
-use futures01::{
-	future::{
-		self,
-		Either::{A, B},
-	},
-	sync::mpsc,
-	Future, Stream,
-};
+use futures::{Future, StreamExt, TryStreamExt};
 use hyper::{http, rt, Client, Request, Uri};
+use super::RequestBuilder;
 
 /// Create a HTTP Client
-pub fn connect<TClient>(url: &str) -> impl Future<Item = TClient, Error = RpcError>
+pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
 where
 	TClient: From<RpcChannel>,
 {
+	use futures::future::ready;
+	use futures::future::Either::{Left, Right};
+
 	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return A(future::err(RpcError::Other(e.into()))),
+		Err(e) => return Left(ready(Err(RpcError::Other(e.into())))),
 	};
 
 	#[cfg(feature = "tls")]
 	let connector = match hyper_tls::HttpsConnector::new(4) {
 		Ok(connector) => connector,
-		Err(e) => return A(future::err(RpcError::Other(e.into()))),
+		Err(e) => return Left(ready(Err(RpcError::Other(e.into())))),
 	};
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
@@ -39,9 +35,12 @@ where
 
 	let mut request_builder = RequestBuilder::new();
 
-	let (sender, receiver) = mpsc::channel(max_parallel);
+	let (sender, receiver) = futures::channel::mpsc::unbounded();
 
+	use futures01::{Future, Stream};
 	let fut = receiver
+		.map(Ok)
+		.compat()
 		.filter_map(move |msg: RpcMessage| {
 			let (request, sender) = match msg {
 				RpcMessage::Call(call) => {
@@ -71,6 +70,7 @@ where
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, sender)| {
+			use futures01::future::{self, Either::{A, B}};
 			let future = match result {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
@@ -101,10 +101,12 @@ where
 			})
 		});
 
-	B(rt::lazy(move || {
-		rt::spawn(fut.map_err(|e| log::error!("RPC Client error: {:?}", e)));
-		Ok(TClient::from(sender.into()))
-	}))
+	Right(futures::compat::Compat01As03::new(
+		rt::lazy(move || {
+			rt::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
+			Ok(TClient::from(sender.into()))
+		})
+	))
 }
 
 #[cfg(test)]
