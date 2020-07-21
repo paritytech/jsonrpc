@@ -6,7 +6,7 @@
 //!
 //! ```
 //! use jsonrpc_derive::rpc;
-//! use jsonrpc_core::{IoHandler, Result};
+//! use jsonrpc_core::{IoHandler, Result, BoxFuture};
 //! use jsonrpc_core::futures::future;
 //!
 //! #[rpc(server)]
@@ -18,7 +18,7 @@
 //! 	fn add(&self, a: u64, b: u64) -> Result<u64>;
 //!
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, a: u64) -> future::Ready<Result<String>>;
+//! 	fn call(&self, a: u64) -> BoxFuture<Result<String>>;
 //! }
 //!
 //! struct RpcImpl;
@@ -31,8 +31,8 @@
 //! 		Ok(a + b)
 //! 	}
 //!
-//! 	fn call(&self, _: u64) -> future::Ready<Result<String>> {
-//! 		future::ready(Ok("OK".to_owned()).into())
+//! 	fn call(&self, _: u64) -> BoxFuture<Result<String>> {
+//! 		Box::pin(future::ready(Ok("OK".to_owned()).into()))
 //! 	}
 //! }
 //!
@@ -127,8 +127,8 @@
 //!
 //! ```
 //! use jsonrpc_core_client::transports::local;
-//! use jsonrpc_core::futures::future;
-//! use jsonrpc_core::{IoHandler, Result};
+//! use jsonrpc_core::futures::{self, future};
+//! use jsonrpc_core::{IoHandler, Result, BoxFuture};
 //! use jsonrpc_derive::rpc;
 //!
 //! /// Rpc trait
@@ -144,7 +144,7 @@
 //!
 //! 	/// Performs asynchronous operation
 //! 	#[rpc(name = "callAsync")]
-//! 	fn call(&self, a: u64) -> future::Ready<Result<String>>;
+//! 	fn call(&self, a: u64) -> BoxFuture<Result<String>>;
 //! }
 //!
 //! struct RpcImpl;
@@ -158,20 +158,23 @@
 //! 		Ok(a + b)
 //! 	}
 //!
-//! 	fn call(&self, _: u64) -> future::Ready<Result<String>> {
-//! 		future::ready(Ok("OK".to_owned()))
+//! 	fn call(&self, _: u64) -> BoxFuture<Result<String>> {
+//! 		Box::pin(future::ready(Ok("OK".to_owned())))
 //! 	}
 //! }
 //!
 //! fn main() {
+//! 	let exec = futures::executor::ThreadPool::new().unwrap();
+//! 	exec.spawn_ok(run())
+//! }
+//! async fn run() {
 //! 	let mut io = IoHandler::new();
 //! 	io.extend_with(RpcImpl.to_delegate());
 //!
-//! 	let fut = {
-//! 		let (client, server) = local::connect::<gen_client::Client, _, _>(io);
-//! 		client.add(5, 6).map(|res| println!("5 + 6 = {}", res)).join(server)
-//! 	};
-//! 	fut.wait().unwrap();
+//! 	let (client, server) = local::connect::<RpcClient, _, _>(io);
+//! 	let res = client.add(5, 6).await.unwrap();
+//! 	println!("5 + 6 = {}", res);
+//! 	server.await.unwrap()
 //! }
 //!
 //! ```

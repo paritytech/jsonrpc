@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
-use jsonrpc_core::types::params::Params;
-use jsonrpc_core::{futures, MetaIoHandler, Metadata, Result, Value, BoxFuture};
+use jsonrpc_core::futures::future;
+use jsonrpc_core::{MetaIoHandler, Metadata, Result, Value, BoxFuture, Params};
 use jsonrpc_derive::rpc;
 
 #[derive(Clone)]
@@ -62,11 +62,11 @@ impl Rpc<u64> for RpcImpl {
 	}
 
 	fn call(&self, x: u64) -> BoxFuture<Result<String>> {
-		futures::finished(format!("OK: {}", x))
+		Box::pin(future::ready(Ok(format!("OK: {}", x))))
 	}
 
 	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> BoxFuture<Result<String>> {
-		futures::finished(format!("From: {}, got: {:?}", meta.0, map))
+		Box::pin(future::ready(Ok(format!("From: {}, got: {:?}", meta.0, map))))
 	}
 
 	fn notify(&self, a: u64) {

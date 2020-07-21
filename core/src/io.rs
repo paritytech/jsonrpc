@@ -146,7 +146,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Adds new supported synchronous method.
 	///
 	/// A backward-compatible wrapper.
-	pub fn add_sync_method<F, X>(&mut self, name: &str, method: F)
+	pub fn add_sync_method<F>(&mut self, name: &str, method: F)
 	where
 		F: RpcMethodSync,
 	{

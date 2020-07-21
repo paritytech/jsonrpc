@@ -75,7 +75,7 @@ struct Metadata;
 impl jsonrpc_core::Metadata for Metadata {}
 impl PubSubMetadata for Metadata {
 	fn session(&self) -> Option<Arc<Session>> {
-		let (tx, _rx) = mpsc::channel(1);
+		let (tx, _rx) = mpsc::unbounded();
 		Some(Arc::new(Session::new(tx)))
 	}
 }

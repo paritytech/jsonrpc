@@ -53,7 +53,7 @@ impl MethodRegistration {
 				let unsub_method_ident = unsubscribe.ident();
 				let unsub_closure = quote! {
 					move |base, id, meta| {
-						use self::_futures::FutureExt;
+						use self::_futures::{FutureExt, TryFutureExt};
 						self::_jsonrpc_core::WrapFuture::into_future(
 							Self::#unsub_method_ident(base, meta, id)
 						)

@@ -9,23 +9,31 @@ use hyper::{http, rt, Client, Request, Uri};
 use super::RequestBuilder;
 
 /// Create a HTTP Client
-pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
+pub fn connect<TClient>(url: &str) -> impl futures01::Future<Item = TClient, Error = RpcError>
+where
+	TClient: From<RpcChannel>,
+{
+	use futures::TryFutureExt;
+	let connect = connect03(url).compat();
+	rt::lazy(|| connect)
+}
+
+fn connect03<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
 where
 	TClient: From<RpcChannel>,
 {
 	use futures::future::ready;
-	use futures::future::Either::{Left, Right};
 
 	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return Left(ready(Err(RpcError::Other(e.into())))),
+		Err(e) => return ready(Err(RpcError::Other(e.into()))),
 	};
 
 	#[cfg(feature = "tls")]
 	let connector = match hyper_tls::HttpsConnector::new(4) {
 		Ok(connector) => connector,
-		Err(e) => return Left(ready(Err(RpcError::Other(e.into())))),
+		Err(e) => return ready(Err(RpcError::Other(e.into()))),
 	};
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
@@ -101,24 +109,22 @@ where
 			})
 		});
 
-	Right(futures::compat::Compat01As03::new(
-		rt::lazy(move || {
-			rt::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
-			Ok(TClient::from(sender.into()))
-		})
-	))
+	rt::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
+	ready(Ok(TClient::from(sender.into())))
 }
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use crate::*;
 	use assert_matches::assert_matches;
+	use crate::*;
+	use futures01::prelude::*;
 	use hyper::rt;
+	use jsonrpc_core::futures::{FutureExt, TryFutureExt};
 	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 	use jsonrpc_http_server::*;
 	use std::net::SocketAddr;
 	use std::time::Duration;
+	use super::*;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -168,7 +174,7 @@ mod tests {
 	fn io() -> IoHandler {
 		let mut io = IoHandler::default();
 		io.add_sync_method("hello", |params: Params| match params.parse::<(String,)>() {
-			Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
+		Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
 			_ => Ok(Value::String("world".into())),
 		});
 		io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
@@ -190,13 +196,13 @@ mod tests {
 	}
 
 	impl TestClient {
-		fn hello(&self, msg: &'static str) -> impl Future<Item = String, Error = RpcError> {
+		fn hello(&self, msg: &'static str) -> impl Future<Output = RpcResult<String>> {
 			self.0.call_method("hello", "String", (msg,))
 		}
-		fn fail(&self) -> impl Future<Item = (), Error = RpcError> {
+		fn fail(&self) -> impl Future<Output = RpcResult<()>> {
 			self.0.call_method("fail", "()", ())
 		}
-		fn notify(&self, value: u64) -> impl Future<Item = (), Error = RpcError> {
+		fn notify(&self, value: u64) -> RpcResult<()> {
 			self.0.notify("notify", (value,))
 		}
 	}
@@ -212,15 +218,15 @@ mod tests {
 		// when
 		let run = connect(&server.uri)
 			.and_then(|client: TestClient| {
-				client.hello("http").and_then(move |result| {
+				client.hello("http").compat().and_then(move |result| {
 					drop(client);
 					let _ = tx.send(result);
-					Ok(())
+					future::ready(Ok(()))
 				})
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
-		rt::run(run);
+		rt::run(run.compat());
 
 		// then
 		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -238,15 +244,14 @@ mod tests {
 		// when
 		let run = connect(&server.uri)
 			.and_then(|client: TestClient| {
-				client.notify(12).and_then(move |result| {
-					drop(client);
-					let _ = tx.send(result);
-					Ok(())
-				})
+				let result = client.notify(12);
+				drop(client);
+				let _ = tx.send(result);
+				Ok(())
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
-		rt::run(run);
+		rt::run(run.compat());
 
 		// then
 		rx.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -282,13 +287,13 @@ mod tests {
 		// when
 		let run = connect(&server.uri)
 			.and_then(|client: TestClient| {
-				client.fail().then(move |res| {
+				client.fail().compat().then(move |res| {
 					let _ = tx.send(res);
 					Ok(())
 				})
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
-		rt::run(run);
+		rt::run(run.compat());
 
 		// then
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -319,14 +324,14 @@ mod tests {
 
 		let call = client
 			.and_then(|client: TestClient| {
-				client.hello("http").then(move |res| {
+				client.hello("http").compat().then(move |res| {
 					let _ = tx.send(res);
 					Ok(())
 				})
 			})
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
-		rt::run(call);
+		rt::run(call.compat());
 
 		// then
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
@@ -366,7 +371,7 @@ mod tests {
 					})
 					.and_then(move |_| {
 						server.start(); // todo: make the server start on the main thread
-						client.hello("http2").then(move |res| {
+						client.hello("http2").compat().then(|res| {
 							let _ = tx2.send(res);
 							Ok(())
 						})
@@ -375,7 +380,7 @@ mod tests {
 			.map_err(|e| log::error!("RPC Client error: {:?}", e));
 
 		// when
-		rt::run(call);
+		rt::run(call.compat());
 
 		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
 		assert!(res.is_err());

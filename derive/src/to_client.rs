@@ -53,8 +53,7 @@ pub fn generate_client_module(
 				Response, Version,
 			};
 			use _jsonrpc_core::serde_json::{self, Value};
-			use _jsonrpc_core_client::futures01::sync::{mpsc, oneshot};
-			use _jsonrpc_core_client::futures03::{Future, FutureExt};
+			use _jsonrpc_core_client::futures::{Future, FutureExt, channel::{mpsc, oneshot}};
 			use _jsonrpc_core_client::{RpcChannel, RpcResult, RpcFuture, TypedClient, TypedSubscriptionStream};
 
 			/// The Client.
@@ -89,8 +88,6 @@ pub fn generate_client_module(
 			}
 		}
 	};
-
-	println!("Client: {}", client);
 
 	Ok(client)
 }
@@ -154,7 +151,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					let unsubscribe = unsubscribe.name();
 					let client_method = syn::parse_quote!(
 						#(#attrs)*
-						pub fn #name(&self, #args) -> impl Future<Output = RpcResult<TypedSubscriptionStream<#returns>> {
+						pub fn #name(&self, #args) -> RpcResult<TypedSubscriptionStream<#returns>> {
 							let args_tuple = (#(#arg_names,)*);
 							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
 						}
@@ -170,7 +167,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 				let arg_names = compute_arg_identifiers(&args)?;
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
-					pub fn #name(&self, #args) -> impl Future<Output = RpcResult<()>> {
+					pub fn #name(&self, #args) -> RpcResult<()> {
 						let args_tuple = (#(#arg_names,)*);
 						self.inner.notify(#rpc_name, args_tuple)
 					}

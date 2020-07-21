@@ -329,8 +329,9 @@ impl TypedClient {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use futures01::prelude::{Future as _};
 	use crate::transports::local;
-	use crate::{RpcChannel, RpcError, TypedClient};
+	use crate::{RpcChannel, TypedClient};
 	use jsonrpc_core::{self as core, IoHandler};
 	use jsonrpc_pubsub::{PubSubHandler, Subscriber, SubscriptionId};
 	use std::sync::atomic::{AtomicBool, Ordering};

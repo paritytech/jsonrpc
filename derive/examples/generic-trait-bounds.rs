@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use jsonrpc_core::{IoHandler, IoHandlerExtension, Result, BoxFuture};
+use jsonrpc_core::{IoHandler, IoHandlerExtension, Result, BoxFuture, futures::future};
 use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
@@ -49,7 +49,7 @@ impl Rpc<InAndOut, In, Out> for RpcImpl {
 	}
 
 	fn call(&self, num: InAndOut) -> BoxFuture<Result<(InAndOut, u64)>> {
-		jsonrpc_core::futures::future::ready(Ok((InAndOut { foo: num.foo + 999 }, num.foo)))
+		Box::pin(future::ready(Ok((InAndOut { foo: num.foo + 999 }, num.foo))))
 	}
 }
 
