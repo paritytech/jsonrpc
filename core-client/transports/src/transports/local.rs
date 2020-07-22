@@ -3,7 +3,7 @@
 use crate::{RpcChannel, RpcError, RpcResult};
 use futures::channel::mpsc;
 use futures::{Stream, StreamExt, Sink, SinkExt, Future, task::{Context, Poll}};
-use jsonrpc_core::{MetaIoHandler, Metadata};
+use jsonrpc_core::{MetaIoHandler, Metadata, BoxFuture};
 use jsonrpc_pubsub::Session;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -13,7 +13,14 @@ use std::sync::Arc;
 pub struct LocalRpc<THandler, TMetadata> {
 	handler: THandler,
 	meta: TMetadata,
+	buffered: Buffered,
 	queue: (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>),
+}
+
+enum Buffered {
+	Request(BoxFuture<Option<String>>),
+	Response(String),
+	None,
 }
 
 
@@ -35,6 +42,7 @@ where
 		Self {
 			handler,
 			meta,
+			buffered: Buffered::None,
 			queue: mpsc::unbounded(),
 		}
 	}
@@ -55,6 +63,32 @@ where
 	}
 }
 
+impl<TMetadata, THandler> LocalRpc<THandler, TMetadata>
+where
+	TMetadata: Metadata + Unpin,
+	THandler: Deref<Target = MetaIoHandler<TMetadata>> + Unpin,
+{
+	fn poll_buffered(&mut self, cx: &mut Context) -> Poll<Result<(), RpcError>> {
+		let response = match self.buffered {
+			Buffered::Request(ref mut r) => futures::ready!(r.as_mut().poll(cx)),
+			_ => None,
+		};
+		if let Some(response) = response {
+			self.buffered = Buffered::Response(response);
+		}
+
+		self.send_response().into()
+	}
+
+	fn send_response(&mut self) -> Result<(), RpcError> {
+		if let Buffered::Response(r) = std::mem::replace(&mut self.buffered, Buffered::None) {
+			self.queue.0.start_send(r)
+				.map_err(|e| RpcError::Other(e.into()))?;
+		}
+		Ok(())
+	}
+}
+
 impl<TMetadata, THandler> Sink<String> for LocalRpc<THandler, TMetadata>
 where
 	TMetadata: Metadata + Unpin,
@@ -62,23 +96,21 @@ where
 {
     type Error = RpcError;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+		futures::ready!(self.poll_buffered(cx))?;
 		futures::ready!(self.queue.0.poll_ready(cx))
 			.map_err(|e| RpcError::Other(e.into()))
 			.into()
 	}
 
     fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
-		if let Some(res) = self.handler.handle_request_sync(&item, self.meta.clone()) {
-			self.queue.0.start_send(res)
-				.map_err(|e| RpcError::Other(e.into()))
-				.into()
-		} else {
-			Ok(())
-		}
+		let future = self.handler.handle_request(&item, self.meta.clone());
+		self.buffered = Buffered::Request(Box::pin(future));
+		Ok(())
 	}
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+		futures::ready!(self.poll_buffered(cx))?;
 		futures::ready!(self.queue.0.poll_flush_unpin(cx))
 			.map_err(|e| RpcError::Other(e.into()))
 			.into()

@@ -6,7 +6,7 @@
 //!
 //! fn main() {
 //! 	let mut io = IoHandler::new();
-//! 	io.add_method("say_hello", |_: Params| {
+//! 	io.add_sync_method("say_hello", |_: Params| {
 //! 		Ok(Value::String("hello".to_string()))
 //! 	});
 //!

@@ -90,7 +90,11 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 pub fn duplex<TSink, TStream>(
 	sink: Pin<Box<TSink>>,
 	stream: Pin<Box<TStream>>,
-) -> (Duplex<TSink, TStream>, RpcChannel) {
+) -> (Duplex<TSink, TStream>, RpcChannel)
+where
+	TSink: Sink<String>,
+	TStream: Stream<Item = String>,
+{
 	let (sender, receiver) = mpsc::unbounded();
 	let client = Duplex::new(sink, stream, receiver);
 	(client, sender.into())

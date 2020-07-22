@@ -22,12 +22,13 @@ where
 /// Connect to a JSON-RPC websocket server.
 ///
 /// Uses an unbuffered channel to queue outgoing rpc messages.
-pub fn connect<T>(url: &url::Url) -> impl Future<Item = T, Error = RpcError>
+pub fn connect<T>(url: &url::Url) -> impl futures::Future<Output = Result<T, RpcError>>
 where
 	T: From<RpcChannel>,
 {
 	let client_builder = ClientBuilder::from_url(url);
-	do_connect(client_builder)
+	let fut = do_connect(client_builder);
+	futures::compat::Compat01As03::new(fut)
 }
 
 fn do_connect<T>(client_builder: ClientBuilder) -> impl Future<Item = T, Error = RpcError>
@@ -48,7 +49,7 @@ where
 				)
 			);
 			let (rpc_client, sender) = super::duplex(sink, stream);
-			let rpc_client = rpc_client.compat().map_err(|error| eprintln!("{:?}", error));
+			let rpc_client = rpc_client.compat().map_err(|error| log::error!("{:?}", error));
 			tokio::spawn(rpc_client);
 			sender.into()
 		})
