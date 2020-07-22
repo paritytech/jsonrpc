@@ -128,7 +128,6 @@ mod tests {
 	use crate::*;
 	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 	use jsonrpc_http_server::*;
-	use std::net::SocketAddr;
 	use super::*;
 
 	fn id<T>(t: T) -> T {
@@ -137,7 +136,6 @@ mod tests {
 
 	struct TestServer {
 		uri: String,
-		socket_addr: SocketAddr,
 		server: Option<Server>,
 	}
 
@@ -146,25 +144,11 @@ mod tests {
 			let builder = ServerBuilder::new(io()).rest_api(RestApi::Unsecure);
 
 			let server = alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap();
-			let socket_addr = server.address().clone();
-			let uri = format!("http://{}", socket_addr);
+			let uri = format!("http://{}", server.address());
 
 			TestServer {
 				uri,
-				socket_addr,
 				server: Some(server),
-			}
-		}
-
-		fn start(&mut self) {
-			if self.server.is_none() {
-				let server = ServerBuilder::new(io())
-					.rest_api(RestApi::Unsecure)
-					.start_http(&self.socket_addr)
-					.unwrap();
-				self.server = Some(server);
-			} else {
-				panic!("Server already running")
 			}
 		}
 
