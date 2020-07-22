@@ -1,6 +1,6 @@
 //! A futures oneshot channel that can be used for rendezvous.
 
-use crate::core::futures::{self, future, channel::oneshot, Future, FutureExt, TryFutureExt};
+use crate::core::futures::{self, channel::oneshot, future, Future, FutureExt, TryFutureExt};
 use std::ops::{Deref, DerefMut};
 
 /// Create a new future-base rendezvous channel.

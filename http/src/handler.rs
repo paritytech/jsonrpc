@@ -6,11 +6,11 @@ use std::{fmt, mem, str};
 use hyper::header::{self, HeaderMap, HeaderValue};
 use hyper::{self, service::Service, Body, Method};
 
-use futures01::{Async, Future, Poll, Stream};
 use crate::jsonrpc::serde_json;
 use crate::jsonrpc::{self as core, middleware, Metadata, Middleware};
 use crate::response::Response;
 use crate::server_utils::cors;
+use futures01::{Async, Future, Poll, Stream};
 
 use crate::{utils, AllowedHosts, CorsDomains, RequestMiddleware, RequestMiddlewareAction, RestApi};
 
@@ -57,7 +57,8 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S> where
+impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -120,7 +121,8 @@ pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Middleware(Box<dyn Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>),
 }
 
-impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S> where
+impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -214,7 +216,8 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	keep_alive: bool,
 }
 
-impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S> where
+impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -325,15 +328,12 @@ impl From<hyper::Error> for BodyError {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> where
+impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
-	fn read_headers(
-		&self,
-		request: hyper::Request<Body>,
-		continue_on_invalid_cors: bool,
-	) -> RpcHandlerState<M> {
+	fn read_headers(&self, request: hyper::Request<Body>, continue_on_invalid_cors: bool) -> RpcHandlerState<M> {
 		if self.cors_allow_origin == cors::AllowCors::Invalid && !continue_on_invalid_cors {
 			return RpcHandlerState::Writing(Response::invalid_allow_origin());
 		}
@@ -392,11 +392,7 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> where
 		}
 	}
 
-	fn process_health(
-		&self,
-		method: String,
-		metadata: M,
-	) -> Result<RpcPollState<M>, hyper::Error> {
+	fn process_health(&self, method: String, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
 		use self::core::types::{Call, Failure, Id, MethodCall, Output, Params, Request, Success, Version};
 		use futures03::{FutureExt, TryFutureExt};
 
@@ -427,15 +423,11 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> where
 					Response::service_unavailable(result)
 				}
 				e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
-			})
+			}),
 		))))
 	}
 
-	fn process_rest(
-		&self,
-		uri: hyper::Uri,
-		metadata: M,
-	) -> Result<RpcPollState<M>, hyper::Error> {
+	fn process_rest(&self, uri: hyper::Uri, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
 		use self::core::types::{Call, Id, MethodCall, Params, Request, Value, Version};
 		use futures03::{FutureExt, TryFutureExt};
 
@@ -466,11 +458,9 @@ impl<M: Metadata, S: Middleware<M>> RpcHandler<M, S> where
 		};
 		let response = response.map(Ok).compat();
 
-		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::new(
-			response.map(|res| {
-				res.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed"))
-			})
-		))))
+		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::new(response.map(
+			|res| res.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed")),
+		)))))
 	}
 
 	fn process_body(

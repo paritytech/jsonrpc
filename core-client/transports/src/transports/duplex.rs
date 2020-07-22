@@ -1,8 +1,11 @@
 //! Duplex transport
 
 use failure::format_err;
-use futures::{Future, Stream, Sink, StreamExt, task::{Context, Poll}};
 use futures::channel::{mpsc, oneshot};
+use futures::{
+	task::{Context, Poll},
+	Future, Sink, Stream, StreamExt,
+};
 use jsonrpc_core::Id;
 use jsonrpc_pubsub::SubscriptionId;
 use log::debug;
@@ -12,7 +15,7 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 
 use super::RequestBuilder;
-use crate::{RpcChannel, RpcResult, RpcError, RpcMessage};
+use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
 
 struct Subscription {
 	/// Subscription id received when subscribing.
@@ -26,11 +29,7 @@ struct Subscription {
 }
 
 impl Subscription {
-	fn new(
-		channel: mpsc::UnboundedSender<RpcResult<Value>>,
-		notification: String,
-		unsubscribe: String
-	) -> Self {
+	fn new(channel: mpsc::UnboundedSender<RpcResult<Value>>, notification: String, unsubscribe: String) -> Self {
 		Subscription {
 			id: None,
 			notification,
@@ -67,11 +66,7 @@ pub struct Duplex<TSink, TStream> {
 
 impl<TSink, TStream> Duplex<TSink, TStream> {
 	/// Creates a new `Duplex`.
-	fn new(
-		sink: Pin<Box<TSink>>,
-		stream: Pin<Box<TStream>>,
-		channel: mpsc::UnboundedReceiver<RpcMessage>
-	) -> Self {
+	fn new(sink: Pin<Box<TSink>>, stream: Pin<Box<TStream>>, channel: mpsc::UnboundedReceiver<RpcMessage>) -> Self {
 		log::debug!("open");
 		Duplex {
 			request_builder: RequestBuilder::new(),
@@ -87,10 +82,7 @@ impl<TSink, TStream> Duplex<TSink, TStream> {
 }
 
 /// Creates a new `Duplex`, along with a channel to communicate
-pub fn duplex<TSink, TStream>(
-	sink: Pin<Box<TSink>>,
-	stream: Pin<Box<TStream>>,
-) -> (Duplex<TSink, TStream>, RpcChannel)
+pub fn duplex<TSink, TStream>(sink: Pin<Box<TSink>>, stream: Pin<Box<TStream>>) -> (Duplex<TSink, TStream>, RpcChannel)
 where
 	TSink: Sink<String>,
 	TStream: Stream<Item = String>,
@@ -107,7 +99,7 @@ where
 {
 	type Output = RpcResult<()>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+	fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
 		// Handle requests from the client.
 		log::debug!("handle requests from client");
 		loop {
@@ -228,17 +220,13 @@ where
 								}
 							} else {
 								let err = RpcError::Other(format_err!(
-										"Subscription {:?} ({:?}) rejected: {:?}",
-										id,
-										method,
-										result,
+									"Subscription {:?} ({:?}) rejected: {:?}",
+									id,
+									method,
+									result,
 								));
 
-								if subscription
-									.channel
-										.unbounded_send(result)
-										.is_err()
-								{
+								if subscription.channel.unbounded_send(result).is_err() {
 									log::warn!("{}, but the reply channel has closed.", err);
 								}
 							}
@@ -260,9 +248,7 @@ where
 					};
 
 					if let Some(subscription) = self.subscriptions.get_mut(&sid_and_method) {
-						let res = subscription
-							.channel
-							.unbounded_send(result);
+						let res = subscription.channel.unbounded_send(result);
 						if res.is_err() {
 							let subscription = self
 								.subscriptions
@@ -292,15 +278,17 @@ where
 		loop {
 			let err = || Err(RpcError::Other(failure::format_err!("closing")));
 			match self.sink.as_mut().poll_ready(cx) {
-				Poll::Ready(Ok(())) => {},
+				Poll::Ready(Ok(())) => {}
 				Poll::Ready(Err(_)) => return err().into(),
 				_ => break,
 			}
 			match self.outgoing.pop_front() {
-				Some(request) => if let Err(_) = self.sink.as_mut().start_send(request) {
-					// the channel is disconnected.
-					return err().into();
-				},
+				Some(request) => {
+					if let Err(_) = self.sink.as_mut().start_send(request) {
+						// the channel is disconnected.
+						return err().into();
+					}
+				}
 				None => break,
 			}
 		}

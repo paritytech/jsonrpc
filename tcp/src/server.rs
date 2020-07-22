@@ -24,7 +24,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	outgoing_separator: codecs::Separator,
 }
 
-impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> where
+impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -37,7 +38,8 @@ impl<M: Metadata + Default, S: Middleware<M> + 'static> ServerBuilder<M, S> wher
 	}
 }
 
-impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S> where
+impl<M: Metadata, S: Middleware<M> + 'static> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {

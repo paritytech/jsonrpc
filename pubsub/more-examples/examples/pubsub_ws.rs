@@ -67,10 +67,13 @@ fn main() {
 				}
 			});
 		}),
-		("remove_hello", |_id: SubscriptionId, _meta| -> BoxFuture<Result<Value>> {
-			println!("Closing subscription");
-			Box::pin(futures::future::ready(Ok(Value::Bool(true))))
-		}),
+		(
+			"remove_hello",
+			|_id: SubscriptionId, _meta| -> BoxFuture<Result<Value>> {
+				println!("Closing subscription");
+				Box::pin(futures::future::ready(Ok(Value::Bool(true))))
+			},
+		),
 	);
 
 	let server =

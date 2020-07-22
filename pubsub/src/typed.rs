@@ -7,8 +7,8 @@ use crate::subscription;
 use crate::types::{SinkResult, SubscriptionId, TransportError};
 use serde;
 
-use crate::core::futures::{self, channel};
 use crate::core::futures::task::{Context, Poll};
+use crate::core::futures::{self, channel};
 use crate::core::{self, Error, Params, Value};
 
 /// New PUB-SUB subscriber.
@@ -118,20 +118,20 @@ impl<T: serde::Serialize, E: serde::Serialize> Sink<T, E> {
 impl<T: serde::Serialize + Unpin, E: serde::Serialize + Unpin> futures::sink::Sink<Result<T, E>> for Sink<T, E> {
 	type Error = TransportError;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+	fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.sink).poll_ready(cx)
 	}
 
-    fn start_send(mut self: Pin<&mut Self>, item: Result<T, E>) -> Result<(), Self::Error> {
+	fn start_send(mut self: Pin<&mut Self>, item: Result<T, E>) -> Result<(), Self::Error> {
 		let val = self.val_to_params(item);
 		Pin::new(&mut self.sink).start_send(val)
 	}
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.sink).poll_flush(cx)
 	}
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.sink).poll_close(cx)
 	}
 }

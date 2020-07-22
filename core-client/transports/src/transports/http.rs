@@ -2,11 +2,11 @@
 //!
 //! HTTPS support is enabled with the `tls` feature.
 
-use crate::{RpcChannel, RpcError, RpcResult, RpcMessage};
-use failure::format_err;
-use futures::{Future, FutureExt, TryFutureExt, StreamExt, TryStreamExt};
-use hyper::{http, rt, Client, Request, Uri};
 use super::RequestBuilder;
+use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
+use failure::format_err;
+use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use hyper::{http, rt, Client, Request, Uri};
 
 /// Create a HTTP Client
 pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
@@ -17,17 +17,20 @@ where
 	let url = url.to_owned();
 
 	std::thread::spawn(move || {
-		let connect = rt::lazy(move || do_connect(&url).map(|client| {
-			if sender.send(client).is_err() {
-				panic!("The caller did not wait for the server.");
-			}
-			Ok(())
-		}).compat());
+		let connect = rt::lazy(move || {
+			do_connect(&url)
+				.map(|client| {
+					if sender.send(client).is_err() {
+						panic!("The caller did not wait for the server.");
+					}
+					Ok(())
+				})
+				.compat()
+		});
 		rt::run(connect);
 	});
 
-	receiver
-		.map(|res| res.expect("Server closed prematurely.").map(TClient::from))
+	receiver.map(|res| res.expect("Server closed prematurely.").map(TClient::from))
 }
 
 fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
@@ -87,7 +90,10 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, sender)| {
-			use futures01::future::{self, Either::{A, B}};
+			use futures01::future::{
+				self,
+				Either::{A, B},
+			};
 			let future = match result {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
@@ -124,11 +130,11 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 
 #[cfg(test)]
 mod tests {
-	use assert_matches::assert_matches;
+	use super::*;
 	use crate::*;
+	use assert_matches::assert_matches;
 	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 	use jsonrpc_http_server::*;
-	use super::*;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -163,7 +169,7 @@ mod tests {
 	fn io() -> IoHandler {
 		let mut io = IoHandler::default();
 		io.add_sync_method("hello", |params: Params| match params.parse::<(String,)>() {
-		Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
+			Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
 			_ => Ok(Value::String("world".into())),
 		});
 		io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));

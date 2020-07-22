@@ -7,8 +7,8 @@
 
 #![deny(missing_docs)]
 
-pub use jsonrpc_client_transports::*;
 pub use futures;
+pub use jsonrpc_client_transports::*;
 
 #[cfg(feature = "futures01")]
 pub use futures01;

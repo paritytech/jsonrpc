@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use crate::jsonrpc::{Metadata, futures::channel::mpsc};
+use crate::jsonrpc::{futures::channel::mpsc, Metadata};
 
 /// Request context
 pub struct RequestContext {

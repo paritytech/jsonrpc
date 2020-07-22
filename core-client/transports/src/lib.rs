@@ -2,15 +2,19 @@
 
 #![deny(missing_docs)]
 
-use std::pin::Pin;
 use failure::{format_err, Fail};
-use jsonrpc_core::{Error, Params};
 use jsonrpc_core::futures::channel::{mpsc, oneshot};
-use jsonrpc_core::futures::{self, future, Future, Stream, StreamExt, TryFutureExt, task::{Context, Poll}};
-use serde::Serialize;
+use jsonrpc_core::futures::{
+	self, future,
+	task::{Context, Poll},
+	Future, Stream, StreamExt, TryFutureExt,
+};
+use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::Value;
 use std::marker::PhantomData;
+use std::pin::Pin;
 
 pub mod transports;
 
@@ -115,10 +119,7 @@ impl From<SubscribeMessage> for RpcMessage {
 pub struct RpcChannel(mpsc::UnboundedSender<RpcMessage>);
 
 impl RpcChannel {
-	fn send(
-		&self,
-		msg: RpcMessage,
-	) -> Result<(), mpsc::TrySendError<RpcMessage>> {
+	fn send(&self, msg: RpcMessage) -> Result<(), mpsc::TrySendError<RpcMessage>> {
 		self.0.unbounded_send(msg)
 	}
 }
@@ -156,18 +157,17 @@ impl<T> TypedSubscriptionStream<T> {
 impl<T: DeserializeOwned + Unpin + 'static> Stream for TypedSubscriptionStream<T> {
 	type Item = RpcResult<T>;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Self::Item>> {
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
 		let result = futures::ready!(self.stream.poll_next_unpin(cx));
 		match result {
-			Some(Ok(value)) =>
-				Some(serde_json::from_value::<T>(value)
-					.map_err(|error| RpcError::ParseError(self.returns.into(), error.into()))),
+			Some(Ok(value)) => Some(
+				serde_json::from_value::<T>(value)
+					.map_err(|error| RpcError::ParseError(self.returns.into(), error.into())),
+			),
 			None => None,
 			Some(Err(err)) => Some(Err(err.into())),
-		}.into()
+		}
+		.into()
 	}
 }
 
@@ -191,10 +191,12 @@ impl RawClient {
 			sender,
 		};
 		match self.0.send(msg.into()) {
-			Ok(()) => future::Either::Left(async move { match receiver.await {
-				Ok(v) => v,
-				Err(e) => Err(RpcError::Other(e.into())),
-			}}),
+			Ok(()) => future::Either::Left(async move {
+				match receiver.await {
+					Ok(v) => v,
+					Err(e) => Err(RpcError::Other(e.into())),
+				}
+			}),
 			Err(error) => future::Either::Right(future::ready(Err(RpcError::Other(error.into())))),
 		}
 	}
@@ -230,7 +232,8 @@ impl RawClient {
 			sender,
 		};
 
-		self.0.send(msg.into())
+		self.0
+			.send(msg.into())
 			.map(|()| receiver)
 			.map_err(|e| RpcError::Other(e.into()))
 	}
@@ -319,8 +322,7 @@ impl TypedClient {
 			}
 		};
 
-		self
-			.0
+		self.0
 			.subscribe(subscribe, params, topic, unsubscribe)
 			.map(move |stream| TypedSubscriptionStream::new(stream, returns))
 	}
@@ -441,7 +443,8 @@ mod tests {
 		let received = Arc::new(std::sync::Mutex::new(vec![]));
 		let r2 = received.clone();
 		let fut = async move {
-			let mut stream = client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")?;
+			let mut stream =
+				client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")?;
 			let result = stream.next().await;
 			r2.lock().unwrap().push(result.expect("Expected at least one item."));
 			tx.send(()).unwrap();

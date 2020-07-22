@@ -58,7 +58,8 @@ impl Server {
 		executor: UninitializedExecutor,
 		max_connections: usize,
 		max_payload_bytes: usize,
-	) -> Result<Server> where
+	) -> Result<Server>
+	where
 		S::Future: Unpin,
 		S::CallFuture: Unpin,
 	{

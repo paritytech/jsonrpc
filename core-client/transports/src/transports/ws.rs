@@ -38,15 +38,16 @@ where
 	client_builder
 		.async_connect(None)
 		.map(|(client, _)| {
-			use futures::{TryFutureExt, StreamExt};
+			use futures::{StreamExt, TryFutureExt};
 			let (sink, stream) = client.split();
 			let (sink, stream) = WebsocketClient::new(sink, stream).split();
 			let (sink, stream) = (
 				Box::pin(futures::compat::Compat01As03Sink::new(sink)),
-				Box::pin(futures::compat::Compat01As03::new(stream)
-					.take_while(|x| futures::future::ready(x.is_ok()))
-					.map(|x| x.expect("Stream is closed upon first error."))
-				)
+				Box::pin(
+					futures::compat::Compat01As03::new(stream)
+						.take_while(|x| futures::future::ready(x.is_ok()))
+						.map(|x| x.expect("Stream is closed upon first error.")),
+				),
 			);
 			let (rpc_client, sender) = super::duplex(sink, stream);
 			let rpc_client = rpc_client.compat().map_err(|error| log::error!("{:?}", error));

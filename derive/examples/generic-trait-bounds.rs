@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use jsonrpc_core::{IoHandler, IoHandlerExtension, Result, BoxFuture, futures::future};
+use jsonrpc_core::{futures::future, BoxFuture, IoHandler, IoHandlerExtension, Result};
 use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned

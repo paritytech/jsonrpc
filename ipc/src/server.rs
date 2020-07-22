@@ -4,7 +4,7 @@ use crate::jsonrpc::futures::channel::mpsc;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 use crate::select_with_weak::SelectWithWeakExt;
-use futures01::{future, Future, Stream, Sink, sync::oneshot};
+use futures01::{future, sync::oneshot, Future, Sink, Stream};
 use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
 use tokio_service::{self, Service as TokioService};
@@ -30,7 +30,8 @@ impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> where
+impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -44,11 +45,7 @@ impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S> whe
 	fn call(&self, req: Self::Request) -> Self::Future {
 		use futures03::{FutureExt, TryFutureExt};
 		trace!(target: "ipc", "Received request: {}", req);
-		Box::new(
-			self.handler.handle_request(&req, self.meta.clone())
-				.map(Ok)
-				.compat()
-		)
+		Box::new(self.handler.handle_request(&req, self.meta.clone()).map(Ok).compat())
 	}
 }
 
@@ -65,7 +62,8 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	client_buffer_size: usize,
 }
 
-impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> where
+impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -78,7 +76,8 @@ impl<M: Metadata + Default, S: Middleware<M>> ServerBuilder<M, S> where
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> where
+impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -229,9 +228,7 @@ impl<M: Metadata, S: Middleware<M>> ServerBuilder<M, S> where
 					.filter_map(|x| x)
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
-					.select_with_weak(
-						futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, Ok))
-					);
+					.select_with_weak(futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, Ok)));
 
 				let writer = writer.send_all(responses).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
@@ -345,13 +342,13 @@ impl CloseHandle {
 mod tests {
 	use super::*;
 
-	use futures01::{Stream, Future, Sink};
+	use futures01::{Future, Sink, Stream};
 	use jsonrpc_core::Value;
 	use jsonrpc_server_utils::tokio::{self, timer::Delay};
 	use jsonrpc_server_utils::tokio_codec::Decoder;
-	use tokio_uds::UnixStream;
 	use std::thread;
 	use std::time::{self, Duration, Instant};
+	use tokio_uds::UnixStream;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();

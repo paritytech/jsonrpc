@@ -205,7 +205,8 @@ impl<M: core::Metadata, S: core::Middleware<M>> Session<M, S> {
 	}
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> where
+impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -267,9 +268,7 @@ impl<M: core::Metadata, S: core::Middleware<M>> ws::Handler for Session<M, S> wh
 		let poll_liveness = LivenessPoll::create(self.task_slab.clone());
 
 		let active_lock = self.active.clone();
-		let response = self
-			.handler
-			.handle_request(req, metadata);
+		let response = self.handler.handle_request(req, metadata);
 
 		use futures03::{FutureExt, TryFutureExt};
 		let response = response.map(Ok).compat();
@@ -335,7 +334,8 @@ impl<M: core::Metadata, S: core::Middleware<M>> Factory<M, S> {
 	}
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S> where
+impl<M: core::Metadata, S: core::Middleware<M>> ws::Factory for Factory<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {

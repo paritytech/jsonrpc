@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use jsonrpc_core::futures::future;
-use jsonrpc_core::{MetaIoHandler, Metadata, Result, Value, BoxFuture, Params};
+use jsonrpc_core::{BoxFuture, MetaIoHandler, Metadata, Params, Result, Value};
 use jsonrpc_derive::rpc;
 
 #[derive(Clone)]

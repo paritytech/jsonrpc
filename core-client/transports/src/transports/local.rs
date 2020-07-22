@@ -2,8 +2,11 @@
 
 use crate::{RpcChannel, RpcError, RpcResult};
 use futures::channel::mpsc;
-use futures::{Stream, StreamExt, Sink, SinkExt, Future, task::{Context, Poll}};
-use jsonrpc_core::{MetaIoHandler, Metadata, BoxFuture};
+use futures::{
+	task::{Context, Poll},
+	Future, Sink, SinkExt, Stream, StreamExt,
+};
+use jsonrpc_core::{BoxFuture, MetaIoHandler, Metadata};
 use jsonrpc_pubsub::Session;
 use std::ops::Deref;
 use std::pin::Pin;
@@ -22,7 +25,6 @@ enum Buffered {
 	Response(String),
 	None,
 }
-
 
 impl<TMetadata, THandler> LocalRpc<THandler, TMetadata>
 where
@@ -55,10 +57,7 @@ where
 {
 	type Item = String;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context,
-    ) -> Poll<Option<Self::Item>> {
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
 		self.queue.1.poll_next_unpin(cx)
 	}
 }
@@ -82,8 +81,7 @@ where
 
 	fn send_response(&mut self) -> Result<(), RpcError> {
 		if let Buffered::Response(r) = std::mem::replace(&mut self.buffered, Buffered::None) {
-			self.queue.0.start_send(r)
-				.map_err(|e| RpcError::Other(e.into()))?;
+			self.queue.0.start_send(r).map_err(|e| RpcError::Other(e.into()))?;
 		}
 		Ok(())
 	}
@@ -94,29 +92,29 @@ where
 	TMetadata: Metadata + Unpin,
 	THandler: Deref<Target = MetaIoHandler<TMetadata>> + Unpin,
 {
-    type Error = RpcError;
+	type Error = RpcError;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+	fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
 		futures::ready!(self.poll_buffered(cx))?;
 		futures::ready!(self.queue.0.poll_ready(cx))
 			.map_err(|e| RpcError::Other(e.into()))
 			.into()
 	}
 
-    fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
+	fn start_send(mut self: Pin<&mut Self>, item: String) -> Result<(), Self::Error> {
 		let future = self.handler.handle_request(&item, self.meta.clone());
 		self.buffered = Buffered::Request(Box::pin(future));
 		Ok(())
 	}
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
 		futures::ready!(self.poll_buffered(cx))?;
 		futures::ready!(self.queue.0.poll_flush_unpin(cx))
 			.map_err(|e| RpcError::Other(e.into()))
 			.into()
 	}
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
 		futures::ready!(self.queue.0.poll_close_unpin(cx))
 			.map_err(|e| RpcError::Other(e.into()))
 			.into()
@@ -140,9 +138,7 @@ where
 }
 
 /// Connects to a `Deref<Target = MetaIoHandler<Metadata + Default>`.
-pub fn connect<TClient, THandler, TMetadata>(
-	handler: THandler,
-) -> (TClient, impl Future<Output = RpcResult<()>>)
+pub fn connect<TClient, THandler, TMetadata>(handler: THandler) -> (TClient, impl Future<Output = RpcResult<()>>)
 where
 	TClient: From<RpcChannel>,
 	THandler: Deref<Target = MetaIoHandler<TMetadata>> + Unpin,
@@ -155,9 +151,7 @@ where
 pub type LocalMeta = Arc<Session>;
 
 /// Connects with pubsub.
-pub fn connect_with_pubsub<TClient, THandler>(
-	handler: THandler,
-) -> (TClient, impl Future<Output = RpcResult<()>>)
+pub fn connect_with_pubsub<TClient, THandler>(handler: THandler) -> (TClient, impl Future<Output = RpcResult<()>>)
 where
 	TClient: From<RpcChannel>,
 	THandler: Deref<Target = MetaIoHandler<LocalMeta>> + Unpin,
@@ -165,10 +159,7 @@ where
 	let (tx, rx) = mpsc::unbounded();
 	let meta = Arc::new(Session::new(tx));
 	let (sink, stream) = LocalRpc::with_metadata(handler, meta).split();
-	let stream = futures::stream::select(
-		stream,
-		rx
-	);
+	let stream = futures::stream::select(stream, rx);
 	let (rpc_client, sender) = crate::transports::duplex(Box::pin(sink), Box::pin(stream));
 	let client = TClient::from(sender);
 	(client, rpc_client)

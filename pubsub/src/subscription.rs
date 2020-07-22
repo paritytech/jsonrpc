@@ -3,11 +3,15 @@
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use crate::core::futures::channel::mpsc;
-use crate::core::futures::{self, future, Future, Sink as FuturesSink, task::{Poll, Context}, TryFutureExt};
+use crate::core::futures::{
+	self, future,
+	task::{Context, Poll},
+	Future, Sink as FuturesSink, TryFutureExt,
+};
 use crate::core::{self, BoxFuture};
 
 use crate::handler::{SubscribeRpcMethod, UnsubscribeRpcMethod};
@@ -123,7 +127,7 @@ impl Sink {
 impl FuturesSink<core::Params> for Sink {
 	type Error = TransportError;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+	fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.transport).poll_ready(cx)
 	}
 
@@ -132,11 +136,11 @@ impl FuturesSink<core::Params> for Sink {
 		Pin::new(&mut self.transport).start_send(val)
 	}
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.transport).poll_flush(cx)
 	}
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		Pin::new(&mut self.transport).poll_close(cx)
 	}
 }
@@ -201,12 +205,10 @@ impl Subscriber {
 			transport,
 			sender,
 		} = self;
-		sender
-			.send_and_wait(Ok(id))
-			.map_ok(|_| Sink {
-				notification,
-				transport,
-			})
+		sender.send_and_wait(Ok(id)).map_ok(|_| Sink {
+			notification,
+			transport,
+		})
 	}
 
 	/// Rejects this subscription request with given error.
@@ -431,10 +433,7 @@ mod tests {
 
 		let val = rx.try_next().unwrap();
 		// then
-		assert_eq!(
-			val,
-			Some(r#"{"jsonrpc":"2.0","method":"test","params":[10]}"#.into())
-		);
+		assert_eq!(val, Some(r#"{"jsonrpc":"2.0","method":"test","params":[10]}"#.into()));
 	}
 
 	#[test]

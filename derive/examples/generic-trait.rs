@@ -1,6 +1,6 @@
 use jsonrpc_core;
 
-use jsonrpc_core::{IoHandler, Result, BoxFuture};
+use jsonrpc_core::{BoxFuture, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
 #[rpc]

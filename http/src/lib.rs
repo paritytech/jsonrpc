@@ -42,10 +42,10 @@ use std::thread;
 
 use parking_lot::Mutex;
 
-use futures01::sync::oneshot;
-use futures01::{future, Future, Stream};
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
+use futures01::sync::oneshot;
+use futures01::{future, Future, Stream};
 use hyper::{server, Body};
 use jsonrpc_core as jsonrpc;
 
@@ -247,7 +247,8 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	max_request_body_size: usize,
 }
 
-impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> where
+impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -264,7 +265,8 @@ impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M,
 	}
 }
 
-impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S> where
+impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {

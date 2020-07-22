@@ -24,7 +24,7 @@ extern crate log;
 
 pub use jsonrpc_core;
 
-use jsonrpc_core::{MetaIoHandler, Middleware, Metadata};
+use jsonrpc_core::{MetaIoHandler, Metadata, Middleware};
 use std::sync::Arc;
 use tokio::prelude::{Future, Stream};
 use tokio_codec::{FramedRead, FramedWrite, LinesCodec};
@@ -34,7 +34,8 @@ pub struct ServerBuilder<M: Metadata = (), T: Middleware<M> = jsonrpc_core::Noop
 	handler: Arc<MetaIoHandler<M, T>>,
 }
 
-impl<M: Metadata, T: Middleware<M>> ServerBuilder<M, T> where
+impl<M: Metadata, T: Middleware<M>> ServerBuilder<M, T>
+where
 	M: Default,
 	T::Future: Unpin,
 	T::CallFuture: Unpin,
@@ -70,14 +71,12 @@ impl<M: Metadata, T: Middleware<M>> ServerBuilder<M, T> where
 	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl Future<Item = String, Error = ()> + Send {
 		use jsonrpc_core::futures::{FutureExt, TryFutureExt};
 		let f = io.handle_request(&input, Default::default());
-		f.map(Ok)
-			.compat()
-			.map(move |result| match result {
-				Some(res) => res,
-				None => {
-					info!("JSON RPC request produced no response: {:?}", input);
-					String::from("")
-				}
-			})
+		f.map(Ok).compat().map(move |result| match result {
+			Some(res) => res,
+			None => {
+				info!("JSON RPC request produced no response: {:?}", input);
+				String::from("")
+			}
+		})
 	}
 }

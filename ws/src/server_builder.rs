@@ -26,7 +26,8 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	max_payload_bytes: usize,
 }
 
-impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> where
+impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
@@ -39,7 +40,8 @@ impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S> wh
 	}
 }
 
-impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S> where
+impl<M: core::Metadata, S: core::Middleware<M>> ServerBuilder<M, S>
+where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {

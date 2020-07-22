@@ -98,8 +98,8 @@ mod tests {
 	use std::sync::Arc;
 
 	use crate::core;
-	use crate::core::futures::future;
 	use crate::core::futures::channel::mpsc;
+	use crate::core::futures::future;
 	use crate::subscription::{Session, Subscriber};
 	use crate::types::{PubSubMetadata, SubscriptionId};
 

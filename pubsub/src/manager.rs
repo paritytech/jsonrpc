@@ -22,7 +22,7 @@ use std::sync::{
 };
 
 use crate::core::futures::channel::oneshot;
-use crate::core::futures::{self, Future, FutureExt, TryFutureExt, task};
+use crate::core::futures::{self, task, Future, FutureExt, TryFutureExt};
 use crate::{
 	typed::{Sink, Subscriber},
 	SubscriptionId,
@@ -301,9 +301,7 @@ mod tests {
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
 		let stream = stream::iter(vec![Ok(Ok(1))]);
 
-		let id = manager.add(subscriber, move |sink| {
-			stream.forward(sink).map(|_| ())
-		});
+		let id = manager.add(subscriber, move |sink| stream.forward(sink).map(|_| ()));
 
 		assert!(matches!(id, SubscriptionId::String(_)))
 	}
@@ -316,9 +314,7 @@ mod tests {
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
 		let stream = stream::iter(vec![Ok(Ok(1))]);
 
-		let id = manager.add(subscriber, move |sink| {
-			stream.forward(sink).map(|_| ())
-		});
+		let id = manager.add(subscriber, move |sink| stream.forward(sink).map(|_| ()));
 
 		assert!(matches!(id, SubscriptionId::Number(_)))
 	}
@@ -331,9 +327,7 @@ mod tests {
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
 		let stream = stream::iter(vec![Ok(Ok(1))]);
 
-		let id = manager.add(subscriber, move |sink| {
-			stream.forward(sink).map(|_| ())
-		});
+		let id = manager.add(subscriber, move |sink| stream.forward(sink).map(|_| ()));
 
 		assert!(matches!(id, SubscriptionId::String(_)))
 	}

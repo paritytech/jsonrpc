@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
-use jsonrpc_core::{IoHandler, Result};
 use jsonrpc_core::futures::{self, FutureExt, TryFutureExt};
+use jsonrpc_core::{IoHandler, Result};
 use jsonrpc_core_client::transports::local;
 use jsonrpc_derive::rpc;
 
@@ -85,9 +85,7 @@ mod named_params {
 				assert_matches!(res, Ok(Ok(x)) if x == expected);
 			});
 		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
-		exec.spawn_ok(async move {
-			futures::join!(fut, rpc_client).1.unwrap()
-		});
+		exec.spawn_ok(async move { futures::join!(fut, rpc_client).1.unwrap() });
 	}
 }
 
@@ -125,8 +123,6 @@ mod raw_params {
 				assert_matches!(res, Ok(Ok(x)) if x == expected);
 			});
 		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
-		exec.spawn_ok(async move {
-			futures::join!(fut, rpc_client).1.unwrap()
-		});
+		exec.spawn_ok(async move { futures::join!(fut, rpc_client).1.unwrap() });
 	}
 }

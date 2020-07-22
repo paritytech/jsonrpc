@@ -296,7 +296,7 @@ fn try_infer_returns(output: &syn::ReturnType) -> Option<syn::Type> {
 					check_segment(&segments[0]).ok().flatten()
 				}
 			}
-		},
+		}
 		_ => None,
 	}
 }

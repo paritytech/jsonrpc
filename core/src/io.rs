@@ -9,7 +9,9 @@ use std::sync::Arc;
 use futures::{self, future, Future, FutureExt};
 use serde_json;
 
-use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcMethodSync, RpcMethodSimple, RpcNotification, RpcNotificationSimple};
+use crate::calls::{
+	Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcNotification, RpcNotificationSimple,
+};
 use crate::middleware::{self, Middleware};
 use crate::types::{Call, Output, Request, Response};
 use crate::types::{Error, ErrorCode, Version};
@@ -27,10 +29,7 @@ pub type FutureResult<F, G> = future::Map<
 >;
 
 /// A type representing a result of a single method call.
-pub type FutureRpcOutput<F> = future::Either<
-	F,
-	future::Either<FutureOutput, future::Ready<Option<Output>>>
->;
+pub type FutureRpcOutput<F> = future::Either<F, future::Either<FutureOutput, future::Ready<Option<Output>>>>;
 
 /// A type representing an optional `Response` for RPC `Request`.
 pub type FutureRpcResult<F, G> = future::Either<
@@ -246,16 +245,18 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 		self.middleware
 			.on_request(request, meta, |request, meta| match request {
-				Request::Single(call) => Left(self
-					.handle_call(call, meta)
-					.map(output_as_response as fn(Option<Output>) -> Option<Response>)),
+				Request::Single(call) => Left(
+					self.handle_call(call, meta)
+						.map(output_as_response as fn(Option<Output>) -> Option<Response>),
+				),
 				Request::Batch(calls) => {
 					let futures: Vec<_> = calls
 						.into_iter()
 						.map(move |call| self.handle_call(call, meta.clone()))
 						.collect();
-					Right(future::join_all(futures)
-						.map(outputs_as_batch as fn(Vec<Option<Output>>) -> Option<Response>))
+					Right(
+						future::join_all(futures).map(outputs_as_batch as fn(Vec<Option<Output>>) -> Option<Response>),
+					)
 				}
 			})
 	}
@@ -288,13 +289,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				match result {
 					Ok(result) => Left(Box::pin(
-						result.then(move |result| future::ready(
-							Some(Output::from(result, id, jsonrpc))
-						)),
+						result.then(move |result| future::ready(Some(Output::from(result, id, jsonrpc)))),
 					) as _),
-					Err(err) => Right(future::ready(
-						Some(Output::from(Err(err), id, jsonrpc))
-					)),
+					Err(err) => Right(future::ready(Some(Output::from(Err(err), id, jsonrpc)))),
 				}
 			}
 			Call::Notification(notification) => {
@@ -318,12 +315,10 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				Right(future::ready(None))
 			}
-			Call::Invalid { id } => Right(future::ready(
-				Some(Output::invalid_request(
-					id,
-					self.compatibility.default_version(),
-				))
-			)),
+			Call::Invalid { id } => Right(future::ready(Some(Output::invalid_request(
+				id,
+				self.compatibility.default_version(),
+			)))),
 		})
 	}
 
