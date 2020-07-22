@@ -7,13 +7,13 @@ homepage = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-ws-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.2.0"
+version = "15.0.0"
 
 [dependencies]
 futures01 = { version = "0.1", package = "futures" }
 futures03 = { version = "0.3", package = "futures", features = [ "compat" ] }
-jsonrpc-core = { version = "14.2", path = "../core" }
-jsonrpc-server-utils = { version = "14.2", path = "../server-utils" }
+jsonrpc-core = { version = "15.0", path = "../core" }
+jsonrpc-server-utils = { version = "15.0", path = "../server-utils" }
 log = "0.4"
 parking_lot = "0.10.0"
 slab = "0.4"
