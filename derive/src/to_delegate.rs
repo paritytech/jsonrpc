@@ -7,7 +7,7 @@ use syn::{
 	parse_quote,
 	punctuated::Punctuated,
 	visit::{self, Visit},
-	Result, Token,
+	Result, Token, WherePredicate,
 };
 
 pub enum MethodRegistration {
@@ -458,6 +458,8 @@ pub fn generate_where_clause_serialization_predicates(
 	let mut visitor = FindTyParams::default();
 	visitor.visit_item_trait(item_trait);
 
+	let additional_where_clause = item_trait.generics.where_clause.clone();
+
 	item_trait
 		.generics
 		.type_params()
@@ -483,6 +485,20 @@ pub fn generate_where_clause_serialization_predicates(
 					bounds.push(parse_quote!(_jsonrpc_core::serde::de::DeserializeOwned))
 				}
 			}
+
+			// add the trait bounds specified by the user in where clause.
+			if let Some(ref where_clause) = additional_where_clause {
+				for predicate in where_clause.predicates.iter() {
+					if let WherePredicate::Type(where_ty) = predicate {
+						if let syn::Type::Path(ref predicate) = where_ty.bounded_ty {
+							if *predicate == ty_path {
+								bounds.extend(where_ty.bounds.clone().into_iter());
+							}
+						}
+					}
+				}
+			}
+
 			syn::WherePredicate::Type(syn::PredicateType {
 				lifetimes: None,
 				bounded_ty: syn::Type::Path(ty_path),
