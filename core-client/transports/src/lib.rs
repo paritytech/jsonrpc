@@ -192,11 +192,9 @@ impl RawClient {
 		};
 		let result = self.0.send(msg.into());
 		async move {
-			let () = result
-				.map_err(|e| RpcError::Other(e.into()))?;
+			let () = result.map_err(|e| RpcError::Other(e.into()))?;
 
-			receiver.await
-				.map_err(|e| RpcError::Other(e.into()))?
+			receiver.await.map_err(|e| RpcError::Other(e.into()))?
 		}
 	}
 
@@ -270,7 +268,7 @@ impl TypedClient {
 			Value::Object(map) => Ok(Params::Map(map)),
 			_ => Err(RpcError::Other(format_err!(
 				"RPC params should serialize to a JSON array, JSON object or null"
-			)))
+			))),
 		};
 		let result = params.map(|params| self.0.call_method(method, params));
 
@@ -279,8 +277,7 @@ impl TypedClient {
 
 			log::debug!("response: {:?}", value);
 
-			serde_json::from_value::<R>(value)
-				.map_err(|error| RpcError::ParseError(returns, error.into()))
+			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns, error.into()))
 		}
 	}
 
