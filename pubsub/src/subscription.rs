@@ -297,7 +297,7 @@ where
 					futures::future::ready(match result {
 						Ok(id) => {
 							session.add_subscription(&notification, &id, move |id| {
-								// TODO [ToDr] We currently run unsubscribe tasks on a shared thread pool.
+								// TODO [#570] [ToDr] We currently run unsubscribe tasks on a shared thread pool.
 								// In the future we should use some kind of `::spawn` method
 								// that spawns a task on an existing executor or pass the spawner handle here.
 								let f = unsub.call(id, None);
