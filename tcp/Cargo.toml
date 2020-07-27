@@ -10,7 +10,8 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "15.0.0"
 
 [dependencies]
-futures = "0.1"
+futures01 = { version = "0.1", package = "futures" }
+# TODO remove when we no longer need compat (use jsonrpc-core re-export instead)
 futures03 = { version = "0.3", features = ["compat"], package = "futures" }
 jsonrpc-core = { version = "15.0", path = "../core" }
 jsonrpc-server-utils = { version = "15.0", path = "../server-utils" }

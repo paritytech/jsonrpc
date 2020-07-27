@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::jsonrpc::futures::FutureExt;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use futures::Future;
+use futures01::Future;
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,

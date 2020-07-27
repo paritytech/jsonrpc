@@ -3,7 +3,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use futures::{future, Future};
+use futures01::{future, Future};
 use jsonrpc_core::{MetaIoHandler, Metadata, Value};
 
 use crate::server_utils::tokio::{self, io, net::TcpStream, timer::Delay};
@@ -71,7 +71,7 @@ fn disconnect() {
 }
 
 fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
-	let (ret_tx, ret_rx) = futures::sync::oneshot::channel();
+	let (ret_tx, ret_rx) = futures01::sync::oneshot::channel();
 
 	let stream = TcpStream::connect(addr)
 		.and_then(move |stream| io::write_all(stream, data))

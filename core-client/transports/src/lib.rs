@@ -5,9 +5,9 @@
 use failure::{format_err, Fail};
 use jsonrpc_core::futures::channel::{mpsc, oneshot};
 use jsonrpc_core::futures::{
-	self, future,
+	self,
 	task::{Context, Poll},
-	Future, Stream, StreamExt, TryFutureExt,
+	Stream, StreamExt,
 };
 use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
@@ -183,22 +183,18 @@ impl From<RpcChannel> for RawClient {
 
 impl RawClient {
 	/// Call RPC method with raw JSON.
-	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Output = RpcResult<Value>> {
+	pub async fn call_method(&self, method: &str, params: Params) -> RpcResult<Value> {
 		let (sender, receiver) = oneshot::channel();
 		let msg = CallMessage {
 			method: method.into(),
 			params,
 			sender,
 		};
-		match self.0.send(msg.into()) {
-			Ok(()) => future::Either::Left(async move {
-				match receiver.await {
-					Ok(v) => v,
-					Err(e) => Err(RpcError::Other(e.into())),
-				}
-			}),
-			Err(error) => future::Either::Right(future::ready(Err(RpcError::Other(error.into())))),
-		}
+		let () = self.0.send(msg.into())
+			.map_err(|e| RpcError::Other(e.into()))?;
+
+		receiver.await
+			.map_err(|e| RpcError::Other(e.into()))?
 	}
 
 	/// Send RPC notification with raw JSON.
@@ -256,12 +252,12 @@ impl TypedClient {
 	}
 
 	/// Call RPC with serialization of request and deserialization of response.
-	pub fn call_method<T: Serialize, R: DeserializeOwned + 'static>(
+	pub async fn call_method<T: Serialize, R: DeserializeOwned>(
 		&self,
 		method: &str,
-		returns: &'static str,
+		returns: &str,
 		args: T,
-	) -> impl Future<Output = RpcResult<R>> {
+	) -> RpcResult<R> {
 		let args =
 			serde_json::to_value(args).expect("Only types with infallible serialisation can be used for JSON-RPC");
 		let params = match args {
@@ -269,18 +265,17 @@ impl TypedClient {
 			Value::Null => Params::None,
 			Value::Object(map) => Params::Map(map),
 			_ => {
-				return future::Either::Left(future::ready(Err(RpcError::Other(format_err!(
+				return Err(RpcError::Other(format_err!(
 					"RPC params should serialize to a JSON array, JSON object or null"
-				)))))
+				)))
 			}
 		};
 
-		future::Either::Right(self.0.call_method(method, params).and_then(move |value: Value| {
-			log::debug!("response: {:?}", value);
-			let result =
-				serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns.into(), error.into()));
-			future::ready(result)
-		}))
+		let value: Value = self.0.call_method(method, params).await?;
+		log::debug!("response: {:?}", value);
+
+		serde_json::from_value::<R>(value)
+			.map_err(|error| RpcError::ParseError(returns.into(), error.into()))
 	}
 
 	/// Call RPC with serialization of request only.

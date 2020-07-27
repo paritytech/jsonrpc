@@ -272,10 +272,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				let jsonrpc = method.jsonrpc;
 				let valid_version = self.compatibility.is_version_valid(jsonrpc);
 
-				let call_method = |method: &Arc<dyn RpcMethod<T>>| {
-					// TODO [ToDr] lazy here?
-					method.call(params, meta)
-				};
+				let call_method = |method: &Arc<dyn RpcMethod<T>>| method.call(params, meta);
 
 				let result = match (valid_version, self.methods.get(&method.method)) {
 					(false, _) => Err(Error::invalid_version()),

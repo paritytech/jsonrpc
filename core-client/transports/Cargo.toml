@@ -59,7 +59,6 @@ jsonrpc-http-server = { version = "15.0", path = "../../http" }
 jsonrpc-ipc-server = { version = "15.0", path = "../../ipc" }
 lazy_static = "1.0"
 env_logger = "0.7"
-tokio = "0.1"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master" }

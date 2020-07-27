@@ -12,7 +12,7 @@ version = "15.0.0"
 
 [dependencies]
 bytes = "0.4"
-futures = "0.1"
+futures01 = { version = "0.1", package = "futures" }
 globset = "0.4"
 jsonrpc-core = { version = "15.0", path = "../core" }
 lazy_static = "1.1.0"

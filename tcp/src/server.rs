@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use tokio_service::Service as TokioService;
 
-use futures::sync::oneshot;
-use futures::{future, Future, Sink, Stream};
+use futures01::sync::oneshot;
+use futures01::{future, Future, Sink, Stream};
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio, tokio_codec::Framed, SuspendableStream};

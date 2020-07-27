@@ -83,7 +83,6 @@ impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
 	}
 }
 
-// TODO [ToDr] Check all the bounds
 impl<F: Send + Sync + 'static, X: Send + 'static> RpcMethodSimple for F
 where
 	F: Fn(Params) -> X,

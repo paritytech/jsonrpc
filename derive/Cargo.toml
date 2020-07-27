@@ -26,5 +26,4 @@ jsonrpc-pubsub = { version = "15.0", path = "../pubsub" }
 jsonrpc-tcp-server = { version = "15.0", path = "../tcp" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = "0.2"
 trybuild = "1.0"

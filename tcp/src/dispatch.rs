@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::jsonrpc::futures::{self as futures03, channel::mpsc, StreamExt};
-use futures::{Async, Poll, Stream};
+use futures01::{Async, Poll, Stream};
 
 use parking_lot::Mutex;
 
