@@ -7,7 +7,7 @@ use syn::{
 	parse_quote,
 	punctuated::Punctuated,
 	visit::{self, Visit},
-	Result, Token, WherePredicate,
+	Result, Token,
 };
 
 pub enum MethodRegistration {
@@ -489,7 +489,7 @@ pub fn generate_where_clause_serialization_predicates(
 			// add the trait bounds specified by the user in where clause.
 			if let Some(ref where_clause) = additional_where_clause {
 				for predicate in where_clause.predicates.iter() {
-					if let WherePredicate::Type(where_ty) = predicate {
+					if let syn::WherePredicate::Type(where_ty) = predicate {
 						if let syn::Type::Path(ref predicate) = where_ty.bounded_ty {
 							if *predicate == ty_path {
 								bounds.extend(where_ty.bounds.clone().into_iter());
