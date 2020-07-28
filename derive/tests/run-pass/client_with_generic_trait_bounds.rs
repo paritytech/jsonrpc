@@ -1,5 +1,5 @@
-use jsonrpc_core::futures::future::{self, FutureResult};
-use jsonrpc_core::{Error, IoHandler, Result};
+use jsonrpc_core::futures::future;
+use jsonrpc_core::{IoHandler, Result, BoxFuture};
 use jsonrpc_derive::rpc;
 use std::collections::BTreeMap;
 
@@ -15,7 +15,7 @@ where
 
 	/// Performs asynchronous operation
 	#[rpc(name = "beFancy")]
-	fn call(&self, a: One) -> FutureResult<(One, Two), Error>;
+	fn call(&self, a: One) -> BoxFuture<Result<(One, Two)>>;
 }
 
 struct RpcImpl;
@@ -26,8 +26,8 @@ impl Rpc<u64, String> for RpcImpl {
 		Ok(Default::default())
 	}
 
-	fn call(&self, num: u64) -> FutureResult<(u64, String), Error> {
-		crate::future::finished((num + 999, "hello".into()))
+	fn call(&self, num: u64) -> BoxFuture<Result<(u64, String)>> {
+		Box::pin(future::ready(Ok((num + 999, "hello".into()))))
 	}
 }
 
