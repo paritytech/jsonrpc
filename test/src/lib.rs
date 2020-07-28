@@ -30,7 +30,7 @@
 //!   // You can also test RPC created without macros:
 //!   let rpc = {
 //!     let mut io = IoHandler::new();
-//!     io.add_method("rpc_test_method", |_| {
+//!     io.add_sync_method("rpc_test_method", |_| {
 //!         Err(Error::internal_error())
 //!     });
 //!     test::Rpc::from(io)
@@ -147,7 +147,7 @@ mod tests {
 		// given
 		let rpc = {
 			let mut io = rpc::IoHandler::new();
-			io.add_method("test_method", |_| Ok(rpc::Value::Array(vec![5.into(), 10.into()])));
+			io.add_sync_method("test_method", |_| Ok(rpc::Value::Array(vec![5.into(), 10.into()])));
 			Rpc::from(io)
 		};
 
@@ -160,7 +160,7 @@ mod tests {
 		// given
 		let rpc = {
 			let mut io = rpc::IoHandler::new();
-			io.add_method("test_method", |_| Ok(rpc::Value::Array(vec![5.into(), 10.into()])));
+			io.add_sync_method("test_method", |_| Ok(rpc::Value::Array(vec![5.into(), 10.into()])));
 			Rpc::from(io)
 		};
 

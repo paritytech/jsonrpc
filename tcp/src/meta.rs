@@ -1,14 +1,13 @@
 use std::net::SocketAddr;
 
-use crate::jsonrpc::futures::sync::mpsc;
-use crate::jsonrpc::Metadata;
+use crate::jsonrpc::{futures::channel::mpsc, Metadata};
 
 /// Request context
 pub struct RequestContext {
 	/// Peer Address
 	pub peer_addr: SocketAddr,
 	/// Peer Sender channel
-	pub sender: mpsc::Sender<String>,
+	pub sender: mpsc::UnboundedSender<String>,
 }
 
 /// Metadata extractor (per session)

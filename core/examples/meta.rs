@@ -1,4 +1,3 @@
-use jsonrpc_core::futures::Future;
 use jsonrpc_core::*;
 
 #[derive(Clone, Default)]
@@ -8,7 +7,7 @@ impl Metadata for Meta {}
 pub fn main() {
 	let mut io = MetaIoHandler::default();
 
-	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| {
+	io.add_method_with_meta("say_hello", |_params: Params, meta: Meta| async move {
 		Ok(Value::String(format!("Hello World: {}", meta.0)))
 	});
 
@@ -17,7 +16,7 @@ pub fn main() {
 
 	let headers = 5;
 	assert_eq!(
-		io.handle_request(request, Meta(headers)).wait().unwrap(),
+		io.handle_request_sync(request, Meta(headers)),
 		Some(response.to_owned())
 	);
 }

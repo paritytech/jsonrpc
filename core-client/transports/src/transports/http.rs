@@ -3,33 +3,49 @@
 //! HTTPS support is enabled with the `tls` feature.
 
 use super::RequestBuilder;
-use crate::{RpcChannel, RpcError, RpcMessage};
+use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
 use failure::format_err;
-use futures::{
-	future::{
-		self,
-		Either::{A, B},
-	},
-	sync::mpsc,
-	Future, Stream,
-};
+use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hyper::{http, rt, Client, Request, Uri};
 
 /// Create a HTTP Client
-pub fn connect<TClient>(url: &str) -> impl Future<Item = TClient, Error = RpcError>
+pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
 where
 	TClient: From<RpcChannel>,
 {
+	let (sender, receiver) = futures::channel::oneshot::channel();
+	let url = url.to_owned();
+
+	std::thread::spawn(move || {
+		let connect = rt::lazy(move || {
+			do_connect(&url)
+				.map(|client| {
+					if sender.send(client).is_err() {
+						panic!("The caller did not wait for the server.");
+					}
+					Ok(())
+				})
+				.compat()
+		});
+		rt::run(connect);
+	});
+
+	receiver.map(|res| res.expect("Server closed prematurely.").map(TClient::from))
+}
+
+fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
+	use futures::future::ready;
+
 	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return A(future::err(RpcError::Other(e.into()))),
+		Err(e) => return ready(Err(RpcError::Other(e.into()))),
 	};
 
 	#[cfg(feature = "tls")]
 	let connector = match hyper_tls::HttpsConnector::new(4) {
 		Ok(connector) => connector,
-		Err(e) => return A(future::err(RpcError::Other(e.into()))),
+		Err(e) => return ready(Err(RpcError::Other(e.into()))),
 	};
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
@@ -39,9 +55,12 @@ where
 
 	let mut request_builder = RequestBuilder::new();
 
-	let (sender, receiver) = mpsc::channel(max_parallel);
+	let (sender, receiver) = futures::channel::mpsc::unbounded();
 
+	use futures01::{Future, Stream};
 	let fut = receiver
+		.map(Ok)
+		.compat()
 		.filter_map(move |msg: RpcMessage| {
 			let (request, sender) = match msg {
 				RpcMessage::Call(call) => {
@@ -71,6 +90,10 @@ where
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, sender)| {
+			use futures01::future::{
+				self,
+				Either::{A, B},
+			};
 			let future = match result {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
@@ -101,10 +124,8 @@ where
 			})
 		});
 
-	B(rt::lazy(move || {
-		rt::spawn(fut.map_err(|e| log::error!("RPC Client error: {:?}", e)));
-		Ok(TClient::from(sender.into()))
-	}))
+	rt::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
+	ready(Ok(sender.into()))
 }
 
 #[cfg(test)]
@@ -112,11 +133,8 @@ mod tests {
 	use super::*;
 	use crate::*;
 	use assert_matches::assert_matches;
-	use hyper::rt;
 	use jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
 	use jsonrpc_http_server::*;
-	use std::net::SocketAddr;
-	use std::time::Duration;
 
 	fn id<T>(t: T) -> T {
 		t
@@ -124,7 +142,6 @@ mod tests {
 
 	struct TestServer {
 		uri: String,
-		socket_addr: SocketAddr,
 		server: Option<Server>,
 	}
 
@@ -133,25 +150,11 @@ mod tests {
 			let builder = ServerBuilder::new(io()).rest_api(RestApi::Unsecure);
 
 			let server = alter(builder).start_http(&"127.0.0.1:0".parse().unwrap()).unwrap();
-			let socket_addr = server.address().clone();
-			let uri = format!("http://{}", socket_addr);
+			let uri = format!("http://{}", server.address());
 
 			TestServer {
 				uri,
-				socket_addr,
 				server: Some(server),
-			}
-		}
-
-		fn start(&mut self) {
-			if self.server.is_none() {
-				let server = ServerBuilder::new(io())
-					.rest_api(RestApi::Unsecure)
-					.start_http(&self.socket_addr)
-					.unwrap();
-				self.server = Some(server);
-			} else {
-				panic!("Server already running")
 			}
 		}
 
@@ -165,11 +168,11 @@ mod tests {
 
 	fn io() -> IoHandler {
 		let mut io = IoHandler::default();
-		io.add_method("hello", |params: Params| match params.parse::<(String,)>() {
+		io.add_sync_method("hello", |params: Params| match params.parse::<(String,)>() {
 			Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
 			_ => Ok(Value::String("world".into())),
 		});
-		io.add_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
+		io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
 		io.add_notification("notify", |params: Params| {
 			let (value,) = params.parse::<(u64,)>().expect("expected one u64 as param");
 			assert_eq!(value, 12);
@@ -188,13 +191,13 @@ mod tests {
 	}
 
 	impl TestClient {
-		fn hello(&self, msg: &'static str) -> impl Future<Item = String, Error = RpcError> {
+		fn hello(&self, msg: &'static str) -> impl Future<Output = RpcResult<String>> {
 			self.0.call_method("hello", "String", (msg,))
 		}
-		fn fail(&self) -> impl Future<Item = (), Error = RpcError> {
+		fn fail(&self) -> impl Future<Output = RpcResult<()>> {
 			self.0.call_method("fail", "()", ())
 		}
-		fn notify(&self, value: u64) -> impl Future<Item = (), Error = RpcError> {
+		fn notify(&self, value: u64) -> RpcResult<()> {
 			self.0.notify("notify", (value,))
 		}
 	}
@@ -205,24 +208,18 @@ mod tests {
 
 		// given
 		let server = TestServer::serve(id);
-		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = connect(&server.uri)
-			.and_then(|client: TestClient| {
-				client.hello("http").and_then(move |result| {
-					drop(client);
-					let _ = tx.send(result);
-					Ok(())
-				})
-			})
-			.map_err(|e| log::error!("RPC Client error: {:?}", e));
+		let run = async {
+			let client: TestClient = connect(&server.uri).await?;
+			let result = client.hello("http").await?;
 
-		rt::run(run);
+			// then
+			assert_eq!("hello http", result);
+			Ok(()) as RpcResult<_>
+		};
 
-		// then
-		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap();
-		assert_eq!("hello http", result);
+		futures::executor::block_on(run).unwrap();
 	}
 
 	#[test]
@@ -234,20 +231,15 @@ mod tests {
 		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = connect(&server.uri)
-			.and_then(|client: TestClient| {
-				client.notify(12).and_then(move |result| {
-					drop(client);
-					let _ = tx.send(result);
-					Ok(())
-				})
-			})
-			.map_err(|e| log::error!("RPC Client error: {:?}", e));
+		let run = async move {
+			let client: TestClient = connect(&server.uri).await.unwrap();
+			client.notify(12).unwrap();
+			tx.send(()).unwrap();
+		};
 
-		rt::run(run);
-
-		// then
-		rx.recv_timeout(Duration::from_secs(3)).unwrap();
+		let pool = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		pool.spawn_ok(run);
+		rx.recv().unwrap();
 	}
 
 	#[test]
@@ -258,8 +250,7 @@ mod tests {
 		let invalid_uri = "invalid uri";
 
 		// when
-		let run = connect(invalid_uri); // rx.recv_timeout(Duration::from_secs(3)).unwrap();
-		let res: Result<TestClient, RpcError> = run.wait();
+		let res: RpcResult<TestClient> = futures::executor::block_on(connect(invalid_uri));
 
 		// then
 		assert_matches!(
@@ -275,22 +266,15 @@ mod tests {
 
 		// given
 		let server = TestServer::serve(id);
-		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = connect(&server.uri)
-			.and_then(|client: TestClient| {
-				client.fail().then(move |res| {
-					let _ = tx.send(res);
-					Ok(())
-				})
-			})
-			.map_err(|e| log::error!("RPC Client error: {:?}", e));
-		rt::run(run);
+		let run = async {
+			let client: TestClient = connect(&server.uri).await?;
+			client.fail().await
+		};
+		let res = futures::executor::block_on(run);
 
 		// then
-		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
-
 		if let Err(RpcError::JsonRpcError(err)) = res {
 			assert_eq!(
 				err,
@@ -311,75 +295,24 @@ mod tests {
 		let mut server = TestServer::serve(id);
 		// stop server so that we get a connection refused
 		server.stop();
-		let (tx, rx) = std::sync::mpsc::channel();
 
-		let client = connect(&server.uri);
+		let run = async {
+			let client: TestClient = connect(&server.uri).await?;
+			let res = client.hello("http").await;
 
-		let call = client
-			.and_then(|client: TestClient| {
-				client.hello("http").then(move |res| {
-					let _ = tx.send(res);
-					Ok(())
-				})
-			})
-			.map_err(|e| log::error!("RPC Client error: {:?}", e));
-
-		rt::run(call);
-
-		// then
-		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
-
-		if let Err(RpcError::Other(err)) = res {
-			if let Some(err) = err.downcast_ref::<hyper::Error>() {
-				assert!(err.is_connect(), format!("Expected Connection Error, got {:?}", err))
+			if let Err(RpcError::Other(err)) = res {
+				if let Some(err) = err.downcast_ref::<hyper::Error>() {
+					assert!(err.is_connect(), format!("Expected Connection Error, got {:?}", err))
+				} else {
+					panic!("Expected a hyper::Error")
+				}
 			} else {
-				panic!("Expected a hyper::Error")
+				panic!("Expected JsonRpcError. Received {:?}", res)
 			}
-		} else {
-			panic!("Expected JsonRpcError. Received {:?}", res)
-		}
-	}
 
-	#[test]
-	#[ignore] // todo: [AJ] make it pass
-	fn client_still_works_after_http_connect_error() {
-		// given
-		let mut server = TestServer::serve(id);
+			Ok(()) as RpcResult<_>
+		};
 
-		// stop server so that we get a connection refused
-		server.stop();
-
-		let (tx, rx) = std::sync::mpsc::channel();
-		let tx2 = tx.clone();
-
-		let client = connect(&server.uri);
-
-		let call = client
-			.and_then(move |client: TestClient| {
-				client
-					.hello("http")
-					.then(move |res| {
-						let _ = tx.send(res);
-						Ok(())
-					})
-					.and_then(move |_| {
-						server.start(); // todo: make the server start on the main thread
-						client.hello("http2").then(move |res| {
-							let _ = tx2.send(res);
-							Ok(())
-						})
-					})
-			})
-			.map_err(|e| log::error!("RPC Client error: {:?}", e));
-
-		// when
-		rt::run(call);
-
-		let res = rx.recv_timeout(Duration::from_secs(3)).unwrap();
-		assert!(res.is_err());
-
-		// then
-		let result = rx.recv_timeout(Duration::from_secs(3)).unwrap().unwrap();
-		assert_eq!("hello http", result);
+		futures::executor::block_on(run).unwrap();
 	}
 }

@@ -3,7 +3,7 @@ use jsonrpc_ws_server::ServerBuilder;
 
 fn main() {
 	let mut io = IoHandler::default();
-	io.add_method("say_hello", |_params| {
+	io.add_sync_method("say_hello", |_params| {
 		println!("Processing");
 		Ok(Value::String("hello".to_owned()))
 	});

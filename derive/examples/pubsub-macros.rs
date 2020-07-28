@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::{atomic, Arc, RwLock};
 use std::thread;
 
-use jsonrpc_core::futures::Future;
 use jsonrpc_core::{Error, ErrorCode, Result};
 use jsonrpc_derive::rpc;
 use jsonrpc_pubsub::typed;
@@ -70,7 +69,7 @@ fn main() {
 		{
 			let subscribers = active_subscriptions.read().unwrap();
 			for sink in subscribers.values() {
-				let _ = sink.notify(Ok("Hello World!".into())).wait();
+				let _ = sink.notify(Ok("Hello World!".into()));
 			}
 		}
 		thread::sleep(::std::time::Duration::from_secs(1));

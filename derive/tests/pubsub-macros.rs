@@ -4,7 +4,7 @@ use serde_json;
 #[macro_use]
 extern crate jsonrpc_derive;
 
-use jsonrpc_core::futures::sync::mpsc;
+use jsonrpc_core::futures::channel::mpsc;
 use jsonrpc_pubsub::typed::Subscriber;
 use jsonrpc_pubsub::{PubSubHandler, PubSubMetadata, Session, SubscriptionId};
 use std::sync::Arc;
@@ -75,7 +75,7 @@ struct Metadata;
 impl jsonrpc_core::Metadata for Metadata {}
 impl PubSubMetadata for Metadata {
 	fn session(&self) -> Option<Arc<Session>> {
-		let (tx, _rx) = mpsc::channel(1);
+		let (tx, _rx) = mpsc::unbounded();
 		Some(Arc::new(Session::new(tx)))
 	}
 }

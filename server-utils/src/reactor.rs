@@ -8,7 +8,7 @@
 use std::io;
 use tokio;
 
-use crate::core::futures::{self, Future};
+use futures01::Future;
 
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]
@@ -83,7 +83,7 @@ impl Executor {
 #[derive(Debug)]
 pub struct RpcEventLoop {
 	executor: tokio::runtime::TaskExecutor,
-	close: Option<futures::Complete<()>>,
+	close: Option<futures01::Complete<()>>,
 	handle: Option<tokio::runtime::Shutdown>,
 }
 
@@ -101,7 +101,7 @@ impl RpcEventLoop {
 
 	/// Spawns a new named thread with the `EventLoop`.
 	pub fn with_name(name: Option<String>) -> io::Result<Self> {
-		let (stop, stopped) = futures::oneshot();
+		let (stop, stopped) = futures01::oneshot();
 
 		let mut tb = tokio::runtime::Builder::new();
 		tb.core_threads(1);
@@ -112,7 +112,7 @@ impl RpcEventLoop {
 
 		let mut runtime = tb.build()?;
 		let executor = runtime.executor();
-		let terminate = futures::empty().select(stopped).map(|_| ()).map_err(|_| ());
+		let terminate = futures01::empty().select(stopped).map(|_| ()).map_err(|_| ());
 		runtime.spawn(terminate);
 		let handle = runtime.shutdown_on_idle();
 

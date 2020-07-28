@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-core-client"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.2.0"
+version = "15.0.0"
 
 categories = [
 	"asynchronous",
@@ -19,14 +19,17 @@ categories = [
 ]
 
 [features]
-tls = ["jsonrpc-client-transports/tls"]
-http = ["jsonrpc-client-transports/http"]
-ws = ["jsonrpc-client-transports/ws"]
-ipc = ["jsonrpc-client-transports/ipc"]
+tls = ["jsonrpc-client-transports/tls", "futures01"]
+http = ["jsonrpc-client-transports/http", "futures01"]
+ws = ["jsonrpc-client-transports/ws", "futures01"]
+ipc = ["jsonrpc-client-transports/ipc", "futures01"]
 arbitrary_precision = ["jsonrpc-client-transports/arbitrary_precision"]
 
 [dependencies]
-jsonrpc-client-transports = { version = "14.2", path = "./transports", default-features = false }
+jsonrpc-client-transports = { version = "15.0", path = "./transports", default-features = false }
+# Only for client transports, should be removed when we fully transition to futures=0.3
+futures01 = { version = "0.1", package = "futures", optional = true }
+futures = { version = "0.3", features = [ "compat" ] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

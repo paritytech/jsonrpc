@@ -3,30 +3,42 @@
 
 use crate::transports::duplex::duplex;
 use crate::{RpcChannel, RpcError};
-use futures::prelude::*;
+use futures::compat::{Sink01CompatExt, Stream01CompatExt};
+use futures::StreamExt;
+use futures01::prelude::*;
 use jsonrpc_server_utils::codecs::StreamCodec;
 use parity_tokio_ipc::IpcConnection;
-use std::io;
 use std::path::Path;
 use tokio::codec::Decoder;
+use tokio::runtime::Runtime;
 
 /// Connect to a JSON-RPC IPC server.
 pub fn connect<P: AsRef<Path>, Client: From<RpcChannel>>(
 	path: P,
-	reactor: &tokio::reactor::Handle,
-) -> Result<impl Future<Item = Client, Error = RpcError>, io::Error> {
-	let connection = IpcConnection::connect(path, reactor)?;
-
-	Ok(futures::lazy(move || {
+) -> impl futures::Future<Output = Result<Client, RpcError>> {
+	let rt = Runtime::new().unwrap();
+	#[allow(deprecated)]
+	let reactor = rt.reactor().clone();
+	async move {
+		let connection = IpcConnection::connect(path, &reactor).map_err(|e| RpcError::Other(e.into()))?;
 		let (sink, stream) = StreamCodec::stream_incoming().framed(connection).split();
 		let sink = sink.sink_map_err(|e| RpcError::Other(e.into()));
-		let stream = stream.map_err(|e| RpcError::Other(e.into()));
+		let stream = stream.map_err(|e| log::error!("IPC stream error: {}", e));
 
-		let (client, sender) = duplex(sink, stream);
+		let (client, sender) = duplex(
+			Box::pin(sink.sink_compat()),
+			Box::pin(
+				stream
+					.compat()
+					.take_while(|x| futures::future::ready(x.is_ok()))
+					.map(|x| x.expect("Stream is closed upon first error.")),
+			),
+		);
 
-		tokio::spawn(client.map_err(|e| log::warn!("IPC client error: {:?}", e)));
+		tokio::spawn(futures::compat::Compat::new(client).map_err(|_| unreachable!()));
+
 		Ok(sender.into())
-	}))
+	}
 }
 
 #[cfg(test)]
@@ -37,7 +49,6 @@ mod tests {
 	use jsonrpc_ipc_server::ServerBuilder;
 	use parity_tokio_ipc::dummy_endpoint;
 	use serde_json::map::Map;
-	use tokio::runtime::Runtime;
 
 	#[test]
 	fn should_call_one() {

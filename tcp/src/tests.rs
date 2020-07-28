@@ -3,8 +3,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::jsonrpc::futures::{self, future, Future};
-use crate::jsonrpc::{MetaIoHandler, Metadata, Value};
+use futures01::{future, Future};
+use jsonrpc_core::{MetaIoHandler, Metadata, Value};
 
 use crate::server_utils::tokio::{self, io, net::TcpStream, timer::Delay};
 
@@ -16,7 +16,7 @@ use crate::ServerBuilder;
 
 fn casual_server() -> ServerBuilder {
 	let mut io = MetaIoHandler::<()>::default();
-	io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
+	io.add_sync_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 	ServerBuilder::new(io)
 }
 
@@ -25,7 +25,7 @@ fn doc_test() {
 	crate::logger::init_log();
 
 	let mut io = MetaIoHandler::<()>::default();
-	io.add_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
+	io.add_sync_method("say_hello", |_params| Ok(Value::String("hello".to_string())));
 	let server = ServerBuilder::new(io);
 
 	server
@@ -71,7 +71,7 @@ fn disconnect() {
 }
 
 fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
-	let (ret_tx, ret_rx) = futures::sync::oneshot::channel();
+	let (ret_tx, ret_rx) = futures01::sync::oneshot::channel();
 
 	let stream = TcpStream::connect(addr)
 		.and_then(move |stream| io::write_all(stream, data))
@@ -180,7 +180,7 @@ impl MetaExtractor<SocketMetadata> for PeerMetaExtractor {
 fn meta_server() -> ServerBuilder<SocketMetadata> {
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
 	io.add_method_with_meta("say_hello", |_params, meta: SocketMetadata| {
-		future::ok(Value::String(format!("hello, {}", meta.addr())))
+		jsonrpc_core::futures::future::ready(Ok(Value::String(format!("hello, {}", meta.addr()))))
 	});
 	ServerBuilder::new(io).session_meta_extractor(PeerMetaExtractor)
 }
@@ -223,7 +223,7 @@ fn message() {
 	let addr: SocketAddr = "127.0.0.1:17790".parse().unwrap();
 	let mut io = MetaIoHandler::<SocketMetadata>::default();
 	io.add_method_with_meta("say_hello", |_params, _: SocketMetadata| {
-		future::ok(Value::String("hello".to_owned()))
+		jsonrpc_core::futures::future::ready(Ok(Value::String("hello".to_owned())))
 	});
 	let extractor = PeerListMetaExtractor::default();
 	let peer_list = extractor.peers.clone();

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 use crate::types::{Error, Params, Value};
 use crate::BoxFuture;
-use futures::IntoFuture;
+use futures::Future;
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,
@@ -17,14 +17,13 @@ impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F>
 where
 	M: Metadata,
 	F: Fn(&T, Params) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	I: Future<Output = Result<Value, Error>> + Send + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
 {
-	fn call(&self, params: Params, _meta: M) -> BoxFuture<Value> {
+	fn call(&self, params: Params, _meta: M) -> BoxFuture<crate::Result<Value>> {
 		let closure = &self.closure;
-		Box::new(closure(&self.delegate, params).into_future())
+		Box::pin(closure(&self.delegate, params))
 	}
 }
 
@@ -37,14 +36,13 @@ impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F>
 where
 	M: Metadata,
 	F: Fn(&T, Params, M) -> I,
-	I: IntoFuture<Item = Value, Error = Error>,
+	I: Future<Output = Result<Value, Error>> + Send + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
-	I::Future: Send + 'static,
 {
-	fn call(&self, params: Params, meta: M) -> BoxFuture<Value> {
+	fn call(&self, params: Params, meta: M) -> BoxFuture<crate::Result<Value>> {
 		let closure = &self.closure;
-		Box::new(closure(&self.delegate, params, meta).into_future())
+		Box::pin(closure(&self.delegate, params, meta))
 	}
 }
 
@@ -117,9 +115,8 @@ where
 	pub fn add_method<F, I>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: Future<Output = Result<Value, Error>> + Send + 'static,
 		F: Send + Sync + 'static,
-		I::Future: Send + 'static,
 	{
 		self.methods.insert(
 			name.into(),
@@ -134,9 +131,8 @@ where
 	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params, M) -> I,
-		I: IntoFuture<Item = Value, Error = Error>,
+		I: Future<Output = Result<Value, Error>> + Send + 'static,
 		F: Send + Sync + 'static,
-		I::Future: Send + 'static,
 	{
 		self.methods.insert(
 			name.into(),

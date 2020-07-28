@@ -4,7 +4,7 @@ extern crate jsonrpc_core_client;
 extern crate jsonrpc_derive;
 
 use jsonrpc_core::IoHandler;
-use jsonrpc_core::futures::future::Future;
+use jsonrpc_core::futures::{self, TryFutureExt};
 use jsonrpc_core_client::transports::local;
 
 #[rpc(client)]
@@ -24,9 +24,7 @@ fn main() {
 		let (client, _rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		client
 			.add(5, 6)
-			.map(|res| println!("5 + 6 = {}", res))
+			.map_ok(|res| println!("5 + 6 = {}", res))
 	};
-	fut
-		.wait()
-		.ok();
+	let _ = futures::executor::block_on(fut);
 }

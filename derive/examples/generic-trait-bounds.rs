@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use jsonrpc_core::futures::future::{self, FutureResult};
-use jsonrpc_core::{Error, IoHandler, IoHandlerExtension, Result};
+use jsonrpc_core::{futures::future, BoxFuture, IoHandler, IoHandlerExtension, Result};
 use jsonrpc_derive::rpc;
 
 // One is both parameter and a result so requires both Serialize and DeserializeOwned
@@ -22,7 +21,7 @@ pub trait Rpc<One, Two, Three> {
 
 	/// Performs asynchronous operation
 	#[rpc(name = "beFancy")]
-	fn call(&self, a: One) -> FutureResult<(One, u64), Error>;
+	fn call(&self, a: One) -> BoxFuture<Result<(One, u64)>>;
 }
 
 struct RpcImpl;
@@ -49,8 +48,8 @@ impl Rpc<InAndOut, In, Out> for RpcImpl {
 		Ok(Out {})
 	}
 
-	fn call(&self, num: InAndOut) -> FutureResult<(InAndOut, u64), Error> {
-		crate::future::finished((InAndOut { foo: num.foo + 999 }, num.foo))
+	fn call(&self, num: InAndOut) -> BoxFuture<Result<(InAndOut, u64)>> {
+		Box::pin(future::ready(Ok((InAndOut { foo: num.foo + 999 }, num.foo))))
 	}
 }
 

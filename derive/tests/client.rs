@@ -1,4 +1,5 @@
-use futures::prelude::*;
+use assert_matches::assert_matches;
+use jsonrpc_core::futures::{self, FutureExt, TryFutureExt};
 use jsonrpc_core::{IoHandler, Result};
 use jsonrpc_core_client::transports::local;
 use jsonrpc_derive::rpc;
@@ -35,16 +36,14 @@ mod client_server {
 		let fut = client
 			.clone()
 			.add(3, 4)
-			.and_then(move |res| client.notify(res).map(move |_| res))
-			.join(rpc_client)
-			.map(|(res, ())| {
-				assert_eq!(res, 7);
-			})
-			.map_err(|err| {
-				eprintln!("{:?}", err);
-				assert!(false);
+			.map_ok(move |res| client.notify(res).map(move |_| res))
+			.map(|res| {
+				assert_matches!(res, Ok(Ok(7)));
 			});
-		tokio::run(fut);
+		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		exec.spawn_ok(async move {
+			futures::join!(fut, rpc_client).1.unwrap();
+		});
 	}
 }
 
@@ -64,6 +63,8 @@ mod named_params {
 
 	#[test]
 	fn client_generates_correct_named_params_payload() {
+		use jsonrpc_core::futures::{FutureExt, TryFutureExt};
+
 		let expected = json!({ // key names are derived from function parameter names in the trait
 			"number": 3,
 			"string": String::from("test string"),
@@ -73,22 +74,18 @@ mod named_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_method("call_with_named", |params: Params| Ok(params.into()));
+		handler.add_sync_method("call_with_named", |params: Params| Ok(params.into()));
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.call_with_named(3, String::from("test string"), json!({"key": ["value"]}))
-			.and_then(move |res| client.notify(res.clone()).map(move |_| res))
-			.join(rpc_client)
-			.map(move |(res, ())| {
-				assert_eq!(res, expected);
-			})
-			.map_err(|err| {
-				eprintln!("{:?}", err);
-				assert!(false);
+			.map_ok(move |res| client.notify(res.clone()).map(move |_| res))
+			.map(move |res| {
+				assert_matches!(res, Ok(Ok(x)) if x == expected);
 			});
-		tokio::run(fut);
+		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		exec.spawn_ok(async move { futures::join!(fut, rpc_client).1.unwrap() });
 	}
 }
 
@@ -115,21 +112,17 @@ mod raw_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_method("call_raw", |params: Params| Ok(params.into()));
+		handler.add_sync_method("call_raw", |params: Params| Ok(params.into()));
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.call_raw_single_param(expected.clone())
-			.and_then(move |res| client.notify(res.clone()).map(move |_| res))
-			.join(rpc_client)
-			.map(move |(res, ())| {
-				assert_eq!(res, expected);
-			})
-			.map_err(|err| {
-				eprintln!("{:?}", err);
-				assert!(false);
+			.map_ok(move |res| client.notify(res.clone()).map(move |_| res))
+			.map(move |res| {
+				assert_matches!(res, Ok(Ok(x)) if x == expected);
 			});
-		tokio::run(fut);
+		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		exec.spawn_ok(async move { futures::join!(fut, rpc_client).1.unwrap() });
 	}
 }

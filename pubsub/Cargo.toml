@@ -8,19 +8,19 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "macros"]
 license = "MIT"
 name = "jsonrpc-pubsub"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.2.0"
+version = "15.0.0"
 
 [dependencies]
+futures = { version = "0.3", features = ["thread-pool"] }
+jsonrpc-core = { version = "15.0", path = "../core" }
+lazy_static = "1.4"
 log = "0.4"
-parking_lot = "0.10.0"
-jsonrpc-core = { version = "14.2", path = "../core" }
-serde = "1.0"
+parking_lot = "0.11.0"
 rand = "0.7"
+serde = "1.0"
 
 [dev-dependencies]
-jsonrpc-tcp-server = { version = "14.2", path = "../tcp" }
-futures = { version = "0.3", features = ["compat", "thread-pool"] }
-lazy_static = "1.4"
+jsonrpc-tcp-server = { version = "15.0", path = "../tcp" }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

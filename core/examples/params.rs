@@ -9,7 +9,7 @@ struct HelloParams {
 fn main() {
 	let mut io = IoHandler::new();
 
-	io.add_method("say_hello", |params: Params| {
+	io.add_method("say_hello", |params: Params| async move {
 		let parsed: HelloParams = params.parse().unwrap();
 		Ok(Value::String(format!("hello, {}", parsed.name)))
 	});

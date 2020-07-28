@@ -8,8 +8,6 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
-use jsonrpc_core as core;
-
 pub use tokio;
 pub use tokio_codec;
 

@@ -3,13 +3,18 @@
 #![deny(missing_docs)]
 
 use failure::{format_err, Fail};
-use futures::sync::{mpsc, oneshot};
-use futures::{future, prelude::*};
+use jsonrpc_core::futures::channel::{mpsc, oneshot};
+use jsonrpc_core::futures::{
+	self,
+	task::{Context, Poll},
+	Future, Stream, StreamExt,
+};
 use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 use std::marker::PhantomData;
+use std::pin::Pin;
 
 pub mod transports;
 
@@ -39,6 +44,9 @@ impl From<Error> for RpcError {
 	}
 }
 
+/// A result returned by the client.
+pub type RpcResult<T> = Result<T, RpcError>;
+
 /// An RPC call message.
 struct CallMessage {
 	/// The RPC method name.
@@ -47,7 +55,7 @@ struct CallMessage {
 	params: Params,
 	/// The oneshot channel to send the result of the rpc
 	/// call to.
-	sender: oneshot::Sender<Result<Value, RpcError>>,
+	sender: oneshot::Sender<RpcResult<Value>>,
 }
 
 /// An RPC notification.
@@ -75,7 +83,7 @@ struct SubscribeMessage {
 	/// The subscription to subscribe to.
 	subscription: Subscription,
 	/// The channel to send notifications to.
-	sender: mpsc::Sender<Result<Value, RpcError>>,
+	sender: mpsc::UnboundedSender<RpcResult<Value>>,
 }
 
 /// A message sent to the `RpcClient`.
@@ -108,76 +116,25 @@ impl From<SubscribeMessage> for RpcMessage {
 
 /// A channel to a `RpcClient`.
 #[derive(Clone)]
-pub struct RpcChannel(mpsc::Sender<RpcMessage>);
+pub struct RpcChannel(mpsc::UnboundedSender<RpcMessage>);
 
 impl RpcChannel {
-	fn send(
-		&self,
-		msg: RpcMessage,
-	) -> impl Future<Item = mpsc::Sender<RpcMessage>, Error = mpsc::SendError<RpcMessage>> {
-		self.0.to_owned().send(msg)
+	fn send(&self, msg: RpcMessage) -> Result<(), mpsc::TrySendError<RpcMessage>> {
+		self.0.unbounded_send(msg)
 	}
 }
 
-impl From<mpsc::Sender<RpcMessage>> for RpcChannel {
-	fn from(sender: mpsc::Sender<RpcMessage>) -> Self {
+impl From<mpsc::UnboundedSender<RpcMessage>> for RpcChannel {
+	fn from(sender: mpsc::UnboundedSender<RpcMessage>) -> Self {
 		RpcChannel(sender)
 	}
 }
 
 /// The future returned by the rpc call.
-pub struct RpcFuture {
-	recv: oneshot::Receiver<Result<Value, RpcError>>,
-}
-
-impl RpcFuture {
-	/// Creates a new `RpcFuture`.
-	pub fn new(recv: oneshot::Receiver<Result<Value, RpcError>>) -> Self {
-		RpcFuture { recv }
-	}
-}
-
-impl Future for RpcFuture {
-	type Item = Value;
-	type Error = RpcError;
-
-	fn poll(&mut self) -> Result<Async<Self::Item>, Self::Error> {
-		// TODO should timeout (#410)
-		match self.recv.poll() {
-			Ok(Async::Ready(Ok(value))) => Ok(Async::Ready(value)),
-			Ok(Async::Ready(Err(error))) => Err(error),
-			Ok(Async::NotReady) => Ok(Async::NotReady),
-			Err(error) => Err(RpcError::Other(error.into())),
-		}
-	}
-}
+pub type RpcFuture = oneshot::Receiver<Result<Value, RpcError>>;
 
 /// The stream returned by a subscribe.
-pub struct SubscriptionStream {
-	recv: mpsc::Receiver<Result<Value, RpcError>>,
-}
-
-impl SubscriptionStream {
-	/// Crates a new `SubscriptionStream`.
-	pub fn new(recv: mpsc::Receiver<Result<Value, RpcError>>) -> Self {
-		SubscriptionStream { recv }
-	}
-}
-
-impl Stream for SubscriptionStream {
-	type Item = Value;
-	type Error = RpcError;
-
-	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-		match self.recv.poll() {
-			Ok(Async::Ready(Some(Ok(value)))) => Ok(Async::Ready(Some(value))),
-			Ok(Async::Ready(Some(Err(error)))) => Err(error),
-			Ok(Async::Ready(None)) => Ok(Async::Ready(None)),
-			Ok(Async::NotReady) => Ok(Async::NotReady),
-			Err(()) => Err(RpcError::Other(format_err!("mpsc channel returned an error."))),
-		}
-	}
-}
+pub type SubscriptionStream = mpsc::UnboundedReceiver<Result<Value, RpcError>>;
 
 /// A typed subscription stream.
 pub struct TypedSubscriptionStream<T> {
@@ -197,19 +154,20 @@ impl<T> TypedSubscriptionStream<T> {
 	}
 }
 
-impl<T: DeserializeOwned + 'static> Stream for TypedSubscriptionStream<T> {
-	type Item = T;
-	type Error = RpcError;
+impl<T: DeserializeOwned + Unpin + 'static> Stream for TypedSubscriptionStream<T> {
+	type Item = RpcResult<T>;
 
-	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-		let result = match self.stream.poll()? {
-			Async::Ready(Some(value)) => serde_json::from_value::<T>(value)
-				.map(|result| Async::Ready(Some(result)))
-				.map_err(|error| RpcError::ParseError(self.returns.into(), error.into()))?,
-			Async::Ready(None) => Async::Ready(None),
-			Async::NotReady => Async::NotReady,
-		};
-		Ok(result)
+	fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+		let result = futures::ready!(self.stream.poll_next_unpin(cx));
+		match result {
+			Some(Ok(value)) => Some(
+				serde_json::from_value::<T>(value)
+					.map_err(|error| RpcError::ParseError(self.returns.into(), error.into())),
+			),
+			None => None,
+			Some(Err(err)) => Some(Err(err.into())),
+		}
+		.into()
 	}
 }
 
@@ -225,29 +183,31 @@ impl From<RpcChannel> for RawClient {
 
 impl RawClient {
 	/// Call RPC method with raw JSON.
-	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Item = Value, Error = RpcError> {
+	pub fn call_method(&self, method: &str, params: Params) -> impl Future<Output = RpcResult<Value>> {
 		let (sender, receiver) = oneshot::channel();
 		let msg = CallMessage {
 			method: method.into(),
 			params,
 			sender,
 		};
-		self.0
-			.send(msg.into())
-			.map_err(|error| RpcError::Other(error.into()))
-			.and_then(|_| RpcFuture::new(receiver))
+		let result = self.0.send(msg.into());
+		async move {
+			let () = result.map_err(|e| RpcError::Other(e.into()))?;
+
+			receiver.await.map_err(|e| RpcError::Other(e.into()))?
+		}
 	}
 
 	/// Send RPC notification with raw JSON.
-	pub fn notify(&self, method: &str, params: Params) -> impl Future<Item = (), Error = RpcError> {
+	pub fn notify(&self, method: &str, params: Params) -> RpcResult<()> {
 		let msg = NotifyMessage {
 			method: method.into(),
 			params,
 		};
-		self.0
-			.send(msg.into())
-			.map(|_| ())
-			.map_err(|error| RpcError::Other(error.into()))
+		match self.0.send(msg.into()) {
+			Ok(()) => Ok(()),
+			Err(error) => Err(RpcError::Other(error.into())),
+		}
 	}
 
 	/// Subscribe to topic with raw JSON.
@@ -257,8 +217,8 @@ impl RawClient {
 		subscribe_params: Params,
 		notification: &str,
 		unsubscribe: &str,
-	) -> impl Future<Item = SubscriptionStream, Error = RpcError> {
-		let (sender, receiver) = mpsc::channel(0);
+	) -> RpcResult<SubscriptionStream> {
+		let (sender, receiver) = mpsc::unbounded();
 		let msg = SubscribeMessage {
 			subscription: Subscription {
 				subscribe: subscribe.into(),
@@ -268,10 +228,11 @@ impl RawClient {
 			},
 			sender,
 		};
+
 		self.0
 			.send(msg.into())
-			.map_err(|error| RpcError::Other(error.into()))
-			.map(|_| SubscriptionStream::new(receiver))
+			.map(|()| receiver)
+			.map_err(|e| RpcError::Other(e.into()))
 	}
 }
 
@@ -292,48 +253,49 @@ impl TypedClient {
 	}
 
 	/// Call RPC with serialization of request and deserialization of response.
-	pub fn call_method<T: Serialize, R: DeserializeOwned + 'static>(
+	pub fn call_method<T: Serialize, R: DeserializeOwned>(
 		&self,
 		method: &str,
-		returns: &'static str,
+		returns: &str,
 		args: T,
-	) -> impl Future<Item = R, Error = RpcError> {
+	) -> impl Future<Output = RpcResult<R>> {
+		let returns = returns.to_owned();
 		let args =
 			serde_json::to_value(args).expect("Only types with infallible serialisation can be used for JSON-RPC");
 		let params = match args {
-			Value::Array(vec) => Params::Array(vec),
-			Value::Null => Params::None,
-			Value::Object(map) => Params::Map(map),
-			_ => {
-				return future::Either::A(future::err(RpcError::Other(format_err!(
-					"RPC params should serialize to a JSON array, JSON object or null"
-				))))
-			}
+			Value::Array(vec) => Ok(Params::Array(vec)),
+			Value::Null => Ok(Params::None),
+			Value::Object(map) => Ok(Params::Map(map)),
+			_ => Err(RpcError::Other(format_err!(
+				"RPC params should serialize to a JSON array, JSON object or null"
+			))),
 		};
+		let result = params.map(|params| self.0.call_method(method, params));
 
-		future::Either::B(self.0.call_method(method, params).and_then(move |value: Value| {
+		async move {
+			let value: Value = result?.await?;
+
 			log::debug!("response: {:?}", value);
-			let result =
-				serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns.into(), error.into()));
-			future::done(result)
-		}))
+
+			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns, error.into()))
+		}
 	}
 
 	/// Call RPC with serialization of request only.
-	pub fn notify<T: Serialize>(&self, method: &str, args: T) -> impl Future<Item = (), Error = RpcError> {
+	pub fn notify<T: Serialize>(&self, method: &str, args: T) -> RpcResult<()> {
 		let args =
 			serde_json::to_value(args).expect("Only types with infallible serialisation can be used for JSON-RPC");
 		let params = match args {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
 			_ => {
-				return future::Either::A(future::err(RpcError::Other(format_err!(
+				return Err(RpcError::Other(format_err!(
 					"RPC params should serialize to a JSON array, or null"
-				))))
+				)))
 			}
 		};
 
-		future::Either::B(self.0.notify(method, params))
+		self.0.notify(method, params)
 	}
 
 	/// Subscribe with serialization of request and deserialization of response.
@@ -344,7 +306,7 @@ impl TypedClient {
 		topic: &str,
 		unsubscribe: &str,
 		returns: &'static str,
-	) -> impl Future<Item = TypedSubscriptionStream<R>, Error = RpcError> {
+	) -> RpcResult<TypedSubscriptionStream<R>> {
 		let args = serde_json::to_value(subscribe_params)
 			.expect("Only types with infallible serialisation can be used for JSON-RPC");
 
@@ -352,17 +314,15 @@ impl TypedClient {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
 			_ => {
-				return future::Either::A(future::err(RpcError::Other(format_err!(
+				return Err(RpcError::Other(format_err!(
 					"RPC params should serialize to a JSON array, or null"
-				))))
+				)))
 			}
 		};
 
-		let typed_stream = self
-			.0
+		self.0
 			.subscribe(subscribe, params, topic, unsubscribe)
-			.map(move |stream| TypedSubscriptionStream::new(stream, returns));
-		future::Either::B(typed_stream)
+			.map(move |stream| TypedSubscriptionStream::new(stream, returns))
 	}
 }
 
@@ -370,7 +330,8 @@ impl TypedClient {
 mod tests {
 	use super::*;
 	use crate::transports::local;
-	use crate::{RpcChannel, RpcError, TypedClient};
+	use crate::{RpcChannel, TypedClient};
+	use jsonrpc_core::futures::{future, FutureExt};
 	use jsonrpc_core::{self as core, IoHandler};
 	use jsonrpc_pubsub::{PubSubHandler, Subscriber, SubscriptionId};
 	use std::sync::atomic::{AtomicBool, Ordering};
@@ -386,11 +347,11 @@ mod tests {
 	}
 
 	impl AddClient {
-		fn add(&self, a: u64, b: u64) -> impl Future<Item = u64, Error = RpcError> {
+		fn add(&self, a: u64, b: u64) -> impl Future<Output = RpcResult<u64>> {
 			self.0.call_method("add", "u64", (a, b))
 		}
 
-		fn completed(&self, success: bool) -> impl Future<Item = (), Error = RpcError> {
+		fn completed(&self, success: bool) -> RpcResult<()> {
 			self.0.notify("completed", (success,))
 		}
 	}
@@ -399,65 +360,61 @@ mod tests {
 	fn test_client_terminates() {
 		crate::logger::init_log();
 		let mut handler = IoHandler::new();
-		handler.add_method("add", |params: Params| {
+		handler.add_sync_method("add", |params: Params| {
 			let (a, b) = params.parse::<(u64, u64)>()?;
 			let res = a + b;
 			Ok(jsonrpc_core::to_value(res).unwrap())
 		});
 
+		let (tx, rx) = std::sync::mpsc::channel();
 		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
-		let fut = client
-			.clone()
-			.add(3, 4)
-			.and_then(move |res| client.add(res, 5))
-			.join(rpc_client)
-			.map(|(res, ())| {
-				assert_eq!(res, 12);
-			})
-			.map_err(|err| {
-				eprintln!("{:?}", err);
-				assert!(false);
-			});
-		tokio::run(fut);
+		let fut = async move {
+			let res = client.add(3, 4).await?;
+			let res = client.add(res, 5).await?;
+			assert_eq!(res, 12);
+			tx.send(()).unwrap();
+			Ok(()) as RpcResult<_>
+		};
+		let pool = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		pool.spawn_ok(rpc_client.map(|x| x.unwrap()));
+		pool.spawn_ok(fut.map(|x| x.unwrap()));
+		rx.recv().unwrap()
 	}
 
 	#[test]
 	fn should_send_notification() {
 		crate::logger::init_log();
+		let (tx, rx) = std::sync::mpsc::sync_channel(1);
 		let mut handler = IoHandler::new();
-		handler.add_notification("completed", |params: Params| {
+		handler.add_notification("completed", move |params: Params| {
 			let (success,) = params.parse::<(bool,)>().expect("expected to receive one boolean");
 			assert_eq!(success, true);
+			tx.send(()).unwrap();
 		});
 
 		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
-		let fut = client
-			.clone()
-			.completed(true)
-			.map(move |()| drop(client))
-			.join(rpc_client)
-			.map(|_| ())
-			.map_err(|err| {
-				eprintln!("{:?}", err);
-				assert!(false);
-			});
-		tokio::run(fut);
+		client.completed(true).unwrap();
+		let pool = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		pool.spawn_ok(rpc_client.map(|x| x.unwrap()));
+		rx.recv().unwrap()
 	}
 
 	#[test]
 	fn should_handle_subscription() {
 		crate::logger::init_log();
 		// given
+		let (finish, finished) = std::sync::mpsc::sync_channel(1);
 		let mut handler = PubSubHandler::<local::LocalMeta, _>::default();
 		let called = Arc::new(AtomicBool::new(false));
 		let called2 = called.clone();
 		handler.add_subscription(
 			"hello",
-			("subscribe_hello", |params, _meta, subscriber: Subscriber| {
+			("subscribe_hello", move |params, _meta, subscriber: Subscriber| {
 				assert_eq!(params, core::Params::None);
 				let sink = subscriber
 					.assign_id(SubscriptionId::Number(5))
 					.expect("assigned subscription id");
+				let finish = finish.clone();
 				std::thread::spawn(move || {
 					for i in 0..3 {
 						std::thread::sleep(std::time::Duration::from_millis(100));
@@ -465,49 +422,45 @@ mod tests {
 							"subscription": 5,
 							"result": vec![i],
 						});
-						sink.notify(serde_json::from_value(value).unwrap())
-							.wait()
-							.expect("sent notification");
+						let _ = sink.notify(serde_json::from_value(value).unwrap());
 					}
+					finish.send(()).unwrap();
 				});
 			}),
 			("unsubscribe_hello", move |id, _meta| {
 				// Should be called because session is dropped.
 				called2.store(true, Ordering::SeqCst);
 				assert_eq!(id, SubscriptionId::Number(5));
-				future::ok(core::Value::Bool(true))
+				future::ready(Ok(core::Value::Bool(true)))
 			}),
 		);
 
 		// when
+		let (tx, rx) = std::sync::mpsc::channel();
 		let (client, rpc_client) = local::connect_with_pubsub::<TypedClient, _>(handler);
 		let received = Arc::new(std::sync::Mutex::new(vec![]));
 		let r2 = received.clone();
-		let fut = client
-			.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")
-			.and_then(|stream| {
-				stream
-					.into_future()
-					.map(move |(result, _)| {
-						drop(client);
-						r2.lock().unwrap().push(result.unwrap());
-					})
-					.map_err(|_| {
-						panic!("Expected message not received.");
-					})
-			})
-			.join(rpc_client)
-			.map(|(res, _)| {
-				log::info!("ok {:?}", res);
-			})
-			.map_err(|err| {
-				log::error!("err {:?}", err);
-			});
-		tokio::run(fut);
-		assert_eq!(called.load(Ordering::SeqCst), true);
+		let fut = async move {
+			let mut stream =
+				client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")?;
+			let result = stream.next().await;
+			r2.lock().unwrap().push(result.expect("Expected at least one item."));
+			tx.send(()).unwrap();
+			Ok(()) as RpcResult<_>
+		};
+
+		let pool = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
+		pool.spawn_ok(rpc_client.map(|_| ()));
+		pool.spawn_ok(fut.map(|x| x.unwrap()));
+
+		rx.recv().unwrap();
 		assert!(
 			!received.lock().unwrap().is_empty(),
 			"Expected at least one received item."
 		);
+		// The session is being dropped only when another notification is received.
+		// TODO [ToDr] we should unsubscribe as soon as the stream is dropped instead!
+		finished.recv().unwrap();
+		assert_eq!(called.load(Ordering::SeqCst), true, "Unsubscribe not called.");
 	}
 }

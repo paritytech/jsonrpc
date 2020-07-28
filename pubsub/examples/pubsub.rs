@@ -5,8 +5,6 @@ use jsonrpc_core::*;
 use jsonrpc_pubsub::{PubSubHandler, Session, Subscriber, SubscriptionId};
 use jsonrpc_tcp_server::{RequestContext, ServerBuilder};
 
-use jsonrpc_core::futures::Future;
-
 /// To test the server:
 ///
 /// ```bash
@@ -16,7 +14,7 @@ use jsonrpc_core::futures::Future;
 /// ```
 fn main() {
 	let mut io = PubSubHandler::new(MetaIoHandler::default());
-	io.add_method("say_hello", |_params: Params| Ok(Value::String("hello".to_string())));
+	io.add_sync_method("say_hello", |_params: Params| Ok(Value::String("hello".to_string())));
 
 	let is_done = Arc::new(atomic::AtomicBool::default());
 	let is_done2 = is_done.clone();
@@ -36,7 +34,7 @@ fn main() {
 
 			let is_done = is_done.clone();
 			thread::spawn(move || {
-				let sink = subscriber.assign_id_async(SubscriptionId::Number(5)).wait().unwrap();
+				let sink = subscriber.assign_id(SubscriptionId::Number(5)).unwrap();
 				// or subscriber.reject(Error {} );
 				// or drop(subscriber)
 
@@ -46,7 +44,7 @@ fn main() {
 					}
 
 					thread::sleep(time::Duration::from_millis(100));
-					match sink.notify(Params::Array(vec![Value::Number(10.into())])).wait() {
+					match sink.notify(Params::Array(vec![Value::Number(10.into())])) {
 						Ok(_) => {}
 						Err(_) => {
 							println!("Subscription has ended, finishing.");

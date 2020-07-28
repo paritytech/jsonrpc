@@ -1,8 +1,8 @@
 use std::fmt;
 use std::sync::{atomic, Arc};
 
-use crate::core::futures::sync::mpsc;
-use crate::core::{self, futures};
+use crate::core;
+use crate::core::futures::channel::mpsc;
 use crate::server_utils::{session, tokio::runtime::TaskExecutor};
 use crate::ws;
 
@@ -78,10 +78,12 @@ pub struct RequestContext {
 impl RequestContext {
 	/// Get this session as a `Sink` spawning a new future
 	/// in the underlying event loop.
-	pub fn sender(&self) -> mpsc::Sender<String> {
+	pub fn sender(&self) -> mpsc::UnboundedSender<String> {
+		use futures03::{StreamExt, TryStreamExt};
 		let out = self.out.clone();
-		let (sender, receiver) = mpsc::channel(1);
-		self.executor.spawn(SenderFuture(out, receiver));
+		let (sender, receiver) = mpsc::unbounded();
+		let receiver = receiver.map(Ok).compat();
+		self.executor.spawn(SenderFuture(out, Box::new(receiver)));
 		sender
 	}
 }
@@ -121,27 +123,27 @@ impl<M: core::Metadata + Default> MetaExtractor<M> for NoopExtractor {
 	}
 }
 
-struct SenderFuture(Sender, mpsc::Receiver<String>);
-impl futures::Future for SenderFuture {
+struct SenderFuture(Sender, Box<dyn futures01::Stream<Item = String, Error = ()> + Send>);
+impl futures01::Future for SenderFuture {
 	type Item = ();
 	type Error = ();
 
-	fn poll(&mut self) -> futures::Poll<Self::Item, Self::Error> {
-		use self::futures::Stream;
+	fn poll(&mut self) -> futures01::Poll<Self::Item, Self::Error> {
+		use futures01::Stream;
 
 		loop {
 			let item = self.1.poll()?;
 			match item {
-				futures::Async::NotReady => {
-					return Ok(futures::Async::NotReady);
+				futures01::Async::NotReady => {
+					return Ok(futures01::Async::NotReady);
 				}
-				futures::Async::Ready(None) => {
-					return Ok(futures::Async::Ready(()));
+				futures01::Async::Ready(None) => {
+					return Ok(futures01::Async::Ready(()));
 				}
-				futures::Async::Ready(Some(val)) => {
+				futures01::Async::Ready(Some(val)) => {
 					if let Err(e) = self.0.send(val) {
 						warn!("Error sending a subscription update: {:?}", e);
-						return Ok(futures::Async::Ready(()));
+						return Ok(futures01::Async::Ready(()));
 					}
 				}
 			}

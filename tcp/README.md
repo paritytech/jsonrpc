@@ -9,7 +9,7 @@ TCP server for JSON-RPC 2.0.
 
 ```
 [dependencies]
-jsonrpc-tcp-server = "14.2"
+jsonrpc-tcp-server = "15.0"
 ```
 
 `main.rs`

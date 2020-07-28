@@ -8,16 +8,18 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 license = "MIT"
 name = "jsonrpc-http-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "14.2.0"
+version = "15.0.0"
 
 [dependencies]
+futures01 = { version = "0.1", package = "futures" }
+futures03 = { version = "0.3", package = "futures", features = ["compat"] }
 hyper = "0.12"
-jsonrpc-core = { version = "14.2", path = "../core" }
-jsonrpc-server-utils = { version = "14.2", path = "../server-utils" }
+jsonrpc-core = { version = "15.0", path = "../core" }
+jsonrpc-server-utils = { version = "15.0", path = "../server-utils" }
 log = "0.4"
 net2 = "0.2"
-unicase = "2.0"
 parking_lot = "0.10.0"
+unicase = "2.0"
 
 [dev-dependencies]
 env_logger = "0.7"

@@ -21,8 +21,8 @@ use std::sync::{
 	Arc,
 };
 
-use crate::core::futures::sync::oneshot;
-use crate::core::futures::{future as future01, Future as Future01};
+use crate::core::futures::channel::oneshot;
+use crate::core::futures::{self, task, Future, FutureExt, TryFutureExt};
 use crate::{
 	typed::{Sink, Subscriber},
 	SubscriptionId,
@@ -33,8 +33,8 @@ use parking_lot::Mutex;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
-/// Alias for an implementation of `futures::future::Executor`.
-pub type TaskExecutor = Arc<dyn future01::Executor<Box<dyn Future01<Item = (), Error = ()> + Send>> + Send + Sync>;
+/// Cloneable `Spawn` handle.
+pub type TaskExecutor = Arc<dyn futures::task::Spawn>;
 
 type ActiveSubscriptions = Arc<Mutex<HashMap<SubscriptionId, oneshot::Sender<()>>>>;
 
@@ -170,23 +170,28 @@ impl<I: IdProvider> SubscriptionManager<I> {
 	///
 	/// Second parameter is a function that converts Subscriber Sink into a Future.
 	/// This future will be driven to completion by the underlying event loop
-	pub fn add<T, E, G, R, F>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId
+	pub fn add<T, E, G, F>(&self, subscriber: Subscriber<T, E>, into_future: G) -> SubscriptionId
 	where
-		G: FnOnce(Sink<T, E>) -> R,
-		R: future01::IntoFuture<Future = F, Item = (), Error = ()>,
-		F: future01::Future<Item = (), Error = ()> + Send + 'static,
+		G: FnOnce(Sink<T, E>) -> F,
+		F: Future<Output = ()> + Send + 'static,
 	{
 		let id = self.id_provider.next_id();
 		let subscription_id: SubscriptionId = id.into();
 		if let Ok(sink) = subscriber.assign_id(subscription_id.clone()) {
 			let (tx, rx) = oneshot::channel();
-			let future = into_future(sink)
-				.into_future()
-				.select(rx.map_err(|e| warn!("Error timing out: {:?}", e)))
-				.then(|_| Ok(()));
+			let f = into_future(sink).fuse();
+			let rx = rx.map_err(|e| warn!("Error timing out: {:?}", e)).fuse();
+			let future = async move {
+				futures::pin_mut!(f);
+				futures::pin_mut!(rx);
+				futures::select! {
+					a = f => a,
+					_ = rx => (),
+				}
+			};
 
 			self.active_subscriptions.lock().insert(subscription_id.clone(), tx);
-			if self.executor.execute(Box::new(future)).is_err() {
+			if self.executor.spawn_obj(task::FutureObj::new(Box::pin(future))).is_err() {
 				error!("Failed to spawn RPC subscription task");
 			}
 		}
@@ -222,11 +227,8 @@ impl<I: Default + IdProvider> SubscriptionManager<I> {
 mod tests {
 	use super::*;
 	use crate::typed::Subscriber;
-	use futures::{compat::Future01CompatExt, executor, FutureExt};
-	use futures::{stream, StreamExt, TryStreamExt};
-
-	use crate::core::futures::sink::Sink as Sink01;
-	use crate::core::futures::stream::Stream as Stream01;
+	use futures::{executor, stream};
+	use futures::{FutureExt, StreamExt};
 
 	// Executor shared by all tests.
 	//
@@ -238,12 +240,13 @@ mod tests {
 	}
 
 	pub struct TestTaskExecutor;
-	type Boxed01Future01 = Box<dyn future01::Future<Item = (), Error = ()> + Send + 'static>;
+	impl task::Spawn for TestTaskExecutor {
+		fn spawn_obj(&self, future: task::FutureObj<'static, ()>) -> Result<(), task::SpawnError> {
+			EXECUTOR.spawn_obj(future)
+		}
 
-	impl future01::Executor<Boxed01Future01> for TestTaskExecutor {
-		fn execute(&self, future: Boxed01Future01) -> std::result::Result<(), future01::ExecuteError<Boxed01Future01>> {
-			EXECUTOR.spawn_ok(future.compat().map(drop));
-			Ok(())
+		fn status(&self) -> Result<(), task::SpawnError> {
+			EXECUTOR.status()
 		}
 	}
 
@@ -296,13 +299,9 @@ mod tests {
 	fn new_subscription_manager_defaults_to_random_string_provider() {
 		let manager = SubscriptionManager::new(Arc::new(TestTaskExecutor));
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
-		let stream = stream::iter(vec![Ok(1)]).compat();
+		let stream = stream::iter(vec![Ok(Ok(1))]);
 
-		let id = manager.add(subscriber, |sink| {
-			let stream = stream.map(|res| Ok(res));
-
-			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
-		});
+		let id = manager.add(subscriber, move |sink| stream.forward(sink).map(|_| ()));
 
 		assert!(matches!(id, SubscriptionId::String(_)))
 	}
@@ -313,13 +312,9 @@ mod tests {
 		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
 
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
-		let stream = stream::iter(vec![Ok(1)]).compat();
+		let stream = stream::iter(vec![Ok(Ok(1))]);
 
-		let id = manager.add(subscriber, |sink| {
-			let stream = stream.map(|res| Ok(res));
-
-			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
-		});
+		let id = manager.add(subscriber, move |sink| stream.forward(sink).map(|_| ()));
 
 		assert!(matches!(id, SubscriptionId::Number(_)))
 	}
@@ -330,13 +325,9 @@ mod tests {
 		let manager = SubscriptionManager::with_id_provider(id_provider, Arc::new(TestTaskExecutor));
 
 		let subscriber = Subscriber::<u64>::new_test("test_subTest").0;
-		let stream = stream::iter(vec![Ok(1)]).compat();
+		let stream = stream::iter(vec![Ok(Ok(1))]);
 
-		let id = manager.add(subscriber, |sink| {
-			let stream = stream.map(|res| Ok(res));
-
-			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
-		});
+		let id = manager.add(subscriber, move |sink| stream.forward(sink).map(|_| ()));
 
 		assert!(matches!(id, SubscriptionId::String(_)))
 	}
@@ -350,12 +341,9 @@ mod tests {
 
 		let (mut tx, rx) = futures::channel::mpsc::channel(8);
 		tx.start_send(1).unwrap();
-		let stream = rx.map(|v| Ok::<_, ()>(v)).compat();
-
-		let id = manager.add(subscriber, |sink| {
-			let stream = stream.map(|res| Ok(res));
-
-			sink.sink_map_err(|_| ()).send_all(stream).map(|_| ())
+		let id = manager.add(subscriber, move |sink| {
+			let rx = rx.map(|v| Ok(Ok(v)));
+			rx.forward(sink).map(|_| ())
 		});
 
 		let is_cancelled = manager.cancel(id);

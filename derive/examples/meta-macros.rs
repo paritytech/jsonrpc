@@ -1,8 +1,7 @@
 use std::collections::BTreeMap;
 
-use jsonrpc_core::futures::future::FutureResult;
-use jsonrpc_core::types::params::Params;
-use jsonrpc_core::{futures, Error, MetaIoHandler, Metadata, Result, Value};
+use jsonrpc_core::futures::future;
+use jsonrpc_core::{BoxFuture, MetaIoHandler, Metadata, Params, Result, Value};
 use jsonrpc_derive::rpc;
 
 #[derive(Clone)]
@@ -31,11 +30,11 @@ pub trait Rpc<One> {
 
 	/// Performs an asynchronous operation.
 	#[rpc(name = "callAsync")]
-	fn call(&self, a: u64) -> FutureResult<String, Error>;
+	fn call(&self, a: u64) -> BoxFuture<Result<String>>;
 
 	/// Performs an asynchronous operation with meta.
 	#[rpc(meta, name = "callAsyncMeta", alias("callAsyncMetaAlias"))]
-	fn call_meta(&self, a: Self::Metadata, b: BTreeMap<String, Value>) -> FutureResult<String, Error>;
+	fn call_meta(&self, a: Self::Metadata, b: BTreeMap<String, Value>) -> BoxFuture<Result<String>>;
 
 	/// Handles a notification.
 	#[rpc(name = "notify")]
@@ -62,12 +61,12 @@ impl Rpc<u64> for RpcImpl {
 		Ok(format!("Got: {:?}", params))
 	}
 
-	fn call(&self, x: u64) -> FutureResult<String, Error> {
-		futures::finished(format!("OK: {}", x))
+	fn call(&self, x: u64) -> BoxFuture<Result<String>> {
+		Box::pin(future::ready(Ok(format!("OK: {}", x))))
 	}
 
-	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> FutureResult<String, Error> {
-		futures::finished(format!("From: {}, got: {:?}", meta.0, map))
+	fn call_meta(&self, meta: Self::Metadata, map: BTreeMap<String, Value>) -> BoxFuture<Result<String>> {
+		Box::pin(future::ready(Ok(format!("From: {}, got: {:?}", meta.0, map))))
 	}
 
 	fn notify(&self, a: u64) {

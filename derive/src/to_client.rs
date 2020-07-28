@@ -43,7 +43,7 @@ pub fn generate_client_module(
 		})
 		.unzip();
 	let client_name = crate_name("jsonrpc-core-client")?;
-	Ok(quote! {
+	let client = quote! {
 		/// The generated client module.
 		pub mod gen_client {
 			use #client_name as _jsonrpc_core_client;
@@ -52,10 +52,9 @@ pub fn generate_client_module(
 				Call, Error, ErrorCode, Id, MethodCall, Params, Request,
 				Response, Version,
 			};
-			use _jsonrpc_core::futures::prelude::*;
-			use _jsonrpc_core::futures::sync::{mpsc, oneshot};
 			use _jsonrpc_core::serde_json::{self, Value};
-			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, TypedClient, TypedSubscriptionStream};
+			use _jsonrpc_core_client::futures::{Future, FutureExt, channel::{mpsc, oneshot}};
+			use _jsonrpc_core_client::{RpcChannel, RpcResult, RpcFuture, TypedClient, TypedSubscriptionStream};
 
 			/// The Client.
 			#[derive(Clone)]
@@ -88,7 +87,9 @@ pub fn generate_client_module(
 				}
 			}
 		}
-	})
+	};
+
+	Ok(client)
 }
 
 fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptions) -> Result<Vec<syn::ImplItem>> {
@@ -126,7 +127,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
-					pub fn #name(&self, #args) -> impl Future<Item=#returns, Error=RpcError> {
+					pub fn #name(&self, #args) -> impl Future<Output = RpcResult<#returns>> {
 						let args = #args_serialized;
 						self.inner.call_method(#rpc_name, #returns_str, args)
 					}
@@ -150,7 +151,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					let unsubscribe = unsubscribe.name();
 					let client_method = syn::parse_quote!(
 						#(#attrs)*
-						pub fn #name(&self, #args) -> impl Future<Item=TypedSubscriptionStream<#returns>, Error=RpcError> {
+						pub fn #name(&self, #args) -> RpcResult<TypedSubscriptionStream<#returns>> {
 							let args_tuple = (#(#arg_names,)*);
 							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
 						}
@@ -166,7 +167,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 				let arg_names = compute_arg_identifiers(&args)?;
 				let client_method = syn::parse_quote! {
 					#(#attrs)*
-					pub fn #name(&self, #args) -> impl Future<Item = (), Error = RpcError> {
+					pub fn #name(&self, #args) -> RpcResult<()> {
 						let args_tuple = (#(#arg_names,)*);
 						self.inner.notify(#rpc_name, args_tuple)
 					}
@@ -264,22 +265,38 @@ fn compute_returns(method: &syn::TraitItemMethod, returns: &Option<String>) -> R
 }
 
 fn try_infer_returns(output: &syn::ReturnType) -> Option<syn::Type> {
+	let extract_path_segments = |ty: &syn::Type| match ty {
+		syn::Type::Path(syn::TypePath {
+			path: syn::Path { segments, .. },
+			..
+		}) => Some(segments.clone()),
+		_ => None,
+	};
+
 	match output {
-		syn::ReturnType::Type(_, ty) => match &**ty {
-			syn::Type::Path(syn::TypePath {
-				path: syn::Path { segments, .. },
-				..
-			}) => match &segments[0] {
+		syn::ReturnType::Type(_, ty) => {
+			let segments = extract_path_segments(&**ty)?;
+			let check_segment = |seg: &syn::PathSegment| match seg {
 				syn::PathSegment { ident, arguments, .. } => {
-					if ident.to_string().ends_with("Result") {
-						get_first_type_argument(arguments)
+					let id = ident.to_string();
+					let inner = get_first_type_argument(arguments);
+					if id.ends_with("Result") {
+						Ok(inner)
 					} else {
-						None
+						Err(inner)
 					}
 				}
-			},
-			_ => None,
-		},
+			};
+			// Try out first argument (Result<X>) or nested types like:
+			// BoxFuture<Result<X>>
+			match check_segment(&segments[0]) {
+				Ok(returns) => Some(returns?),
+				Err(inner) => {
+					let segments = extract_path_segments(&inner?)?;
+					check_segment(&segments[0]).ok().flatten()
+				}
+			}
+		}
 		_ => None,
 	}
 }
@@ -287,9 +304,9 @@ fn try_infer_returns(output: &syn::ReturnType) -> Option<syn::Type> {
 fn get_first_type_argument(args: &syn::PathArguments) -> Option<syn::Type> {
 	match args {
 		syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments { args, .. }) => {
-			if args.len() > 0 {
+			if !args.is_empty() {
 				match &args[0] {
-					syn::GenericArgument::Type(ty) => Some(ty.to_owned()),
+					syn::GenericArgument::Type(ty) => Some(ty.clone()),
 					_ => None,
 				}
 			} else {

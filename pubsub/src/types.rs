@@ -1,15 +1,15 @@
 use crate::core;
-use crate::core::futures::sync::mpsc;
+use crate::core::futures::channel::mpsc;
 use std::sync::Arc;
 
 use crate::subscription::Session;
 
 /// Raw transport sink for specific client.
-pub type TransportSender = mpsc::Sender<String>;
+pub type TransportSender = mpsc::UnboundedSender<String>;
 /// Raw transport error.
-pub type TransportError = mpsc::SendError<String>;
+pub type TransportError = mpsc::SendError;
 /// Subscription send result.
-pub type SinkResult = core::futures::sink::Send<TransportSender>;
+pub type SinkResult = Result<(), mpsc::TrySendError<String>>;
 
 /// Metadata extension for pub-sub method handling.
 ///

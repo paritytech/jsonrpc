@@ -258,8 +258,10 @@ pub fn rpc_impl(input: syn::Item, options: &DeriveOptions) -> Result<proc_macro2
 	if options.enable_client {
 		let rpc_client_module = generate_client_module(&method_registrations, &rpc_trait, options)?;
 		submodules.push(rpc_client_module);
+		let client_name = syn::Ident::new(&format!("{}Client", name), proc_macro2::Span::call_site());
 		exports.push(quote! {
 			pub use self::#mod_name_ident::gen_client;
+			pub use self::#mod_name_ident::gen_client::Client as #client_name;
 		});
 	}
 	if options.enable_server {
