@@ -6,7 +6,6 @@ use futures::prelude::*;
 use futures::sync::mpsc;
 use jsonrpc_core::{MetaIoHandler, Metadata};
 use jsonrpc_pubsub::Session;
-use std::collections::VecDeque;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -14,7 +13,8 @@ use std::sync::Arc;
 pub struct LocalRpc<THandler, TMetadata> {
 	handler: THandler,
 	meta: TMetadata,
-	queue: VecDeque<String>,
+	sender: mpsc::UnboundedSender<String>,
+	receiver: mpsc::UnboundedReceiver<String>,
 }
 
 impl<TMetadata, THandler> LocalRpc<THandler, TMetadata>
@@ -32,10 +32,12 @@ where
 
 	/// Creates a new `LocalRpc` with given handler and metadata.
 	pub fn with_metadata(handler: THandler, meta: TMetadata) -> Self {
+		let (sender, receiver) = mpsc::unbounded();
 		Self {
 			handler,
 			meta,
-			queue: Default::default(),
+			sender,
+			receiver,
 		}
 	}
 }
@@ -49,10 +51,9 @@ where
 	type Error = RpcError;
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-		match self.queue.pop_front() {
-			Some(response) => Ok(Async::Ready(Some(response))),
-			None => Ok(Async::NotReady),
-		}
+		self.receiver
+			.poll()
+			.map_err(|()| RpcError::Other(format_err!("Sender dropped.")))
 	}
 }
 
@@ -66,7 +67,10 @@ where
 
 	fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
 		match self.handler.handle_request_sync(&request, self.meta.clone()) {
-			Some(response) => self.queue.push_back(response),
+			Some(response) => self
+				.sender
+				.unbounded_send(response)
+				.map_err(|_| RpcError::Other(format_err!("Receiver dropped.")))?,
 			None => {}
 		};
 		Ok(AsyncSink::Ready)
