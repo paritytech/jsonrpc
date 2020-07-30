@@ -51,7 +51,8 @@ where
 	type Error = RpcError;
 
 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, Self::Error> {
-		self.receiver.poll()
+		self.receiver
+			.poll()
 			.map_err(|()| RpcError::Other(format_err!("Sender dropped.")))
 	}
 }
@@ -66,11 +67,11 @@ where
 
 	fn start_send(&mut self, request: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
 		match self.handler.handle_request_sync(&request, self.meta.clone()) {
-			Some(response) => {
-				self.sender.unbounded_send(response)
-					.map_err(|_| RpcError::Other(format_err!("Receiver dropped.")))?
-			},
-			None => {},
+			Some(response) => self
+				.sender
+				.unbounded_send(response)
+				.map_err(|_| RpcError::Other(format_err!("Receiver dropped.")))?,
+			None => {}
 		};
 		Ok(AsyncSink::Ready)
 	}
