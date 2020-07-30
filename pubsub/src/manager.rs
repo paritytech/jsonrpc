@@ -34,7 +34,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
 /// Cloneable `Spawn` handle.
-pub type TaskExecutor = Arc<dyn futures::task::Spawn>;
+pub type TaskExecutor = Arc<dyn futures::task::Spawn + Send + Sync>;
 
 type ActiveSubscriptions = Arc<Mutex<HashMap<SubscriptionId, oneshot::Sender<()>>>>;
 
@@ -359,5 +359,12 @@ mod tests {
 		let is_not_cancelled = !is_cancelled;
 
 		assert!(is_not_cancelled);
+	}
+
+	#[test]
+	fn is_send_sync() {
+		fn send_sync<T: Send + Sync>() {}
+
+		send_sync::<SubscriptionManager>();
 	}
 }
