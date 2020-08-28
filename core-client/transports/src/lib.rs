@@ -282,9 +282,9 @@ impl TypedClient {
 			Value::Array(vec) => Ok(Params::Array(vec)),
 			Value::Null => Ok(Params::None),
 			Value::Object(map) => Ok(Params::Map(map)),
-			_ => Err(RpcError::Client(format!(
-				"RPC params should serialize to a JSON array, JSON object or null"
-			))),
+			_ => Err(RpcError::Client(
+				"RPC params should serialize to a JSON array, JSON object or null".into()
+			)),
 		};
 		let result = params.map(|params| self.0.call_method(method, params));
 
@@ -308,9 +308,9 @@ impl TypedClient {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
 			_ => {
-				return Err(RpcError::Client(format!(
-					"RPC params should serialize to a JSON array, or null"
-				)))
+				return Err(RpcError::Client(
+					"RPC params should serialize to a JSON array, or null".into()
+				))
 			}
 		};
 
@@ -333,9 +333,9 @@ impl TypedClient {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
 			_ => {
-				return Err(RpcError::Client(format!(
-					"RPC params should serialize to a JSON array, or null"
-				)))
+				return Err(RpcError::Client(
+					"RPC params should serialize to a JSON array, or null".into()
+				))
 			}
 		};
 
