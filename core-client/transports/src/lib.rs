@@ -175,10 +175,7 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for TypedSubscriptionStream<T
 		match result {
 			Some(Ok(value)) => Some(
 				serde_json::from_value::<T>(value)
-					.map_err(|error| RpcError::ParseError(
-							self.returns.into(),
-							Box::new(error)
-					)),
+					.map_err(|error| RpcError::ParseError(self.returns.into(), Box::new(error))),
 			),
 			None => None,
 			Some(Err(err)) => Some(Err(err.into())),
@@ -283,7 +280,7 @@ impl TypedClient {
 			Value::Null => Ok(Params::None),
 			Value::Object(map) => Ok(Params::Map(map)),
 			_ => Err(RpcError::Client(
-				"RPC params should serialize to a JSON array, JSON object or null".into()
+				"RPC params should serialize to a JSON array, JSON object or null".into(),
 			)),
 		};
 		let result = params.map(|params| self.0.call_method(method, params));
@@ -293,10 +290,7 @@ impl TypedClient {
 
 			log::debug!("response: {:?}", value);
 
-			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(
-					returns,
-					Box::new(error)
-			))
+			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns, Box::new(error)))
 		}
 	}
 
@@ -309,7 +303,7 @@ impl TypedClient {
 			Value::Null => Params::None,
 			_ => {
 				return Err(RpcError::Client(
-					"RPC params should serialize to a JSON array, or null".into()
+					"RPC params should serialize to a JSON array, or null".into(),
 				))
 			}
 		};
@@ -334,7 +328,7 @@ impl TypedClient {
 			Value::Null => Params::None,
 			_ => {
 				return Err(RpcError::Client(
-					"RPC params should serialize to a JSON array, or null".into()
+					"RPC params should serialize to a JSON array, or null".into(),
 				))
 			}
 		};

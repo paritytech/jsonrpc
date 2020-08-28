@@ -220,9 +220,7 @@ where
 							} else {
 								let err = RpcError::Client(format!(
 									"Subscription {:?} ({:?}) rejected: {:?}",
-									id,
-									method,
-									result,
+									id, method, result,
 								));
 
 								if subscription.channel.unbounded_send(result).is_err() {

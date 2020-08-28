@@ -14,8 +14,7 @@ pub fn try_connect<T>(url: &str) -> Result<impl Future<Item = T, Error = RpcErro
 where
 	T: From<RpcChannel>,
 {
-	let client_builder = ClientBuilder::new(url)
-		.map_err(|e| RpcError::Other(Box::new(e)))?;
+	let client_builder = ClientBuilder::new(url).map_err(|e| RpcError::Other(Box::new(e)))?;
 	Ok(do_connect(client_builder))
 }
 
@@ -106,7 +105,9 @@ where
 				None => break,
 			}
 		}
-		self.sink.poll_complete().map_err(|error| RpcError::Other(Box::new(error)))
+		self.sink
+			.poll_complete()
+			.map_err(|error| RpcError::Other(Box::new(error)))
 	}
 }
 
