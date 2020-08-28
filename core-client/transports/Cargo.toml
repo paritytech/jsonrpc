@@ -36,7 +36,7 @@ ipc = [
 arbitrary_precision = ["serde_json/arbitrary_precision", "jsonrpc-core/arbitrary_precision"]
 
 [dependencies]
-failure = "0.1"
+derive_more = "0.99"
 futures = { version = "0.3", features = [ "compat" ] }
 jsonrpc-core = { version = "15.0", path = "../../core" }
 jsonrpc-pubsub = { version = "15.0", path = "../../pubsub" }

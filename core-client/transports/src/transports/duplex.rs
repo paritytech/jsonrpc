@@ -1,6 +1,5 @@
 //! Duplex transport
 
-use failure::format_err;
 use futures::channel::{mpsc, oneshot};
 use futures::{
 	task::{Context, Poll},
@@ -195,7 +194,7 @@ where
 						// It's a regular Req-Res call, so just answer.
 						Some(PendingRequest::Call(tx)) => {
 							tx.send(result)
-								.map_err(|_| RpcError::Other(format_err!("oneshot channel closed")))?;
+								.map_err(|_| RpcError::Client("oneshot channel closed".into()))?;
 							continue;
 						}
 						// It was a subscription request,
@@ -219,11 +218,9 @@ where
 									);
 								}
 							} else {
-								let err = RpcError::Other(format_err!(
+								let err = RpcError::Client(format!(
 									"Subscription {:?} ({:?}) rejected: {:?}",
-									id,
-									method,
-									result,
+									id, method, result,
 								));
 
 								if subscription.channel.unbounded_send(result).is_err() {
@@ -276,7 +273,7 @@ where
 		// Writes queued messages to sink.
 		log::debug!("handle outgoing");
 		loop {
-			let err = || Err(RpcError::Other(failure::format_err!("closing")));
+			let err = || Err(RpcError::Client("closing".into()));
 			match self.sink.as_mut().poll_ready(cx) {
 				Poll::Ready(Ok(())) => {}
 				Poll::Ready(Err(_)) => return err().into(),

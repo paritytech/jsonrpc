@@ -4,7 +4,6 @@
 
 use super::RequestBuilder;
 use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
-use failure::format_err;
 use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use hyper::{http, rt, Client, Request, Uri};
 
@@ -39,13 +38,13 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return ready(Err(RpcError::Other(e.into()))),
+		Err(e) => return ready(Err(RpcError::Other(Box::new(e)))),
 	};
 
 	#[cfg(feature = "tls")]
 	let connector = match hyper_tls::HttpsConnector::new(4) {
 		Ok(connector) => connector,
-		Err(e) => return ready(Err(RpcError::Other(e.into()))),
+		Err(e) => return ready(Err(RpcError::Other(Box::new(e)))),
 	};
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
@@ -97,16 +96,16 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 			let future = match result {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
-					A(future::err(RpcError::Other(format_err!(
+					A(future::err(RpcError::Client(format!(
 						"Unexpected response status code: {}",
 						res.status()
 					))))
 				}
 				Ok(res) => B(res
 					.into_body()
-					.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+					.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
 					.concat2()),
-				Err(err) => A(future::err(RpcError::Other(err.into()))),
+				Err(err) => A(future::err(RpcError::Other(Box::new(err)))),
 			};
 			future.then(|result| {
 				if let Some(sender) = sender {

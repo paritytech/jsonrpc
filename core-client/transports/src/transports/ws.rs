@@ -1,6 +1,5 @@
 //! JSON-RPC websocket client implementation.
 use crate::{RpcChannel, RpcError};
-use failure::Error;
 use futures01::prelude::*;
 use log::info;
 use std::collections::VecDeque;
@@ -11,11 +10,11 @@ use websocket::{ClientBuilder, OwnedMessage};
 /// Uses an unbuffered channel to queue outgoing rpc messages.
 ///
 /// Returns `Err` if the `url` is invalid.
-pub fn try_connect<T>(url: &str) -> Result<impl Future<Item = T, Error = RpcError>, Error>
+pub fn try_connect<T>(url: &str) -> Result<impl Future<Item = T, Error = RpcError>, RpcError>
 where
 	T: From<RpcChannel>,
 {
-	let client_builder = ClientBuilder::new(url)?;
+	let client_builder = ClientBuilder::new(url).map_err(|e| RpcError::Other(Box::new(e)))?;
 	Ok(do_connect(client_builder))
 }
 
@@ -54,7 +53,7 @@ where
 			tokio::spawn(rpc_client);
 			sender.into()
 		})
-		.map_err(|error| RpcError::Other(error.into()))
+		.map_err(|error| RpcError::Other(Box::new(error)))
 }
 
 struct WebsocketClient<TSink, TStream> {
@@ -67,7 +66,7 @@ impl<TSink, TStream, TError> WebsocketClient<TSink, TStream>
 where
 	TSink: Sink<SinkItem = OwnedMessage, SinkError = TError>,
 	TStream: Stream<Item = OwnedMessage, Error = TError>,
-	TError: Into<Error>,
+	TError: std::error::Error + Send + 'static,
 {
 	pub fn new(sink: TSink, stream: TStream) -> Self {
 		Self {
@@ -82,7 +81,7 @@ impl<TSink, TStream, TError> Sink for WebsocketClient<TSink, TStream>
 where
 	TSink: Sink<SinkItem = OwnedMessage, SinkError = TError>,
 	TStream: Stream<Item = OwnedMessage, Error = TError>,
-	TError: Into<Error>,
+	TError: std::error::Error + Send + 'static,
 {
 	type SinkItem = String;
 	type SinkError = RpcError;
@@ -101,12 +100,14 @@ where
 						self.queue.push_front(request);
 						break;
 					}
-					Err(error) => return Err(RpcError::Other(error.into())),
+					Err(error) => return Err(RpcError::Other(Box::new(error))),
 				},
 				None => break,
 			}
 		}
-		self.sink.poll_complete().map_err(|error| RpcError::Other(error.into()))
+		self.sink
+			.poll_complete()
+			.map_err(|error| RpcError::Other(Box::new(error)))
 	}
 }
 
@@ -114,7 +115,7 @@ impl<TSink, TStream, TError> Stream for WebsocketClient<TSink, TStream>
 where
 	TSink: Sink<SinkItem = OwnedMessage, SinkError = TError>,
 	TStream: Stream<Item = OwnedMessage, Error = TError>,
-	TError: Into<Error>,
+	TError: std::error::Error + Send + 'static,
 {
 	type Item = String;
 	type Error = RpcError;
@@ -134,7 +135,7 @@ where
 					return Ok(Async::Ready(None));
 				}
 				Ok(Async::NotReady) => return Ok(Async::NotReady),
-				Err(error) => return Err(RpcError::Other(error.into())),
+				Err(error) => return Err(RpcError::Other(Box::new(error))),
 			}
 		}
 	}
