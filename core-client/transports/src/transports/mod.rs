@@ -82,7 +82,7 @@ pub fn parse_response(
 	response: &str,
 ) -> Result<(Id, Result<Value, RpcError>, Option<String>, Option<SubscriptionId>), RpcError> {
 	jsonrpc_core::serde_from_str::<ClientResponse>(response)
-		.map_err(|e| RpcError::ParseError(e.to_string(), e.into()))
+		.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
 		.map(|response| {
 			let id = response.id().unwrap_or(Id::Null);
 			let sid = response.subscription_id();

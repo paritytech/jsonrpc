@@ -2,7 +2,6 @@
 
 #![deny(missing_docs)]
 
-use failure::{format_err, Fail};
 use jsonrpc_core::futures::channel::{mpsc, oneshot};
 use jsonrpc_core::futures::{
 	self,
@@ -22,20 +21,34 @@ pub mod transports;
 mod logger;
 
 /// The errors returned by the client.
-#[derive(Debug, Fail)]
+#[derive(Debug, derive_more::Display)]
 pub enum RpcError {
 	/// An error returned by the server.
-	#[fail(display = "Server returned rpc error {}", _0)]
+	#[display(fmt = "Server returned rpc error {}", _0)]
 	JsonRpcError(Error),
 	/// Failure to parse server response.
-	#[fail(display = "Failed to parse server response as {}: {}", _0, _1)]
-	ParseError(String, failure::Error),
+	#[display(fmt = "Failed to parse server response as {}: {}", _0, _1)]
+	ParseError(String, Box<dyn std::error::Error + Send>),
 	/// Request timed out.
-	#[fail(display = "Request timed out")]
+	#[display(fmt = "Request timed out")]
 	Timeout,
+	/// A general client error.
+	#[display(fmt = "Client error: {}", _0)]
+	Client(String),
 	/// Not rpc specific errors.
-	#[fail(display = "{}", _0)]
-	Other(failure::Error),
+	#[display(fmt = "{}", _0)]
+	Other(Box<dyn std::error::Error + Send>),
+}
+
+impl std::error::Error for RpcError {
+	fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+		match *self {
+			Self::JsonRpcError(ref e) => Some(e),
+			Self::ParseError(_, ref e) => Some(&**e),
+			Self::Other(ref e) => Some(&**e),
+			_ => None,
+		}
+	}
 }
 
 impl From<Error> for RpcError {
@@ -162,7 +175,10 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for TypedSubscriptionStream<T
 		match result {
 			Some(Ok(value)) => Some(
 				serde_json::from_value::<T>(value)
-					.map_err(|error| RpcError::ParseError(self.returns.into(), error.into())),
+					.map_err(|error| RpcError::ParseError(
+							self.returns.into(),
+							Box::new(error)
+					)),
 			),
 			None => None,
 			Some(Err(err)) => Some(Err(err.into())),
@@ -192,9 +208,9 @@ impl RawClient {
 		};
 		let result = self.0.send(msg.into());
 		async move {
-			let () = result.map_err(|e| RpcError::Other(e.into()))?;
+			let () = result.map_err(|e| RpcError::Other(Box::new(e)))?;
 
-			receiver.await.map_err(|e| RpcError::Other(e.into()))?
+			receiver.await.map_err(|e| RpcError::Other(Box::new(e)))?
 		}
 	}
 
@@ -206,7 +222,7 @@ impl RawClient {
 		};
 		match self.0.send(msg.into()) {
 			Ok(()) => Ok(()),
-			Err(error) => Err(RpcError::Other(error.into())),
+			Err(error) => Err(RpcError::Other(Box::new(error))),
 		}
 	}
 
@@ -232,7 +248,7 @@ impl RawClient {
 		self.0
 			.send(msg.into())
 			.map(|()| receiver)
-			.map_err(|e| RpcError::Other(e.into()))
+			.map_err(|e| RpcError::Other(Box::new(e)))
 	}
 }
 
@@ -266,7 +282,7 @@ impl TypedClient {
 			Value::Array(vec) => Ok(Params::Array(vec)),
 			Value::Null => Ok(Params::None),
 			Value::Object(map) => Ok(Params::Map(map)),
-			_ => Err(RpcError::Other(format_err!(
+			_ => Err(RpcError::Client(format!(
 				"RPC params should serialize to a JSON array, JSON object or null"
 			))),
 		};
@@ -277,7 +293,10 @@ impl TypedClient {
 
 			log::debug!("response: {:?}", value);
 
-			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns, error.into()))
+			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(
+					returns,
+					Box::new(error)
+			))
 		}
 	}
 
@@ -289,7 +308,7 @@ impl TypedClient {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
 			_ => {
-				return Err(RpcError::Other(format_err!(
+				return Err(RpcError::Client(format!(
 					"RPC params should serialize to a JSON array, or null"
 				)))
 			}
@@ -314,7 +333,7 @@ impl TypedClient {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
 			_ => {
-				return Err(RpcError::Other(format_err!(
+				return Err(RpcError::Client(format!(
 					"RPC params should serialize to a JSON array, or null"
 				)))
 			}

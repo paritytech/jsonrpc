@@ -81,7 +81,7 @@ where
 
 	fn send_response(&mut self) -> Result<(), RpcError> {
 		if let Buffered::Response(r) = std::mem::replace(&mut self.buffered, Buffered::None) {
-			self.queue.0.start_send(r).map_err(|e| RpcError::Other(e.into()))?;
+			self.queue.0.start_send(r).map_err(|e| RpcError::Other(Box::new(e)))?;
 		}
 		Ok(())
 	}
@@ -97,7 +97,7 @@ where
 	fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
 		futures::ready!(self.poll_buffered(cx))?;
 		futures::ready!(self.queue.0.poll_ready(cx))
-			.map_err(|e| RpcError::Other(e.into()))
+			.map_err(|e| RpcError::Other(Box::new(e)))
 			.into()
 	}
 
@@ -110,13 +110,13 @@ where
 	fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
 		futures::ready!(self.poll_buffered(cx))?;
 		futures::ready!(self.queue.0.poll_flush_unpin(cx))
-			.map_err(|e| RpcError::Other(e.into()))
+			.map_err(|e| RpcError::Other(Box::new(e)))
 			.into()
 	}
 
 	fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Self::Error>> {
 		futures::ready!(self.queue.0.poll_close_unpin(cx))
-			.map_err(|e| RpcError::Other(e.into()))
+			.map_err(|e| RpcError::Other(Box::new(e)))
 			.into()
 	}
 }
