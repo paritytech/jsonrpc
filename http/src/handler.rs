@@ -544,6 +544,7 @@ where
 		if is_options {
 			headers.append(header::ALLOW, allowed.clone());
 			headers.append(header::ACCEPT, HeaderValue::from_static("application/json"));
+			headers.append(header::ACCEPT, HeaderValue::from_static("text/json"));
 		}
 
 		if let Some(cors_allow_origin) = cors_allow_origin {
@@ -577,7 +578,10 @@ where
 			Some(ref content)
 				if content.eq_ignore_ascii_case("application/json")
 					|| content.eq_ignore_ascii_case("application/json; charset=utf-8")
-					|| content.eq_ignore_ascii_case("application/json;charset=utf-8") =>
+					|| content.eq_ignore_ascii_case("application/json;charset=utf-8")
+					|| content.eq_ignore_ascii_case("text/json")
+					|| content.eq_ignore_ascii_case("text/json; charset=utf-8")
+					|| content.eq_ignore_ascii_case("text/json;charset=utf-8") =>
 			{
 				true
 			}
