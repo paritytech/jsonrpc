@@ -52,7 +52,7 @@ pub fn generate_client_module(
 				Call, Error, ErrorCode, Id, MethodCall, Params, Request,
 				Response, Version,
 			};
-			use _jsonrpc_core::futures::prelude::*;
+			use _jsonrpc_core::futures::prelude::Future;
 			use _jsonrpc_core::futures::sync::{mpsc, oneshot};
 			use _jsonrpc_core::serde_json::{self, Value};
 			use _jsonrpc_core_client::{RpcChannel, RpcError, RpcFuture, TypedClient, TypedSubscriptionStream};
