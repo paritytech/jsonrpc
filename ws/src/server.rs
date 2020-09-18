@@ -64,6 +64,8 @@ impl Server {
 			config.max_connections = max_connections;
 			// don't accept super large requests
 			config.max_fragment_size = max_payload_bytes;
+			config.max_in_buffer_capacity = max_payload_bytes;
+			config.max_out_buffer_capacity = max_payload_bytes;
 			// don't grow non-final fragments (to prevent DOS)
 			config.fragments_grow = false;
 			config.fragments_capacity = cmp::max(1, max_payload_bytes / config.fragment_size);

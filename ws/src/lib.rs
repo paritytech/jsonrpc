@@ -5,7 +5,7 @@
 use jsonrpc_server_utils as server_utils;
 
 pub use jsonrpc_core;
-pub use ws;
+pub use parity_ws as ws;
 
 #[macro_use]
 extern crate log;
