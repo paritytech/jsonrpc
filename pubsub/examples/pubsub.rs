@@ -39,7 +39,7 @@ fn main() {
 				// or drop(subscriber)
 
 				loop {
-					if is_done.load(atomic::Ordering::AcqRel) {
+					if is_done.load(atomic::Ordering::SeqCst) {
 						return;
 					}
 
@@ -56,13 +56,13 @@ fn main() {
 		}),
 		("remove_hello", move |_id: SubscriptionId, _| {
 			println!("Closing subscription");
-			is_done2.store(true, atomic::Ordering::AcqRel);
+			is_done2.store(true, atomic::Ordering::SeqCst);
 			futures::future::ok(Value::Bool(true))
 		}),
 	);
 
 	let server = ServerBuilder::new(io)
-		.session_meta_extractor(|context: &RequestContext| Some(Arc::new(Session::new(context.sender.clone()))))
+		.session_meta_extractor(|context: &RequestContext| Some(Arc::new(Session::new(context.sender()))))
 		.start(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
