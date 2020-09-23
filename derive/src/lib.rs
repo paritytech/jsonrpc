@@ -120,7 +120,20 @@
 //! 	}
 //! }
 //!
-//! # fn main() {}
+//! fn main() {
+//!	  let mut io = jsonrpc_core::MetaIoHandler::default();
+//!	  io.extend_with(RpcImpl::default().to_delegate());
+//!
+//!	  let server_builder = jsonrpc_tcp_server::ServerBuilder::with_meta_extractor(
+//!		io,
+//!		|request: &jsonrpc_tcp_server::RequestContext| Arc::new(Session::new(request.sender.clone()))
+//!	  );
+//!	  let server = server_builder
+//!		.start(&"127.0.0.1:3030".parse().unwrap())
+//!		.expect("Unable to start TCP server");
+//!
+//!	  // server.wait();
+//! }
 //! ```
 //!
 //! Client Example
