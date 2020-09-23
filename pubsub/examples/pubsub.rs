@@ -62,7 +62,9 @@ fn main() {
 	);
 
 	let server = ServerBuilder::new(io)
-		.session_meta_extractor(|context: &RequestContext| Some(Arc::new(Session::new(context.sender()))))
+		.session_meta_extractor(|context: &RequestContext| {
+			Some(Arc::new(Session::new(context.sender.clone())))
+		})
 		.start(&"127.0.0.1:3030".parse().unwrap())
 		.expect("Unable to start RPC server");
 
