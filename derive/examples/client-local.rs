@@ -1,5 +1,8 @@
+use jsonrpc_core::{
+	futures::{self, FutureExt},
+	BoxFuture, IoHandler, Result,
+};
 use jsonrpc_core_client::transports::local;
-use jsonrpc_core::{BoxFuture, IoHandler, Result, futures::{self, FutureExt}};
 use jsonrpc_derive::rpc;
 
 /// Rpc trait
