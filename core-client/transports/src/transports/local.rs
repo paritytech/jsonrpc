@@ -102,7 +102,9 @@ where
 }
 
 /// Connects to a `Deref<Target = MetaIoHandler<Metadata + Default>`.
-pub fn connect<TClient, THandler, TMetadata, TMiddleware>(handler: THandler) -> (TClient, impl Future<Item = (), Error = RpcError>)
+pub fn connect<TClient, THandler, TMetadata, TMiddleware>(
+	handler: THandler,
+) -> (TClient, impl Future<Item = (), Error = RpcError>)
 where
 	TClient: From<RpcChannel>,
 	TMiddleware: Middleware<TMetadata>,
@@ -116,7 +118,9 @@ where
 pub type LocalMeta = Arc<Session>;
 
 /// Connects with pubsub.
-pub fn connect_with_pubsub<TClient, THandler, TMiddleware>(handler: THandler) -> (TClient, impl Future<Item = (), Error = RpcError>)
+pub fn connect_with_pubsub<TClient, THandler, TMiddleware>(
+	handler: THandler,
+) -> (TClient, impl Future<Item = (), Error = RpcError>)
 where
 	TClient: From<RpcChannel>,
 	TMiddleware: Middleware<LocalMeta>,
