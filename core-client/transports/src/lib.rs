@@ -405,7 +405,7 @@ mod tests {
 			Ok(jsonrpc_core::to_value(res).unwrap())
 		});
 
-		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
+		let (client, rpc_client) = local::connect::<AddClient, _, _, _>(handler);
 		let fut = client
 			.clone()
 			.add(3, 4)
@@ -430,7 +430,7 @@ mod tests {
 			assert_eq!(success, true);
 		});
 
-		let (client, rpc_client) = local::connect::<AddClient, _, _>(handler);
+		let (client, rpc_client) = local::connect::<AddClient, _, _, _>(handler);
 		let fut = client
 			.clone()
 			.completed(true)
@@ -480,7 +480,7 @@ mod tests {
 		);
 
 		// when
-		let (client, rpc_client) = local::connect_with_pubsub::<TypedClient, _>(handler);
+		let (client, rpc_client) = local::connect_with_pubsub::<TypedClient, _, _>(handler);
 		let received = Arc::new(std::sync::Mutex::new(vec![]));
 		let r2 = received.clone();
 		let fut = client
