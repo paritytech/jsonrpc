@@ -132,6 +132,8 @@
 //!		.start(&"127.0.0.1:3030".parse().unwrap())
 //!		.expect("Unable to start TCP server");
 //!
+//!   // The server spawns a separate thread. Dropping the `server` handle causes it to close.
+//!   // Uncomment the line below to keep the server running in your example.
 //!	  // server.wait();
 //! }
 //! ```
