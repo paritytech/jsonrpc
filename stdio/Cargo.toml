@@ -11,7 +11,7 @@ version = "15.1.0"
 
 [dependencies]
 futures = "0.1.23"
-jsonrpc-core = { version = "15.0", path = "../core" }
+jsonrpc-core = { version = "15.1", path = "../core" }
 log = "0.4"
 tokio = "0.1.7"
 tokio-codec = "0.1.0"

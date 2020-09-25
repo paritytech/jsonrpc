@@ -13,7 +13,7 @@ version = "15.1.0"
 [dependencies]
 bytes = "0.4"
 globset = "0.4"
-jsonrpc-core = { version = "15.0", path = "../core" }
+jsonrpc-core = { version = "15.1", path = "../core" }
 lazy_static = "1.1.0"
 log = "0.4"
 tokio = { version = "0.1.15" }

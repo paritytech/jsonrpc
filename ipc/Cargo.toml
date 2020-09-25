@@ -12,8 +12,8 @@ version = "15.1.0"
 [dependencies]
 log = "0.4"
 tokio-service = "0.1"
-jsonrpc-core = { version = "15.0", path = "../core" }
-jsonrpc-server-utils = { version = "15.0", path = "../server-utils" }
+jsonrpc-core = { version = "15.1", path = "../core" }
+jsonrpc-server-utils = { version = "15.1", path = "../server-utils" }
 parity-tokio-ipc = "0.4"
 parking_lot = "0.10.0"
 
