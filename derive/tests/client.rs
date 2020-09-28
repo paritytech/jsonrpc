@@ -31,7 +31,7 @@ mod client_server {
 	fn client_server_roundtrip() {
 		let mut handler = IoHandler::new();
 		handler.extend_with(RpcServer.to_delegate());
-		let (client, rpc_client) = local::connect::<gen_client::Client, _, _, _>(handler);
+		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.add(3, 4)
@@ -75,7 +75,7 @@ mod named_params {
 		let mut handler = IoHandler::new();
 		handler.add_method("call_with_named", |params: Params| Ok(params.into()));
 
-		let (client, rpc_client) = local::connect::<gen_client::Client, _, _, _>(handler);
+		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.call_with_named(3, String::from("test string"), json!({"key": ["value"]}))
@@ -117,7 +117,7 @@ mod raw_params {
 		let mut handler = IoHandler::new();
 		handler.add_method("call_raw", |params: Params| Ok(params.into()));
 
-		let (client, rpc_client) = local::connect::<gen_client::Client, _, _, _>(handler);
+		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
 			.clone()
 			.call_raw_single_param(expected.clone())
