@@ -21,7 +21,7 @@ pub trait Rpc {
 fn main() {
 	let fut = {
 		let handler = IoHandler::new();
-		let (client, _rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
+		let (client, _rpc_client) = local::connect::<gen_client::Client, _, _, _>(handler);
 		client
 			.add(5, 6)
 			.map(|res| println!("5 + 6 = {}", res))

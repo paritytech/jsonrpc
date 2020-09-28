@@ -169,7 +169,7 @@
 //! 	io.extend_with(RpcImpl.to_delegate());
 //!
 //! 	let fut = {
-//! 		let (client, server) = local::connect::<gen_client::Client, _, _>(io);
+//! 		let (client, server) = local::connect::<gen_client::Client, _, _, _>(io);
 //! 		client.add(5, 6).map(|res| println!("5 + 6 = {}", res)).join(server)
 //! 	};
 //! 	fut.wait().unwrap();
