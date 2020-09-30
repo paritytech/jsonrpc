@@ -8,12 +8,12 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 license = "MIT"
 name = "jsonrpc-http-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "15.0.0"
+version = "15.1.0"
 
 [dependencies]
 hyper = "0.12"
-jsonrpc-core = { version = "15.0", path = "../core" }
-jsonrpc-server-utils = { version = "15.0", path = "../server-utils" }
+jsonrpc-core = { version = "15.1.0", path = "../core" }
+jsonrpc-server-utils = { version = "15.1.0", path = "../server-utils" }
 log = "0.4"
 net2 = "0.2"
 unicase = "2.0"

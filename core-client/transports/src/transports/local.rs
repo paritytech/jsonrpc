@@ -4,7 +4,7 @@ use crate::{RpcChannel, RpcError};
 use failure::format_err;
 use futures::prelude::*;
 use futures::sync::mpsc;
-use jsonrpc_core::{MetaIoHandler, Metadata};
+use jsonrpc_core::{MetaIoHandler, Metadata, Middleware};
 use jsonrpc_pubsub::Session;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -17,10 +17,11 @@ pub struct LocalRpc<THandler, TMetadata> {
 	receiver: mpsc::UnboundedReceiver<String>,
 }
 
-impl<TMetadata, THandler> LocalRpc<THandler, TMetadata>
+impl<TMetadata, THandler, TMiddleware> LocalRpc<THandler, TMetadata>
 where
 	TMetadata: Metadata,
-	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	TMiddleware: Middleware<TMetadata>,
+	THandler: Deref<Target = MetaIoHandler<TMetadata, TMiddleware>>,
 {
 	/// Creates a new `LocalRpc` with default metadata.
 	pub fn new(handler: THandler) -> Self
@@ -42,10 +43,11 @@ where
 	}
 }
 
-impl<TMetadata, THandler> Stream for LocalRpc<THandler, TMetadata>
+impl<TMetadata, THandler, TMiddleware> Stream for LocalRpc<THandler, TMetadata>
 where
 	TMetadata: Metadata,
-	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	TMiddleware: Middleware<TMetadata>,
+	THandler: Deref<Target = MetaIoHandler<TMetadata, TMiddleware>>,
 {
 	type Item = String;
 	type Error = RpcError;
@@ -57,10 +59,11 @@ where
 	}
 }
 
-impl<TMetadata, THandler> Sink for LocalRpc<THandler, TMetadata>
+impl<TMetadata, THandler, TMiddleware> Sink for LocalRpc<THandler, TMetadata>
 where
 	TMetadata: Metadata,
-	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
+	TMiddleware: Middleware<TMetadata>,
+	THandler: Deref<Target = MetaIoHandler<TMetadata, TMiddleware>>,
 {
 	type SinkItem = String;
 	type SinkError = RpcError;
@@ -81,6 +84,23 @@ where
 	}
 }
 
+/// Connects to a `Deref<Target = MetaIoHandler<Metadata>` specifying a custom middleware implementation.
+pub fn connect_with_metadata_and_middleware<TClient, THandler, TMetadata, TMiddleware>(
+	handler: THandler,
+	meta: TMetadata,
+) -> (TClient, impl Future<Item = (), Error = RpcError>)
+where
+	TClient: From<RpcChannel>,
+	TMiddleware: Middleware<TMetadata>,
+	THandler: Deref<Target = MetaIoHandler<TMetadata, TMiddleware>>,
+	TMetadata: Metadata,
+{
+	let (sink, stream) = LocalRpc::with_metadata(handler, meta).split();
+	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
+	let client = TClient::from(sender);
+	(client, rpc_client)
+}
+
 /// Connects to a `Deref<Target = MetaIoHandler<Metadata>`.
 pub fn connect_with_metadata<TClient, THandler, TMetadata>(
 	handler: THandler,
@@ -91,10 +111,20 @@ where
 	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	TMetadata: Metadata,
 {
-	let (sink, stream) = LocalRpc::with_metadata(handler, meta).split();
-	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
-	let client = TClient::from(sender);
-	(client, rpc_client)
+	connect_with_metadata_and_middleware(handler, meta)
+}
+
+/// Connects to a `Deref<Target = MetaIoHandler<Metadata + Default>` specifying a custom middleware implementation.
+pub fn connect_with_middleware<TClient, THandler, TMetadata, TMiddleware>(
+	handler: THandler,
+) -> (TClient, impl Future<Item = (), Error = RpcError>)
+where
+	TClient: From<RpcChannel>,
+	TMiddleware: Middleware<TMetadata>,
+	THandler: Deref<Target = MetaIoHandler<TMetadata, TMiddleware>>,
+	TMetadata: Metadata + Default,
+{
+	connect_with_metadata_and_middleware(handler, Default::default())
 }
 
 /// Connects to a `Deref<Target = MetaIoHandler<Metadata + Default>`.
@@ -104,17 +134,20 @@ where
 	THandler: Deref<Target = MetaIoHandler<TMetadata>>,
 	TMetadata: Metadata + Default,
 {
-	connect_with_metadata(handler, Default::default())
+	connect_with_middleware(handler)
 }
 
 /// Metadata for LocalRpc.
 pub type LocalMeta = Arc<Session>;
 
-/// Connects with pubsub.
-pub fn connect_with_pubsub<TClient, THandler>(handler: THandler) -> (TClient, impl Future<Item = (), Error = RpcError>)
+/// Connects with pubsub specifying a custom middleware implementation.
+pub fn connect_with_pubsub_and_middleware<TClient, THandler, TMiddleware>(
+	handler: THandler,
+) -> (TClient, impl Future<Item = (), Error = RpcError>)
 where
 	TClient: From<RpcChannel>,
-	THandler: Deref<Target = MetaIoHandler<LocalMeta>>,
+	TMiddleware: Middleware<LocalMeta>,
+	THandler: Deref<Target = MetaIoHandler<LocalMeta, TMiddleware>>,
 {
 	let (tx, rx) = mpsc::channel(0);
 	let meta = Arc::new(Session::new(tx));
@@ -123,4 +156,13 @@ where
 	let (rpc_client, sender) = crate::transports::duplex(sink, stream);
 	let client = TClient::from(sender);
 	(client, rpc_client)
+}
+
+/// Connects with pubsub.
+pub fn connect_with_pubsub<TClient, THandler>(handler: THandler) -> (TClient, impl Future<Item = (), Error = RpcError>)
+where
+	TClient: From<RpcChannel>,
+	THandler: Deref<Target = MetaIoHandler<LocalMeta>>,
+{
+	connect_with_pubsub_and_middleware(handler)
 }

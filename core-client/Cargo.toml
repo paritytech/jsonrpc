@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-core-client"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "15.0.0"
+version = "15.1.0"
 
 categories = [
 	"asynchronous",
@@ -26,7 +26,7 @@ ipc = ["jsonrpc-client-transports/ipc"]
 arbitrary_precision = ["jsonrpc-client-transports/arbitrary_precision"]
 
 [dependencies]
-jsonrpc-client-transports = { version = "15.0", path = "./transports", default-features = false }
+jsonrpc-client-transports = { version = "15.1.0", path = "./transports", default-features = false }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
