@@ -148,7 +148,7 @@ where
 			self.max_connections,
 			self.max_payload_bytes,
 			self.max_in_buffer_capacity,
-			self.max_in_buffer_capacity,
+			self.max_out_buffer_capacity,
 		)
 	}
 }
