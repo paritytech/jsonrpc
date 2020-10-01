@@ -174,7 +174,7 @@ mod tests {
 	#[test]
 	fn config_usize_vals_can_be_set() {
 		let server = basic_server_builder();
-		
+
 		// We can set them individually
 		let server = server.max_connections(10);
 		assert_eq!(server.max_connections, 10);
