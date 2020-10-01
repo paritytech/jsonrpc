@@ -152,3 +152,46 @@ where
 		)
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn basic_server_builder() -> ServerBuilder<(), jsonrpc_core::middleware::Noop> {
+		let io = core::IoHandler::default();
+		ServerBuilder::new(io)
+	}
+	#[test]
+	fn config_usize_vals_have_correct_defaults() {
+		let server = basic_server_builder();
+
+		assert_eq!(server.max_connections, 100);
+		assert_eq!(server.max_payload_bytes, 5 * 1024 * 1024);
+		assert_eq!(server.max_in_buffer_capacity, 10 * 1024 * 1024);
+		assert_eq!(server.max_out_buffer_capacity, 10 * 1024 * 1024);
+	}
+
+	#[test]
+	fn config_usize_vals_can_be_set() {
+		let server = basic_server_builder();
+		
+		// We can set them individually
+		let server = server.max_connections(10);
+		assert_eq!(server.max_connections, 10);
+
+		let server = server.max_payload(29);
+		assert_eq!(server.max_payload_bytes, 29);
+
+		let server = server.max_in_buffer_capacity(38);
+		assert_eq!(server.max_in_buffer_capacity, 38);
+
+		let server = server.max_out_buffer_capacity(47);
+		assert_eq!(server.max_out_buffer_capacity, 47);
+
+		// Setting values consecutively does not impact other values
+		assert_eq!(server.max_connections, 10);
+		assert_eq!(server.max_payload_bytes, 29);
+		assert_eq!(server.max_in_buffer_capacity, 38);
+		assert_eq!(server.max_out_buffer_capacity, 47);
+	}
+}
