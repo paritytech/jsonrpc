@@ -58,6 +58,8 @@ impl Server {
 		executor: UninitializedExecutor,
 		max_connections: usize,
 		max_payload_bytes: usize,
+		max_in_buffer_capacity: usize,
+		max_out_buffer_capacity: usize,
 	) -> Result<Server>
 	where
 		S::Future: Unpin,
@@ -68,8 +70,8 @@ impl Server {
 			config.max_connections = max_connections;
 			// don't accept super large requests
 			config.max_fragment_size = max_payload_bytes;
-			config.max_in_buffer_capacity = max_payload_bytes;
-			config.max_out_buffer_capacity = max_payload_bytes;
+			config.max_in_buffer_capacity = max_in_buffer_capacity;
+			config.max_out_buffer_capacity = max_out_buffer_capacity;
 			// don't grow non-final fragments (to prevent DOS)
 			config.fragments_grow = false;
 			config.fragments_capacity = cmp::max(1, max_payload_bytes / config.fragment_size);
