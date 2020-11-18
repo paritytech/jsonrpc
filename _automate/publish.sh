@@ -66,6 +66,8 @@ for CRATE_DIR in ${ORDER[@]}; do
 			if [ "$CHOICE" = "s" ]; then
 				break
 			fi
+		else
+			break
 		fi
 	done
 

@@ -120,7 +120,22 @@
 //! 	}
 //! }
 //!
-//! # fn main() {}
+//! fn main() {
+//!	  let mut io = jsonrpc_core::MetaIoHandler::default();
+//!	  io.extend_with(RpcImpl::default().to_delegate());
+//!
+//!	  let server_builder = jsonrpc_tcp_server::ServerBuilder::with_meta_extractor(
+//!		io,
+//!		|request: &jsonrpc_tcp_server::RequestContext| Arc::new(Session::new(request.sender.clone()))
+//!	  );
+//!	  let server = server_builder
+//!		.start(&"127.0.0.1:3030".parse().unwrap())
+//!		.expect("Unable to start TCP server");
+//!
+//!   // The server spawns a separate thread. Dropping the `server` handle causes it to close.
+//!   // Uncomment the line below to keep the server running in your example.
+//!	  // server.wait();
+//! }
 //! ```
 //!
 //! Client Example

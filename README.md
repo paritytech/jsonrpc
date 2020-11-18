@@ -50,12 +50,12 @@ Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` 
 
 ```rust
 use jsonrpc_http_server::jsonrpc_core::{IoHandler, Value, Params};
-use jsonrpc_http_server::{ServerBuilder};
+use jsonrpc_http_server::ServerBuilder;
 
 fn main() {
-	let mut io = IoHandler::new();
-	io.add_method("say_hello", |_params: Params| {
-		Ok(Value::String("hello".to_string()))
+	let mut io = IoHandler::default();
+	io.add_method("say_hello", |_params: Params| async {
+		Ok(Value::String("hello".to_owned()))
 	});
 
 	let server = ServerBuilder::new(io)
@@ -97,7 +97,6 @@ fn main() {
 
 ```rust
 use jsonrpc_core_client::transports::local;
-use jsonrpc_core::futures::future::{self, Future, FutureResult};
 use jsonrpc_core::{Error, IoHandler, Result};
 use jsonrpc_derive::rpc;
 
@@ -143,5 +142,4 @@ fn main() {
 	};
 	fut.wait().unwrap();
 }
-
 ```

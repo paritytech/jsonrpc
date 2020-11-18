@@ -24,6 +24,8 @@ pub struct ServerBuilder<M: core::Metadata, S: core::Middleware<M>> {
 	executor: UninitializedExecutor,
 	max_connections: usize,
 	max_payload_bytes: usize,
+	max_in_buffer_capacity: usize,
+	max_out_buffer_capacity: usize,
 }
 
 impl<M: core::Metadata + Default, S: core::Middleware<M>> ServerBuilder<M, S>
@@ -61,6 +63,8 @@ where
 			executor: UninitializedExecutor::Unspawned,
 			max_connections: 100,
 			max_payload_bytes: 5 * 1024 * 1024,
+			max_in_buffer_capacity: 10 * 1024 * 1024,
+			max_out_buffer_capacity: 10 * 1024 * 1024,
 		}
 	}
 
@@ -115,6 +119,20 @@ where
 		self
 	}
 
+	/// The maximum size to which the incoming buffer can grow.
+	/// Default: 10,485,760
+	pub fn max_in_buffer_capacity(mut self, max_in_buffer_capacity: usize) -> Self {
+		self.max_in_buffer_capacity = max_in_buffer_capacity;
+		self
+	}
+
+	/// The maximum size to which the outgoing buffer can grow.
+	/// Default: 10,485,760
+	pub fn max_out_buffer_capacity(mut self, max_out_buffer_capacity: usize) -> Self {
+		self.max_out_buffer_capacity = max_out_buffer_capacity;
+		self
+	}
+
 	/// Starts a new `WebSocket` server in separate thread.
 	/// Returns a `Server` handle which closes the server when droped.
 	pub fn start(self, addr: &SocketAddr) -> Result<Server> {
@@ -129,6 +147,51 @@ where
 			self.executor,
 			self.max_connections,
 			self.max_payload_bytes,
+			self.max_in_buffer_capacity,
+			self.max_out_buffer_capacity,
 		)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	fn basic_server_builder() -> ServerBuilder<(), jsonrpc_core::middleware::Noop> {
+		let io = core::IoHandler::default();
+		ServerBuilder::new(io)
+	}
+	#[test]
+	fn config_usize_vals_have_correct_defaults() {
+		let server = basic_server_builder();
+
+		assert_eq!(server.max_connections, 100);
+		assert_eq!(server.max_payload_bytes, 5 * 1024 * 1024);
+		assert_eq!(server.max_in_buffer_capacity, 10 * 1024 * 1024);
+		assert_eq!(server.max_out_buffer_capacity, 10 * 1024 * 1024);
+	}
+
+	#[test]
+	fn config_usize_vals_can_be_set() {
+		let server = basic_server_builder();
+
+		// We can set them individually
+		let server = server.max_connections(10);
+		assert_eq!(server.max_connections, 10);
+
+		let server = server.max_payload(29);
+		assert_eq!(server.max_payload_bytes, 29);
+
+		let server = server.max_in_buffer_capacity(38);
+		assert_eq!(server.max_in_buffer_capacity, 38);
+
+		let server = server.max_out_buffer_capacity(47);
+		assert_eq!(server.max_out_buffer_capacity, 47);
+
+		// Setting values consecutively does not impact other values
+		assert_eq!(server.max_connections, 10);
+		assert_eq!(server.max_payload_bytes, 29);
+		assert_eq!(server.max_in_buffer_capacity, 38);
+		assert_eq!(server.max_out_buffer_capacity, 47);
 	}
 }
