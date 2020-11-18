@@ -15,7 +15,7 @@ futures = { version = "0.3", features = ["thread-pool"] }
 jsonrpc-core = { version = "16.0", path = "../core" }
 lazy_static = "1.4"
 log = "0.4"
-parking_lot = "0.11.0"
+parking_lot = "0.11.1"
 rand = "0.7"
 serde = "1.0"
 

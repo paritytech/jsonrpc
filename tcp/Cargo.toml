@@ -16,7 +16,7 @@ futures03 = { version = "0.3", features = ["compat"], package = "futures" }
 jsonrpc-core = { version = "16.0", path = "../core" }
 jsonrpc-server-utils = { version = "16.0", path = "../server-utils" }
 log = "0.4"
-parking_lot = "0.10.0"
+parking_lot = "0.11.1"
 tokio-service = "0.1"
 
 [dev-dependencies]
