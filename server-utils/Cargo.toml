@@ -12,6 +12,7 @@ version = "16.0.0"
 
 [dependencies]
 bytes = "0.4"
+bytes05 = { version = "0.5", package = "bytes" }
 futures01 = { version = "0.1", package = "futures" }
 globset = "0.4"
 jsonrpc-core = { version = "16.0", path = "../core" }
@@ -19,6 +20,7 @@ lazy_static = "1.1.0"
 log = "0.4"
 tokio = { version = "0.1.15" }
 tokio-codec = { version = "0.1" }
+tokio-util = { version = "0.3", features = ["codec", "compat"] }
 unicase = "2.0"
 
 [badges]

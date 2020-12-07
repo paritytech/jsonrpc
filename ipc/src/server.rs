@@ -12,7 +12,6 @@ use tokio_service::{self, Service as _};
 use crate::server_utils::{
 	codecs, reactor, session,
 	tokio::{reactor::Handle, runtime::TaskExecutor},
-	tokio_codec::Framed,
 };
 
 pub use parity_tokio_ipc::SecurityAttributes;
@@ -149,7 +148,6 @@ where
 	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let executor = self.executor.initialize()?;
-		let reactor = self.reactor;
 		let rpc_handler = self.handler;
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor;
@@ -173,15 +171,8 @@ where
 				}
 			}
 
-			// Make sure to construct Handle::default() inside Tokio runtime
-			let reactor = if cfg!(windows) {
-				#[allow(deprecated)]
-				reactor.unwrap_or_else(Handle::current)
-			} else {
-				reactor.unwrap_or_else(Handle::default)
-			};
-
-			let connections = match endpoint.incoming(&reactor) {
+			let endpoint_addr = endpoint.path().to_owned();
+			let connections = match endpoint.incoming() {
 				Ok(connections) => connections,
 				Err(e) => {
 					start_signal
@@ -193,7 +184,8 @@ where
 
 			let mut id = 0u64;
 
-			let server = connections.map(move |(io_stream, remote_id)| {
+			use futures03::TryStreamExt;
+			let server = connections.compat().map(move |io_stream| {
 				id = id.wrapping_add(1);
 				let session_id = id;
 				let session_stats = session_stats.clone();
@@ -204,41 +196,48 @@ where
 
 				let (sender, receiver) = mpsc::unbounded();
 				let meta = meta_extractor.extract(&RequestContext {
-					endpoint_addr: &remote_id,
+					endpoint_addr: endpoint_addr.as_ref(),
 					session_id,
 					sender,
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = Framed::new(
-					io_stream,
-					codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
-				)
-				.split();
+				use crate::server_utils::tokio_util;
+				let codec = codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone());
+				use tokio_util::codec::Decoder as _;
+				use futures03::StreamExt;
+				let (writer, reader) = codec.framed(io_stream).split();
+
+				// let (writer, reader) = Framed::new(io_stream, codec).split();
 				let responses = reader
-					.map(move |req| {
+					.map(move |req: std::io::Result<String>| {
+						// FIXME: !!
+						let req = req.unwrap();
+
+						use futures03::compat::Future01CompatExt;
 						service
 							.call(req)
 							.then(|result| match result {
-								Err(_) => future::ok(None),
-								Ok(some_result) => future::ok(some_result),
+								Err(_) => future::ok::<_, ()>(None),
+								Ok(some_result) => future::ok::<_, ()>(some_result),
 							})
 							.map_err(|_: ()| std::io::ErrorKind::Other.into())
+							.compat()
 					})
 					.buffer_unordered(client_buffer_size)
+					.compat()
 					.filter_map(|x| x)
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
-					.select_with_weak(futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, Ok)));
+					.select_with_weak(futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, std::io::Result::Ok)));
 
-				let writer = writer.send_all(responses).then(move |_| {
-					trace!(target: "ipc", "Peer: service finished");
-					if let Some(stats) = session_stats.as_ref() {
-						stats.close_session(session_id)
-					}
-					Ok(())
-				});
-
-				writer
+				responses.forward(futures03::SinkExt::compat(writer))
+					.and_then(move |_| {
+						trace!(target: "ipc", "Peer: service finished");
+						if let Some(stats) = session_stats.as_ref() {
+							stats.close_session(session_id)
+						}
+						Ok(())
+					})
 			});
 			start_signal
 				.send(Ok(()))
