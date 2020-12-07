@@ -50,8 +50,8 @@ fn main() {
 		futures::pin_mut!(server);
 
 		futures::select! {
-			server = server => {},
-			client = client => {},
+			_server = server => {},
+			_client = client => {},
 		}
 	});
 }
