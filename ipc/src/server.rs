@@ -7,7 +7,7 @@ use crate::select_with_weak::SelectWithWeakExt;
 use futures01::{future, sync::oneshot, Future, Sink, Stream};
 use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
-use tokio_service::{self, Service as TokioService};
+use tokio_service::{self, Service as _};
 
 use crate::server_utils::{
 	codecs, reactor, session,

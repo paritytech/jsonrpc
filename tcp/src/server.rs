@@ -2,7 +2,7 @@ use std;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tokio_service::Service as TokioService;
+use tokio_service::Service as _;
 
 use futures01::sync::oneshot;
 use futures01::{future, Future, Sink, Stream};
