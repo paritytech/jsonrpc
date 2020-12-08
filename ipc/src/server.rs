@@ -4,7 +4,7 @@ use crate::jsonrpc::futures::channel::mpsc;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 use crate::select_with_weak::SelectWithWeakExt;
-use futures01::{future, sync::oneshot, Future, Sink, Stream};
+use futures01::{future, sync::oneshot, Future, Stream};
 use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
 use tokio_service::{self, Service as _};
@@ -13,6 +13,7 @@ use crate::server_utils::{
 	codecs, reactor, session,
 	tokio::{reactor::Handle, runtime::TaskExecutor},
 	tokio_compat,
+	tokio_util,
 };
 
 pub use parity_tokio_ipc::SecurityAttributes;
@@ -208,30 +209,19 @@ where
 					sender,
 				});
 				let service = Service::new(rpc_handler.clone(), meta);
-				use crate::server_utils::tokio_util;
 				let codec = codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone());
-				use tokio_util::codec::Decoder as _;
-				use futures03::StreamExt;
-				let (writer, reader) = codec.framed(io_stream).split();
+				let framed = tokio_util::codec::Decoder::framed(codec, io_stream);
+				let (writer, reader) = futures03::StreamExt::split(framed);
 
-				// let (writer, reader) = Framed::new(io_stream, codec).split();
 				let responses = reader
-					.map(move |req: std::io::Result<String>| {
-						// FIXME: !!
-						let req = req.unwrap();
-
-						use futures03::compat::Future01CompatExt;
+					.compat()
+					.map(move |req| {
 						service
 							.call(req)
-							.then(|result| match result {
-								Err(_) => future::ok::<_, ()>(None),
-								Ok(some_result) => future::ok::<_, ()>(some_result),
-							})
+							.then(|result| future::ok::<_, ()>(result.unwrap_or(None)))
 							.map_err(|_: ()| std::io::ErrorKind::Other.into())
-							.compat()
 					})
 					.buffer_unordered(client_buffer_size)
-					.compat()
 					.filter_map(|x| x)
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
