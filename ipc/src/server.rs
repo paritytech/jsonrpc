@@ -1,13 +1,16 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use crate::jsonrpc::futures::channel::mpsc;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 use crate::select_with_weak::SelectWithWeakExt;
-use futures01::{future, sync::oneshot, Future, Stream};
+use futures01::{future, sync::oneshot, Future as _, Stream};
 use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
-use tokio_service::{self, Service as _};
+use tower_service::Service as _;
 
 use crate::server_utils::{
 	codecs, reactor, session,
@@ -31,22 +34,24 @@ impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S>
+impl<M: Metadata, S: Middleware<M>> tower_service::Service<String> for Service<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
-	type Request = String;
 	type Response = Option<String>;
-
 	type Error = ();
 
-	type Future = Box<dyn Future<Item = Option<String>, Error = ()> + Send>;
+	type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-	fn call(&self, req: Self::Request) -> Self::Future {
-		use futures03::{FutureExt, TryFutureExt};
+	fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+		Poll::Ready(Ok(()))
+	}
+
+	fn call(&mut self, req: String) -> Self::Future {
+		use futures03::FutureExt;
 		trace!(target: "ipc", "Received request: {}", req);
-		Box::new(self.handler.handle_request(&req, self.meta.clone()).map(Ok).compat())
+		Box::pin(self.handler.handle_request(&req, self.meta.clone()).map(Ok))
 	}
 }
 
@@ -202,7 +207,7 @@ where
 					session_id,
 					sender,
 				});
-				let service = Service::new(rpc_handler.clone(), meta);
+				let mut service = Service::new(rpc_handler.clone(), meta);
 				let codec = codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone());
 				let framed = tokio_util::codec::Decoder::framed(codec, io_stream);
 				let (writer, reader) = futures03::StreamExt::split(framed);
@@ -210,8 +215,10 @@ where
 				let responses = reader
 					.compat()
 					.map(move |req| {
+						use futures03::TryFutureExt;
 						service
 							.call(req)
+							.compat()
 							.then(|result| future::ok::<_, ()>(result.unwrap_or(None)))
 							.map_err(|_: ()| std::io::ErrorKind::Other.into())
 					})

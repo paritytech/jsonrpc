@@ -13,7 +13,7 @@ version = "16.0.0"
 futures01 = { version = "0.1", package = "futures" }
 futures03 = { version = "0.3", package = "futures", features = [ "compat" ] }
 log = "0.4"
-tokio-service = "0.1"
+tower-service = "0.3"
 jsonrpc-core = { version = "16.0", path = "../core" }
 jsonrpc-server-utils = { version = "16.0", path = "../server-utils" }
 parity-tokio-ipc = "0.7"

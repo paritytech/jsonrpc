@@ -2,7 +2,7 @@ use std;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tokio_service::Service as _;
+use tower_service::Service as _;
 
 use futures01::sync::oneshot;
 use futures01::{future, Future, Sink, Stream};
@@ -113,15 +113,16 @@ where
 					};
 
 					let meta = meta_extractor.extract(&context);
-					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
+					let mut service = Service::new(peer_addr, rpc_handler.clone(), meta);
 					let (writer, reader) = Framed::new(
 						socket,
 						codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
 					)
 					.split();
 
+					use futures03::TryFutureExt;
 					let responses = reader.and_then(move |req| {
-						service.call(req).then(|response| match response {
+						service.call(req).compat().then(|response| match response {
 							Err(e) => {
 								warn!(target: "tcp", "Error while processing request: {:?}", e);
 								future::ok(String::new())
