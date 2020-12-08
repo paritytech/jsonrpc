@@ -11,6 +11,7 @@ extern crate lazy_static;
 pub use tokio;
 pub use tokio_codec;
 pub use tokio_util;
+pub use tokio_compat;
 
 pub mod cors;
 pub mod hosts;

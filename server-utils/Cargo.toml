@@ -21,6 +21,7 @@ log = "0.4"
 tokio = { version = "0.1.15" }
 tokio-codec = { version = "0.1" }
 tokio-util = { version = "0.3", features = ["codec", "compat"] }
+tokio-compat = { version = "0.1" }
 unicase = "2.0"
 
 [badges]

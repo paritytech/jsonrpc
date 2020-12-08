@@ -15,6 +15,8 @@ use futures01::Future;
 pub enum UninitializedExecutor {
 	/// Shared instance of executor.
 	Shared(tokio::runtime::TaskExecutor),
+	/// Shared instance of executor.
+	Compat(tokio_compat::runtime::TaskExecutor),
 	/// Event Loop should be spawned by the transport.
 	Unspawned,
 }
@@ -33,6 +35,7 @@ impl UninitializedExecutor {
 	pub fn init_with_name<T: Into<String>>(self, name: T) -> io::Result<Executor> {
 		match self {
 			UninitializedExecutor::Shared(executor) => Ok(Executor::Shared(executor)),
+			UninitializedExecutor::Compat(executor) => Ok(Executor::Compat(executor)),
 			UninitializedExecutor::Unspawned => RpcEventLoop::with_name(Some(name.into())).map(Executor::Spawned),
 		}
 	}
@@ -43,6 +46,8 @@ impl UninitializedExecutor {
 pub enum Executor {
 	/// Shared instance
 	Shared(tokio::runtime::TaskExecutor),
+	/// Shared instance
+	Compat(tokio_compat::runtime::TaskExecutor),
 	/// Spawned Event Loop
 	Spawned(RpcEventLoop),
 }
@@ -52,6 +57,7 @@ impl Executor {
 	pub fn executor(&self) -> tokio::runtime::TaskExecutor {
 		match *self {
 			Executor::Shared(ref executor) => executor.clone(),
+			Executor::Compat(..) => panic!(),
 			Executor::Spawned(ref eloop) => eloop.executor(),
 		}
 	}
@@ -61,7 +67,11 @@ impl Executor {
 	where
 		F: Future<Item = (), Error = ()> + Send + 'static,
 	{
-		self.executor().spawn(future)
+		match self {
+			Executor::Shared(exe) => exe.spawn(future),
+			Executor::Compat(exe) => exe.spawn(future),
+			Executor::Spawned(eloop) => eloop.executor().spawn(future),
+		}
 	}
 
 	/// Closes underlying event loop (if any!).

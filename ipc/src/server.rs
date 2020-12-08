@@ -12,6 +12,7 @@ use tokio_service::{self, Service as _};
 use crate::server_utils::{
 	codecs, reactor, session,
 	tokio::{reactor::Handle, runtime::TaskExecutor},
+	tokio_compat,
 };
 
 pub use parity_tokio_ipc::SecurityAttributes;
@@ -102,6 +103,12 @@ where
 	/// Sets shared different event loop executor.
 	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
 		self.executor = reactor::UninitializedExecutor::Shared(executor);
+		self
+	}
+
+	/// Sets shared different event loop executor.
+	pub fn event_loop_executor_compat(mut self, executor: tokio_compat::runtime::TaskExecutor) -> Self {
+		self.executor = reactor::UninitializedExecutor::Compat(executor);
 		self
 	}
 
@@ -568,7 +575,9 @@ mod tests {
 		};
 
 		let io = MetaIoHandler::<Arc<SessionEndMeta>>::default();
+		let mut rt = tokio_compat::runtime::Builder::new().build().unwrap();
 		let builder = ServerBuilder::with_meta_extractor(io, session_metadata_extractor);
+		let builder = builder.event_loop_executor_compat(rt.executor());
 		let server = builder.start(path).expect("Server must run with no issues");
 		{
 			let _ = UnixStream::connect(path).wait().expect("Socket should connect");
