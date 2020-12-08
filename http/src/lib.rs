@@ -53,7 +53,7 @@ pub use crate::handler::ServerHandler;
 pub use crate::response::Response;
 pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, AllowCors, Origin};
 pub use crate::server_utils::hosts::{DomainsValidation, Host};
-pub use crate::server_utils::{tokio, SuspendableStream};
+pub use crate::server_utils::{tokio, tokio_compat, SuspendableStream};
 pub use crate::utils::{cors_allow_headers, cors_allow_origin, is_host_allowed};
 
 /// Action undertaken by a middleware.
@@ -300,7 +300,7 @@ where
 	/// Utilize existing event loop executor to poll RPC results.
 	///
 	/// Applies only to 1 of the threads. Other threads will spawn their own Event Loops.
-	pub fn event_loop_executor(mut self, executor: tokio::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, executor: tokio_compat::runtime::TaskExecutor) -> Self {
 		self.executor = UninitializedExecutor::Shared(executor);
 		self
 	}
@@ -519,7 +519,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		mpsc::Sender<io::Result<SocketAddr>>,
 		oneshot::Sender<()>,
 	),
-	executor: tokio::runtime::TaskExecutor,
+	executor: tokio_compat::runtime::TaskExecutor,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,

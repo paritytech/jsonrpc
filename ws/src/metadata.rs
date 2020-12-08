@@ -3,7 +3,7 @@ use std::sync::{atomic, Arc};
 
 use crate::core;
 use crate::core::futures::channel::mpsc;
-use crate::server_utils::{session, tokio::runtime::TaskExecutor};
+use crate::server_utils::{session, tokio_compat::runtime::TaskExecutor};
 use crate::ws;
 
 use crate::error;

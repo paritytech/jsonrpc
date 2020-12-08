@@ -69,7 +69,7 @@ where
 	}
 
 	/// Utilize existing event loop executor to poll RPC results.
-	pub fn event_loop_executor(mut self, executor: server_utils::tokio::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, executor: server_utils::tokio_compat::runtime::TaskExecutor) -> Self {
 		self.executor = UninitializedExecutor::Shared(executor);
 		self
 	}

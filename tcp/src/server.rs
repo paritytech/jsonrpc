@@ -8,7 +8,7 @@ use futures01::sync::oneshot;
 use futures01::{future, Future, Sink, Stream};
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use crate::server_utils::{codecs, reactor, tokio, tokio_codec::Framed, SuspendableStream};
+use crate::server_utils::{codecs, reactor, tokio, tokio_compat, tokio_codec::Framed, SuspendableStream};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -60,7 +60,7 @@ where
 	}
 
 	/// Utilize existing event loop executor.
-	pub fn event_loop_executor(mut self, handle: tokio::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, handle: tokio_compat::runtime::TaskExecutor) -> Self {
 		self.executor = reactor::UninitializedExecutor::Shared(handle);
 		self
 	}
