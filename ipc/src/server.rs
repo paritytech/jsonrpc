@@ -238,7 +238,7 @@ where
 					.select_with_weak(futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, std::io::Result::Ok)));
 
 				responses.forward(futures03::SinkExt::compat(writer))
-					.and_then(move |_| {
+					.then(move |_| {
 						trace!(target: "ipc", "Peer: service finished");
 						if let Some(stats) = session_stats.as_ref() {
 							stats.close_session(session_id)
