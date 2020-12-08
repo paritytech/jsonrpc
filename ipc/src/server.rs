@@ -339,10 +339,9 @@ impl CloseHandle {
 mod tests {
 	use super::*;
 
-	use futures01::{Future, Sink, Stream};
+	use futures01::{Future, Stream};
 	use jsonrpc_core::Value;
 	use jsonrpc_server_utils::tokio::{self, timer::Delay};
-	use jsonrpc_server_utils::tokio_codec::Decoder;
 	use std::thread;
 	use std::time::{self, Duration, Instant};
 	use tokio_uds::UnixStream;
@@ -360,17 +359,22 @@ mod tests {
 	}
 
 	fn dummy_request_str(path: &str, data: &str) -> String {
-		let stream_future = UnixStream::connect(path);
-		let reply = stream_future.and_then(|stream| {
-			let stream = codecs::StreamCodec::stream_incoming().framed(stream);
-			let reply = stream
-				.send(data.to_owned())
-				.and_then(move |stream| stream.into_future().map_err(|(err, _)| err))
-				.and_then(|(reply, _)| future::ok(reply.expect("there should be one reply")));
-			reply
-		});
+		use futures03::{StreamExt, SinkExt};
 
-		reply.wait().expect("wait for reply")
+		let reply = async move {
+			use tokio02::net::UnixStream;
+
+			let stream: UnixStream = UnixStream::connect(path).await?;
+			let codec = codecs::StreamCodec::stream_incoming();
+			let mut stream = tokio_util::codec::Decoder::framed(codec, stream);
+			stream.send(data.to_owned()).await?;
+			let (reply, _) = stream.into_future().await;
+
+			reply.expect("there should be one reply")
+		};
+
+		let mut rt = tokio02::runtime::Runtime::new().unwrap();
+		rt.block_on(reply).expect("wait for reply")
 	}
 
 	#[test]

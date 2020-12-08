@@ -18,7 +18,7 @@ globset = "0.4"
 jsonrpc-core = { version = "16.0", path = "../core" }
 lazy_static = "1.1.0"
 log = "0.4"
-tokio = { version = "0.1.15", default-features = false, features = ["timer", "tcp"] }
+tokio = { version = "0.1.15", default-features = false, features = ["timer", "tcp", "reactor", "rt-full"] }
 tokio-codec = { version = "0.1", optional = true }
 tokio-util = { version = "0.3", features = ["codec", "compat"] }
 tokio-compat = { version = "0.1" }

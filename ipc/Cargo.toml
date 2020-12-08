@@ -25,6 +25,7 @@ lazy_static = "1.0"
 
 [target.'cfg(not(windows))'.dev-dependencies]
 tokio-uds = "0.2"
+tokio02 = { package = "tokio", version = "0.2", default-features = false, features = ["uds"] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
