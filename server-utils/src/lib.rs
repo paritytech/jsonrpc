@@ -8,6 +8,7 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(feature = "tokio")]
 pub use tokio;
 pub use tokio_util;
 pub use tokio_compat;
@@ -20,9 +21,11 @@ mod matcher;
 pub mod reactor;
 pub mod session;
 mod stream_codec;
+#[cfg(feature = "tokio")]
 mod suspendable_stream;
 
 pub use crate::matcher::Pattern;
+#[cfg(feature = "tokio")]
 pub use crate::suspendable_stream::SuspendableStream;
 
 /// Codecs utilities

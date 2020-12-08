@@ -167,7 +167,7 @@ where
 		let security_attributes = self.security_attributes;
 		let client_buffer_size = self.client_buffer_size;
 
-		executor.spawn(future::lazy(move || {
+		executor.executor().spawn(future::lazy(move || {
 			let mut endpoint = Endpoint::new(endpoint_addr);
 			endpoint.set_security_attributes(security_attributes);
 

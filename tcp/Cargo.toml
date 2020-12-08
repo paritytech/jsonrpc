@@ -14,7 +14,7 @@ futures01 = { version = "0.1", package = "futures" }
 # TODO remove when we no longer need compat (use jsonrpc-core re-export instead)
 futures03 = { version = "0.3", features = ["compat"], package = "futures" }
 jsonrpc-core = { version = "16.0", path = "../core" }
-jsonrpc-server-utils = { version = "16.0", path = "../server-utils", features = ["tokio-codec"] }
+jsonrpc-server-utils = { version = "16.0", path = "../server-utils", features = ["tokio", "tokio-codec"] }
 log = "0.4"
 parking_lot = "0.11.0"
 tower-service = "0.3"

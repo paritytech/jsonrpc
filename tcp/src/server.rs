@@ -91,7 +91,7 @@ where
 
 		let executor = self.executor.initialize()?;
 
-		executor.spawn(future::lazy(move || {
+		executor.executor().spawn(future::lazy(move || {
 			let start = move || {
 				let listener = tokio::net::TcpListener::bind(&address)?;
 				let connections = SuspendableStream::new(listener.incoming());

@@ -7,8 +7,6 @@
 
 use std::io;
 
-use tokio::prelude::Future;
-
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]
 pub enum UninitializedExecutor {
@@ -52,17 +50,6 @@ impl Executor {
 		match self {
 			Executor::Shared(ref executor) => executor.clone(),
 			Executor::Spawned(ref eloop) => eloop.executor(),
-		}
-	}
-
-	/// Spawn a future onto the Tokio runtime.
-	pub fn spawn<F>(&self, future: F)
-	where
-		F: Future<Item = (), Error = ()> + Send + 'static,
-	{
-		match self {
-			Executor::Shared(exe) => exe.spawn(future),
-			Executor::Spawned(eloop) => eloop.executor().spawn(future),
 		}
 	}
 
@@ -130,6 +117,7 @@ impl RpcEventLoop {
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> Result<(), ()> {
+		use futures01::Future;
 		self.runtime.take().ok_or(())?.shutdown_on_idle().wait()
 	}
 
