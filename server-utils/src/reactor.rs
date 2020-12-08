@@ -7,7 +7,7 @@
 
 use std::io;
 
-use futures01::Future;
+use tokio::prelude::Future;
 
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]
@@ -85,7 +85,7 @@ impl Executor {
 #[derive(Debug)]
 pub struct RpcEventLoop {
 	executor: tokio_compat::runtime::TaskExecutor,
-	close: Option<futures01::Complete<()>>,
+	close: Option<futures03::channel::oneshot::Sender<()>>,
 	runtime: Option<tokio_compat::runtime::Runtime>,
 }
 
@@ -103,7 +103,7 @@ impl RpcEventLoop {
 
 	/// Spawns a new named thread with the `EventLoop`.
 	pub fn with_name(name: Option<String>) -> io::Result<Self> {
-		let (stop, stopped) = futures01::oneshot();
+		let (stop, stopped) = futures03::channel::oneshot::channel();
 
 		let mut tb = tokio_compat::runtime::Builder::new();
 		tb.core_threads(1);
@@ -114,8 +114,7 @@ impl RpcEventLoop {
 
 		let runtime = tb.build()?;
 		let executor = runtime.executor();
-		let terminate = futures01::empty().select(stopped).map(|_| ()).map_err(|_| ());
-		runtime.spawn(terminate);
+		runtime.spawn_std(async { let _ = stopped.await; });
 
 		Ok(RpcEventLoop {
 			executor,
