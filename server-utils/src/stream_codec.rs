@@ -1,6 +1,4 @@
-use bytes::BytesMut;
 use std::{io, str};
-use tokio_codec::{Decoder, Encoder};
 
 /// Separator for enveloping messages in streaming codecs
 #[derive(Debug, Clone)]
@@ -108,11 +106,12 @@ impl tokio_util::codec::Decoder for StreamCodec {
 	}
 }
 
-impl Decoder for StreamCodec {
+#[cfg(feature = "tokio-codec")]
+impl tokio_codec::Decoder for StreamCodec {
 	type Item = String;
 	type Error = io::Error;
 
-	fn decode(&mut self, buf: &mut BytesMut) -> io::Result<Option<Self::Item>> {
+	fn decode(&mut self, buf: &mut bytes04::BytesMut) -> io::Result<Option<Self::Item>> {
 		if let Separator::Byte(separator) = self.incoming_separator {
 			if let Some(i) = buf.as_ref().iter().position(|&b| b == separator) {
 				let line = buf.split_to(i);
@@ -168,11 +167,12 @@ impl Decoder for StreamCodec {
 	}
 }
 
-impl Encoder for StreamCodec {
+#[cfg(feature = "tokio-codec")]
+impl tokio_codec::Encoder for StreamCodec {
 	type Item = String;
 	type Error = io::Error;
 
-	fn encode(&mut self, msg: String, buf: &mut BytesMut) -> io::Result<()> {
+	fn encode(&mut self, msg: String, buf: &mut bytes04::BytesMut) -> io::Result<()> {
 		let mut payload = msg.into_bytes();
 		if let Separator::Byte(separator) = self.outgoing_separator {
 			payload.push(separator);
@@ -199,8 +199,8 @@ impl tokio_util::codec::Encoder<String> for StreamCodec {
 mod tests {
 
 	use super::StreamCodec;
-	use bytes::{BufMut, BytesMut};
-	use tokio_codec::Decoder;
+	use bytes05::{BufMut, BytesMut};
+	use tokio_util::codec::Decoder;
 
 	#[test]
 	fn simple_encode() {
