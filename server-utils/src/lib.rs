@@ -11,7 +11,10 @@ extern crate lazy_static;
 #[cfg(feature = "tokio")]
 pub use tokio;
 pub use tokio_util;
+#[cfg(feature = "tokio-compat")]
 pub use tokio_compat;
+#[cfg(feature = "tokio02")]
+pub use tokio02;
 #[cfg(feature = "tokio-codec")]
 pub use tokio_codec;
 
