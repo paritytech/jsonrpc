@@ -216,11 +216,9 @@ where
 					.compat()
 					.map(move |req| {
 						use futures03::TryFutureExt;
-						service
-							.call(req)
+						service.call(req)
+							.map_err(|()| std::io::ErrorKind::Other.into())
 							.compat()
-							.then(|result| future::ok::<_, ()>(result.unwrap_or(None)))
-							.map_err(|_: ()| std::io::ErrorKind::Other.into())
 					})
 					.buffer_unordered(client_buffer_size)
 					.filter_map(|x| x)
