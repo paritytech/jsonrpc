@@ -39,7 +39,7 @@ fn main() {
 				// or drop(subscriber)
 
 				loop {
-					if is_done.load(atomic::Ordering::AcqRel) {
+					if is_done.load(atomic::Ordering::SeqCst) {
 						return;
 					}
 
@@ -56,7 +56,7 @@ fn main() {
 		}),
 		("remove_hello", move |_id: SubscriptionId, _| {
 			println!("Closing subscription");
-			is_done2.store(true, atomic::Ordering::AcqRel);
+			is_done2.store(true, atomic::Ordering::SeqCst);
 			futures::future::ok(Value::Bool(true))
 		}),
 	);
