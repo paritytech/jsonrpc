@@ -14,8 +14,7 @@ use tower_service::Service as _;
 
 use crate::server_utils::{
 	codecs, reactor, session,
-	tokio::reactor::Handle,
-	tokio_compat::runtime::TaskExecutor,
+	reactor::TaskExecutor,
 	tokio_util,
 };
 
@@ -61,7 +60,6 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	meta_extractor: Arc<dyn MetaExtractor<M>>,
 	session_stats: Option<Arc<dyn session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
-	reactor: Option<Handle>,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
 	security_attributes: SecurityAttributes,
@@ -98,7 +96,6 @@ where
 			meta_extractor: Arc::new(extractor),
 			session_stats: None,
 			executor: reactor::UninitializedExecutor::Unspawned,
-			reactor: None,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
 			security_attributes: SecurityAttributes::empty(),
@@ -109,12 +106,6 @@ where
 	/// Sets shared different event loop executor.
 	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
 		self.executor = reactor::UninitializedExecutor::Shared(executor);
-		self
-	}
-
-	/// Sets different event loop I/O reactor.
-	pub fn event_loop_reactor(mut self, reactor: Handle) -> Self {
-		self.reactor = Some(reactor);
 		self
 	}
 
@@ -257,7 +248,7 @@ where
 		use futures03::compat::Future01CompatExt;
 		use futures03::FutureExt;
 		let fut = Box::pin(fut.compat().map(drop));
-		executor.executor().spawn_std(fut);
+		executor.executor().spawn(fut);
 
 		let handle = InnerHandles {
 			executor: Some(executor),
@@ -343,9 +334,8 @@ mod tests {
 
 	use futures01::{Future, Stream};
 	use jsonrpc_core::Value;
-	use jsonrpc_server_utils::tokio::{self, timer::Delay};
 	use std::thread;
-	use std::time::{self, Duration, Instant};
+	use std::time::{self, Duration};
 	use tokio_uds::UnixStream;
 
 	fn server_builder() -> ServerBuilder {
@@ -617,9 +607,14 @@ mod tests {
 			tx.send(true).expect("failed to report that the server has stopped");
 		});
 
-		let delay = Delay::new(Instant::now() + Duration::from_millis(500))
-			.map(|_| false)
-			.map_err(|err| panic!("{:?}", err));
+		use futures03::FutureExt;
+		use futures03::TryFutureExt;
+		let delay = futures01::future::lazy(||
+			// Lazily bound to Tokio timer instance
+			tokio02::time::delay_for(Duration::from_millis(500))
+			.map(|_| Ok(false))
+			.compat()
+		);
 
 		let result_fut = rx.map_err(|_| ()).select(delay).then(move |result| match result {
 			Ok((result, _)) => {
@@ -633,7 +628,9 @@ mod tests {
 			Err(_) => Err(()),
 		});
 
-		tokio::run(result_fut);
+		use futures03::compat::Future01CompatExt;
+		let mut rt = tokio02::runtime::Runtime::new().unwrap();
+		rt.block_on(result_fut.compat()).unwrap();
 	}
 
 	#[test]

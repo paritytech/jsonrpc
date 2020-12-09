@@ -26,4 +26,4 @@ pub use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 pub use crate::server::{CloseHandle, SecurityAttributes, Server, ServerBuilder};
 
 pub use self::server_utils::session::{SessionId, SessionStats};
-pub use self::server_utils::{codecs::Separator, tokio};
+pub use self::server_utils::{codecs::Separator};
