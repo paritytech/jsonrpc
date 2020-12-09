@@ -167,7 +167,7 @@ where
 		let security_attributes = self.security_attributes;
 		let client_buffer_size = self.client_buffer_size;
 
-		executor.executor().spawn(future::lazy(move || {
+		let fut = future::lazy(move || {
 			let mut endpoint = Endpoint::new(endpoint_addr);
 			endpoint.set_security_attributes(security_attributes);
 
@@ -255,7 +255,11 @@ where
 					})
 					.map_err(|_| ()),
 			)
-		}));
+		});
+		use futures03::compat::Future01CompatExt;
+		use futures03::FutureExt;
+		let fut = Box::pin(fut.compat().map(drop));
+		executor.executor().spawn_std(fut);
 
 		let handle = InnerHandles {
 			executor: Some(executor),
