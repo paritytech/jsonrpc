@@ -169,9 +169,7 @@ where
 }
 
 /// Connects to a `Deref<Target = MetaIoHandler<Metadata + Default>`.
-pub fn connect<TClient, THandler, TMetadata>(
-	handler: THandler
-) -> (TClient, impl Future<Output = RpcResult<()>>)
+pub fn connect<TClient, THandler, TMetadata>(handler: THandler) -> (TClient, impl Future<Output = RpcResult<()>>)
 where
 	TClient: From<RpcChannel>,
 	TMetadata: Metadata + Default + Unpin,
@@ -202,9 +200,7 @@ where
 }
 
 /// Connects with pubsub.
-pub fn connect_with_pubsub<TClient, THandler>(
-	handler: THandler
-) -> (TClient, impl Future<Output = RpcResult<()>>)
+pub fn connect_with_pubsub<TClient, THandler>(handler: THandler) -> (TClient, impl Future<Output = RpcResult<()>>)
 where
 	TClient: From<RpcChannel>,
 	THandler: Deref<Target = MetaIoHandler<LocalMeta>> + Unpin,
