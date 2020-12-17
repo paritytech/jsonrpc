@@ -24,7 +24,7 @@ tls = ["hyper-tls", "http"]
 http = ["hyper", "futures01"]
 ws = [
 	"websocket",
-	"tokio",
+	"tokio02",
 	"futures01",
 ]
 ipc = [
@@ -50,6 +50,7 @@ jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional
 parity-tokio-ipc = { version = "0.7", optional = true }
 tokio = { version = "0.1", optional = true }
 websocket = { version = "0.24", optional = true }
+tokio02 = { package = "tokio", version = "0.2", features = ["macros"], optional = true }
 
 [dev-dependencies]
 assert_matches = "1.1"
