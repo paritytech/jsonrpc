@@ -4,8 +4,12 @@ use std::sync::Arc;
 
 use tower_service::Service as _;
 
-use futures01::sync::oneshot;
-use futures01::{future, Future, Sink, Stream};
+use futures03::channel::oneshot;
+// use futures01::sync::oneshot;
+use futures01::{
+	// future,
+	// Future,
+	Sink, Stream};
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio02, tokio_util::codec::Framed, SuspendableStream};
@@ -87,7 +91,7 @@ where
 		let outgoing_separator = self.outgoing_separator;
 		let address = addr.to_owned();
 		let (tx, rx) = std::sync::mpsc::channel();
-		let (stop_tx, stop_rx) = oneshot::channel();
+		let (stop_tx, stop_rx) = futures03::channel::oneshot::channel();
 
 		let executor = self.executor.initialize()?;
 
@@ -104,7 +108,10 @@ where
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
-							return future::Either::A(future::ok::<(), ()>(())).compat();
+							let fut = Box::pin(async move { });
+							// return future::Either::A(future::ok::<(), ()>(())).compat();
+							return futures03::future::Either::Left(fut);
+							// return future::Either::A(future::ok::<(), ()>(())).compat();
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
@@ -125,22 +132,21 @@ where
 
 					use futures03::TryStreamExt;
 					use futures03::SinkExt;
-					let reader = reader.compat();
-					let writer = writer.compat();
 					use futures03::TryFutureExt;
-					let responses = reader.and_then(move |req| {
-						service.call(req).compat().then(|response| match response {
+					use futures03::FutureExt;
+					let responses = TryStreamExt::and_then(reader, move |req| {
+						service.call(req).then(|response| match response {
 							Err(e) => {
 								warn!(target: "tcp", "Error while processing request: {:?}", e);
-								future::ok(String::new())
+								futures03::future::ok(String::new())
 							}
 							Ok(None) => {
 								trace!(target: "tcp", "JSON RPC request produced no response");
-								future::ok(String::new())
+								futures03::future::ok(String::new())
 							}
 							Ok(Some(response_data)) => {
 								trace!(target: "tcp", "Sent response: {}", &response_data);
-								future::ok(response_data)
+								futures03::future::ok(response_data)
 							}
 						})
 					});
@@ -153,23 +159,24 @@ where
 					};
 
 					let shared_channels = channels.clone();
-					let writer = writer.send_all(peer_message_queue).then(move |_| {
+					let writer = Box::pin(async move {
+						let _ = writer.send_all(&mut peer_message_queue).await;
+						// writer.send_all(peer_message_queue).then(move |_| {
 						trace!(target: "tcp", "Peer {}: service finished", peer_addr);
 						let mut channels = shared_channels.lock();
 						channels.remove(&peer_addr);
-						Ok::<(), ()>(())
-					});
+						// Ok::<(), ()>(())
+						});
+					// });
 
-					future::Either::B(writer).compat()
+					futures03::future::Either::Right(writer)
 				});
 
-				use futures03::compat::Stream01CompatExt;
 				Ok(server)
 			};
 
-			use futures03::compat::Future01CompatExt;
+			use futures03::TryFutureExt;
 
-			let stop = stop_rx.map(drop).map_err(drop).compat();
 			match start.await {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
@@ -177,9 +184,8 @@ where
 						.buffer_unordered(1024)
 						.for_each(|_| async { () })
 						;
-					// let stop = stop;
 
-					let select = futures03::future::select(Box::pin(server), stop);
+					let select = futures03::future::select(Box::pin(server), stop_rx);
 					select.await;
 
 					// future::Either::A(
@@ -195,14 +201,12 @@ where
 				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");
-					stop.await;
+					stop_rx.await;
 					// future::Either::B(stop.map_err(|e| {
 					// 	error!("Error while executing the server: {:?}", e);
 					// }))
 				}
 			}
-			// .compat()
-			// .await
 		});
 
 		let res = rx.recv().expect("Response is always sent before tx is dropped.");
