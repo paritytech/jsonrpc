@@ -540,9 +540,8 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	S::CallFuture: Unpin,
 {
 	use futures03::compat::Future01CompatExt;
-
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
-	executor.spawn({
+	executor.spawn(async move {
 		let bind = move || {
 			let listener = match addr {
 				SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
@@ -583,68 +582,52 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			}
 		};
 
-		bind_result
-			.and_then(move |(listener, local_addr)| {
-				let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
+		let (listener, local_addr) = bind_result.compat().await?;
 
-				let mut http = server::conn::Http::new();
-				http.keep_alive(keep_alive);
-				let tcp_stream = SuspendableStream::new(listener);
-				use futures03::StreamExt;
+		let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-				let server = tcp_stream
-					.map(move |socket| {
-						let service = ServerHandler::new(
-							jsonrpc_handler.downgrade(),
-							cors_domains.clone(),
-							cors_max_age,
-							allowed_headers.clone(),
-							allowed_hosts.clone(),
-							request_middleware.clone(),
-							rest_api,
-							health_api.clone(),
-							max_request_body_size,
-							keep_alive,
-						);
+		let mut http = server::conn::Http::new();
+		http.keep_alive(keep_alive);
+		let tcp_stream = SuspendableStream::new(listener);
+		use futures03::StreamExt;
 
-						let connection = http.serve_connection(socket, service)
-							.map(|res| {
-								res.map_err(|e| error!("Error serving connection: {:?}", e))
-							});
+		let server = tcp_stream
+			.map(move |socket| {
+				let service = ServerHandler::new(
+					jsonrpc_handler.downgrade(),
+					cors_domains.clone(),
+					cors_max_age,
+					allowed_headers.clone(),
+					allowed_hosts.clone(),
+					request_middleware.clone(),
+					rest_api,
+					health_api.clone(),
+					max_request_body_size,
+					keep_alive,
+				);
 
-						tokio02::spawn(connection);
-					})
-					.for_each(|_| async { () });
-				let shutdown_signal = shutdown_signal.map_err(|e| {
-					debug!("Shutdown signaller dropped, closing server: {:?}", e);
-				});
+				let connection = http.serve_connection(socket, service)
+					.map(|res| {
+						res.map_err(|e| error!("Error serving connection: {:?}", e))
+					});
 
-				use futures03::FutureExt;
-				use std::future::Future as StdFuture;
-
-				let server: std::pin::Pin<Box<dyn StdFuture<Output = ()> + Send>> = Box::pin(server);
-				let shutdown_signal: std::pin::Pin<Box<dyn StdFuture<Output = ()> + Send>> = Box::pin(shutdown_signal.compat().map(|_| ()));
-				let select = futures03::future::select(server, shutdown_signal);
-
-				futures03::compat::Compat::new(select.map(|x| Ok(x)))
-				// futures03::future::select(server, shutdown_signal).compat()
-					// .for_each(|_| async { () });
-					// .into_future()
-					// .map_err(|e| {
-					// 	warn!("Incoming streams error, closing sever: {:?}", e);
-					// })
-					// .select(shutdown_signal.map_err(|e| {
-					// 	debug!("Shutdown signaller dropped, closing server: {:?}", e);
-					// }))
-					// .map_err(|_| ())
+				tokio02::spawn(connection);
 			})
-			.and_then(|either_fut| {
-				// We drop the server first to prevent a situation where main thread terminates
-				// before the server is properly dropped (see #504 for more details)
-				drop(either_fut);
-				done_tx.send(())
-			})
-			.compat()
+			.for_each(|_| async { () });
+		let shutdown_signal = shutdown_signal.map_err(|e| {
+			debug!("Shutdown signaller dropped, closing server: {:?}", e);
+		});
+
+		use futures03::FutureExt;
+
+		let select = futures03::future::select(Box::pin(server), shutdown_signal.compat().map(drop));
+
+		let res = select.await;
+		// We drop the server (possibly unresolved future) first to prevent a situation where
+		// main thread terminates before the server is properly dropped (see #504 for more details)
+		drop(res);
+
+		done_tx.send(())
 	});
 }
 
