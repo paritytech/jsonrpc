@@ -587,7 +587,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
 		let mut http = server::conn::Http::new();
-		http.keep_alive(keep_alive);
+		http.http1_keep_alive(keep_alive);
 		let tcp_stream = SuspendableStream::new(listener);
 		use futures03::StreamExt;
 

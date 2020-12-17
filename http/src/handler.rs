@@ -2,7 +2,7 @@ use crate::WeakRpc;
 
 use std::sync::Arc;
 use std::{fmt, mem, str};
-use std::{pin::Pin, task};
+use std::task;
 
 use hyper::header::{self, HeaderMap, HeaderValue};
 use hyper::{self, service::Service, Body, Method};
