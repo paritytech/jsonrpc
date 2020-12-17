@@ -96,15 +96,15 @@ where
 			let start = async move {
 				let listener = tokio02::net::TcpListener::bind(&address).await?;
 				let connections = SuspendableStream::new(listener);
-				let connections = connections.map(Ok);
+				// let connections = connections.map(Ok);
 
 				use futures03::TryStreamExt;
-				let server = connections.compat().map(move |socket| {
+				let server = connections.map(move |socket| {
 					let peer_addr = match socket.peer_addr() {
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
-							return future::Either::A(future::ok(()));
+							return future::Either::A(future::ok::<(), ()>(())).compat();
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
@@ -157,10 +157,10 @@ where
 						trace!(target: "tcp", "Peer {}: service finished", peer_addr);
 						let mut channels = shared_channels.lock();
 						channels.remove(&peer_addr);
-						Ok(())
+						Ok::<(), ()>(())
 					});
 
-					future::Either::B(writer)
+					future::Either::B(writer).compat()
 				});
 
 				use futures03::compat::Stream01CompatExt;
@@ -169,30 +169,40 @@ where
 
 			use futures03::compat::Future01CompatExt;
 
-			let stop = stop_rx.map_err(|_| ());
+			let stop = stop_rx.map(drop).map_err(drop).compat();
 			match start.await {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
-					future::Either::A(
-						server
-							.buffer_unordered(1024)
-							.for_each(|_| Ok(()))
-							.select(stop)
-							.map(|_| ())
-							.map_err(|(e, _)| {
-								error!("Error while executing the server: {:?}", e);
-							}),
-					)
+					let server = server
+						.buffer_unordered(1024)
+						.for_each(|_| async { () })
+						;
+					// let stop = stop;
+
+					let select = futures03::future::select(Box::pin(server), stop);
+					select.await;
+
+					// future::Either::A(
+					// 	server
+					// 		.buffer_unordered(1024)
+					// 		// .for_each(|_| async { Ok(()) })
+					// 		.select(stop)
+					// 		.map(|_| ())
+					// 		.map_err(|(e, _)| {
+					// 			error!("Error while executing the server: {:?}", e);
+					// 		}),
+					// )
 				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");
-					future::Either::B(stop.map_err(|e| {
-						error!("Error while executing the server: {:?}", e);
-					}))
+					stop.await;
+					// future::Either::B(stop.map_err(|e| {
+					// 	error!("Error while executing the server: {:?}", e);
+					// }))
 				}
 			}
-			.compat()
-			.await
+			// .compat()
+			// .await
 		});
 
 		let res = rx.recv().expect("Response is always sent before tx is dropped.");
