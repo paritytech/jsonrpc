@@ -23,7 +23,7 @@ tokio = { version = "0.1.15", default-features = false, features = ["timer", "tc
 tokio-codec = { version = "0.1", optional = true }
 tokio-util = { version = "0.3", features = ["codec", "compat"] }
 tokio-compat = { version = "0.1", optional = true }
-tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["rt-threaded", "io-driver", "time", "tcp"] }
+tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["rt-threaded", "io-driver", "io-util", "time", "tcp"] }
 
 unicase = "2.0"
 

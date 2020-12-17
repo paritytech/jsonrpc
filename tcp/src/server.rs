@@ -8,7 +8,7 @@ use futures01::sync::oneshot;
 use futures01::{future, Future, Sink, Stream};
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use crate::server_utils::{codecs, reactor, tokio, tokio_compat, tokio_codec::Framed, SuspendableStream};
+use crate::server_utils::{codecs, reactor, tokio02, tokio_util::codec::Framed, SuspendableStream};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -59,11 +59,11 @@ where
 		}
 	}
 
-	/// Utilize existing event loop executor.
-	pub fn event_loop_executor(mut self, handle: tokio_compat::runtime::TaskExecutor) -> Self {
-		self.executor = reactor::UninitializedExecutor::Shared(handle);
-		self
-	}
+	// /// Utilize existing event loop executor.
+	// pub fn event_loop_executor(mut self, handle: tokio_compat::runtime::TaskExecutor) -> Self {
+	// 	self.executor = reactor::UninitializedExecutor::Shared(handle);
+	// 	self
+	// }
 
 	/// Sets session meta extractor
 	pub fn session_meta_extractor<T: MetaExtractor<M> + 'static>(mut self, meta_extractor: T) -> Self {
@@ -91,12 +91,15 @@ where
 
 		let executor = self.executor.initialize()?;
 
-		executor.executor().spawn(future::lazy(move || {
-			let start = move || {
-				let listener = tokio::net::TcpListener::bind(&address)?;
-				let connections = SuspendableStream::new(listener.incoming());
+		use futures03::StreamExt;
+		executor.executor().spawn(async move {
+			let start = async move {
+				let listener = tokio02::net::TcpListener::bind(&address).await?;
+				let connections = SuspendableStream::new(listener);
+				let connections = connections.map(Ok);
 
-				let server = connections.map(move |socket| {
+				use futures03::TryStreamExt;
+				let server = connections.compat().map(move |socket| {
 					let peer_addr = match socket.peer_addr() {
 						Ok(addr) => addr,
 						Err(e) => {
@@ -120,6 +123,10 @@ where
 					)
 					.split();
 
+					use futures03::TryStreamExt;
+					use futures03::SinkExt;
+					let reader = reader.compat();
+					let writer = writer.compat();
 					use futures03::TryFutureExt;
 					let responses = reader.and_then(move |req| {
 						service.call(req).compat().then(|response| match response {
@@ -156,11 +163,14 @@ where
 					future::Either::B(writer)
 				});
 
+				use futures03::compat::Stream01CompatExt;
 				Ok(server)
 			};
 
+			use futures03::compat::Future01CompatExt;
+
 			let stop = stop_rx.map_err(|_| ());
-			match start() {
+			match start.await {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
 					future::Either::A(
@@ -181,7 +191,9 @@ where
 					}))
 				}
 			}
-		}));
+			.compat()
+			.await
+		});
 
 		let res = rx.recv().expect("Response is always sent before tx is dropped.");
 

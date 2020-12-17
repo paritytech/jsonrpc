@@ -42,7 +42,7 @@ mod tests;
 
 use jsonrpc_core as jsonrpc;
 
-pub use self::server_utils::{codecs::Separator, tokio};
+pub use self::server_utils::{codecs::Separator, tokio02};
 pub use crate::dispatch::{Dispatcher, PushMessageError};
 pub use crate::meta::{MetaExtractor, RequestContext};
 pub use crate::server::{Server, ServerBuilder};
