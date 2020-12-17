@@ -14,7 +14,7 @@ version = "16.0.0"
 bytes04 = { version = "0.4", package = "bytes" }
 bytes05 = { version = "0.5", package = "bytes" }
 futures01 = { version = "0.1", package = "futures" }
-futures03 = { version = "0.3", package = "futures" }
+futures03 = { version = "0.3", package = "futures", features = ["compat"] }
 globset = "0.4"
 jsonrpc-core = { version = "16.0", path = "../core" }
 lazy_static = "1.1.0"
@@ -23,7 +23,7 @@ tokio = { version = "0.1.15", default-features = false, features = ["timer", "tc
 tokio-codec = { version = "0.1", optional = true }
 tokio-util = { version = "0.3", features = ["codec", "compat"] }
 tokio-compat = { version = "0.1", optional = true }
-tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["rt-threaded", "io-driver"] }
+tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["rt-threaded", "io-driver", "time"] }
 
 unicase = "2.0"
 

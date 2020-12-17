@@ -45,7 +45,9 @@ use parking_lot::Mutex;
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
 use futures01::sync::oneshot;
-use futures01::{future, Future, Stream};
+use futures01::{future, Future,
+	// Stream
+};
 use hyper::{server, Body};
 use jsonrpc_core as jsonrpc;
 
@@ -53,7 +55,8 @@ pub use crate::handler::ServerHandler;
 pub use crate::response::Response;
 pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, AllowCors, Origin};
 pub use crate::server_utils::hosts::{DomainsValidation, Host};
-pub use crate::server_utils::{tokio, tokio_compat, SuspendableStream};
+pub use crate::server_utils::{tokio02, SuspendableStream};
+pub use crate::server_utils::{reactor::TaskExecutor};
 pub use crate::utils::{cors_allow_headers, cors_allow_origin, is_host_allowed};
 
 /// Action undertaken by a middleware.
@@ -300,7 +303,7 @@ where
 	/// Utilize existing event loop executor to poll RPC results.
 	///
 	/// Applies only to 1 of the threads. Other threads will spawn their own Event Loops.
-	pub fn event_loop_executor(mut self, executor: tokio_compat::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
 		self.executor = UninitializedExecutor::Shared(executor);
 		self
 	}
@@ -519,7 +522,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		mpsc::Sender<io::Result<SocketAddr>>,
 		oneshot::Sender<()>,
 	),
-	executor: tokio_compat::runtime::TaskExecutor,
+	executor: TaskExecutor,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
@@ -536,10 +539,10 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
+	use futures03::compat::Future01CompatExt;
+
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
 	executor.spawn({
-		let handle = tokio::reactor::Handle::default();
-
 		let bind = move || {
 			let listener = match addr {
 				SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
@@ -549,7 +552,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			listener.reuse_address(true)?;
 			listener.bind(&addr)?;
 			let listener = listener.listen(1024)?;
-			let listener = tokio::net::TcpListener::from_std(listener, &handle)?;
+			let listener = tokio02::net::TcpListener::from_std(listener)?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!
@@ -587,8 +590,9 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				let mut http = server::conn::Http::new();
 				http.keep_alive(keep_alive);
 				let tcp_stream = SuspendableStream::new(listener.incoming());
+				use futures03::StreamExt;
 
-				tcp_stream
+				let server = tcp_stream
 					.map(move |socket| {
 						let service = ServerHandler::new(
 							jsonrpc_handler.downgrade(),
@@ -603,27 +607,52 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 							keep_alive,
 						);
 
-						tokio::spawn(
-							http.serve_connection(socket, service)
-								.map_err(|e| error!("Error serving connection: {:?}", e))
-								.then(|_| Ok(())),
-						)
+						let connection = http.serve_connection(socket, service)
+							.map(|res| {
+								res.map_err(|e| error!("Error serving connection: {:?}", e))
+							});
+
+						tokio02::spawn(connection);
 					})
-					.for_each(|_| Ok(()))
-					.map_err(|e| {
-						warn!("Incoming streams error, closing sever: {:?}", e);
-					})
-					.select(shutdown_signal.map_err(|e| {
-						debug!("Shutdown signaller dropped, closing server: {:?}", e);
-					}))
-					.map_err(|_| ())
+					.for_each(|_| async { () });
+				let shutdown_signal = shutdown_signal.map_err(|e| {
+					debug!("Shutdown signaller dropped, closing server: {:?}", e);
+				});
+
+				use futures03::FutureExt;
+				use std::future::Future as StdFuture;
+
+				let server: std::pin::Pin<Box<dyn StdFuture<Output = ()> + Send>> = Box::pin(server);
+				let shutdown_signal: std::pin::Pin<Box<dyn StdFuture<Output = ()> + Send>> = Box::pin(shutdown_signal.compat().map(|_| ()));
+				let select = futures03::future::select(server, shutdown_signal);
+
+				futures03::compat::Compat::new(select.map(|x| Ok(x)))
+				// futures03::future::select(server, shutdown_signal).compat()
+					// .for_each(|_| async { () });
+					// .into_future()
+					// .map_err(|e| {
+					// 	warn!("Incoming streams error, closing sever: {:?}", e);
+					// })
+					// .select(shutdown_signal.map_err(|e| {
+					// 	debug!("Shutdown signaller dropped, closing server: {:?}", e);
+					// }))
+					// .map_err(|_| ())
 			})
-			.and_then(|(_, server)| {
+			.and_then(|either| {
 				// We drop the server first to prevent a situation where main thread terminates
 				// before the server is properly dropped (see #504 for more details)
-				drop(server);
+				match either {
+					futures03::future::Either::Left((server_done, shutdown_future)) => {
+						drop(shutdown_future);
+					},
+					futures03::future::Either::Right((shutdown_signalled, server_future)) => {
+						drop(server_future);
+					},
+				}
+				// drop(server);
 				done_tx.send(())
 			})
+			.compat()
 	});
 }
 

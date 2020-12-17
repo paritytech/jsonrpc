@@ -2,6 +2,7 @@ use crate::WeakRpc;
 
 use std::sync::Arc;
 use std::{fmt, mem, str};
+use std::{pin::Pin, task};
 
 use hyper::header::{self, HeaderMap, HeaderValue};
 use hyper::{self, service::Service, Body, Method};
@@ -10,7 +11,7 @@ use crate::jsonrpc::serde_json;
 use crate::jsonrpc::{self as core, middleware, Metadata, Middleware};
 use crate::response::Response;
 use crate::server_utils::cors;
-use futures01::{Async, Future, Poll, Stream};
+use futures01::{Async, Future, Poll};
 
 use crate::{utils, AllowedHosts, CorsDomains, RequestMiddleware, RequestMiddlewareAction, RestApi};
 
@@ -57,17 +58,22 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S>
+impl<M: Metadata, S: Middleware<M>> Service<hyper::Request<Body>> for ServerHandler<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
-	type ReqBody = Body;
-	type ResBody = Body;
+	type Response = hyper::Response<Body>;
+	// type ReqBody = Body;
+	// type ResBody = Body;
 	type Error = hyper::Error;
 	type Future = Handler<M, S>;
 
-	fn call(&mut self, request: hyper::Request<Self::ReqBody>) -> Self::Future {
+	fn poll_ready(&mut self, cx: &mut task::Context<'_>) -> task::Poll<hyper::Result<()>> {
+		todo!()
+	}
+
+	fn call(&mut self, request: hyper::Request<Body>) -> Self::Future {
 		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
 		let action = self.middleware.on_request(request);
 
@@ -134,6 +140,30 @@ where
 			Handler::Rpc(ref mut handler) => handler.poll(),
 			Handler::Middleware(ref mut middleware) => middleware.poll(),
 			Handler::Err(ref mut response) => Ok(Async::Ready(
+				response
+					.take()
+					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
+					.into(),
+			)),
+		}
+	}
+}
+
+impl<M: Metadata, S: Middleware<M>> std::future::Future for Handler<M, S>
+where
+	S::Future: Unpin,
+	S::CallFuture: Unpin,
+{
+	type Output = hyper::Result<hyper::Response<Body>>;
+	// type Error = hyper::Error;
+
+	fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+		use std::future::Future as StdFuture;
+		use futures03::compat::Future01CompatExt;
+		match *self {
+			Handler::Rpc(ref mut handler) => StdFuture::poll(Pin::new(&mut handler.compat()), cx),
+			Handler::Middleware(ref mut middleware) => StdFuture::poll(Pin::new(&mut middleware.compat()), cx),
+			Handler::Err(ref mut response) => std::task::Poll::Ready(Ok(
 				response
 					.take()
 					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")

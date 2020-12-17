@@ -24,11 +24,11 @@ mod matcher;
 pub mod reactor;
 pub mod session;
 mod stream_codec;
-#[cfg(feature = "tokio")]
+#[cfg(feature = "tokio02")]
 mod suspendable_stream;
 
 pub use crate::matcher::Pattern;
-#[cfg(feature = "tokio")]
+#[cfg(feature = "tokio02")]
 pub use crate::suspendable_stream::SuspendableStream;
 
 /// Codecs utilities
