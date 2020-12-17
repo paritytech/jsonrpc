@@ -589,7 +589,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 
 				let mut http = server::conn::Http::new();
 				http.keep_alive(keep_alive);
-				let tcp_stream = SuspendableStream::new(listener.incoming());
+				let tcp_stream = SuspendableStream::new(listener);
 				use futures03::StreamExt;
 
 				let server = tcp_stream
@@ -638,18 +638,10 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 					// }))
 					// .map_err(|_| ())
 			})
-			.and_then(|either| {
+			.and_then(|either_fut| {
 				// We drop the server first to prevent a situation where main thread terminates
 				// before the server is properly dropped (see #504 for more details)
-				match either {
-					futures03::future::Either::Left((server_done, shutdown_future)) => {
-						drop(shutdown_future);
-					},
-					futures03::future::Either::Right((shutdown_signalled, server_future)) => {
-						drop(server_future);
-					},
-				}
-				// drop(server);
+				drop(either_fut);
 				done_tx.send(())
 			})
 			.compat()

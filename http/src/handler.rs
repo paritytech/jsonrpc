@@ -67,13 +67,14 @@ where
 	// type ReqBody = Body;
 	// type ResBody = Body;
 	type Error = hyper::Error;
-	type Future = Handler<M, S>;
+	type Future = futures03::compat::Compat01As03<Handler<M, S>>;
 
-	fn poll_ready(&mut self, cx: &mut task::Context<'_>) -> task::Poll<hyper::Result<()>> {
-		todo!()
+	fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> task::Poll<hyper::Result<()>> {
+		task::Poll::Ready(Ok(()))
 	}
 
 	fn call(&mut self, request: hyper::Request<Body>) -> Self::Future {
+		use futures03::compat::Future01CompatExt;
 		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
 		let action = self.middleware.on_request(request);
 
@@ -90,12 +91,12 @@ where
 
 		// Validate host
 		if should_validate_hosts && !is_host_allowed {
-			return Handler::Err(Some(Response::host_not_allowed()));
+			return Handler::Err(Some(Response::host_not_allowed())).compat();
 		}
 
 		// Replace response with the one returned by middleware.
 		match response {
-			Ok(response) => Handler::Middleware(response),
+			Ok(response) => Handler::Middleware(response).compat(),
 			Err(request) => {
 				Handler::Rpc(RpcHandler {
 					jsonrpc_handler: self.jsonrpc_handler.clone(),
@@ -115,7 +116,7 @@ where
 					max_request_body_size: self.max_request_body_size,
 					// initial value, overwritten when reading client headers
 					keep_alive: true,
-				})
+				}).compat()
 			}
 		}
 	}
@@ -149,29 +150,30 @@ where
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> std::future::Future for Handler<M, S>
-where
-	S::Future: Unpin,
-	S::CallFuture: Unpin,
-{
-	type Output = hyper::Result<hyper::Response<Body>>;
-	// type Error = hyper::Error;
+// impl<M: Metadata, S: Middleware<M>> std::future::Future for Handler<M, S>
+// where
+// 	S::Future: Unpin,
+// 	S::CallFuture: Unpin,
+// {
+// 	type Output = hyper::Result<hyper::Response<Body>>;
+// 	// type Error = hyper::Error;
 
-	fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
-		use std::future::Future as StdFuture;
-		use futures03::compat::Future01CompatExt;
-		match *self {
-			Handler::Rpc(ref mut handler) => StdFuture::poll(Pin::new(&mut handler.compat()), cx),
-			Handler::Middleware(ref mut middleware) => StdFuture::poll(Pin::new(&mut middleware.compat()), cx),
-			Handler::Err(ref mut response) => std::task::Poll::Ready(Ok(
-				response
-					.take()
-					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
-					.into(),
-			)),
-		}
-	}
-}
+// 	fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
+// 		let lol = Pin::into_inner(self);
+// 		use std::future::Future as StdFuture;
+// 		use futures03::compat::Future01CompatExt;
+// 		match *self {
+// 			Handler::Rpc(ref mut handler) => StdFuture::poll(Pin::new(&mut handler.compat()), cx),
+// 			Handler::Middleware(ref mut middleware) => StdFuture::poll(Pin::new(&mut middleware.compat()), cx),
+// 			Handler::Err(ref mut response) => std::task::Poll::Ready(Ok(
+// 				response
+// 					.take()
+// 					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
+// 					.into(),
+// 			)),
+// 		}
+// 	}
+// }
 
 enum RpcPollState<M> {
 	Ready(RpcHandlerState<M>),
@@ -495,13 +497,17 @@ where
 
 	fn process_body(
 		&self,
-		mut body: hyper::Body,
+		body: hyper::Body,
 		mut request: Vec<u8>,
 		uri: Option<hyper::Uri>,
 		metadata: M,
 	) -> Result<RpcPollState<M>, BodyError> {
+		use futures03::TryStreamExt;
+		use futures01::Stream;
+		let mut compat = body.compat();
+
 		loop {
-			match body.poll()? {
+			match compat.poll()? {
 				Async::Ready(Some(chunk)) => {
 					if request
 						.len()
@@ -538,7 +544,7 @@ where
 				}
 				Async::NotReady => {
 					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {
-						body,
+						body: compat.into_inner(),
 						request,
 						metadata,
 						uri,
