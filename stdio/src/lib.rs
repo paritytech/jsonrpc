@@ -17,17 +17,15 @@
 
 #![deny(missing_docs)]
 
-use tokio;
-use tokio_stdin_stdout;
+use std::sync::Arc;
+
 #[macro_use]
 extern crate log;
 
 pub use jsonrpc_core;
 
 use jsonrpc_core::{MetaIoHandler, Metadata, Middleware};
-use std::sync::Arc;
-use tokio::prelude::{Future, Stream};
-use tokio_codec::{FramedRead, FramedWrite, LinesCodec};
+use tokio_util::codec::{FramedRead, LinesCodec};
 
 /// Stdio server builder
 pub struct ServerBuilder<M: Metadata = (), T: Middleware<M> = jsonrpc_core::NoopMiddleware> {
@@ -51,27 +49,44 @@ where
 	/// The server reads from STDIN line-by-line, one request is taken
 	/// per line and each response is written to STDOUT on a new line.
 	pub fn build(&self) {
-		let stdin = tokio_stdin_stdout::stdin(0);
-		let stdout = tokio_stdin_stdout::stdout(0).make_sendable();
+		let stdin = tokio::io::stdin();
+		let mut stdout = tokio::io::stdout();
 
-		let framed_stdin = FramedRead::new(stdin, LinesCodec::new());
-		let framed_stdout = FramedWrite::new(stdout, LinesCodec::new());
+		let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
 
 		let handler = self.handler.clone();
-		let future = framed_stdin
-			.and_then(move |line| Self::process(&handler, line).map_err(|_| unreachable!()))
-			.forward(framed_stdout)
-			.map(|_| ())
-			.map_err(|e| panic!("{:?}", e));
-
-		tokio::run(future);
+		use futures::StreamExt;
+		let future = async {
+			while let Some(request) = framed_stdin.next().await {
+				match request {
+					Ok(line) => {
+						let res = Self::process(&handler, line).await;
+						let mut sanitized = res.replace('\n', "");
+						sanitized.push('\n');
+						use tokio::io::AsyncWriteExt;
+						if let Err(e) = stdout.write_all(sanitized.as_bytes()).await {
+							log::warn!("Error writing response: {:?}", e);
+						}
+					}
+					Err(e) => {
+						log::warn!("Error reading line: {:?}", e);
+					}
+				}
+			}
+		};
+		let mut rt = tokio::runtime::Builder::new()
+			.basic_scheduler()
+			.enable_io()
+			.build()
+			.unwrap();
+		rt.block_on(future);
 	}
 
 	/// Process a request asynchronously
-	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl Future<Item = String, Error = ()> + Send {
-		use jsonrpc_core::futures::{FutureExt, TryFutureExt};
+	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl std::future::Future<Output = String> + Send {
+		use jsonrpc_core::futures::{FutureExt};
 		let f = io.handle_request(&input, Default::default());
-		f.map(Ok).compat().map(move |result| match result {
+		f.map(move |result| match result {
 			Some(res) => res,
 			None => {
 				info!("JSON RPC request produced no response: {:?}", input);
