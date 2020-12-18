@@ -1,6 +1,9 @@
 use std::io;
+use std::future::Future;
+use std::pin::Pin;
+use std::task::Poll;
 use std::time::Duration;
-// use futures01::prelude::*;
+
 use tokio02::time::Delay;
 
 /// `Incoming` is a stream of incoming sockets
@@ -32,63 +35,6 @@ impl<S> SuspendableStream<S> {
 		}
 	}
 }
-
-// impl<S, I> futures01::Stream for SuspendableStream<S>
-// where
-// 	S: futures01::Stream<Item = I, Error = io::Error>,
-// {
-// 	type Item = I;
-// 	type Error = ();
-
-// 	fn poll(&mut self) -> Result<Async<Option<Self::Item>>, ()> {
-// 		loop {
-// 			if let Some(timeout) = self.timeout.take() {
-// 				let deadline = timeout.deadline();
-// 				use futures03::FutureExt;
-// 				let mut compat = futures03::compat::Compat::new(timeout.map(Ok::<(), ()>));
-// 				match futures01::Future::poll(&mut compat) {
-// 					Ok(Async::Ready(_)) => {}
-// 					Ok(Async::NotReady) => {
-// 						self.timeout = Some(tokio02::time::delay_until(deadline));
-// 						return Ok(Async::NotReady);
-// 					}
-// 					Err(err) => {
-// 						warn!("Timeout error {:?}", err);
-// 						futures01::task::current().notify();
-// 						return Ok(Async::NotReady);
-// 					}
-// 				}
-// 			}
-
-// 			match self.stream.poll() {
-// 				Ok(item) => {
-// 					if self.next_delay > self.initial_delay {
-// 						self.next_delay = self.initial_delay;
-// 					}
-// 					return Ok(item);
-// 				}
-// 				Err(ref err) => {
-// 					if connection_error(err) {
-// 						warn!("Connection Error: {:?}", err);
-// 						continue;
-// 					}
-// 					self.next_delay = if self.next_delay < self.max_delay {
-// 						self.next_delay * 2
-// 					} else {
-// 						self.next_delay
-// 					};
-// 					debug!("Error accepting connection: {}", err);
-// 					debug!("The server will stop accepting connections for {:?}", self.next_delay);
-// 					self.timeout = Some(tokio02::time::delay_for(self.next_delay));
-// 				}
-// 			}
-// 		}
-// 	}
-// }
-
-use std::future::Future;
-use std::pin::Pin;
-use std::task::Poll;
 
 impl<S, I> futures03::Stream for SuspendableStream<S>
 where
