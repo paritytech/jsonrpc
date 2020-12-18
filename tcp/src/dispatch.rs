@@ -97,10 +97,10 @@ impl<S: Unpin + Stream<Item = std::io::Result<String>>> Stream for PeerMessageQu
 		let this = Pin::into_inner(self);
 
 		let up_closed = match Pin::new(&mut this.up).poll_next(cx) {
-			Poll::Pending => false,
-			Poll::Ready(None) => true,
 			Poll::Ready(Some(Ok(item))) => return Poll::Ready(Some(Ok(item))),
 			Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
+			Poll::Ready(None) => true,
+			Poll::Pending => false,
 		};
 
 		let mut rx = match &mut this.receiver {
