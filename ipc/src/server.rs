@@ -336,7 +336,7 @@ mod tests {
 	use jsonrpc_core::Value;
 	use std::thread;
 	use std::time::{self, Duration};
-	use tokio_uds::UnixStream;
+	use std::os::unix::net::UnixStream;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -388,7 +388,7 @@ mod tests {
 		let path = "/tmp/test-ipc-30000";
 		let _server = run(path);
 
-		UnixStream::connect(path).wait().expect("Socket should connect");
+		UnixStream::connect(path).expect("Socket should connect");
 	}
 
 	#[test]
@@ -469,7 +469,7 @@ mod tests {
 			"There should be no socket file left"
 		);
 		assert!(
-			UnixStream::connect(path).wait().is_err(),
+			UnixStream::connect(path).is_err(),
 			"Connection to the closed socket should fail"
 		);
 	}
@@ -565,7 +565,7 @@ mod tests {
 		let builder = ServerBuilder::with_meta_extractor(io, session_metadata_extractor);
 		let server = builder.start(path).expect("Server must run with no issues");
 		{
-			let _ = UnixStream::connect(path).wait().expect("Socket should connect");
+			let _ = UnixStream::connect(path).expect("Socket should connect");
 		}
 
 		receiver
@@ -585,7 +585,7 @@ mod tests {
 		let handle = server.close_handle();
 		handle.close();
 		assert!(
-			UnixStream::connect(path).wait().is_err(),
+			UnixStream::connect(path).is_err(),
 			"Connection to the closed socket should fail"
 		);
 	}
@@ -620,7 +620,7 @@ mod tests {
 			Ok((result, _)) => {
 				assert_eq!(result, true, "Wait timeout exceeded");
 				assert!(
-					UnixStream::connect(path).wait().is_err(),
+					UnixStream::connect(path).is_err(),
 					"Connection to the closed socket should fail"
 				);
 				Ok(())
