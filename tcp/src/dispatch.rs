@@ -115,7 +115,7 @@ impl<S: Unpin + Stream<Item = std::io::Result<String>>> Stream for PeerMessageQu
 		// 	err => return err,
 		// };
 
-		let rx = match &mut this.receiver {
+		let mut rx = match &mut this.receiver {
 			None => {
 				debug_assert!(up_closed);
 				return Poll::Ready(None);

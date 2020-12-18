@@ -305,7 +305,8 @@ fn message() {
 		stream.write_all(&data[..]).await?;
 
 		stream.shutdown(Shutdown::Write).unwrap();
-		let _ = stream.read_to_end(&mut Vec::new()).await?;
+		let mut read_buf = vec![];
+		let _ = stream.read_to_end(&mut read_buf).await?;
 
 		trace!(target: "tcp", "Read response message");
 		let response_signal = read_buf[..].to_vec();

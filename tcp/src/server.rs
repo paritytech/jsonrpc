@@ -124,7 +124,7 @@ where
 
 					let meta = meta_extractor.extract(&context);
 					let mut service = Service::new(peer_addr, rpc_handler.clone(), meta);
-					let (writer, reader) = Framed::new(
+					let (mut writer, reader) = Framed::new(
 						socket,
 						codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
 					)
@@ -134,7 +134,8 @@ where
 					use futures03::SinkExt;
 					use futures03::TryFutureExt;
 					use futures03::FutureExt;
-					let responses = TryStreamExt::and_then(reader, move |req| {
+					// Work around https://github.com/rust-lang/rust/issues/64552 by boxing the stream type
+					let responses: std::pin::Pin<Box<dyn futures03::Stream<Item = std::io::Result<String>> + Send>> = Box::pin(TryStreamExt::and_then(reader, move |req| {
 						service.call(req).then(|response| match response {
 							Err(e) => {
 								warn!(target: "tcp", "Error while processing request: {:?}", e);
@@ -149,9 +150,9 @@ where
 								futures03::future::ok(response_data)
 							}
 						})
-					});
+					}));
 
-					let peer_message_queue = {
+					let mut peer_message_queue = {
 						let mut channels = channels.lock();
 						channels.insert(peer_addr, sender.clone());
 
