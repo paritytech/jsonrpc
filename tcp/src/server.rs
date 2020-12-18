@@ -1,12 +1,14 @@
 use std;
+use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::pin::Pin;
 
 use tower_service::Service as _;
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio02, tokio_util::codec::Framed, SuspendableStream};
-use crate::futures03;
+use crate::futures03::{self, future};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -77,7 +79,7 @@ where
 	}
 
 	/// Starts a new server
-	pub fn start(self, addr: &SocketAddr) -> std::io::Result<Server> {
+	pub fn start(self, addr: &SocketAddr) -> io::Result<Server> {
 		let meta_extractor = self.meta_extractor.clone();
 		let rpc_handler = self.handler.clone();
 		let channels = self.channels.clone();
@@ -89,23 +91,24 @@ where
 
 		let executor = self.executor.initialize()?;
 
-		use futures03::StreamExt;
+		use futures03::{FutureExt, SinkExt, StreamExt, TryStreamExt};
 		executor.executor().spawn(async move {
-			let start = async move {
+			let start = async {
 				let listener = tokio02::net::TcpListener::bind(&address).await?;
 				let connections = SuspendableStream::new(listener);
 
-				let server = connections.map(move |socket| {
+				let server = connections.map(|socket| {
 					let peer_addr = match socket.peer_addr() {
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
-							let fut = Box::pin(async move { });
-							return futures03::future::Either::Left(fut);
+							return future::Either::Left(async {
+								io::Result::Ok(())
+							});
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
-					let (sender, receiver) = crate::jsonrpc::futures::channel::mpsc::unbounded();
+					let (sender, receiver) = futures03::channel::mpsc::unbounded();
 
 					let context = RequestContext {
 						peer_addr,
@@ -120,24 +123,21 @@ where
 					)
 					.split();
 
-					use futures03::TryStreamExt;
-					use futures03::SinkExt;
-					use futures03::FutureExt;
 					// Work around https://github.com/rust-lang/rust/issues/64552 by boxing the stream type
-					let responses: std::pin::Pin<Box<dyn futures03::Stream<Item = std::io::Result<String>> + Send>> =
+					let responses: Pin<Box<dyn futures03::Stream<Item = io::Result<String>> + Send>> =
 					Box::pin(reader.and_then(move |req| {
 						service.call(req).then(|response| match response {
 							Err(e) => {
 								warn!(target: "tcp", "Error while processing request: {:?}", e);
-								futures03::future::ok(String::new())
+								future::ok(String::new())
 							}
 							Ok(None) => {
 								trace!(target: "tcp", "JSON RPC request produced no response");
-								futures03::future::ok(String::new())
+								future::ok(String::new())
 							}
 							Ok(Some(response_data)) => {
 								trace!(target: "tcp", "Sent response: {}", &response_data);
-								futures03::future::ok(response_data)
+								future::ok(response_data)
 							}
 						})
 					}));
@@ -150,14 +150,15 @@ where
 					};
 
 					let shared_channels = channels.clone();
-					let writer = Box::pin(async move {
-						let _ = writer.send_all(&mut peer_message_queue).await;
-							trace!(target: "tcp", "Peer {}: service finished", peer_addr);
-							let mut channels = shared_channels.lock();
-							channels.remove(&peer_addr);
-						});
+					let writer = async move {
+						writer.send_all(&mut peer_message_queue).await?;
+						trace!(target: "tcp", "Peer {}: service finished", peer_addr);
+						let mut channels = shared_channels.lock();
+						channels.remove(&peer_addr);
+						Ok(())
+					};
 
-					futures03::future::Either::Right(writer)
+					future::Either::Right(writer)
 				});
 
 				Ok(server)
@@ -168,29 +169,13 @@ where
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
 					let server = server
 						.buffer_unordered(1024)
-						.for_each(|_| async { () })
-						;
+						.for_each(|_| async { () });
 
-					let select = futures03::future::select(Box::pin(server), stop_rx);
-					select.await;
-
-					// future::Either::A(
-					// 	server
-					// 		.buffer_unordered(1024)
-					// 		// .for_each(|_| async { Ok(()) })
-					// 		.select(stop)
-					// 		.map(|_| ())
-					// 		.map_err(|(e, _)| {
-					// 			error!("Error while executing the server: {:?}", e);
-					// 		}),
-					// )
+					future::select(Box::pin(server), stop_rx).await;
 				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");
 					let _ = stop_rx.await;
-					// future::Either::B(stop.map_err(|e| {
-					// 	error!("Error while executing the server: {:?}", e);
-					// }))
 				}
 			}
 		});

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::jsonrpc::futures::{self as futures03, channel::mpsc};
+use crate::futures03::{self, channel::mpsc};
 
 use futures03::Stream;
 use std::task::Poll;
