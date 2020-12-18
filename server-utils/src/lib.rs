@@ -9,8 +9,6 @@ extern crate log;
 extern crate lazy_static;
 
 pub use tokio_util;
-#[cfg(feature = "tokio-compat")]
-pub use tokio_compat;
 #[cfg(feature = "tokio02")]
 pub use tokio02;
 

@@ -7,11 +7,6 @@
 
 use std::io;
 
-#[cfg(feature = "tokio-compat")]
-use tokio_compat::runtime;
-#[cfg(feature = "tokio-compat")]
-/// Task executor for Tokio-compat runtime.
-pub type TaskExecutor = tokio_compat::runtime::TaskExecutor;
 #[cfg(feature = "tokio02")]
 use tokio02::runtime;
 #[cfg(feature = "tokio02")]
@@ -56,15 +51,6 @@ pub enum Executor {
 }
 
 impl Executor {
-	#[cfg(feature = "tokio-compat")]
-	/// Get tokio executor associated with this event loop.
-	pub fn executor(&self) -> TaskExecutor {
-		match self {
-			Executor::Shared(ref executor) => executor.clone(),
-			Executor::Spawned(ref eloop) => eloop.executor(),
-		}
-	}
-
 	#[cfg(feature = "tokio02")]
 	/// Get tokio executor associated with this event loop.
 	pub fn executor(&self) -> TaskExecutor {
@@ -124,15 +110,6 @@ impl RpcEventLoop {
 
 		let runtime = tb.build()?;
 		let executor;
-		#[cfg(feature = "tokio-compat")]
-		{
-			executor = runtime.executor();
-			if let Some(name) = name {
-				tb.name_prefix(name);
-			}
-
-			runtime.spawn_std(async { let _ = stopped.await; });
-		}
 		#[cfg(feature = "tokio02")]
 		{
 			executor = runtime.handle().clone();
@@ -151,12 +128,6 @@ impl RpcEventLoop {
 	}
 
 	/// Get executor for this event loop.
-	#[cfg(feature = "tokio-compat")]
-	pub fn executor(&self) -> TaskExecutor {
-		self.executor.clone()
-	}
-
-	/// Get executor for this event loop.
 	#[cfg(feature = "tokio02")]
 	pub fn executor(&self) -> runtime::Handle {
 		self.runtime.as_ref()
@@ -167,11 +138,6 @@ impl RpcEventLoop {
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> Result<(), ()> {
-		#[cfg(feature = "tokio-compat")]
-		{
-			use futures01::Future;
-			self.runtime.take().ok_or(())?.shutdown_on_idle().wait()
-		}
 		#[cfg(feature = "tokio02")]
 		{
 			// Dropping Tokio 0.2 runtime waits for spawned task to shutdown by default
