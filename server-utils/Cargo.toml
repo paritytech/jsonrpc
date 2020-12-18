@@ -11,7 +11,7 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "16.0.0"
 
 [dependencies]
-bytes05 = { version = "0.5", package = "bytes" }
+bytes = { version = "0.5", package = "bytes" }
 futures01 = { version = "0.1", package = "futures" }
 futures03 = { version = "0.3", package = "futures", features = ["compat"] }
 globset = "0.4"
