@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
+use crate::futures03;
+
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,

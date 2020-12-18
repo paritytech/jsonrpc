@@ -1,14 +1,14 @@
 use std::net::{Shutdown, SocketAddr};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use futures01::{future, Future};
 use jsonrpc_core::{MetaIoHandler, Metadata, Value};
+use tokio::io::AsyncWriteExt;
+use tokio::io::AsyncReadExt;
 
-use crate::server_utils::tokio02::{self as tokio, io, net::TcpStream, time::Delay};
-		use tokio::io::AsyncWriteExt;
-		use tokio::io::AsyncReadExt;
+use crate::server_utils::tokio02::{self as tokio, net::TcpStream};
+use crate::futures03;
 
 use parking_lot::Mutex;
 
@@ -50,12 +50,7 @@ fn doc_test_connect() {
 
 	run_future(async move {
 		TcpStream::connect(&addr).await
-	}).unwrap();
-	// let stream = TcpStream::connect(&addr)
-	// 	.and_then(move |_stream| Ok(()))
-	// 	.map_err(|err| panic!("Server connection error: {:?}", err));
-
-	// tokio::run(stream);
+	}).expect("Server connection error");
 }
 
 #[test]
@@ -71,14 +66,6 @@ fn disconnect() {
 		assert_eq!(stream.peer_addr().unwrap(), addr);
 		stream.shutdown(::std::net::Shutdown::Both).unwrap();
 	});
-	// let stream = TcpStream::connect(&addr)
-	// 	.and_then(move |stream| {
-	// 		assert_eq!(stream.peer_addr().unwrap(), addr);
-	// 		stream.shutdown(::std::net::Shutdown::Both)
-	// 	})
-	// 	.map_err(|err| panic!("Error disconnecting: {:?}", err));
-
-	// tokio::run(stream);
 
 	::std::thread::sleep(::std::time::Duration::from_millis(50));
 
@@ -86,9 +73,7 @@ fn disconnect() {
 }
 
 fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
-	let (ret_tx, ret_rx) = futures01::sync::oneshot::channel();
-
-	use futures03::TryFutureExt;
+	let (ret_tx, ret_rx) = std::sync::mpsc::channel();
 
 	let stream = async move {
 		let mut stream = TcpStream::connect(addr).await?;
@@ -103,19 +88,7 @@ fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
 	};
 
 	run_future(stream).unwrap();
-	ret_rx.wait().expect("Unable to receive result")
-
-	// let stream = TcpStream::connect(addr)
-	// 	.and_then(move |stream| io::write_all(stream, data))
-	// 	.and_then(|(stream, _data)| {
-	// 		stream.shutdown(Shutdown::Write).unwrap();
-	// 		io::read_to_end(stream, vec![])
-	// 	})
-	// 	.and_then(move |(_stream, read_buf)| ret_tx.send(read_buf).map_err(|err| panic!("Unable to send {:?}", err)))
-	// 	.map_err(|err| panic!("Error connecting or closing connection: {:?}", err));
-
-	// tokio::run(stream);
-	// ret_rx.wait().expect("Unable to receive result")
+	ret_rx.recv().expect("Unable to receive result")
 }
 
 fn dummy_request_str(addr: &SocketAddr, data: Vec<u8>) -> String {
@@ -264,20 +237,17 @@ fn message() {
 
 	let _server = server.start(&addr).expect("Server must run with no issues");
 
-	// let delay = futures03::future::lazy(|_| tokio::time::delay_for(Duration::from_millis(500)));
-	// let delay = Delay::new(Instant::now() + Duration::from_millis(500)).map_err(|err| panic!("{:?}", err));
-
 	let message = "ping";
 	let executed_dispatch = Arc::new(Mutex::new(false));
 	let executed_request = Arc::new(Mutex::new(false));
 	let executed_dispatch_move = executed_dispatch.clone();
 	let executed_request_move = executed_request.clone();
 
-	// CLIENT RUN
-	let stream = async move {
-		let mut stream = TcpStream::connect(&addr).await?;
-		tokio::time::delay_for(Duration::from_millis(500)).await;
-		// TODO: delay
+	let client = async move {
+		let stream = TcpStream::connect(&addr);
+		let delay = tokio::time::delay_for(Duration::from_millis(500));
+		let (stream, _) = futures03::join!(stream, delay);
+		let mut stream = stream?;
 
 		let peer_addr = peer_list.lock()[0].clone();
 		dispatcher
@@ -321,59 +291,8 @@ fn message() {
 		Ok::<(), Box<dyn std::error::Error>>(())
 	};
 
-	run_future(stream).unwrap();
-	// let stream = TcpStream::connect(&addr)
-	// 	.and_then(|stream| future::ok(stream).join(delay))
-	// 	.and_then(move |stream| {
-	// 		let peer_addr = peer_list.lock()[0].clone();
-	// 		dispatcher
-	// 			.push_message(&peer_addr, message.to_owned())
-	// 			.expect("Should be sent with no errors");
-	// 		trace!(target: "tcp", "Dispatched message for {}", peer_addr);
-	// 		future::ok(stream)
-	// 	})
-	// 	.and_then(move |(stream, _)| {
-	// 		// Read message plus newline appended by codec.
-	// 		io::read_exact(stream, vec![0u8; message.len() + 1])
-	// 	})
-	// 	.and_then(move |(stream, read_buf)| {
-	// 		trace!(target: "tcp", "Read ping message");
-	// 		let ping_signal = read_buf[..].to_vec();
+	run_future(client).unwrap();
 
-	// 		assert_eq!(
-	// 			format!("{}\n", message),
-	// 			String::from_utf8(ping_signal).expect("String should be utf-8"),
-	// 			"Sent request does not match received by the peer",
-	// 		);
-	// 		// ensure that the above assert was actually triggered
-	// 		*executed_dispatch_move.lock() = true;
-
-	// 		future::ok(stream)
-	// 	})
-	// 	.and_then(|stream| {
-	// 		// make request AFTER message dispatches
-	// 		let data = b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n";
-	// 		io::write_all(stream, &data[..])
-	// 	})
-	// 	.and_then(|(stream, _)| {
-	// 		stream.shutdown(Shutdown::Write).unwrap();
-	// 		io::read_to_end(stream, Vec::new())
-	// 	})
-	// 	.and_then(move |(_, read_buf)| {
-	// 		trace!(target: "tcp", "Read response message");
-	// 		let response_signal = read_buf[..].to_vec();
-	// 		assert_eq!(
-	// 			"{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}\n",
-	// 			String::from_utf8(response_signal).expect("String should be utf-8"),
-	// 			"Response does not match the expected handling",
-	// 		);
-	// 		*executed_request_move.lock() = true;
-
-	// 		future::ok(())
-	// 	})
-	// 	.map_err(|err| panic!("Dispach message error: {:?}", err));
-
-	// tokio::run(stream);
 	assert!(*executed_dispatch.lock());
 	assert!(*executed_request.lock());
 }

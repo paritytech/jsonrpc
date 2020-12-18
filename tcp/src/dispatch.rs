@@ -3,11 +3,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::jsonrpc::futures::{self as futures03, channel::mpsc, StreamExt};
-// use futures01::{Async,
-	// Poll,
-	// Stream
-// };
+use crate::jsonrpc::futures::{self as futures03, channel::mpsc};
+
 use futures03::Stream;
 use std::task::Poll;
 
@@ -18,17 +15,14 @@ pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::UnboundedSender<String
 pub struct PeerMessageQueue<S: Stream + Unpin> {
 	up: S,
 	receiver: Option<mpsc::UnboundedReceiver<String>>,
-	// receiver: Option<Box<dyn Stream<Item = String> + Send>>,
 	_addr: SocketAddr,
 }
 
 impl<S: Stream + Unpin> PeerMessageQueue<S> {
 	pub fn new(response_stream: S, receiver: mpsc::UnboundedReceiver<String>, addr: SocketAddr) -> Self {
-		// let receiver = futures03::compat::Compat::new(receiver.map(|v| Ok(v)));
 		PeerMessageQueue {
 			up: response_stream,
 			receiver: Some(receiver),
-			// receiver: Some(Box::new(receiver)),
 			_addr: addr,
 		}
 	}
@@ -89,7 +83,6 @@ use std::pin::Pin;
 
 impl<S: Unpin + Stream<Item = std::io::Result<String>>> Stream for PeerMessageQueue<S> {
 	type Item = std::io::Result<String>;
-	// type Error = std::io::Error;
 
 	// The receiver will never return `Ok(Async::Ready(None))`
 	// Because the sender is kept in `SenderChannels` and it will never be dropped until `the stream` is resolved.
@@ -109,11 +102,6 @@ impl<S: Unpin + Stream<Item = std::io::Result<String>>> Stream for PeerMessageQu
 			Poll::Ready(Some(Ok(item))) => return Poll::Ready(Some(Ok(item))),
 			Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
 		};
-		// 	Ok(Async::Ready(Some(item))) => return Ok(Async::Ready(Some(item))),
-		// 	Ok(Async::Ready(None)) => true,
-		// 	Ok(Async::NotReady) => false,
-		// 	err => return err,
-		// };
 
 		let mut rx = match &mut this.receiver {
 			None => {
@@ -125,20 +113,11 @@ impl<S: Unpin + Stream<Item = std::io::Result<String>>> Stream for PeerMessageQu
 
 		match Pin::new(&mut rx).poll_next(cx) {
 			Poll::Ready(Some(item)) => Poll::Ready(Some(Ok(item))),
-			Poll::Pending | Poll::Ready(None) if up_closed => {
+			Poll::Ready(None) | Poll::Pending if up_closed => {
 				this.receiver = None;
 				Poll::Ready(None)
 			}
-			Poll::Pending | Poll::Ready(None) => Poll::Pending,
+			Poll::Ready(None) | Poll::Pending => Poll::Pending,
 		}
-		// match rx.poll() {
-		// 	Ok(Async::Ready(Some(item))) => Ok(Async::Ready(Some(item))),
-		// 	Ok(Async::Ready(None)) | Ok(Async::NotReady) if up_closed => {
-		// 		self.receiver = None;
-		// 		Ok(Async::Ready(None))
-		// 	}
-		// 	Ok(Async::Ready(None)) | Ok(Async::NotReady) => Ok(Async::NotReady),
-		// 	Err(_) => Err(std::io::Error::new(std::io::ErrorKind::Other, "MPSC error")),
-		// }
 	}
 }

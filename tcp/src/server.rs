@@ -4,15 +4,9 @@ use std::sync::Arc;
 
 use tower_service::Service as _;
 
-use futures03::channel::oneshot;
-// use futures01::sync::oneshot;
-use futures01::{
-	// future,
-	// Future,
-	Sink, Stream};
-
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio02, tokio_util::codec::Framed, SuspendableStream};
+use crate::futures03;
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -100,18 +94,14 @@ where
 			let start = async move {
 				let listener = tokio02::net::TcpListener::bind(&address).await?;
 				let connections = SuspendableStream::new(listener);
-				// let connections = connections.map(Ok);
 
-				use futures03::TryStreamExt;
 				let server = connections.map(move |socket| {
 					let peer_addr = match socket.peer_addr() {
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
 							let fut = Box::pin(async move { });
-							// return future::Either::A(future::ok::<(), ()>(())).compat();
 							return futures03::future::Either::Left(fut);
-							// return future::Either::A(future::ok::<(), ()>(())).compat();
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
@@ -132,10 +122,10 @@ where
 
 					use futures03::TryStreamExt;
 					use futures03::SinkExt;
-					use futures03::TryFutureExt;
 					use futures03::FutureExt;
 					// Work around https://github.com/rust-lang/rust/issues/64552 by boxing the stream type
-					let responses: std::pin::Pin<Box<dyn futures03::Stream<Item = std::io::Result<String>> + Send>> = Box::pin(TryStreamExt::and_then(reader, move |req| {
+					let responses: std::pin::Pin<Box<dyn futures03::Stream<Item = std::io::Result<String>> + Send>> =
+					Box::pin(reader.and_then(move |req| {
 						service.call(req).then(|response| match response {
 							Err(e) => {
 								warn!(target: "tcp", "Error while processing request: {:?}", e);
@@ -162,21 +152,16 @@ where
 					let shared_channels = channels.clone();
 					let writer = Box::pin(async move {
 						let _ = writer.send_all(&mut peer_message_queue).await;
-						// writer.send_all(peer_message_queue).then(move |_| {
-						trace!(target: "tcp", "Peer {}: service finished", peer_addr);
-						let mut channels = shared_channels.lock();
-						channels.remove(&peer_addr);
-						// Ok::<(), ()>(())
+							trace!(target: "tcp", "Peer {}: service finished", peer_addr);
+							let mut channels = shared_channels.lock();
+							channels.remove(&peer_addr);
 						});
-					// });
 
 					futures03::future::Either::Right(writer)
 				});
 
 				Ok(server)
 			};
-
-			use futures03::TryFutureExt;
 
 			match start.await {
 				Ok(server) => {
@@ -202,7 +187,7 @@ where
 				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");
-					stop_rx.await;
+					let _ = stop_rx.await;
 					// future::Either::B(stop.map_err(|e| {
 					// 	error!("Error while executing the server: {:?}", e);
 					// }))
@@ -227,7 +212,7 @@ where
 /// TCP Server handle
 pub struct Server {
 	executor: Option<reactor::Executor>,
-	stop: Option<oneshot::Sender<()>>,
+	stop: Option<futures03::channel::oneshot::Sender<()>>,
 }
 
 impl Server {
