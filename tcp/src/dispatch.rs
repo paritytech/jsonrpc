@@ -2,11 +2,12 @@ use std;
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::pin::Pin;
+use std::task::Poll;
 
 use crate::futures03::{self, channel::mpsc};
 
 use futures03::Stream;
-use std::task::Poll;
 
 use parking_lot::Mutex;
 
@@ -79,9 +80,7 @@ impl Dispatcher {
 	}
 }
 
-use std::pin::Pin;
-
-impl<S: Unpin + Stream<Item = std::io::Result<String>>> Stream for PeerMessageQueue<S> {
+impl<S: Stream<Item = std::io::Result<String>> + Unpin> Stream for PeerMessageQueue<S> {
 	type Item = std::io::Result<String>;
 
 	// The receiver will never return `Ok(Async::Ready(None))`
