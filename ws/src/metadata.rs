@@ -3,7 +3,7 @@ use std::sync::{atomic, Arc};
 
 use crate::core;
 use crate::core::futures::channel::mpsc;
-use crate::server_utils::{session, tokio_compat::runtime::TaskExecutor};
+use crate::server_utils::{session, reactor::TaskExecutor};
 use crate::ws;
 
 use crate::error;
@@ -79,11 +79,12 @@ impl RequestContext {
 	/// Get this session as a `Sink` spawning a new future
 	/// in the underlying event loop.
 	pub fn sender(&self) -> mpsc::UnboundedSender<String> {
+		use futures03::compat::Future01CompatExt;
 		use futures03::{StreamExt, TryStreamExt};
 		let out = self.out.clone();
 		let (sender, receiver) = mpsc::unbounded();
 		let receiver = receiver.map(Ok).compat();
-		self.executor.spawn(SenderFuture(out, Box::new(receiver)));
+		self.executor.spawn(SenderFuture(out, Box::new(receiver)).compat());
 		sender
 	}
 }

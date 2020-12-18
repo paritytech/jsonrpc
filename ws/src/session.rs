@@ -11,7 +11,7 @@ use slab::Slab;
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::Host;
 use crate::server_utils::session::{SessionId, SessionStats};
-use crate::server_utils::tokio_compat::runtime::TaskExecutor;
+use crate::server_utils::reactor::TaskExecutor;
 use crate::server_utils::Pattern;
 use crate::ws;
 
@@ -294,7 +294,8 @@ where
 			.map(|_| ())
 			.map_err(|_| ());
 
-		self.executor.spawn(future);
+		use futures03::compat::Future01CompatExt;
+		self.executor.spawn(future.compat());
 
 		Ok(())
 	}
