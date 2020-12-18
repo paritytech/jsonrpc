@@ -64,8 +64,6 @@ where
 	S::CallFuture: Unpin,
 {
 	type Response = hyper::Response<Body>;
-	// type ReqBody = Body;
-	// type ResBody = Body;
 	type Error = hyper::Error;
 	type Future = futures03::compat::Compat01As03<Handler<M, S>>;
 
@@ -149,31 +147,6 @@ where
 		}
 	}
 }
-
-// impl<M: Metadata, S: Middleware<M>> std::future::Future for Handler<M, S>
-// where
-// 	S::Future: Unpin,
-// 	S::CallFuture: Unpin,
-// {
-// 	type Output = hyper::Result<hyper::Response<Body>>;
-// 	// type Error = hyper::Error;
-
-// 	fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> task::Poll<Self::Output> {
-// 		let lol = Pin::into_inner(self);
-// 		use std::future::Future as StdFuture;
-// 		use futures03::compat::Future01CompatExt;
-// 		match *self {
-// 			Handler::Rpc(ref mut handler) => StdFuture::poll(Pin::new(&mut handler.compat()), cx),
-// 			Handler::Middleware(ref mut middleware) => StdFuture::poll(Pin::new(&mut middleware.compat()), cx),
-// 			Handler::Err(ref mut response) => std::task::Poll::Ready(Ok(
-// 				response
-// 					.take()
-// 					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
-// 					.into(),
-// 			)),
-// 		}
-// 	}
-// }
 
 enum RpcPollState<M> {
 	Ready(RpcHandlerState<M>),

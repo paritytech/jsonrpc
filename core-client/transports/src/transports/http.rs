@@ -28,11 +28,11 @@ where
 		});
 		use futures::compat::Future01CompatExt;
 		let mut rt = tokio02::runtime::Builder::new()
-		.basic_scheduler()
-		.enable_io()
-		.enable_time()
-		.build()
-		.unwrap();
+			.basic_scheduler()
+			.enable_io()
+			.enable_time()
+			.build()
+			.unwrap();
 		let fut = connect.compat().map(drop);
 		rt.block_on(fut);
 		// FIXME: This keeps Tokio 0.2 runtime alive
@@ -110,11 +110,7 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 				}
 				Ok(res) => B(
 					Box::pin(hyper::body::to_bytes(res.into_body())).compat()
-					.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
-				// res
-					// .into_body()
-					// .map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
-					// .concat2()
+						.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
 				),
 				Err(err) => A(future::err(RpcError::Other(Box::new(err)))),
 			};
