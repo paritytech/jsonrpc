@@ -133,7 +133,7 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 	let fut = fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e));
 	use futures::compat::Future01CompatExt;
 	tokio02::spawn(Box::pin(fut.compat()));
-	// tokio::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
+
 	ready(Ok(sender.into()))
 }
 
