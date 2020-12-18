@@ -5,7 +5,7 @@
 use super::RequestBuilder;
 use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
 use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use hyper::{http, rt, Client, Request, Uri};
+use hyper::{http, Client, Request, Uri};
 
 /// Create a HTTP Client
 pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
@@ -16,17 +16,27 @@ where
 	let url = url.to_owned();
 
 	std::thread::spawn(move || {
-		let connect = rt::lazy(move || {
+		let connect = futures01::lazy(move || {
 			do_connect(&url)
 				.map(|client| {
 					if sender.send(client).is_err() {
 						panic!("The caller did not wait for the server.");
 					}
-					Ok(())
+					Ok::<(), ()>(())
 				})
 				.compat()
 		});
-		rt::run(connect);
+		use futures::compat::Future01CompatExt;
+		let mut rt = tokio02::runtime::Builder::new()
+		.basic_scheduler()
+		.enable_io()
+		.enable_time()
+		.build()
+		.unwrap();
+		let fut = connect.compat().map(drop);
+		rt.block_on(fut);
+		// FIXME: This keeps Tokio 0.2 runtime alive
+		let _ = rt.block_on(futures01::future::empty::<(), ()>().compat());
 	});
 
 	receiver.map(|res| res.expect("Server closed prematurely.").map(TClient::from))
@@ -42,10 +52,7 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 	};
 
 	#[cfg(feature = "tls")]
-	let connector = match hyper_tls::HttpsConnector::new(4) {
-		Ok(connector) => connector,
-		Err(e) => return ready(Err(RpcError::Other(Box::new(e)))),
-	};
+	let connector = hyper_tls::HttpsConnector::new();
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
 
@@ -85,7 +92,7 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
 
-			Some(client.request(request).then(move |response| Ok((response, sender))))
+			Some(client.request(request).compat().then(move |response| Ok((response, sender))))
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(result, sender)| {
@@ -101,10 +108,14 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 						res.status()
 					))))
 				}
-				Ok(res) => B(res
-					.into_body()
+				Ok(res) => B(
+					Box::pin(hyper::body::to_bytes(res.into_body())).compat()
 					.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
-					.concat2()),
+				// res
+					// .into_body()
+					// .map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
+					// .concat2()
+				),
 				Err(err) => A(future::err(RpcError::Other(Box::new(err)))),
 			};
 			future.then(|result| {
@@ -123,7 +134,10 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 			})
 		});
 
-	rt::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
+	let fut = fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e));
+	use futures::compat::Future01CompatExt;
+	tokio02::spawn(Box::pin(fut.compat()));
+	// tokio::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
 	ready(Ok(sender.into()))
 }
 

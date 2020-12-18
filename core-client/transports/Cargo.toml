@@ -21,7 +21,7 @@ categories = [
 [features]
 default = ["http", "tls", "ws"]
 tls = ["hyper-tls", "http"]
-http = ["hyper", "futures01"]
+http = ["hyper", "futures01", "tokio02/full"]
 ws = [
 	"websocket",
 	"tokio02",
@@ -44,22 +44,19 @@ serde_json = "1.0"
 url = "1.7"
 
 futures01 = { version = "0.1.26", package = "futures", optional = true }
-hyper = { version = "0.12", optional = true }
-hyper-tls = { version = "0.3.2", optional = true }
+hyper = { version = "0.13", optional = true }
+hyper-tls = { version = "0.4", optional = true }
 jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true, default-features = false }
 parity-tokio-ipc = { version = "0.7", optional = true }
-tokio = { version = "0.1", optional = true }
 websocket = { version = "0.24", optional = true }
 tokio02 = { package = "tokio", version = "0.2", features = ["macros"], optional = true }
 
 [dev-dependencies]
 assert_matches = "1.1"
-# FIXME: Uncomment once http migrates to Tokio 0.2
-# jsonrpc-http-server = { version = "16.0", path = "../../http" }
+jsonrpc-http-server = { version = "16.0", path = "../../http" }
 jsonrpc-ipc-server = { version = "16.0", path = "../../ipc" }
 lazy_static = "1.0"
 env_logger = "0.7"
-tokio02 = { package = "tokio", version = "0.2", features = ["macros"] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master" }
