@@ -59,11 +59,11 @@ where
 		}
 	}
 
-	// /// Utilize existing event loop executor.
-	// pub fn event_loop_executor(mut self, handle: tokio_compat::runtime::TaskExecutor) -> Self {
-	// 	self.executor = reactor::UninitializedExecutor::Shared(handle);
-	// 	self
-	// }
+	/// Utilize existing event loop executor.
+	pub fn event_loop_executor(mut self, handle: reactor::TaskExecutor) -> Self {
+		self.executor = reactor::UninitializedExecutor::Shared(handle);
+		self
+	}
 
 	/// Sets session meta extractor
 	pub fn session_meta_extractor<T: MetaExtractor<M> + 'static>(mut self, meta_extractor: T) -> Self {

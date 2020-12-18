@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::core;
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::{DomainsValidation, Host};
-use crate::server_utils::reactor::UninitializedExecutor;
+use crate::server_utils::reactor::{self, UninitializedExecutor};
 use crate::server_utils::session::SessionStats;
 
 use crate::error::Result;
@@ -67,11 +67,11 @@ where
 		}
 	}
 
-	// /// Utilize existing event loop executor to poll RPC results.
-	// pub fn event_loop_executor(mut self, executor: server_utils::tokio_compat::runtime::TaskExecutor) -> Self {
-	// 	self.executor = UninitializedExecutor::Shared(executor);
-	// 	self
-	// }
+	/// Utilize existing event loop executor to poll RPC results.
+	pub fn event_loop_executor(mut self, executor: reactor::TaskExecutor) -> Self {
+		self.executor = UninitializedExecutor::Shared(executor);
+		self
+	}
 
 	/// Sets a meta extractor.
 	pub fn session_meta_extractor<T: MetaExtractor<M>>(mut self, extractor: T) -> Self {
