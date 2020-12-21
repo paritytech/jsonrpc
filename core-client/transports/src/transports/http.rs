@@ -12,44 +12,45 @@ pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
 where
 	TClient: From<RpcChannel>,
 {
+	use futures::future::Either;
+
 	let (sender, receiver) = futures::channel::oneshot::channel();
 	let url = url.to_owned();
 
-	std::thread::spawn(move || {
-		let connect = futures01::lazy(move || {
-			do_connect(&url)
-				.map(|client| {
-					if sender.send(client).is_err() {
-						panic!("The caller did not wait for the server.");
-					}
-					Ok::<(), ()>(())
-				})
-				.compat()
-		});
-		use futures::compat::Future01CompatExt;
-		let mut rt = tokio::runtime::Builder::new()
-			.basic_scheduler()
-			.enable_io()
-			.enable_time()
-			.build()
-			.unwrap();
-		let fut = connect.compat().map(drop);
-		rt.block_on(fut);
-		// FIXME: This keeps Tokio 0.2 runtime alive
-		let _ = rt.block_on(futures01::future::empty::<(), ()>().compat());
-	});
-
-	receiver.map(|res| res.expect("Server closed prematurely.").map(TClient::from))
-}
-
-fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
-	use futures::future::ready;
-
-	let max_parallel = 8;
 	let url: Uri = match url.parse() {
 		Ok(url) => url,
-		Err(e) => return ready(Err(RpcError::Other(Box::new(e)))),
+		Err(e) => return Either::Left(async { Err(RpcError::Other(Box::new(e))) }),
 	};
+
+	std::thread::spawn(move || {
+		let mut rt = tokio::runtime::Builder::new()
+			.basic_scheduler()
+			.enable_all()
+			.build()
+			.unwrap();
+
+		rt.block_on(async {
+			let (api, worker) = do_connect(url).await;
+
+			if sender.send(api).is_err() {
+				panic!("The caller did not wait for the server.");
+			}
+
+			// NOTE: We need to explicitly wait on a returned worker task;
+			// idleness tracking in runtime was removed from Tokio 0.1
+			worker.await;
+		});
+	});
+
+	return Either::Right(async move {
+		let api = receiver.await.expect("Server closed prematurely");
+
+		Ok(TClient::from(api))
+	})
+}
+
+fn do_connect(url: Uri) -> impl Future<Output = (RpcChannel, impl Future<Output = ()>)> {
+	let max_parallel = 8;
 
 	#[cfg(feature = "tls")]
 	let connector = hyper_tls::HttpsConnector::new();
@@ -132,9 +133,8 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 
 	let fut = fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e));
 	use futures::compat::Future01CompatExt;
-	tokio::spawn(Box::pin(fut.compat()));
 
-	ready(Ok(sender.into()))
+	async { (sender.into(), Box::pin(fut.compat().map(drop))) }
 }
 
 #[cfg(test)]
