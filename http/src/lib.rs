@@ -55,7 +55,7 @@ pub use crate::handler::ServerHandler;
 pub use crate::response::Response;
 pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, AllowCors, Origin};
 pub use crate::server_utils::hosts::{DomainsValidation, Host};
-pub use crate::server_utils::{tokio02, SuspendableStream};
+pub use crate::server_utils::{tokio, SuspendableStream};
 pub use crate::server_utils::{reactor::TaskExecutor};
 pub use crate::utils::{cors_allow_headers, cors_allow_origin, is_host_allowed};
 
@@ -551,7 +551,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			listener.reuse_address(true)?;
 			listener.bind(&addr)?;
 			let listener = listener.listen(1024)?;
-			let listener = tokio02::net::TcpListener::from_std(listener)?;
+			let listener = tokio::net::TcpListener::from_std(listener)?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!
@@ -611,7 +611,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 						res.map_err(|e| error!("Error serving connection: {:?}", e))
 					});
 
-				tokio02::spawn(connection);
+				tokio::spawn(connection);
 			})
 			.for_each(|_| async { () });
 		let shutdown_signal = shutdown_signal.map_err(|e| {

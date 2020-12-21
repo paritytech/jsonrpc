@@ -6,7 +6,7 @@ use crate::{RpcChannel, RpcError};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use jsonrpc_server_utils::codecs::StreamCodec;
 use jsonrpc_server_utils::tokio_util::codec::Decoder as _;
-use jsonrpc_server_utils::tokio02 as tokio02;
+use jsonrpc_server_utils::tokio;
 use parity_tokio_ipc::Endpoint;
 use std::path::Path;
 
@@ -28,7 +28,7 @@ pub async fn connect<P: AsRef<Path>, Client: From<RpcChannel>>(
 			),
 		);
 
-		tokio02::spawn(client);
+		tokio::spawn(client);
 
 		Ok(sender.into())
 }
@@ -72,7 +72,7 @@ mod tests {
 				Err(err) => panic!("IPC RPC call failed: {}", err),
 			}
 		};
-		tokio02::runtime::Runtime::new().unwrap().block_on(client_fut);
+		tokio::runtime::Runtime::new().unwrap().block_on(client_fut);
 	}
 
 	#[test]
@@ -84,7 +84,7 @@ mod tests {
 		}
 		};
 
-		tokio02::runtime::Runtime::new().unwrap().block_on(test_fut);
+		tokio::runtime::Runtime::new().unwrap().block_on(test_fut);
 	}
 
 	#[test]
@@ -109,6 +109,6 @@ mod tests {
 			}
 		};
 
-		tokio02::runtime::Runtime::new().unwrap().block_on(client_fut);
+		tokio::runtime::Runtime::new().unwrap().block_on(client_fut);
 	}
 }

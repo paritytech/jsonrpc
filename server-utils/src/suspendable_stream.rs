@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::task::Poll;
 use std::time::Duration;
 
-use tokio02::time::Delay;
+use tokio::time::Delay;
 
 /// `Incoming` is a stream of incoming sockets
 /// Polling the stream may return a temporary io::Error (for instance if we can't open the connection because of "too many open files" limit)
@@ -83,7 +83,7 @@ where
 					};
 					debug!("Error accepting connection: {}", err);
 					debug!("The server will stop accepting connections for {:?}", self.next_delay);
-					self.timeout = Some(tokio02::time::delay_for(self.next_delay));
+					self.timeout = Some(tokio::time::delay_for(self.next_delay));
 				}
 			}
 		}

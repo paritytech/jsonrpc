@@ -7,7 +7,7 @@ use std::pin::Pin;
 use tower_service::Service as _;
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use crate::server_utils::{codecs, reactor, tokio02, tokio_util::codec::Framed, SuspendableStream};
+use crate::server_utils::{codecs, reactor, tokio, tokio_util::codec::Framed, SuspendableStream};
 use crate::futures03::{self, future};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
@@ -94,7 +94,7 @@ where
 		use futures03::{FutureExt, SinkExt, StreamExt, TryStreamExt};
 		executor.executor().spawn(async move {
 			let start = async {
-				let listener = tokio02::net::TcpListener::bind(&address).await?;
+				let listener = tokio::net::TcpListener::bind(&address).await?;
 				let connections = SuspendableStream::new(listener);
 
 				let server = connections.map(|socket| {

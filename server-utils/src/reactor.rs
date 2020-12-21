@@ -7,9 +7,9 @@
 
 use std::io;
 
-use tokio02::runtime;
+use tokio::runtime;
 /// Task executor for Tokio 0.2 runtime.
-pub type TaskExecutor = tokio02::runtime::Handle;
+pub type TaskExecutor = tokio::runtime::Handle;
 
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]

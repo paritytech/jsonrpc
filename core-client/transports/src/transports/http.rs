@@ -27,7 +27,7 @@ where
 				.compat()
 		});
 		use futures::compat::Future01CompatExt;
-		let mut rt = tokio02::runtime::Builder::new()
+		let mut rt = tokio::runtime::Builder::new()
 			.basic_scheduler()
 			.enable_io()
 			.enable_time()
@@ -132,7 +132,7 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 
 	let fut = fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e));
 	use futures::compat::Future01CompatExt;
-	tokio02::spawn(Box::pin(fut.compat()));
+	tokio::spawn(Box::pin(fut.compat()));
 
 	ready(Ok(sender.into()))
 }

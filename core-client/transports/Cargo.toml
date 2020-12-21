@@ -21,16 +21,16 @@ categories = [
 [features]
 default = ["http", "tls", "ws"]
 tls = ["hyper-tls", "http"]
-http = ["hyper", "futures01", "tokio02/full"]
+http = ["hyper", "futures01", "tokio/full"]
 ws = [
 	"websocket",
-	"tokio02",
+	"tokio",
 	"futures01",
 ]
 ipc = [
 	"parity-tokio-ipc",
 	"jsonrpc-server-utils",
-	"tokio02",
+	"tokio",
 ]
 arbitrary_precision = ["serde_json/arbitrary_precision", "jsonrpc-core/arbitrary_precision"]
 
@@ -47,10 +47,10 @@ url = "1.7"
 futures01 = { version = "0.1.26", package = "futures", optional = true }
 hyper = { version = "0.13", optional = true }
 hyper-tls = { version = "0.4", optional = true }
-jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true, default-features = false }
+jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true }
 parity-tokio-ipc = { version = "0.7", optional = true }
+tokio = { version = "0.2", optional = true }
 websocket = { version = "0.24", optional = true }
-tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["macros"] }
 
 [dev-dependencies]
 assert_matches = "1.1"

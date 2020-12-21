@@ -8,8 +8,8 @@ extern crate log;
 #[macro_use]
 extern crate lazy_static;
 
+pub use tokio;
 pub use tokio_util;
-pub use tokio02;
 
 pub mod cors;
 pub mod hosts;

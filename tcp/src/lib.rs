@@ -44,7 +44,7 @@ use jsonrpc_core as jsonrpc;
 
 pub(crate) use crate::jsonrpc::futures as futures03;
 
-pub use self::server_utils::{codecs::Separator, tokio02};
+pub use self::server_utils::{codecs::Separator, tokio};
 pub use crate::dispatch::{Dispatcher, PushMessageError};
 pub use crate::meta::{MetaExtractor, RequestContext};
 pub use crate::server::{Server, ServerBuilder};

@@ -27,5 +27,5 @@ pub use self::server_builder::ServerBuilder;
 pub use self::server_utils::cors::Origin;
 pub use self::server_utils::hosts::{DomainsValidation, Host};
 pub use self::server_utils::session::{SessionId, SessionStats};
-pub use self::server_utils::tokio02 as tokio;
+pub use self::server_utils::tokio;
 pub use self::session::{MiddlewareAction, RequestMiddleware};

@@ -50,7 +50,7 @@ where
 			);
 			let (rpc_client, sender) = super::duplex(sink, stream);
 			let rpc_client = rpc_client.map_err(|error| log::error!("{:?}", error));
-			tokio02::spawn(rpc_client);
+			tokio::spawn(rpc_client);
 			sender.into()
 		})
 		.map_err(|error| RpcError::Other(Box::new(error)))

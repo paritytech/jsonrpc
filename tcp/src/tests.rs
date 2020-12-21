@@ -7,7 +7,7 @@ use jsonrpc_core::{MetaIoHandler, Metadata, Value};
 use tokio::io::AsyncWriteExt;
 use tokio::io::AsyncReadExt;
 
-use crate::server_utils::tokio02::{self as tokio, net::TcpStream};
+use crate::server_utils::tokio::{self, net::TcpStream};
 use crate::futures03;
 
 use parking_lot::Mutex;
