@@ -12,19 +12,15 @@ version = "16.0.0"
 
 [dependencies]
 bytes = { version = "0.5", package = "bytes" }
-futures01 = { version = "0.1", package = "futures" }
-futures03 = { version = "0.3", package = "futures", features = ["compat"] }
+futures03 = { version = "0.3", package = "futures" }
 globset = "0.4"
 jsonrpc-core = { version = "16.0", path = "../core" }
 lazy_static = "1.1.0"
 log = "0.4"
 tokio-util = { version = "0.3", features = ["codec", "compat"] }
-tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["rt-threaded", "io-driver", "io-util", "time", "tcp"] }
+tokio02 = { package = "tokio", version = "0.2", features = ["rt-threaded", "io-driver", "io-util", "time", "tcp"] }
 
 unicase = "2.0"
-
-[features]
-default = ["tokio02"]
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

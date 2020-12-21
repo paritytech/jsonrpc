@@ -11,7 +11,7 @@ version = "16.0.0"
 
 [dependencies]
 jsonrpc-core = { version = "16.0", path = "../core" }
-jsonrpc-server-utils = { version = "16.0", path = "../server-utils", default-features = false, features = ["tokio02"] }
+jsonrpc-server-utils = { version = "16.0", path = "../server-utils" }
 log = "0.4"
 parking_lot = "0.11.0"
 tower-service = "0.3"

@@ -9,7 +9,6 @@ extern crate log;
 extern crate lazy_static;
 
 pub use tokio_util;
-#[cfg(feature = "tokio02")]
 pub use tokio02;
 
 pub mod cors;
@@ -18,11 +17,9 @@ mod matcher;
 pub mod reactor;
 pub mod session;
 mod stream_codec;
-#[cfg(feature = "tokio02")]
 mod suspendable_stream;
 
 pub use crate::matcher::Pattern;
-#[cfg(feature = "tokio02")]
 pub use crate::suspendable_stream::SuspendableStream;
 
 /// Codecs utilities

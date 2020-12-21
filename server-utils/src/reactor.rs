@@ -7,9 +7,7 @@
 
 use std::io;
 
-#[cfg(feature = "tokio02")]
 use tokio02::runtime;
-#[cfg(feature = "tokio02")]
 /// Task executor for Tokio 0.2 runtime.
 pub type TaskExecutor = tokio02::runtime::Handle;
 
@@ -51,7 +49,6 @@ pub enum Executor {
 }
 
 impl Executor {
-	#[cfg(feature = "tokio02")]
 	/// Get tokio executor associated with this event loop.
 	pub fn executor(&self) -> TaskExecutor {
 		match self {
@@ -101,24 +98,17 @@ impl RpcEventLoop {
 
 		let mut tb = runtime::Builder::new();
 		tb.core_threads(1);
+		tb.threaded_scheduler();
+		tb.enable_all();
 
-		#[cfg(feature = "tokio02")]
-		{
-			tb.threaded_scheduler();
-			tb.enable_io();
+		if let Some(name) = name {
+			tb.thread_name(name);
 		}
 
 		let runtime = tb.build()?;
-		let executor;
-		#[cfg(feature = "tokio02")]
-		{
-			executor = runtime.handle().clone();
-			if let Some(name) = name {
-				tb.thread_name(name);
-			}
+		let executor = runtime.handle().to_owned();
 
-			runtime.spawn(async { let _ = stopped.await; });
-		}
+		runtime.spawn(async { let _ = stopped.await; });
 
 		Ok(RpcEventLoop {
 			executor,
@@ -128,7 +118,6 @@ impl RpcEventLoop {
 	}
 
 	/// Get executor for this event loop.
-	#[cfg(feature = "tokio02")]
 	pub fn executor(&self) -> runtime::Handle {
 		self.runtime.as_ref()
 		.expect("Runtime is only None if we're being dropped; qed")
@@ -138,13 +127,10 @@ impl RpcEventLoop {
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> Result<(), ()> {
-		#[cfg(feature = "tokio02")]
-		{
-			// Dropping Tokio 0.2 runtime waits for spawned task to shutdown by default
-			let runtime = self.runtime.take().ok_or(())?;
-			drop(runtime);
-			Ok(())
-		}
+		// Dropping Tokio 0.2 runtime waits for all spawned tasks to terminate
+		let runtime = self.runtime.take().ok_or(())?;
+		drop(runtime);
+		Ok(())
 	}
 
 	/// Finishes this event loop.

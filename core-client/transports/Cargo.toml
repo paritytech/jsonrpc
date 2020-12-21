@@ -29,7 +29,8 @@ ws = [
 ]
 ipc = [
 	"parity-tokio-ipc",
-	"jsonrpc-server-utils/tokio02",
+	"jsonrpc-server-utils",
+	"tokio02",
 ]
 arbitrary_precision = ["serde_json/arbitrary_precision", "jsonrpc-core/arbitrary_precision"]
 
@@ -49,7 +50,7 @@ hyper-tls = { version = "0.4", optional = true }
 jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true, default-features = false }
 parity-tokio-ipc = { version = "0.7", optional = true }
 websocket = { version = "0.24", optional = true }
-tokio02 = { package = "tokio", version = "0.2", features = ["macros"], optional = true }
+tokio02 = { package = "tokio", version = "0.2", optional = true, features = ["macros"] }
 
 [dev-dependencies]
 assert_matches = "1.1"

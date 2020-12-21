@@ -15,7 +15,7 @@ futures03 = { version = "0.3", package = "futures", features = [ "compat" ] }
 log = "0.4"
 tower-service = "0.3"
 jsonrpc-core = { version = "16.0", path = "../core" }
-jsonrpc-server-utils = { version = "16.0", path = "../server-utils", default-features = false, features = ["tokio02"] }
+jsonrpc-server-utils = { version = "16.0", path = "../server-utils", default-features = false }
 parity-tokio-ipc = "0.7"
 parking_lot = "0.11.0"
 
