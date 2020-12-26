@@ -36,6 +36,7 @@ mod tests;
 mod utils;
 
 use std::io;
+use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::{mpsc, Arc, Weak};
 use std::thread;
@@ -48,7 +49,7 @@ use futures01::sync::oneshot;
 use futures01::{future, Future,
 	// Stream
 };
-use hyper::{server, Body};
+use hyper::Body;
 use jsonrpc_core as jsonrpc;
 
 pub use crate::handler::ServerHandler;
@@ -551,26 +552,31 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			listener.reuse_address(true)?;
 			listener.bind(&addr)?;
 			let listener = listener.listen(1024)?;
-			let listener = tokio::net::TcpListener::from_std(listener)?;
+			let local_addr = listener.local_addr()?;
+
+			// NOTE: Future-proof by explicitly setting the listener socket to
+			// non-blocking mode of operation (future Tokio/Hyper versions
+			// require for the callers to do that manually)
+			listener.set_nonblocking(true)?;
+			let server_builder = hyper::Server::from_tcp(listener)
+				.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!
-			let local_addr = listener.local_addr()?;
-
-			Ok((listener, local_addr))
+			Ok((server_builder, local_addr))
 		};
 
 		let bind_result = match bind() {
-			Ok((listener, local_addr)) => {
+			Ok((server_builder, local_addr)) => {
 				// Send local address
 				match local_addr_tx.send(Ok(local_addr)) {
-					Ok(_) => future::ok((listener, local_addr)),
+					Ok(_) => Ok((server_builder, local_addr)),
 					Err(_) => {
 						warn!(
 							"Thread {:?} unable to reach receiver, closing server",
 							thread::current().name()
 						);
-						future::err(())
+						Err(())
 					}
 				}
 			}
@@ -578,54 +584,46 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				// Send error
 				let _send_result = local_addr_tx.send(Err(err));
 
-				future::err(())
+				Err(())
 			}
 		};
 
-		let (listener, local_addr) = bind_result.compat().await?;
+		let (server_builder, local_addr) = bind_result?;
 
 		let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-		let mut http = server::conn::Http::new();
-		http.http1_keep_alive(keep_alive);
-		let tcp_stream = SuspendableStream::new(listener);
-		use futures03::StreamExt;
+		let server_builder = server_builder
+			.http1_keepalive(keep_alive)
+			.tcp_nodelay(true)
+			// Explicitly attempt to recover from accept errors (e.g. too many
+			// files opened) instead of erroring out the entire server.
+			.tcp_sleep_on_accept_errors(true);
 
-		let server = tcp_stream
-			.map(move |socket| {
-				let service = ServerHandler::new(
-					jsonrpc_handler.downgrade(),
-					cors_domains.clone(),
-					cors_max_age,
-					allowed_headers.clone(),
-					allowed_hosts.clone(),
-					request_middleware.clone(),
-					rest_api,
-					health_api.clone(),
-					max_request_body_size,
-					keep_alive,
-				);
-
-				let connection = http.serve_connection(socket, service)
-					.map(|res| {
-						res.map_err(|e| error!("Error serving connection: {:?}", e))
-					});
-
-				tokio::spawn(connection);
-			})
-			.for_each(|_| async { () });
-		let shutdown_signal = shutdown_signal.map_err(|e| {
-			debug!("Shutdown signaller dropped, closing server: {:?}", e);
+		let service_fn = hyper::service::make_service_fn(move |_addr_stream| {
+			let service = ServerHandler::new(
+				jsonrpc_handler.downgrade(),
+				cors_domains.clone(),
+				cors_max_age,
+				allowed_headers.clone(),
+				allowed_hosts.clone(),
+				request_middleware.clone(),
+				rest_api,
+				health_api.clone(),
+				max_request_body_size,
+				keep_alive,
+			);
+			async { Ok::<_, Infallible>(service) }
 		});
 
-		use futures03::FutureExt;
+		let server = server_builder.serve(service_fn).with_graceful_shutdown(async {
+			if let Err(err) = shutdown_signal.compat().await {
+				debug!("Shutdown signaller dropped, closing server: {:?}", err);
+			}
+		});
 
-		let select = futures03::future::select(Box::pin(server), shutdown_signal.compat().map(drop));
-
-		let res = select.await;
-		// We drop the server (possibly unresolved future) first to prevent a situation where
-		// main thread terminates before the server is properly dropped (see #504 for more details)
-		drop(res);
+		if let Err(err) = server.await {
+			error!("Error running HTTP server: {:?}", err);
+		}
 
 		done_tx.send(())
 	});
@@ -658,8 +656,12 @@ impl CloseHandle {
 	pub fn close(self) {
 		if let Some(executors) = self.0.lock().take() {
 			for (executor, closer) in executors {
-				executor.close();
+				// First send shutdown signal so we can proceed with select
+				eprintln!("Before sending shutdown signal");
 				let _ = closer.send(());
+				eprintln!("After sending shutdown signal");
+				executor.close();
+				eprintln!("After closing executor");
 			}
 		}
 	}

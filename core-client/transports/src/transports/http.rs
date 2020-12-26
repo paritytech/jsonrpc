@@ -30,15 +30,15 @@ where
 			.unwrap();
 
 		rt.block_on(async {
-			let (api, worker) = do_connect(url).await;
+			let (client_api, client_worker) = do_connect(url).await;
 
-			if sender.send(api).is_err() {
+			if sender.send(client_api).is_err() {
 				panic!("The caller did not wait for the server.");
 			}
 
 			// NOTE: We need to explicitly wait on a returned worker task;
 			// idleness tracking in runtime was removed from Tokio 0.1
-			worker.await;
+			client_worker.await;
 		});
 	});
 
@@ -49,7 +49,7 @@ where
 	})
 }
 
-fn do_connect(url: Uri) -> impl Future<Output = (RpcChannel, impl Future<Output = ()>)> {
+async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
 	let max_parallel = 8;
 
 	#[cfg(feature = "tls")]
@@ -134,7 +134,7 @@ fn do_connect(url: Uri) -> impl Future<Output = (RpcChannel, impl Future<Output 
 	let fut = fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e));
 	use futures::compat::Future01CompatExt;
 
-	async { (sender.into(), Box::pin(fut.compat().map(drop))) }
+	(sender.into(), Box::pin(fut.compat().map(drop)))
 }
 
 #[cfg(test)]
