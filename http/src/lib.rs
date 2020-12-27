@@ -37,7 +37,9 @@ mod utils;
 
 use std::io;
 use std::convert::Infallible;
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 
@@ -45,10 +47,7 @@ use parking_lot::Mutex;
 
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
-use futures01::sync::oneshot;
-use futures01::{future, Future,
-	// Stream
-};
+use futures::{future, channel::oneshot};
 use hyper::Body;
 use jsonrpc_core as jsonrpc;
 
@@ -75,7 +74,7 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// a future for server response
-		response: Box<dyn Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>,
+		response: Pin<Box<dyn Future<Output = hyper::Result<hyper::Response<Body>>> + Send>>,
 	},
 }
 
@@ -83,7 +82,7 @@ impl From<Response> for RequestMiddlewareAction {
 	fn from(o: Response) -> Self {
 		RequestMiddlewareAction::Respond {
 			should_validate_hosts: true,
-			response: Box::new(future::ok(o.into())),
+			response: Box::pin(async { Ok(o.into()) }),
 		}
 	}
 }
@@ -92,7 +91,7 @@ impl From<hyper::Response<Body>> for RequestMiddlewareAction {
 	fn from(response: hyper::Response<Body>) -> Self {
 		RequestMiddlewareAction::Respond {
 			should_validate_hosts: true,
-			response: Box::new(future::ok(response)),
+			response: Box::pin(async { Ok(response) }),
 		}
 	}
 }
@@ -254,7 +253,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin,
+	S::CallFuture: Unpin, M: Unpin
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -272,7 +271,7 @@ where
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin,
+	S::CallFuture: Unpin, M: std::marker::Unpin
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -538,9 +537,8 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	max_request_body_size: usize,
 ) where
 	S::Future: Unpin,
-	S::CallFuture: Unpin,
+	S::CallFuture: Unpin, M: std::marker::Unpin
 {
-	use futures03::compat::Future01CompatExt;
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
 	executor.spawn(async move {
 		let bind = move || {
@@ -622,7 +620,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		});
 
 		let server = server_builder.serve(service_fn).with_graceful_shutdown(async {
-			if let Err(err) = shutdown_signal.compat().await {
+			if let Err(err) = shutdown_signal.await {
 				debug!("Shutdown signaller dropped, closing server: {:?}", err);
 			}
 		});
@@ -714,9 +712,11 @@ impl Server {
 
 	fn wait_internal(&mut self) {
 		if let Some(receivers) = self.done.take() {
-			for receiver in receivers {
-				let _ = receiver.wait();
-			}
+			// NOTE: Gracefully handle the case where we may wait on a *nested*
+			// local task pool (for now, wait on a dedicated, spawned thread)
+			let _ = std::thread::spawn(move || {
+				futures::executor::block_on(future::try_join_all(receivers))
+			}).join();
 		}
 	}
 }
