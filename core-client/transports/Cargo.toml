@@ -21,7 +21,7 @@ categories = [
 [features]
 default = ["http", "tls", "ws"]
 tls = ["hyper-tls", "http"]
-http = ["hyper", "futures01", "tokio/full"]
+http = ["hyper", "tokio/full"]
 ws = [
 	"websocket",
 	"tokio",

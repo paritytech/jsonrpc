@@ -4,7 +4,7 @@
 
 use super::RequestBuilder;
 use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
-use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{future, Future, FutureExt, StreamExt, TryFutureExt};
 use hyper::{http, Client, Request, Uri};
 
 /// Create a HTTP Client
@@ -59,28 +59,26 @@ async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
 
 	#[cfg(not(feature = "tls"))]
 	let client = Client::new();
-
+	// Keep track of internal request IDs when building subsequent requests
 	let mut request_builder = RequestBuilder::new();
 
 	let (sender, receiver) = futures::channel::mpsc::unbounded();
 
-	use futures01::{Future, Stream};
 	let fut = receiver
-		.map(Ok)
-		.compat()
 		.filter_map(move |msg: RpcMessage| {
-			let (request, sender) = match msg {
+			future::ready(match msg {
 				RpcMessage::Call(call) => {
 					let (_, request) = request_builder.call_request(&call);
-					(request, Some(call.sender))
+					Some((request, Some(call.sender)))
 				}
-				RpcMessage::Notify(notify) => (request_builder.notification(&notify), None),
+				RpcMessage::Notify(notify) => Some((request_builder.notification(&notify), None)),
 				RpcMessage::Subscribe(_) => {
 					log::warn!("Unsupported `RpcMessage` type `Subscribe`.");
-					return None;
+					None
 				}
-			};
-
+			})
+		})
+		.map(move |(request, sender)| {
 			let request = Request::post(&url)
 				.header(
 					http::header::CONTENT_TYPE,
@@ -93,48 +91,40 @@ async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
 
-			Some(client.request(request).compat().then(move |response| Ok((response, sender))))
+			client.request(request).then(|response| async move {
+				(response, sender)
+			})
 		})
 		.buffer_unordered(max_parallel)
-		.for_each(|(result, sender)| {
-			use futures01::future::{
-				self,
-				Either::{A, B},
-			};
-			let future = match result {
+		.for_each(|(response, sender)| async {
+			let result = match response {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
-					A(future::err(RpcError::Client(format!(
+					Err(RpcError::Client(format!(
 						"Unexpected response status code: {}",
 						res.status()
-					))))
-				}
-				Ok(res) => B(
-					Box::pin(hyper::body::to_bytes(res.into_body())).compat()
-						.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
-				),
-				Err(err) => A(future::err(RpcError::Other(Box::new(err)))),
+					)))
+				},
+				Err(err) => Err(RpcError::Other(Box::new(err))),
+				Ok(res) => hyper::body::to_bytes(res.into_body())
+					.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
+					.await,
 			};
-			future.then(|result| {
-				if let Some(sender) = sender {
-					let response = result
-						.and_then(|response| {
-							let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
-							super::parse_response(&response_str)
-						})
-						.and_then(|r| r.1);
-					if let Err(err) = sender.send(response) {
-						log::warn!("Error resuming asynchronous request: {:?}", err);
-					}
+
+			if let Some(sender) = sender {
+				let response = result
+					.and_then(|response| {
+						let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
+						super::parse_response(&response_str)
+					})
+					.and_then(|r| r.1);
+				if let Err(err) = sender.send(response) {
+					log::warn!("Error resuming asynchronous request: {:?}", err);
 				}
-				Ok(())
-			})
+			}
 		});
 
-	let fut = fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e));
-	use futures::compat::Future01CompatExt;
-
-	(sender.into(), Box::pin(fut.compat().map(drop)))
+	(sender.into(), fut)
 }
 
 #[cfg(test)]
