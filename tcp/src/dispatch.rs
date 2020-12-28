@@ -5,9 +5,7 @@ use std::sync::Arc;
 use std::pin::Pin;
 use std::task::Poll;
 
-use crate::futures03::{self, channel::mpsc};
-
-use futures03::Stream;
+use crate::futures::{channel::mpsc, Stream};
 
 use parking_lot::Mutex;
 

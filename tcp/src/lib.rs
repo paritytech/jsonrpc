@@ -42,7 +42,7 @@ mod tests;
 
 use jsonrpc_core as jsonrpc;
 
-pub(crate) use crate::jsonrpc::futures as futures03;
+pub(crate) use crate::jsonrpc::futures;
 
 pub use self::server_utils::{codecs::Separator, tokio};
 pub use crate::dispatch::{Dispatcher, PushMessageError};

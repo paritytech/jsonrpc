@@ -8,7 +8,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::io::AsyncReadExt;
 
 use crate::server_utils::tokio::{self, net::TcpStream};
-use crate::futures03;
+use crate::futures;
 
 use parking_lot::Mutex;
 
@@ -246,7 +246,7 @@ fn message() {
 	let client = async move {
 		let stream = TcpStream::connect(&addr);
 		let delay = tokio::time::delay_for(Duration::from_millis(500));
-		let (stream, _) = futures03::join!(stream, delay);
+		let (stream, _) = futures::join!(stream, delay);
 		let mut stream = stream?;
 
 		let peer_addr = peer_list.lock()[0].clone();

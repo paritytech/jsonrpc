@@ -8,7 +8,7 @@ use tower_service::Service as _;
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio, tokio_util::codec::Framed, SuspendableStream};
-use crate::futures03::{self, future};
+use crate::futures::{self, future};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -87,11 +87,11 @@ where
 		let outgoing_separator = self.outgoing_separator;
 		let address = addr.to_owned();
 		let (tx, rx) = std::sync::mpsc::channel();
-		let (stop_tx, stop_rx) = futures03::channel::oneshot::channel();
+		let (stop_tx, stop_rx) = futures::channel::oneshot::channel();
 
 		let executor = self.executor.initialize()?;
 
-		use futures03::{FutureExt, SinkExt, StreamExt, TryStreamExt};
+		use futures::{FutureExt, SinkExt, StreamExt, TryStreamExt};
 		executor.executor().spawn(async move {
 			let start = async {
 				let listener = tokio::net::TcpListener::bind(&address).await?;
@@ -108,7 +108,7 @@ where
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
-					let (sender, receiver) = futures03::channel::mpsc::unbounded();
+					let (sender, receiver) = futures::channel::mpsc::unbounded();
 
 					let context = RequestContext {
 						peer_addr,
@@ -124,7 +124,7 @@ where
 					.split();
 
 					// Work around https://github.com/rust-lang/rust/issues/64552 by boxing the stream type
-					let responses: Pin<Box<dyn futures03::Stream<Item = io::Result<String>> + Send>> =
+					let responses: Pin<Box<dyn futures::Stream<Item = io::Result<String>> + Send>> =
 					Box::pin(reader.and_then(move |req| {
 						service.call(req).then(|response| match response {
 							Err(e) => {
@@ -197,7 +197,7 @@ where
 /// TCP Server handle
 pub struct Server {
 	executor: Option<reactor::Executor>,
-	stop: Option<futures03::channel::oneshot::Sender<()>>,
+	stop: Option<futures::channel::oneshot::Sender<()>>,
 }
 
 impl Server {

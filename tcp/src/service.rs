@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use crate::futures03;
+use crate::futures;
 
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
@@ -43,7 +43,7 @@ where
 
 	// Produce a future for computing a response from a request.
 	fn call(&mut self, req: String) -> Self::Future {
-		use futures03::FutureExt;
+		use futures::FutureExt;
 		trace!(target: "tcp", "Accepted request from peer {}: {}", &self.peer_addr, req);
 		Box::pin(self.handler.handle_request(&req, self.meta.clone()).map(Ok))
 	}
