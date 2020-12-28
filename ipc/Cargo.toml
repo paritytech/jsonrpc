@@ -10,7 +10,7 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "16.0.0"
 
 [dependencies]
-futures03 = { version = "0.3", package = "futures" }
+futures = "0.3"
 log = "0.4"
 tower-service = "0.3"
 jsonrpc-core = { version = "16.0", path = "../core" }

@@ -2,7 +2,7 @@ use std::task::Poll;
 use std::task::Context;
 use std::pin::Pin;
 
-use futures03::stream::{Fuse, Stream};
+use futures::stream::{Fuse, Stream};
 
 pub trait SelectWithWeakExt: Stream {
 	fn select_with_weak<S>(self, other: S) -> SelectWithWeak<Self, S>
@@ -44,7 +44,7 @@ where
 	S1: Stream,
 	S2: Stream<Item = S1::Item>,
 {
-	use futures03::StreamExt;
+	use futures::StreamExt;
 	SelectWithWeak {
 		strong: stream1.fuse(),
 		weak: stream2.fuse(),

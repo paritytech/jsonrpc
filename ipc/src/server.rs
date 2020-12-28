@@ -7,8 +7,8 @@ use crate::jsonrpc::futures::channel::mpsc;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 use crate::select_with_weak::SelectWithWeakExt;
-use futures03::channel::oneshot;
-use futures03::StreamExt;
+use futures::channel::oneshot;
+use futures::StreamExt;
 use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
 use tower_service::Service as _;
@@ -49,7 +49,7 @@ where
 	}
 
 	fn call(&mut self, req: String) -> Self::Future {
-		use futures03::FutureExt;
+		use futures::FutureExt;
 		trace!(target: "ipc", "Received request: {}", req);
 		Box::pin(self.handler.handle_request(&req, self.meta.clone()).map(Ok))
 	}
@@ -184,7 +184,7 @@ where
 
 			let mut id = 0u64;
 
-			use futures03::TryStreamExt;
+			use futures::TryStreamExt;
 			let server = connections.map_ok(move |io_stream| {
 				id = id.wrapping_add(1);
 				let session_id = id;
@@ -203,7 +203,7 @@ where
 				let mut service = Service::new(rpc_handler.clone(), meta);
 				let codec = codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone());
 				let framed = tokio_util::codec::Decoder::framed(codec, io_stream);
-				let (writer, reader) = futures03::StreamExt::split(framed);
+				let (writer, reader) = futures::StreamExt::split(framed);
 
 				let responses = reader
 					.map_ok(move |req| {
@@ -213,7 +213,7 @@ where
 					})
 					.try_buffer_unordered(client_buffer_size)
 					// Filter out previously ignored service errors as `None`s
-					.try_filter_map(|x| futures03::future::ok(x))
+					.try_filter_map(|x| futures::future::ok(x))
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
 					.select_with_weak(receiver.map(Ok));
@@ -236,14 +236,14 @@ where
 
 			let server = server.try_buffer_unordered(1024).for_each(|_| async { });
 
-			let result = futures03::future::select(Box::pin(server), stop).await;
+			let result = futures::future::select(Box::pin(server), stop).await;
 			// We drop the server first to prevent a situation where main thread terminates
 			// before the server is properly dropped (see #504 for more details)
 			drop(result);
 			let _ = wait_signal.send(());
 		};
 
-		use futures03::FutureExt;
+		use futures::FutureExt;
 		let fut = Box::pin(fut.map(drop));
 		executor.executor().spawn(fut);
 
@@ -253,7 +253,7 @@ where
 			path: path.to_owned(),
 		};
 
-		use futures03::TryFutureExt;
+		use futures::TryFutureExt;
 		match start_receiver.recv().expect("Message should always be sent") {
 			Ok(()) => Ok(Server {
 				handles: Arc::new(Mutex::new(handle)),
@@ -350,7 +350,7 @@ mod tests {
 	}
 
 	fn dummy_request_str(path: &str, data: &str) -> String {
-		use futures03::SinkExt;
+		use futures::SinkExt;
 
 		let reply = async move {
 			use tokio02::net::UnixStream;
@@ -420,7 +420,7 @@ mod tests {
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
 		let server = run(path);
-		let (stop_signal, stop_receiver) = futures03::channel::mpsc::channel(400);
+		let (stop_signal, stop_receiver) = futures::channel::mpsc::channel(400);
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
@@ -451,7 +451,7 @@ mod tests {
 				})
 				.take(400)
 				.for_each(|_| async {});
-			futures03::executor::block_on(fut);
+			futures::executor::block_on(fut);
 		}).join().unwrap();
 		server.close();
 	}
@@ -514,7 +514,7 @@ mod tests {
 		t.join().unwrap();
 
 		thread::spawn(move || {
-			futures03::executor::block_on(async move {
+			futures::executor::block_on(async move {
 				let result = stop_receiver.await.unwrap();
 				assert_eq!(
 					result,
@@ -540,7 +540,7 @@ mod tests {
 		}
 
 		struct SessionEndExtractor {
-			drop_receivers: Arc<Mutex<futures03::channel::mpsc::Sender<oneshot::Receiver<()>>>>,
+			drop_receivers: Arc<Mutex<futures::channel::mpsc::Sender<oneshot::Receiver<()>>>>,
 		}
 
 		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
@@ -556,7 +556,7 @@ mod tests {
 
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-30009";
-		let (signal, receiver) = futures03::channel::mpsc::channel(16);
+		let (signal, receiver) = futures::channel::mpsc::channel(16);
 		let session_metadata_extractor = SessionEndExtractor {
 			drop_receivers: Arc::new(Mutex::new(signal)),
 		};
@@ -569,7 +569,7 @@ mod tests {
 		}
 
 		thread::spawn(move || {
-			futures03::executor::block_on(async move {
+			futures::executor::block_on(async move {
 				let (drop_receiver, ..) = receiver.into_future().await;
 				drop_receiver.unwrap().await.unwrap();
 			});
@@ -611,8 +611,8 @@ mod tests {
 		rt.block_on(async move {
 			let timeout = tokio02::time::delay_for(Duration::from_millis(500));
 
-			match futures03::future::select(rx, timeout).await {
-				futures03::future::Either::Left((result, _)) => {
+			match futures::future::select(rx, timeout).await {
+				futures::future::Either::Left((result, _)) => {
 					assert!(result.is_ok(), "Rx failed");
 					assert_eq!(result, Ok(true), "Wait timeout exceeded");
 					assert!(
@@ -621,7 +621,7 @@ mod tests {
 					);
 					Ok(())
 				},
-				futures03::future::Either::Right(_) => Err("timed out"),
+				futures::future::Either::Right(_) => Err("timed out"),
 			}
 		}).unwrap();
 	}
