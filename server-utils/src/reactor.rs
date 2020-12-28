@@ -76,7 +76,7 @@ impl Executor {
 #[derive(Debug)]
 pub struct RpcEventLoop {
 	executor: TaskExecutor,
-	close: Option<futures03::channel::oneshot::Sender<()>>,
+	close: Option<futures::channel::oneshot::Sender<()>>,
 	runtime: Option<runtime::Runtime>,
 }
 
@@ -94,7 +94,7 @@ impl RpcEventLoop {
 
 	/// Spawns a new named thread with the `EventLoop`.
 	pub fn with_name(name: Option<String>) -> io::Result<Self> {
-		let (stop, stopped) = futures03::channel::oneshot::channel();
+		let (stop, stopped) = futures::channel::oneshot::channel();
 
 		let mut tb = runtime::Builder::new();
 		tb.core_threads(1);

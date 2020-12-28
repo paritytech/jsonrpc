@@ -36,9 +36,9 @@ impl<S> SuspendableStream<S> {
 	}
 }
 
-impl<S, I> futures03::Stream for SuspendableStream<S>
+impl<S, I> futures::Stream for SuspendableStream<S>
 where
-	S: futures03::Stream<Item = io::Result<I>> + Unpin,
+	S: futures::Stream<Item = io::Result<I>> + Unpin,
 {
 	type Item = I;
 
