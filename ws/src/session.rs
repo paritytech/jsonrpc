@@ -4,9 +4,9 @@ use std::sync::{atomic, Arc};
 use std::task::{Poll, Context};
 
 use crate::core;
-use futures03::future;
-use futures03::channel::oneshot;
-use futures03::FutureExt;
+use futures::future;
+use futures::channel::oneshot;
+use futures::FutureExt;
 
 use parking_lot::Mutex;
 use slab::Slab;

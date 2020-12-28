@@ -124,13 +124,13 @@ impl<M: core::Metadata + Default> MetaExtractor<M> for NoopExtractor {
 	}
 }
 
-struct SenderFuture(Sender, Box<dyn futures03::Stream<Item = String> + Send + Unpin>);
+struct SenderFuture(Sender, Box<dyn futures::Stream<Item = String> + Send + Unpin>);
 
 impl Future for SenderFuture {
 	type Output = ();
 
 	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-		use futures03::Stream;
+		use futures::Stream;
 
 		let this = Pin::into_inner(self);
 		loop {

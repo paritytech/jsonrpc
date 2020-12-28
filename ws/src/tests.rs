@@ -60,7 +60,7 @@ fn request(server: Server, request: &str) -> Response {
 }
 
 fn serve(port: u16) -> (Server, Arc<AtomicUsize>) {
-	use futures03::{channel::oneshot, future, FutureExt};
+	use futures::{channel::oneshot, future, FutureExt};
 	let pending = Arc::new(AtomicUsize::new(0));
 
 	let counter = pending.clone();
