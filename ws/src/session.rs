@@ -1,9 +1,12 @@
-use std;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{atomic, Arc};
+use std::task::{Poll, Context};
 
 use crate::core;
-use futures01::sync::oneshot;
-use futures01::{Async, Future, Poll};
+use futures03::future;
+use futures03::channel::oneshot;
+use futures03::FutureExt;
 
 use parking_lot::Mutex;
 use slab::Slab;
@@ -123,16 +126,16 @@ impl LivenessPoll {
 }
 
 impl Future for LivenessPoll {
-	type Item = ();
-	type Error = ();
+	type Output = ();
 
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		let this = Pin::into_inner(self);
 		// if the future resolves ok then we've been signalled to return.
 		// it should never be cancelled, but if it was the session definitely
 		// isn't live.
-		match self.rx.poll() {
-			Ok(Async::Ready(_)) | Err(_) => Ok(Async::Ready(())),
-			Ok(Async::NotReady) => Ok(Async::NotReady),
+		match Pin::new(&mut this.rx).poll(cx) {
+			Poll::Ready(_) => Poll::Ready(()),
+			Poll::Pending => Poll::Pending,
 		}
 	}
 }
@@ -270,8 +273,6 @@ where
 		let active_lock = self.active.clone();
 		let response = self.handler.handle_request(req, metadata);
 
-		use futures03::{FutureExt, TryFutureExt};
-		let response = response.map(Ok).compat();
 		let future = response
 			.map(move |response| {
 				if !active_lock.load(atomic::Ordering::SeqCst) {
@@ -289,13 +290,10 @@ where
 						_ => {}
 					}
 				}
-			})
-			.select(poll_liveness)
-			.map(|_| ())
-			.map_err(|_| ());
+			});
 
-		use futures03::compat::Future01CompatExt;
-		self.executor.spawn(future.compat());
+		let future = future::select(future, poll_liveness);
+		self.executor.spawn(future);
 
 		Ok(())
 	}

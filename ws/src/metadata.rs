@@ -1,5 +1,8 @@
+use std::future::Future;
 use std::fmt;
+use std::pin::Pin;
 use std::sync::{atomic, Arc};
+use std::task::{Poll, Context};
 
 use crate::core;
 use crate::core::futures::channel::mpsc;
@@ -79,12 +82,9 @@ impl RequestContext {
 	/// Get this session as a `Sink` spawning a new future
 	/// in the underlying event loop.
 	pub fn sender(&self) -> mpsc::UnboundedSender<String> {
-		use futures03::compat::Future01CompatExt;
-		use futures03::{StreamExt, TryStreamExt};
 		let out = self.out.clone();
 		let (sender, receiver) = mpsc::unbounded();
-		let receiver = receiver.map(Ok).compat();
-		self.executor.spawn(SenderFuture(out, Box::new(receiver)).compat());
+		self.executor.spawn(SenderFuture(out, Box::new(receiver)));
 		sender
 	}
 }
@@ -124,27 +124,23 @@ impl<M: core::Metadata + Default> MetaExtractor<M> for NoopExtractor {
 	}
 }
 
-struct SenderFuture(Sender, Box<dyn futures01::Stream<Item = String, Error = ()> + Send>);
-impl futures01::Future for SenderFuture {
-	type Item = ();
-	type Error = ();
+struct SenderFuture(Sender, Box<dyn futures03::Stream<Item = String> + Send + Unpin>);
 
-	fn poll(&mut self) -> futures01::Poll<Self::Item, Self::Error> {
-		use futures01::Stream;
+impl Future for SenderFuture {
+	type Output = ();
 
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		use futures03::Stream;
+
+		let this = Pin::into_inner(self);
 		loop {
-			let item = self.1.poll()?;
-			match item {
-				futures01::Async::NotReady => {
-					return Ok(futures01::Async::NotReady);
-				}
-				futures01::Async::Ready(None) => {
-					return Ok(futures01::Async::Ready(()));
-				}
-				futures01::Async::Ready(Some(val)) => {
-					if let Err(e) = self.0.send(val) {
+			match Pin::new(&mut this.1).poll_next(cx) {
+				Poll::Pending => return Poll::Pending,
+				Poll::Ready(None) => return Poll::Ready(()),
+				Poll::Ready(Some(val)) => {
+					if let Err(e) = this.0.send(val) {
 						warn!("Error sending a subscription update: {:?}", e);
-						return Ok(futures01::Async::Ready(()));
+						return Poll::Ready(());
 					}
 				}
 			}
