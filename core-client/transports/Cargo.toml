@@ -43,7 +43,6 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 url = "1.7"
 
-futures01 = { version = "0.1.26", package = "futures", optional = true }
 hyper = { version = "0.13", optional = true }
 hyper-tls = { version = "0.4", optional = true }
 jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true }
