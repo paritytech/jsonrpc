@@ -1,14 +1,14 @@
 use std;
 use std::io;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use tower_service::Service as _;
 
+use crate::futures::{self, future};
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::server_utils::{codecs, reactor, tokio, tokio_util::codec::Framed, SuspendableStream};
-use crate::futures::{self, future};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -102,9 +102,7 @@ where
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
-							return future::Either::Left(async {
-								io::Result::Ok(())
-							});
+							return future::Either::Left(async { io::Result::Ok(()) });
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
@@ -125,22 +123,22 @@ where
 
 					// Work around https://github.com/rust-lang/rust/issues/64552 by boxing the stream type
 					let responses: Pin<Box<dyn futures::Stream<Item = io::Result<String>> + Send>> =
-					Box::pin(reader.and_then(move |req| {
-						service.call(req).then(|response| match response {
-							Err(e) => {
-								warn!(target: "tcp", "Error while processing request: {:?}", e);
-								future::ok(String::new())
-							}
-							Ok(None) => {
-								trace!(target: "tcp", "JSON RPC request produced no response");
-								future::ok(String::new())
-							}
-							Ok(Some(response_data)) => {
-								trace!(target: "tcp", "Sent response: {}", &response_data);
-								future::ok(response_data)
-							}
-						})
-					}));
+						Box::pin(reader.and_then(move |req| {
+							service.call(req).then(|response| match response {
+								Err(e) => {
+									warn!(target: "tcp", "Error while processing request: {:?}", e);
+									future::ok(String::new())
+								}
+								Ok(None) => {
+									trace!(target: "tcp", "JSON RPC request produced no response");
+									future::ok(String::new())
+								}
+								Ok(Some(response_data)) => {
+									trace!(target: "tcp", "Sent response: {}", &response_data);
+									future::ok(response_data)
+								}
+							})
+						}));
 
 					let mut peer_message_queue = {
 						let mut channels = channels.lock();
@@ -167,9 +165,7 @@ where
 			match start.await {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
-					let server = server
-						.buffer_unordered(1024)
-						.for_each(|_| async { () });
+					let server = server.buffer_unordered(1024).for_each(|_| async { () });
 
 					future::select(Box::pin(server), stop_rx).await;
 				}

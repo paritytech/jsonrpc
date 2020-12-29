@@ -1,5 +1,5 @@
-use std::io;
 use std::future::Future;
+use std::io;
 use std::pin::Pin;
 use std::task::Poll;
 use std::time::Duration;
@@ -57,7 +57,7 @@ where
 						self.next_delay = self.initial_delay;
 					}
 					return Poll::Pending;
-				},
+				}
 				Poll::Ready(None) => {
 					if self.next_delay > self.initial_delay {
 						self.next_delay = self.initial_delay;

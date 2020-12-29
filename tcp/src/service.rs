@@ -4,9 +4,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::futures;
-
+use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,

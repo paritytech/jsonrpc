@@ -108,7 +108,9 @@ impl RpcEventLoop {
 		let runtime = tb.build()?;
 		let executor = runtime.handle().to_owned();
 
-		runtime.spawn(async { let _ = stopped.await; });
+		runtime.spawn(async {
+			let _ = stopped.await;
+		});
 
 		Ok(RpcEventLoop {
 			executor,
@@ -119,10 +121,11 @@ impl RpcEventLoop {
 
 	/// Get executor for this event loop.
 	pub fn executor(&self) -> runtime::Handle {
-		self.runtime.as_ref()
-		.expect("Runtime is only None if we're being dropped; qed")
-		.handle()
-		.clone()
+		self.runtime
+			.as_ref()
+			.expect("Runtime is only None if we're being dropped; qed")
+			.handle()
+			.clone()
 	}
 
 	/// Blocks current thread and waits until the event loop is finished.

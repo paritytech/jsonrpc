@@ -1,10 +1,10 @@
 use crate::WeakRpc;
 
 use std::future::Future;
-use std::sync::Arc;
-use std::{fmt, mem, str};
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{self, Poll};
+use std::{fmt, mem, str};
 
 use hyper::header::{self, HeaderMap, HeaderValue};
 use hyper::{self, service::Service, Body, Method};
@@ -62,7 +62,8 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 impl<M: Metadata, S: Middleware<M>> Service<hyper::Request<Body>> for ServerHandler<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: Unpin
+	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	type Response = hyper::Response<Body>;
 	type Error = hyper::Error;
@@ -129,7 +130,8 @@ pub enum Handler<M: Metadata, S: Middleware<M>> {
 impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: Unpin
+	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	type Output = hyper::Result<hyper::Response<Body>>;
 
@@ -137,12 +139,10 @@ where
 		match Pin::into_inner(self) {
 			Handler::Rpc(ref mut handler) => Pin::new(handler).poll(cx),
 			Handler::Middleware(ref mut middleware) => Pin::new(middleware).poll(cx),
-			Handler::Err(ref mut response) => Poll::Ready(Ok(
-				response
-					.take()
-					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
-					.into(),
-			)),
+			Handler::Err(ref mut response) => Poll::Ready(Ok(response
+				.take()
+				.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
+				.into())),
 		}
 	}
 }
@@ -223,7 +223,8 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: Unpin
+	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	type Output = hyper::Result<hyper::Response<Body>>;
 
@@ -409,21 +410,23 @@ where
 			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
 		};
 
-		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(Box::pin(async {
-			match response.await {
-				Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
-					let result = serde_json::to_string(&result).expect("Serialization of result is infallible;qed");
+		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(Box::pin(
+			async {
+				match response.await {
+					Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
+						let result = serde_json::to_string(&result).expect("Serialization of result is infallible;qed");
 
-					Response::ok(result)
-				}
-				Some(core::Response::Single(Output::Failure(Failure { error, .. }))) => {
-					let result = serde_json::to_string(&error).expect("Serialization of error is infallible;qed");
+						Response::ok(result)
+					}
+					Some(core::Response::Single(Output::Failure(Failure { error, .. }))) => {
+						let result = serde_json::to_string(&error).expect("Serialization of error is infallible;qed");
 
-					Response::service_unavailable(result)
+						Response::service_unavailable(result)
+					}
+					e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
 				}
-				e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
-			}
-		}))))
+			},
+		))))
 	}
 
 	fn process_rest(&self, uri: hyper::Uri, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
@@ -456,7 +459,9 @@ where
 		};
 
 		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::pin(async {
-				response.await.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed"))
+			response
+				.await
+				.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed"))
 		}))))
 	}
 

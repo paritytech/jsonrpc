@@ -46,7 +46,7 @@ where
 		let api = receiver.await.expect("Server closed prematurely");
 
 		Ok(TClient::from(api))
-	})
+	});
 }
 
 async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
@@ -91,9 +91,9 @@ async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
 
-			client.request(request).then(|response| async move {
-				(response, sender)
-			})
+			client
+				.request(request)
+				.then(|response| async move { (response, sender) })
 		})
 		.buffer_unordered(max_parallel)
 		.for_each(|(response, sender)| async {
@@ -104,11 +104,13 @@ async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
 						"Unexpected response status code: {}",
 						res.status()
 					)))
-				},
+				}
 				Err(err) => Err(RpcError::Other(Box::new(err))),
-				Ok(res) => hyper::body::to_bytes(res.into_body())
-					.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
-					.await,
+				Ok(res) => {
+					hyper::body::to_bytes(res.into_body())
+						.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
+						.await
+				}
 			};
 
 			if let Some(sender) = sender {

@@ -1,11 +1,11 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{atomic, Arc};
-use std::task::{Poll, Context};
+use std::task::{Context, Poll};
 
 use crate::core;
-use futures::future;
 use futures::channel::oneshot;
+use futures::future;
 use futures::FutureExt;
 
 use parking_lot::Mutex;
@@ -13,8 +13,8 @@ use slab::Slab;
 
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::Host;
-use crate::server_utils::session::{SessionId, SessionStats};
 use crate::server_utils::reactor::TaskExecutor;
+use crate::server_utils::session::{SessionId, SessionStats};
 use crate::server_utils::Pattern;
 use crate::ws;
 
@@ -273,24 +273,23 @@ where
 		let active_lock = self.active.clone();
 		let response = self.handler.handle_request(req, metadata);
 
-		let future = response
-			.map(move |response| {
-				if !active_lock.load(atomic::Ordering::SeqCst) {
-					return;
-				}
-				if let Some(result) = response {
-					let res = out.send(result);
-					match res {
-						Err(error::Error::ConnectionClosed) => {
-							active_lock.store(false, atomic::Ordering::SeqCst);
-						}
-						Err(e) => {
-							warn!("Error while sending response: {:?}", e);
-						}
-						_ => {}
+		let future = response.map(move |response| {
+			if !active_lock.load(atomic::Ordering::SeqCst) {
+				return;
+			}
+			if let Some(result) = response {
+				let res = out.send(result);
+				match res {
+					Err(error::Error::ConnectionClosed) => {
+						active_lock.store(false, atomic::Ordering::SeqCst);
 					}
+					Err(e) => {
+						warn!("Error while sending response: {:?}", e);
+					}
+					_ => {}
 				}
-			});
+			}
+		});
 
 		let future = future::select(future, poll_liveness);
 		self.executor.spawn(future);

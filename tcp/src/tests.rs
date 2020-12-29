@@ -4,11 +4,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use jsonrpc_core::{MetaIoHandler, Metadata, Value};
-use tokio::io::AsyncWriteExt;
 use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 
-use crate::server_utils::tokio::{self, net::TcpStream};
 use crate::futures;
+use crate::server_utils::tokio::{self, net::TcpStream};
 
 use parking_lot::Mutex;
 
@@ -48,9 +48,7 @@ fn doc_test_connect() {
 	let server = casual_server();
 	let _server = server.start(&addr).expect("Server must run with no issues");
 
-	run_future(async move {
-		TcpStream::connect(&addr).await
-	}).expect("Server connection error");
+	run_future(async move { TcpStream::connect(&addr).await }).expect("Server connection error");
 }
 
 #[test]

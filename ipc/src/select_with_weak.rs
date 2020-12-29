@@ -1,6 +1,6 @@
-use std::task::Poll;
-use std::task::Context;
 use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
 use futures::stream::{Fuse, Stream};
 

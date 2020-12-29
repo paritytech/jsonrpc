@@ -1,8 +1,8 @@
 use std;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::Poll;
 
 use crate::futures::{channel::mpsc, Stream};

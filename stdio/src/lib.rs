@@ -84,7 +84,7 @@ where
 
 	/// Process a request asynchronously
 	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl std::future::Future<Output = String> + Send {
-		use jsonrpc_core::futures::{FutureExt};
+		use jsonrpc_core::futures::FutureExt;
 		let f = io.handle_request(&input, Default::default());
 		f.map(move |result| match result {
 			Some(res) => res,

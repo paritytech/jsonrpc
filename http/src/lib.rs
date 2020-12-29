@@ -35,9 +35,9 @@ mod response;
 mod tests;
 mod utils;
 
-use std::io;
 use std::convert::Infallible;
 use std::future::Future;
+use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::{mpsc, Arc, Weak};
@@ -47,7 +47,7 @@ use parking_lot::Mutex;
 
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
-use futures::{future, channel::oneshot};
+use futures::{channel::oneshot, future};
 use hyper::Body;
 use jsonrpc_core as jsonrpc;
 
@@ -55,8 +55,8 @@ pub use crate::handler::ServerHandler;
 pub use crate::response::Response;
 pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, AllowCors, Origin};
 pub use crate::server_utils::hosts::{DomainsValidation, Host};
+pub use crate::server_utils::reactor::TaskExecutor;
 pub use crate::server_utils::{tokio, SuspendableStream};
-pub use crate::server_utils::{reactor::TaskExecutor};
 pub use crate::utils::{cors_allow_headers, cors_allow_origin, is_host_allowed};
 
 /// Action undertaken by a middleware.
@@ -253,7 +253,8 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: Unpin
+	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -271,7 +272,8 @@ where
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: Unpin
+	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -537,7 +539,8 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	max_request_body_size: usize,
 ) where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: Unpin
+	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
 	executor.spawn(async move {
@@ -562,8 +565,8 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			#[cfg(not(windows))]
 			let raw_socket = ();
 
-			let server_builder = hyper::Server::from_tcp(listener)
-				.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+			let server_builder =
+				hyper::Server::from_tcp(listener).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!
@@ -634,10 +637,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		// which closes the underlying OS socket.
 		// Remove this once we migrate to Tokio 1.0.
 		#[cfg(windows)]
-		let _: std::net::TcpListener = unsafe {
-			std::os::windows::io::FromRawSocket::from_raw_socket(_raw_socket)
-		};
-
+		let _: std::net::TcpListener = unsafe { std::os::windows::io::FromRawSocket::from_raw_socket(_raw_socket) };
 
 		done_tx.send(())
 	});
@@ -711,9 +711,7 @@ impl Server {
 		if let Some(receivers) = self.done.take() {
 			// NOTE: Gracefully handle the case where we may wait on a *nested*
 			// local task pool (for now, wait on a dedicated, spawned thread)
-			let _ = std::thread::spawn(move || {
-				futures::executor::block_on(future::try_join_all(receivers))
-			}).join();
+			let _ = std::thread::spawn(move || futures::executor::block_on(future::try_join_all(receivers))).join();
 		}
 	}
 }

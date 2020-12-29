@@ -13,11 +13,7 @@ use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
 use tower_service::Service as _;
 
-use crate::server_utils::{
-	codecs, reactor, session,
-	reactor::TaskExecutor,
-	tokio_util,
-};
+use crate::server_utils::{codecs, reactor, reactor::TaskExecutor, session, tokio_util};
 
 pub use parity_tokio_ipc::SecurityAttributes;
 
@@ -207,7 +203,8 @@ where
 
 				let responses = reader
 					.map_ok(move |req| {
-						service.call(req)
+						service
+							.call(req)
 							// Ignore service errors
 							.map(|x| Ok(x.ok().flatten()))
 					})
@@ -218,15 +215,14 @@ where
 					// as soon as the ipc pipe is closed
 					.select_with_weak(receiver.map(Ok));
 
-				responses.forward(writer)
-					.then(move |_| {
-						trace!(target: "ipc", "Peer: service finished");
-						if let Some(stats) = session_stats.as_ref() {
-							stats.close_session(session_id)
-						}
+				responses.forward(writer).then(move |_| {
+					trace!(target: "ipc", "Peer: service finished");
+					if let Some(stats) = session_stats.as_ref() {
+						stats.close_session(session_id)
+					}
 
-						async { Ok(()) }
-					})
+					async { Ok(()) }
+				})
 			});
 			start_signal
 				.send(Ok(()))
@@ -234,7 +230,7 @@ where
 			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted);
 			let stop = Box::pin(stop);
 
-			let server = server.try_buffer_unordered(1024).for_each(|_| async { });
+			let server = server.try_buffer_unordered(1024).for_each(|_| async {});
 
 			let result = futures::future::select(Box::pin(server), stop).await;
 			// We drop the server first to prevent a situation where main thread terminates
@@ -333,9 +329,9 @@ mod tests {
 	use super::*;
 
 	use jsonrpc_core::Value;
+	use std::os::unix::net::UnixStream;
 	use std::thread;
 	use std::time::{self, Duration};
-	use std::os::unix::net::UnixStream;
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -452,7 +448,9 @@ mod tests {
 				.take(400)
 				.for_each(|_| async {});
 			futures::executor::block_on(fut);
-		}).join().unwrap();
+		})
+		.join()
+		.unwrap();
 		server.close();
 	}
 
@@ -523,7 +521,9 @@ mod tests {
 				);
 				server.close();
 			});
-		}).join().unwrap();
+		})
+		.join()
+		.unwrap();
 	}
 
 	#[test]
@@ -573,7 +573,9 @@ mod tests {
 				let (drop_receiver, ..) = receiver.into_future().await;
 				drop_receiver.unwrap().await.unwrap();
 			});
-		}).join().unwrap();
+		})
+		.join()
+		.unwrap();
 		server.close();
 	}
 
@@ -620,10 +622,11 @@ mod tests {
 						"Connection to the closed socket should fail"
 					);
 					Ok(())
-				},
+				}
 				futures::future::Either::Right(_) => Err("timed out"),
 			}
-		}).unwrap();
+		})
+		.unwrap();
 	}
 
 	#[test]

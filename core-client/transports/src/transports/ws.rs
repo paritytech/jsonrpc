@@ -39,28 +39,30 @@ where
 	use futures::{SinkExt, StreamExt, TryFutureExt, TryStreamExt};
 	use websocket::futures::Stream;
 
-	client_builder.async_connect(None).compat()
-	.map_err(|error| RpcError::Other(Box::new(error)))
-	.map_ok(|(client, _)| {
-		let (sink, stream) = client.split();
+	client_builder
+		.async_connect(None)
+		.compat()
+		.map_err(|error| RpcError::Other(Box::new(error)))
+		.map_ok(|(client, _)| {
+			let (sink, stream) = client.split();
 
-		let sink = sink.sink_compat().sink_map_err(|e| RpcError::Other(Box::new(e)));
-		let stream = stream.compat().map_err(|e| RpcError::Other(Box::new(e)));
-		let (sink, stream) = WebsocketClient::new(sink, stream).split();
-		let (sink, stream) = (
-			Box::pin(sink),
-			Box::pin(
-				stream
-					.take_while(|x| futures::future::ready(x.is_ok()))
-					.map(|x| x.expect("Stream is closed upon first error.")),
-			),
-		);
-		let (rpc_client, sender) = super::duplex(sink, stream);
-		let rpc_client = rpc_client.map_err(|error| log::error!("{:?}", error));
-		tokio::spawn(rpc_client);
+			let sink = sink.sink_compat().sink_map_err(|e| RpcError::Other(Box::new(e)));
+			let stream = stream.compat().map_err(|e| RpcError::Other(Box::new(e)));
+			let (sink, stream) = WebsocketClient::new(sink, stream).split();
+			let (sink, stream) = (
+				Box::pin(sink),
+				Box::pin(
+					stream
+						.take_while(|x| futures::future::ready(x.is_ok()))
+						.map(|x| x.expect("Stream is closed upon first error.")),
+				),
+			);
+			let (rpc_client, sender) = super::duplex(sink, stream);
+			let rpc_client = rpc_client.map_err(|error| log::error!("{:?}", error));
+			tokio::spawn(rpc_client);
 
-		sender.into()
-	})
+			sender.into()
+		})
 }
 
 struct WebsocketClient<TSink, TStream> {
@@ -112,7 +114,7 @@ where
 						this.queue.push_front(request);
 						return poll;
 					}
-				}
+				},
 				None => break,
 			}
 		}
