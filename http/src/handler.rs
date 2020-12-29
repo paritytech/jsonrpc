@@ -62,7 +62,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 impl<M: Metadata, S: Middleware<M>> Service<hyper::Request<Body>> for ServerHandler<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: std::marker::Unpin
+	S::CallFuture: Unpin, M: Unpin
 {
 	type Response = hyper::Response<Body>;
 	type Error = hyper::Error;
@@ -223,7 +223,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: std::marker::Unpin
+	S::CallFuture: Unpin, M: Unpin
 {
 	type Output = hyper::Result<hyper::Response<Body>>;
 

@@ -54,8 +54,8 @@ where
 
 impl<S1, S2> Stream for SelectWithWeak<S1, S2>
 where
-	S1: Stream + std::marker::Unpin,
-	S2: Stream<Item = S1::Item> + std::marker::Unpin,
+	S1: Stream + Unpin,
+	S2: Stream<Item = S1::Item> + Unpin,
 {
 	type Item = S1::Item;
 

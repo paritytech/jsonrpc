@@ -271,7 +271,7 @@ where
 impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
 where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: std::marker::Unpin
+	S::CallFuture: Unpin, M: Unpin
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -537,7 +537,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	max_request_body_size: usize,
 ) where
 	S::Future: Unpin,
-	S::CallFuture: Unpin, M: std::marker::Unpin
+	S::CallFuture: Unpin, M: Unpin
 {
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
 	executor.spawn(async move {
