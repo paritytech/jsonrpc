@@ -67,7 +67,7 @@ where
 				match Pin::new(&mut this.strong).poll_next(cx) {
 					Poll::Ready(Some(item)) => {
 						this.use_strong = false;
-						return Poll::Ready(Some(item).into());
+						return Poll::Ready(Some(item));
 					}
 					Poll::Ready(None) => return Poll::Ready(None),
 					Poll::Pending => {
@@ -82,7 +82,7 @@ where
 			} else {
 				this.use_strong = true;
 				match Pin::new(&mut this.strong).poll_next(cx) {
-					Poll::Ready(Some(item)) => return Poll::Ready(Some(item).into()),
+					Poll::Ready(Some(item)) => return Poll::Ready(Some(item)),
 					Poll::Ready(None) | Poll::Pending => (),
 				}
 			}
