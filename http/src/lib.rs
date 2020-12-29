@@ -670,12 +670,9 @@ impl CloseHandle {
 	pub fn close(self) {
 		if let Some(executors) = self.0.lock().take() {
 			for (executor, closer) in executors {
-				// First send shutdown signal so we can proceed with select
-				eprintln!("Before sending shutdown signal");
+				// First send shutdown signal so we can proceed with underlying select
 				let _ = closer.send(());
-				eprintln!("After sending shutdown signal");
 				executor.close();
-				eprintln!("After closing executor");
 			}
 		}
 	}
