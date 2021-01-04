@@ -5,24 +5,28 @@
 //! use jsonrpc_stdio_server::ServerBuilder;
 //! use jsonrpc_stdio_server::jsonrpc_core::*;
 //!
-//! fn main() {
+//! #[tokio::main]
+//! async fn main() {
 //! 	let mut io = IoHandler::default();
 //! 	io.add_sync_method("say_hello", |_params| {
 //! 		Ok(Value::String("hello".to_owned()))
 //! 	});
 //!
-//! 	ServerBuilder::new(io).build();
+//! 	let server = ServerBuilder::new(io).build();
+//!		server.await;
 //! }
 //! ```
 
 #![deny(missing_docs)]
 
 use std::sync::Arc;
+use std::future::Future;
 
 #[macro_use]
 extern crate log;
 
 pub use jsonrpc_core;
+pub use tokio;
 
 use jsonrpc_core::{MetaIoHandler, Metadata, Middleware};
 use tokio_util::codec::{FramedRead, LinesCodec};
@@ -45,18 +49,21 @@ where
 		}
 	}
 
+	/// Returns a server future that needs to be polled in order to make progress.
+	///
 	/// Will block until EOF is read or until an error occurs.
 	/// The server reads from STDIN line-by-line, one request is taken
 	/// per line and each response is written to STDOUT on a new line.
-	pub fn build(&self) {
-		let stdin = tokio::io::stdin();
-		let mut stdout = tokio::io::stdout();
-
-		let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
-
+	pub fn build(&self) -> impl Future<Output = ()> + 'static {
 		let handler = self.handler.clone();
-		use futures::StreamExt;
-		let future = async {
+
+		async move {
+			let stdin = tokio::io::stdin();
+			let mut stdout = tokio::io::stdout();
+
+			let mut framed_stdin = FramedRead::new(stdin, LinesCodec::new());
+
+			use futures::StreamExt;
 			while let Some(request) = framed_stdin.next().await {
 				match request {
 					Ok(line) => {
@@ -73,17 +80,11 @@ where
 					}
 				}
 			}
-		};
-		let mut rt = tokio::runtime::Builder::new()
-			.basic_scheduler()
-			.enable_io()
-			.build()
-			.unwrap();
-		rt.block_on(future);
+		}
 	}
 
 	/// Process a request asynchronously
-	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl std::future::Future<Output = String> + Send {
+	fn process(io: &Arc<MetaIoHandler<M, T>>, input: String) -> impl Future<Output = String> + Send {
 		use jsonrpc_core::futures::FutureExt;
 		let f = io.handle_request(&input, Default::default());
 		f.map(move |result| match result {
