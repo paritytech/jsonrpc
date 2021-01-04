@@ -23,7 +23,7 @@ env_logger = "0.7"
 lazy_static = "1.0"
 
 [target.'cfg(not(windows))'.dev-dependencies]
-tokio02 = { package = "tokio", version = "0.2", default-features = false, features = ["uds", "time", "rt-threaded", "io-driver"] }
+tokio = { version = "0.2", default-features = false, features = ["uds", "time", "rt-threaded", "io-driver"] }
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}

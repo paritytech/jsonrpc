@@ -349,7 +349,7 @@ mod tests {
 		use futures::SinkExt;
 
 		let reply = async move {
-			use tokio02::net::UnixStream;
+			use tokio::net::UnixStream;
 
 			let stream: UnixStream = UnixStream::connect(path).await?;
 			let codec = codecs::StreamCodec::stream_incoming();
@@ -360,7 +360,7 @@ mod tests {
 			reply.expect("there should be one reply")
 		};
 
-		let mut rt = tokio02::runtime::Runtime::new().unwrap();
+		let mut rt = tokio::runtime::Runtime::new().unwrap();
 		rt.block_on(reply).expect("wait for reply")
 	}
 
@@ -609,9 +609,9 @@ mod tests {
 			tx.send(true).expect("failed to report that the server has stopped");
 		});
 
-		let mut rt = tokio02::runtime::Runtime::new().unwrap();
+		let mut rt = tokio::runtime::Runtime::new().unwrap();
 		rt.block_on(async move {
-			let timeout = tokio02::time::delay_for(Duration::from_millis(500));
+			let timeout = tokio::time::delay_for(Duration::from_millis(500));
 
 			match futures::future::select(rx, timeout).await {
 				futures::future::Either::Left((result, _)) => {

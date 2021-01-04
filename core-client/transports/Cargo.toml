@@ -35,7 +35,7 @@ arbitrary_precision = ["serde_json/arbitrary_precision", "jsonrpc-core/arbitrary
 
 [dependencies]
 derive_more = "0.99"
-futures = { version = "0.3", features = [ "compat" ] }
+futures = "0.3"
 jsonrpc-core = { version = "16.0", path = "../../core" }
 jsonrpc-pubsub = { version = "16.0", path = "../../pubsub" }
 log = "0.4"
