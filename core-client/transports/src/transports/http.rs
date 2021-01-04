@@ -8,45 +8,16 @@ use futures::{future, Future, FutureExt, StreamExt, TryFutureExt};
 use hyper::{http, Client, Request, Uri};
 
 /// Create a HTTP Client
-pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
+pub async fn connect<TClient>(url: &str) -> RpcResult<TClient>
 where
 	TClient: From<RpcChannel>,
 {
-	use futures::future::Either;
+	let url: Uri = url.parse().map_err(|e| RpcError::Other(Box::new(e)))?;
 
-	let (sender, receiver) = futures::channel::oneshot::channel();
-	let url = url.to_owned();
+	let (client_api, client_worker) = do_connect(url).await;
+	tokio::spawn(client_worker);
 
-	let url: Uri = match url.parse() {
-		Ok(url) => url,
-		Err(e) => return Either::Left(async { Err(RpcError::Other(Box::new(e))) }),
-	};
-
-	std::thread::spawn(move || {
-		let mut rt = tokio::runtime::Builder::new()
-			.basic_scheduler()
-			.enable_all()
-			.build()
-			.unwrap();
-
-		rt.block_on(async {
-			let (client_api, client_worker) = do_connect(url).await;
-
-			if sender.send(client_api).is_err() {
-				panic!("The caller did not wait for the server.");
-			}
-
-			// NOTE: We need to explicitly wait on a returned worker task;
-			// idleness tracking in runtime was removed from Tokio 0.1
-			client_worker.await;
-		});
-	});
-
-	return Either::Right(async move {
-		let api = receiver.await.expect("Server closed prematurely");
-
-		Ok(TClient::from(api))
-	});
+	Ok(TClient::from(client_api))
 }
 
 async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
@@ -220,7 +191,7 @@ mod tests {
 			Ok(()) as RpcResult<_>
 		};
 
-		futures::executor::block_on(run).unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(run).unwrap();
 	}
 
 	#[test]
@@ -229,18 +200,16 @@ mod tests {
 
 		// given
 		let server = TestServer::serve(id);
-		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = async move {
+		let run = async {
 			let client: TestClient = connect(&server.uri).await.unwrap();
 			client.notify(12).unwrap();
-			tx.send(()).unwrap();
 		};
 
-		let pool = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
-		pool.spawn_ok(run);
-		rx.recv().unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(run);
+		// Ensure that server has not been moved into runtime
+		drop(server);
 	}
 
 	#[test]
@@ -251,7 +220,8 @@ mod tests {
 		let invalid_uri = "invalid uri";
 
 		// when
-		let res: RpcResult<TestClient> = futures::executor::block_on(connect(invalid_uri));
+		let fut = connect(invalid_uri);
+		let res: RpcResult<TestClient> = tokio::runtime::Runtime::new().unwrap().block_on(fut);
 
 		// then
 		assert_matches!(
@@ -273,7 +243,7 @@ mod tests {
 			let client: TestClient = connect(&server.uri).await?;
 			client.fail().await
 		};
-		let res = futures::executor::block_on(run);
+		let res = tokio::runtime::Runtime::new().unwrap().block_on(run);
 
 		// then
 		if let Err(RpcError::JsonRpcError(err)) = res {
@@ -314,6 +284,6 @@ mod tests {
 			Ok(()) as RpcResult<_>
 		};
 
-		futures::executor::block_on(run).unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(run).unwrap();
 	}
 }
