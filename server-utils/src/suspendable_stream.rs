@@ -52,12 +52,7 @@ where
 			}
 
 			match Pin::new(&mut self.stream).poll_next(cx) {
-				Poll::Pending => {
-					if self.next_delay > self.initial_delay {
-						self.next_delay = self.initial_delay;
-					}
-					return Poll::Pending;
-				}
+				Poll::Pending => return Poll::Pending,
 				Poll::Ready(None) => {
 					if self.next_delay > self.initial_delay {
 						self.next_delay = self.initial_delay;
