@@ -19,8 +19,8 @@
 
 #![deny(missing_docs)]
 
-use std::sync::Arc;
 use std::future::Future;
+use std::sync::Arc;
 
 #[macro_use]
 extern crate log;
