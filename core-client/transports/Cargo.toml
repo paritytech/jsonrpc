@@ -25,6 +25,7 @@ http = ["hyper", "tokio/full"]
 ws = [
 	"websocket",
 	"tokio",
+	"futures/compat"
 ]
 ipc = [
 	"parity-tokio-ipc",
