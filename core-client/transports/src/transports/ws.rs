@@ -87,10 +87,7 @@ where
 
 	// Drains the internal buffer and attempts to forward as much of the items
 	// as possible to the underlying sink
-	fn try_empty_buffer(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), TSink::Error>> {
+	fn try_empty_buffer(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), TSink::Error>> {
 		let this = Pin::into_inner(self);
 
 		match Pin::new(&mut this.sink).poll_ready(cx) {
@@ -98,19 +95,19 @@ where
 			Poll::Pending => return Poll::Pending,
 		}
 
-        while let Some(item) = this.queue.pop_front() {
+		while let Some(item) = this.queue.pop_front() {
 			Pin::new(&mut this.sink).start_send(item)?;
 
-            if !this.queue.is_empty() {
+			if !this.queue.is_empty() {
 				match Pin::new(&mut this.sink).poll_ready(cx) {
 					Poll::Ready(value) => value?,
 					Poll::Pending => return Poll::Pending,
 				}
-            }
+			}
 		}
 
-        Poll::Ready(Ok(()))
-    }
+		Poll::Ready(Ok(()))
+	}
 }
 
 // This mostly forwards to the underlying sink but also adds an unbounded queue
