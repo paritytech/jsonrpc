@@ -14,6 +14,3 @@ members = [
 	"test",
 	"ws",
 ]
-
-[patch.crates-io]
-parity-tokio-ipc = { git = "https://github.com/Xanewok/parity-tokio-ipc", branch = "endpoint-incoming-static" }

@@ -47,7 +47,7 @@ url = "1.7"
 hyper = { version = "0.13", optional = true }
 hyper-tls = { version = "0.4", optional = true }
 jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true }
-parity-tokio-ipc = { version = "0.7", optional = true }
+parity-tokio-ipc = { version = "0.8", optional = true }
 tokio = { version = "0.2", optional = true }
 websocket = { version = "0.24", optional = true }
 
