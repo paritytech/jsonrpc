@@ -73,8 +73,8 @@ struct WebsocketClient<TSink, TStream> {
 
 impl<TSink, TStream, TError> WebsocketClient<TSink, TStream>
 where
-	TSink: futures::Sink<OwnedMessage, Error = TError>,
-	TStream: futures::Stream<Item = Result<OwnedMessage, TError>>,
+	TSink: futures::Sink<OwnedMessage, Error = TError> + Unpin,
+	TStream: futures::Stream<Item = Result<OwnedMessage, TError>> + Unpin,
 	TError: std::error::Error + Send + 'static,
 {
 	pub fn new(sink: TSink, stream: TStream) -> Self {
@@ -84,8 +84,39 @@ where
 			queue: VecDeque::new(),
 		}
 	}
+
+	// Drains the internal buffer and attempts to forward as much of the items
+	// as possible to the underlying sink
+	fn try_empty_buffer(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), TSink::Error>> {
+		let this = Pin::into_inner(self);
+
+		match Pin::new(&mut this.sink).poll_ready(cx) {
+			Poll::Ready(value) => value?,
+			Poll::Pending => return Poll::Pending,
+		}
+
+        while let Some(item) = this.queue.pop_front() {
+			Pin::new(&mut this.sink).start_send(item)?;
+
+            if !this.queue.is_empty() {
+				match Pin::new(&mut this.sink).poll_ready(cx) {
+					Poll::Ready(value) => value?,
+					Poll::Pending => return Poll::Pending,
+				}
+            }
+		}
+
+        Poll::Ready(Ok(()))
+    }
 }
 
+// This mostly forwards to the underlying sink but also adds an unbounded queue
+// for when the underlying sink is incapable of receiving more items.
+// See https://docs.rs/futures-util/0.3.8/futures_util/sink/struct.Buffer.html
+// for the variant with a fixed-size buffer.
 impl<TSink, TStream> futures::Sink<String> for WebsocketClient<TSink, TStream>
 where
 	TSink: futures::Sink<OwnedMessage, Error = RpcError> + Unpin,
@@ -94,52 +125,51 @@ where
 	type Error = RpcError;
 
 	fn start_send(mut self: Pin<&mut Self>, request: String) -> Result<(), Self::Error> {
-		self.queue.push_back(OwnedMessage::Text(request));
-		Ok(())
+		let request = OwnedMessage::Text(request);
+
+		if self.queue.is_empty() {
+			let this = Pin::into_inner(self);
+			Pin::new(&mut this.sink).start_send(request)
+		} else {
+			self.queue.push_back(request);
+			Ok(())
+		}
 	}
 
 	fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
 		let this = Pin::into_inner(self);
 
-		loop {
-			match this.queue.pop_front() {
-				Some(request) => match Pin::new(&mut this.sink).poll_ready(cx) {
-					Poll::Ready(Ok(())) => {
-						if let Err(err) = Pin::new(&mut this.sink).start_send(request) {
-							return Poll::Ready(Err(RpcError::Other(Box::new(err))));
-						}
-						continue;
-					}
-					poll => {
-						this.queue.push_front(request);
-						return poll;
-					}
-				},
-				None => break,
-			}
+		if this.queue.is_empty() {
+			return Pin::new(&mut this.sink).poll_ready(cx);
 		}
 
-		Pin::new(&mut this.sink)
-			.poll_ready(cx)
-			.map_err(|error| RpcError::Other(Box::new(error)))
+		let _ = Pin::new(this).try_empty_buffer(cx)?;
+
+		Poll::Ready(Ok(()))
 	}
 
 	fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-		if !self.queue.is_empty() {
-			self.poll_ready(cx)
-		} else {
-			let this = Pin::into_inner(self);
-			Pin::new(&mut this.sink).poll_flush(cx)
+		let this = Pin::into_inner(self);
+
+		match Pin::new(&mut *this).try_empty_buffer(cx) {
+			Poll::Ready(value) => value?,
+			Poll::Pending => return Poll::Pending,
 		}
+		debug_assert!(this.queue.is_empty());
+
+		Pin::new(&mut this.sink).poll_flush(cx)
 	}
 
 	fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-		if !self.queue.is_empty() {
-			self.poll_ready(cx)
-		} else {
-			let this = Pin::into_inner(self);
-			Pin::new(&mut this.sink).poll_close(cx)
+		let this = Pin::into_inner(self);
+
+		match Pin::new(&mut *this).try_empty_buffer(cx) {
+			Poll::Ready(value) => value?,
+			Poll::Pending => return Poll::Pending,
 		}
+		debug_assert!(this.queue.is_empty());
+
+		Pin::new(&mut this.sink).poll_close(cx)
 	}
 }
 
