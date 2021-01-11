@@ -1,27 +1,26 @@
-use std;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::Poll;
 
-use crate::jsonrpc::futures::{self as futures03, channel::mpsc, StreamExt};
-use futures01::{Async, Poll, Stream};
+use crate::futures::{channel::mpsc, Stream};
 
 use parking_lot::Mutex;
 
 pub type SenderChannels = Mutex<HashMap<SocketAddr, mpsc::UnboundedSender<String>>>;
 
-pub struct PeerMessageQueue<S: Stream> {
+pub struct PeerMessageQueue<S: Stream + Unpin> {
 	up: S,
-	receiver: Option<Box<dyn Stream<Item = String, Error = ()> + Send>>,
+	receiver: Option<mpsc::UnboundedReceiver<String>>,
 	_addr: SocketAddr,
 }
 
-impl<S: Stream> PeerMessageQueue<S> {
+impl<S: Stream + Unpin> PeerMessageQueue<S> {
 	pub fn new(response_stream: S, receiver: mpsc::UnboundedReceiver<String>, addr: SocketAddr) -> Self {
-		let receiver = futures03::compat::Compat::new(receiver.map(|v| Ok(v)));
 		PeerMessageQueue {
 			up: response_stream,
-			receiver: Some(Box::new(receiver)),
+			receiver: Some(receiver),
 			_addr: addr,
 		}
 	}
@@ -78,9 +77,8 @@ impl Dispatcher {
 	}
 }
 
-impl<S: Stream<Item = String, Error = std::io::Error>> Stream for PeerMessageQueue<S> {
-	type Item = String;
-	type Error = std::io::Error;
+impl<S: Stream<Item = std::io::Result<String>> + Unpin> Stream for PeerMessageQueue<S> {
+	type Item = std::io::Result<String>;
 
 	// The receiver will never return `Ok(Async::Ready(None))`
 	// Because the sender is kept in `SenderChannels` and it will never be dropped until `the stream` is resolved.
@@ -90,32 +88,32 @@ impl<S: Stream<Item = String, Error = std::io::Error>> Stream for PeerMessageQue
 	// However, it is possible to have a race between `poll` and `push_work` if the connection is dropped.
 	// Therefore, the receiver is then dropped when the connection is dropped and an error is propagated when
 	// a `send` attempt is made on that channel.
-	fn poll(&mut self) -> Poll<Option<String>, std::io::Error> {
+	fn poll_next(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
 		// check if we have response pending
+		let this = Pin::into_inner(self);
 
-		let up_closed = match self.up.poll() {
-			Ok(Async::Ready(Some(item))) => return Ok(Async::Ready(Some(item))),
-			Ok(Async::Ready(None)) => true,
-			Ok(Async::NotReady) => false,
-			err => return err,
+		let up_closed = match Pin::new(&mut this.up).poll_next(cx) {
+			Poll::Ready(Some(Ok(item))) => return Poll::Ready(Some(Ok(item))),
+			Poll::Ready(Some(Err(err))) => return Poll::Ready(Some(Err(err))),
+			Poll::Ready(None) => true,
+			Poll::Pending => false,
 		};
 
-		let rx = match &mut self.receiver {
+		let mut rx = match &mut this.receiver {
 			None => {
 				debug_assert!(up_closed);
-				return Ok(Async::Ready(None));
+				return Poll::Ready(None);
 			}
 			Some(rx) => rx,
 		};
 
-		match rx.poll() {
-			Ok(Async::Ready(Some(item))) => Ok(Async::Ready(Some(item))),
-			Ok(Async::Ready(None)) | Ok(Async::NotReady) if up_closed => {
-				self.receiver = None;
-				Ok(Async::Ready(None))
+		match Pin::new(&mut rx).poll_next(cx) {
+			Poll::Ready(Some(item)) => Poll::Ready(Some(Ok(item))),
+			Poll::Ready(None) | Poll::Pending if up_closed => {
+				this.receiver = None;
+				Poll::Ready(None)
 			}
-			Ok(Async::Ready(None)) | Ok(Async::NotReady) => Ok(Async::NotReady),
-			Err(_) => Err(std::io::Error::new(std::io::ErrorKind::Other, "MPSC error")),
+			Poll::Ready(None) | Poll::Pending => Poll::Pending,
 		}
 	}
 }

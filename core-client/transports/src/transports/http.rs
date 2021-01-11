@@ -4,75 +4,52 @@
 
 use super::RequestBuilder;
 use crate::{RpcChannel, RpcError, RpcMessage, RpcResult};
-use futures::{Future, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
-use hyper::{http, rt, Client, Request, Uri};
+use futures::{future, Future, FutureExt, StreamExt, TryFutureExt};
+use hyper::{http, Client, Request, Uri};
 
 /// Create a HTTP Client
-pub fn connect<TClient>(url: &str) -> impl Future<Output = RpcResult<TClient>>
+pub async fn connect<TClient>(url: &str) -> RpcResult<TClient>
 where
 	TClient: From<RpcChannel>,
 {
-	let (sender, receiver) = futures::channel::oneshot::channel();
-	let url = url.to_owned();
+	let url: Uri = url.parse().map_err(|e| RpcError::Other(Box::new(e)))?;
 
-	std::thread::spawn(move || {
-		let connect = rt::lazy(move || {
-			do_connect(&url)
-				.map(|client| {
-					if sender.send(client).is_err() {
-						panic!("The caller did not wait for the server.");
-					}
-					Ok(())
-				})
-				.compat()
-		});
-		rt::run(connect);
-	});
+	let (client_api, client_worker) = do_connect(url).await;
+	tokio::spawn(client_worker);
 
-	receiver.map(|res| res.expect("Server closed prematurely.").map(TClient::from))
+	Ok(TClient::from(client_api))
 }
 
-fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
-	use futures::future::ready;
-
+async fn do_connect(url: Uri) -> (RpcChannel, impl Future<Output = ()>) {
 	let max_parallel = 8;
-	let url: Uri = match url.parse() {
-		Ok(url) => url,
-		Err(e) => return ready(Err(RpcError::Other(Box::new(e)))),
-	};
 
 	#[cfg(feature = "tls")]
-	let connector = match hyper_tls::HttpsConnector::new(4) {
-		Ok(connector) => connector,
-		Err(e) => return ready(Err(RpcError::Other(Box::new(e)))),
-	};
+	let connector = hyper_tls::HttpsConnector::new();
 	#[cfg(feature = "tls")]
 	let client = Client::builder().build::<_, hyper::Body>(connector);
 
 	#[cfg(not(feature = "tls"))]
 	let client = Client::new();
-
+	// Keep track of internal request IDs when building subsequent requests
 	let mut request_builder = RequestBuilder::new();
 
 	let (sender, receiver) = futures::channel::mpsc::unbounded();
 
-	use futures01::{Future, Stream};
 	let fut = receiver
-		.map(Ok)
-		.compat()
 		.filter_map(move |msg: RpcMessage| {
-			let (request, sender) = match msg {
+			future::ready(match msg {
 				RpcMessage::Call(call) => {
 					let (_, request) = request_builder.call_request(&call);
-					(request, Some(call.sender))
+					Some((request, Some(call.sender)))
 				}
-				RpcMessage::Notify(notify) => (request_builder.notification(&notify), None),
+				RpcMessage::Notify(notify) => Some((request_builder.notification(&notify), None)),
 				RpcMessage::Subscribe(_) => {
 					log::warn!("Unsupported `RpcMessage` type `Subscribe`.");
-					return None;
+					None
 				}
-			};
-
+			})
+		})
+		.map(move |(request, sender)| {
 			let request = Request::post(&url)
 				.header(
 					http::header::CONTENT_TYPE,
@@ -85,46 +62,42 @@ fn do_connect(url: &str) -> impl Future<Output = RpcResult<RpcChannel>> {
 				.body(request.into())
 				.expect("Uri and request headers are valid; qed");
 
-			Some(client.request(request).then(move |response| Ok((response, sender))))
+			client
+				.request(request)
+				.then(|response| async move { (response, sender) })
 		})
 		.buffer_unordered(max_parallel)
-		.for_each(|(result, sender)| {
-			use futures01::future::{
-				self,
-				Either::{A, B},
-			};
-			let future = match result {
+		.for_each(|(response, sender)| async {
+			let result = match response {
 				Ok(ref res) if !res.status().is_success() => {
 					log::trace!("http result status {}", res.status());
-					A(future::err(RpcError::Client(format!(
+					Err(RpcError::Client(format!(
 						"Unexpected response status code: {}",
 						res.status()
-					))))
+					)))
 				}
-				Ok(res) => B(res
-					.into_body()
-					.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
-					.concat2()),
-				Err(err) => A(future::err(RpcError::Other(Box::new(err)))),
+				Err(err) => Err(RpcError::Other(Box::new(err))),
+				Ok(res) => {
+					hyper::body::to_bytes(res.into_body())
+						.map_err(|e| RpcError::ParseError(e.to_string(), Box::new(e)))
+						.await
+				}
 			};
-			future.then(|result| {
-				if let Some(sender) = sender {
-					let response = result
-						.and_then(|response| {
-							let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
-							super::parse_response(&response_str)
-						})
-						.and_then(|r| r.1);
-					if let Err(err) = sender.send(response) {
-						log::warn!("Error resuming asynchronous request: {:?}", err);
-					}
+
+			if let Some(sender) = sender {
+				let response = result
+					.and_then(|response| {
+						let response_str = String::from_utf8_lossy(response.as_ref()).into_owned();
+						super::parse_response(&response_str)
+					})
+					.and_then(|r| r.1);
+				if let Err(err) = sender.send(response) {
+					log::warn!("Error resuming asynchronous request: {:?}", err);
 				}
-				Ok(())
-			})
+			}
 		});
 
-	rt::spawn(fut.map_err(|e: RpcError| log::error!("RPC Client error: {:?}", e)));
-	ready(Ok(sender.into()))
+	(sender.into(), fut)
 }
 
 #[cfg(test)]
@@ -218,7 +191,7 @@ mod tests {
 			Ok(()) as RpcResult<_>
 		};
 
-		futures::executor::block_on(run).unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(run).unwrap();
 	}
 
 	#[test]
@@ -227,18 +200,16 @@ mod tests {
 
 		// given
 		let server = TestServer::serve(id);
-		let (tx, rx) = std::sync::mpsc::channel();
 
 		// when
-		let run = async move {
+		let run = async {
 			let client: TestClient = connect(&server.uri).await.unwrap();
 			client.notify(12).unwrap();
-			tx.send(()).unwrap();
 		};
 
-		let pool = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
-		pool.spawn_ok(run);
-		rx.recv().unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(run);
+		// Ensure that server has not been moved into runtime
+		drop(server);
 	}
 
 	#[test]
@@ -249,7 +220,8 @@ mod tests {
 		let invalid_uri = "invalid uri";
 
 		// when
-		let res: RpcResult<TestClient> = futures::executor::block_on(connect(invalid_uri));
+		let fut = connect(invalid_uri);
+		let res: RpcResult<TestClient> = tokio::runtime::Runtime::new().unwrap().block_on(fut);
 
 		// then
 		assert_matches!(
@@ -271,7 +243,7 @@ mod tests {
 			let client: TestClient = connect(&server.uri).await?;
 			client.fail().await
 		};
-		let res = futures::executor::block_on(run);
+		let res = tokio::runtime::Runtime::new().unwrap().block_on(run);
 
 		// then
 		if let Err(RpcError::JsonRpcError(err)) = res {
@@ -312,6 +284,6 @@ mod tests {
 			Ok(()) as RpcResult<_>
 		};
 
-		futures::executor::block_on(run).unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(run).unwrap();
 	}
 }

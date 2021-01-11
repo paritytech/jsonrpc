@@ -3,42 +3,34 @@
 
 use crate::transports::duplex::duplex;
 use crate::{RpcChannel, RpcError};
-use futures::compat::{Sink01CompatExt, Stream01CompatExt};
-use futures::StreamExt;
-use futures01::prelude::*;
+use futures::{SinkExt, StreamExt, TryStreamExt};
 use jsonrpc_server_utils::codecs::StreamCodec;
-use parity_tokio_ipc::IpcConnection;
+use jsonrpc_server_utils::tokio;
+use jsonrpc_server_utils::tokio_util::codec::Decoder as _;
+use parity_tokio_ipc::Endpoint;
 use std::path::Path;
-use tokio::codec::Decoder;
-use tokio::runtime::Runtime;
 
 /// Connect to a JSON-RPC IPC server.
-pub fn connect<P: AsRef<Path>, Client: From<RpcChannel>>(
-	path: P,
-) -> impl futures::Future<Output = Result<Client, RpcError>> {
-	let rt = Runtime::new().unwrap();
-	#[allow(deprecated)]
-	let reactor = rt.reactor().clone();
-	async move {
-		let connection = IpcConnection::connect(path, &reactor).map_err(|e| RpcError::Other(e.into()))?;
-		let (sink, stream) = StreamCodec::stream_incoming().framed(connection).split();
-		let sink = sink.sink_map_err(|e| RpcError::Other(e.into()));
-		let stream = stream.map_err(|e| log::error!("IPC stream error: {}", e));
+pub async fn connect<P: AsRef<Path>, Client: From<RpcChannel>>(path: P) -> Result<Client, RpcError> {
+	let connection = Endpoint::connect(path)
+		.await
+		.map_err(|e| RpcError::Other(Box::new(e)))?;
+	let (sink, stream) = StreamCodec::stream_incoming().framed(connection).split();
+	let sink = sink.sink_map_err(|e| RpcError::Other(Box::new(e)));
+	let stream = stream.map_err(|e| log::error!("IPC stream error: {}", e));
 
-		let (client, sender) = duplex(
-			Box::pin(sink.sink_compat()),
-			Box::pin(
-				stream
-					.compat()
-					.take_while(|x| futures::future::ready(x.is_ok()))
-					.map(|x| x.expect("Stream is closed upon first error.")),
-			),
-		);
+	let (client, sender) = duplex(
+		Box::pin(sink),
+		Box::pin(
+			stream
+				.take_while(|x| futures::future::ready(x.is_ok()))
+				.map(|x| x.expect("Stream is closed upon first error.")),
+		),
+	);
 
-		tokio::spawn(futures::compat::Compat::new(client).map_err(|_| unreachable!()));
+	tokio::spawn(client);
 
-		Ok(sender.into())
-	}
+	Ok(sender.into())
 }
 
 #[cfg(test)]
@@ -52,13 +44,10 @@ mod tests {
 
 	#[test]
 	fn should_call_one() {
-		let mut rt = Runtime::new().unwrap();
-		#[allow(deprecated)]
-		let reactor = rt.reactor().clone();
 		let sock_path = dummy_endpoint();
 
 		let mut io = IoHandler::new();
-		io.add_method("greeting", |params| {
+		io.add_method("greeting", |params| async {
 			let map_obj = match params {
 				Params::Map(obj) => obj,
 				_ => return Err(Error::invalid_params("missing object")),
@@ -69,66 +58,57 @@ mod tests {
 			};
 			Ok(Value::String(format!("Hello {}!", name)))
 		});
-		let builder = ServerBuilder::new(io).event_loop_executor(rt.executor());
-		let server = builder.start(&sock_path).expect("Couldn't open socket");
+		let builder = ServerBuilder::new(io);
+		let _server = builder.start(&sock_path).expect("Couldn't open socket");
 
-		let client: RawClient = rt.block_on(connect(sock_path, &reactor).unwrap()).unwrap();
-		let mut map = Map::new();
-		map.insert("name".to_string(), "Jeffry".into());
-		let fut = client.call_method("greeting", Params::Map(map));
+		let client_fut = async move {
+			let client: RawClient = connect(sock_path).await.unwrap();
+			let mut map = Map::new();
+			map.insert("name".to_string(), "Jeffry".into());
+			let fut = client.call_method("greeting", Params::Map(map));
 
-		// FIXME: it seems that IPC server on Windows won't be polled with
-		// default I/O reactor, work around with sending stop signal which polls
-		// the server (https://github.com/paritytech/jsonrpc/pull/459)
-		server.close();
-
-		match rt.block_on(fut) {
-			Ok(val) => assert_eq!(&val, "Hello Jeffry!"),
-			Err(err) => panic!("IPC RPC call failed: {}", err),
-		}
-		rt.shutdown_now().wait().unwrap();
+			match fut.await {
+				Ok(val) => assert_eq!(&val, "Hello Jeffry!"),
+				Err(err) => panic!("IPC RPC call failed: {}", err),
+			}
+		};
+		tokio::runtime::Runtime::new().unwrap().block_on(client_fut);
 	}
 
 	#[test]
 	fn should_fail_without_server() {
-		let rt = Runtime::new().unwrap();
-		#[allow(deprecated)]
-		let reactor = rt.reactor();
+		let test_fut = async move {
+			match connect::<_, RawClient>(dummy_endpoint()).await {
+				Err(..) => {}
+				Ok(..) => panic!("Should not be able to connect to an IPC socket that's not open"),
+			}
+		};
 
-		match connect::<_, RawClient>(dummy_endpoint(), reactor) {
-			Err(..) => {}
-			Ok(..) => panic!("Should not be able to connect to an IPC socket that's not open"),
-		}
-		rt.shutdown_now().wait().unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(test_fut);
 	}
 
 	#[test]
 	fn should_handle_server_error() {
-		let mut rt = Runtime::new().unwrap();
-		#[allow(deprecated)]
-		let reactor = rt.reactor().clone();
 		let sock_path = dummy_endpoint();
 
 		let mut io = IoHandler::new();
-		io.add_method("greeting", |_params| Err(Error::invalid_params("test error")));
-		let builder = ServerBuilder::new(io).event_loop_executor(rt.executor());
-		let server = builder.start(&sock_path).expect("Couldn't open socket");
+		io.add_method("greeting", |_params| async { Err(Error::invalid_params("test error")) });
+		let builder = ServerBuilder::new(io);
+		let _server = builder.start(&sock_path).expect("Couldn't open socket");
 
-		let client: RawClient = rt.block_on(connect(sock_path, &reactor).unwrap()).unwrap();
-		let mut map = Map::new();
-		map.insert("name".to_string(), "Jeffry".into());
-		let fut = client.call_method("greeting", Params::Map(map));
+		let client_fut = async move {
+			let client: RawClient = connect(sock_path).await.unwrap();
+			let mut map = Map::new();
+			map.insert("name".to_string(), "Jeffry".into());
+			let fut = client.call_method("greeting", Params::Map(map));
 
-		// FIXME: it seems that IPC server on Windows won't be polled with
-		// default I/O reactor, work around with sending stop signal which polls
-		// the server (https://github.com/paritytech/jsonrpc/pull/459)
-		server.close();
+			match fut.await {
+				Err(RpcError::JsonRpcError(err)) => assert_eq!(err.code, ErrorCode::InvalidParams),
+				Ok(_) => panic!("Expected the call to fail"),
+				_ => panic!("Unexpected error type"),
+			}
+		};
 
-		match rt.block_on(fut) {
-			Err(RpcError::JsonRpcError(err)) => assert_eq!(err.code, ErrorCode::InvalidParams),
-			Ok(_) => panic!("Expected the call to fail"),
-			_ => panic!("Unexpected error type"),
-		}
-		rt.shutdown_now().wait().unwrap();
+		tokio::runtime::Runtime::new().unwrap().block_on(client_fut);
 	}
 }

@@ -1,17 +1,20 @@
-use std;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{atomic, Arc};
+use std::task::{Context, Poll};
 
 use crate::core;
-use futures01::sync::oneshot;
-use futures01::{Async, Future, Poll};
+use futures::channel::oneshot;
+use futures::future;
+use futures::FutureExt;
 
 use parking_lot::Mutex;
 use slab::Slab;
 
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::Host;
+use crate::server_utils::reactor::TaskExecutor;
 use crate::server_utils::session::{SessionId, SessionStats};
-use crate::server_utils::tokio::runtime::TaskExecutor;
 use crate::server_utils::Pattern;
 use crate::ws;
 
@@ -123,16 +126,16 @@ impl LivenessPoll {
 }
 
 impl Future for LivenessPoll {
-	type Item = ();
-	type Error = ();
+	type Output = ();
 
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+	fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+		let this = Pin::into_inner(self);
 		// if the future resolves ok then we've been signalled to return.
 		// it should never be cancelled, but if it was the session definitely
 		// isn't live.
-		match self.rx.poll() {
-			Ok(Async::Ready(_)) | Err(_) => Ok(Async::Ready(())),
-			Ok(Async::NotReady) => Ok(Async::NotReady),
+		match Pin::new(&mut this.rx).poll(cx) {
+			Poll::Ready(_) => Poll::Ready(()),
+			Poll::Pending => Poll::Pending,
 		}
 	}
 }
@@ -270,30 +273,25 @@ where
 		let active_lock = self.active.clone();
 		let response = self.handler.handle_request(req, metadata);
 
-		use futures03::{FutureExt, TryFutureExt};
-		let response = response.map(Ok).compat();
-		let future = response
-			.map(move |response| {
-				if !active_lock.load(atomic::Ordering::SeqCst) {
-					return;
-				}
-				if let Some(result) = response {
-					let res = out.send(result);
-					match res {
-						Err(error::Error::ConnectionClosed) => {
-							active_lock.store(false, atomic::Ordering::SeqCst);
-						}
-						Err(e) => {
-							warn!("Error while sending response: {:?}", e);
-						}
-						_ => {}
+		let future = response.map(move |response| {
+			if !active_lock.load(atomic::Ordering::SeqCst) {
+				return;
+			}
+			if let Some(result) = response {
+				let res = out.send(result);
+				match res {
+					Err(error::Error::ConnectionClosed) => {
+						active_lock.store(false, atomic::Ordering::SeqCst);
 					}
+					Err(e) => {
+						warn!("Error while sending response: {:?}", e);
+					}
+					_ => {}
 				}
-			})
-			.select(poll_liveness)
-			.map(|_| ())
-			.map_err(|_| ());
+			}
+		});
 
+		let future = future::select(future, poll_liveness);
 		self.executor.spawn(future);
 
 		Ok(())

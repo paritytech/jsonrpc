@@ -1,9 +1,11 @@
+use std::future::Future;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use crate::jsonrpc::futures::FutureExt;
+use crate::futures;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use futures01::Future;
 
 pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 	handler: Arc<MetaIoHandler<M, S>>,
@@ -21,26 +23,27 @@ impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S>
+impl<M: Metadata, S: Middleware<M>> tower_service::Service<String> for Service<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
 	// These types must match the corresponding protocol types:
-	type Request = String;
 	type Response = Option<String>;
-
 	// For non-streaming protocols, service errors are always io::Error
 	type Error = ();
 
 	// The future for computing the response; box it for simplicity.
-	type Future = Box<dyn Future<Item = Option<String>, Error = ()> + Send>;
+	type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+	fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+		Poll::Ready(Ok(()))
+	}
 
 	// Produce a future for computing a response from a request.
-	fn call(&self, req: Self::Request) -> Self::Future {
+	fn call(&mut self, req: String) -> Self::Future {
+		use futures::FutureExt;
 		trace!(target: "tcp", "Accepted request from peer {}: {}", &self.peer_addr, req);
-		Box::new(futures03::compat::Compat::new(
-			self.handler.handle_request(&req, self.meta.clone()).map(|v| Ok(v)),
-		))
+		Box::pin(self.handler.handle_request(&req, self.meta.clone()).map(Ok))
 	}
 }

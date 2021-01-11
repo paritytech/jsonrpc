@@ -1,19 +1,19 @@
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use crate::jsonrpc::futures::channel::mpsc;
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
 use crate::select_with_weak::SelectWithWeakExt;
-use futures01::{future, sync::oneshot, Future, Sink, Stream};
+use futures::channel::oneshot;
+use futures::StreamExt;
 use parity_tokio_ipc::Endpoint;
 use parking_lot::Mutex;
-use tokio_service::{self, Service as TokioService};
+use tower_service::Service as _;
 
-use crate::server_utils::{
-	codecs, reactor, session,
-	tokio::{reactor::Handle, runtime::TaskExecutor},
-	tokio_codec::Framed,
-};
+use crate::server_utils::{codecs, reactor, reactor::TaskExecutor, session, tokio_util};
 
 pub use parity_tokio_ipc::SecurityAttributes;
 
@@ -30,22 +30,24 @@ impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> tokio_service::Service for Service<M, S>
+impl<M: Metadata, S: Middleware<M>> tower_service::Service<String> for Service<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
 {
-	type Request = String;
 	type Response = Option<String>;
-
 	type Error = ();
 
-	type Future = Box<dyn Future<Item = Option<String>, Error = ()> + Send>;
+	type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
-	fn call(&self, req: Self::Request) -> Self::Future {
-		use futures03::{FutureExt, TryFutureExt};
+	fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+		Poll::Ready(Ok(()))
+	}
+
+	fn call(&mut self, req: String) -> Self::Future {
+		use futures::FutureExt;
 		trace!(target: "ipc", "Received request: {}", req);
-		Box::new(self.handler.handle_request(&req, self.meta.clone()).map(Ok).compat())
+		Box::pin(self.handler.handle_request(&req, self.meta.clone()).map(Ok))
 	}
 }
 
@@ -55,7 +57,6 @@ pub struct ServerBuilder<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	meta_extractor: Arc<dyn MetaExtractor<M>>,
 	session_stats: Option<Arc<dyn session::SessionStats>>,
 	executor: reactor::UninitializedExecutor,
-	reactor: Option<Handle>,
 	incoming_separator: codecs::Separator,
 	outgoing_separator: codecs::Separator,
 	security_attributes: SecurityAttributes,
@@ -92,7 +93,6 @@ where
 			meta_extractor: Arc::new(extractor),
 			session_stats: None,
 			executor: reactor::UninitializedExecutor::Unspawned,
-			reactor: None,
 			incoming_separator: codecs::Separator::Empty,
 			outgoing_separator: codecs::Separator::default(),
 			security_attributes: SecurityAttributes::empty(),
@@ -103,12 +103,6 @@ where
 	/// Sets shared different event loop executor.
 	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
 		self.executor = reactor::UninitializedExecutor::Shared(executor);
-		self
-	}
-
-	/// Sets different event loop I/O reactor.
-	pub fn event_loop_reactor(mut self, reactor: Handle) -> Self {
-		self.reactor = Some(reactor);
 		self
 	}
 
@@ -149,7 +143,6 @@ where
 	/// Creates a new server from the given endpoint.
 	pub fn start(self, path: &str) -> std::io::Result<Server> {
 		let executor = self.executor.initialize()?;
-		let reactor = self.reactor;
 		let rpc_handler = self.handler;
 		let endpoint_addr = path.to_owned();
 		let meta_extractor = self.meta_extractor;
@@ -157,12 +150,13 @@ where
 		let incoming_separator = self.incoming_separator;
 		let outgoing_separator = self.outgoing_separator;
 		let (stop_signal, stop_receiver) = oneshot::channel();
-		let (start_signal, start_receiver) = oneshot::channel();
-		let (wait_signal, wait_receiver) = oneshot::channel();
+		// NOTE: These channels are only waited upon in synchronous fashion
+		let (start_signal, start_receiver) = std::sync::mpsc::channel();
+		let (wait_signal, wait_receiver) = std::sync::mpsc::channel();
 		let security_attributes = self.security_attributes;
 		let client_buffer_size = self.client_buffer_size;
 
-		executor.spawn(future::lazy(move || {
+		let fut = async move {
 			let mut endpoint = Endpoint::new(endpoint_addr);
 			endpoint.set_security_attributes(security_attributes);
 
@@ -173,27 +167,21 @@ where
 				}
 			}
 
-			// Make sure to construct Handle::default() inside Tokio runtime
-			let reactor = if cfg!(windows) {
-				#[allow(deprecated)]
-				reactor.unwrap_or_else(Handle::current)
-			} else {
-				reactor.unwrap_or_else(Handle::default)
-			};
-
-			let connections = match endpoint.incoming(&reactor) {
+			let endpoint_addr = endpoint.path().to_owned();
+			let connections = match endpoint.incoming() {
 				Ok(connections) => connections,
 				Err(e) => {
 					start_signal
 						.send(Err(e))
 						.expect("Cannot fail since receiver never dropped before receiving");
-					return future::Either::A(future::ok(()));
+					return;
 				}
 			};
 
 			let mut id = 0u64;
 
-			let server = connections.map(move |(io_stream, remote_id)| {
+			use futures::TryStreamExt;
+			let server = connections.map_ok(move |io_stream| {
 				id = id.wrapping_add(1);
 				let session_id = id;
 				let session_stats = session_stats.clone();
@@ -204,61 +192,56 @@ where
 
 				let (sender, receiver) = mpsc::unbounded();
 				let meta = meta_extractor.extract(&RequestContext {
-					endpoint_addr: &remote_id,
+					endpoint_addr: endpoint_addr.as_ref(),
 					session_id,
 					sender,
 				});
-				let service = Service::new(rpc_handler.clone(), meta);
-				let (writer, reader) = Framed::new(
-					io_stream,
-					codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
-				)
-				.split();
+				let mut service = Service::new(rpc_handler.clone(), meta);
+				let codec = codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone());
+				let framed = tokio_util::codec::Decoder::framed(codec, io_stream);
+				let (writer, reader) = futures::StreamExt::split(framed);
+
 				let responses = reader
-					.map(move |req| {
+					.map_ok(move |req| {
 						service
 							.call(req)
-							.then(|result| match result {
-								Err(_) => future::ok(None),
-								Ok(some_result) => future::ok(some_result),
-							})
-							.map_err(|_: ()| std::io::ErrorKind::Other.into())
+							// Ignore service errors
+							.map(|x| Ok(x.ok().flatten()))
 					})
-					.buffer_unordered(client_buffer_size)
-					.filter_map(|x| x)
+					.try_buffer_unordered(client_buffer_size)
+					// Filter out previously ignored service errors as `None`s
+					.try_filter_map(|x| futures::future::ok(x))
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
-					.select_with_weak(futures03::TryStreamExt::compat(futures03::StreamExt::map(receiver, Ok)));
+					.select_with_weak(receiver.map(Ok));
 
-				let writer = writer.send_all(responses).then(move |_| {
+				responses.forward(writer).then(move |_| {
 					trace!(target: "ipc", "Peer: service finished");
 					if let Some(stats) = session_stats.as_ref() {
 						stats.close_session(session_id)
 					}
-					Ok(())
-				});
 
-				writer
+					async { Ok(()) }
+				})
 			});
 			start_signal
 				.send(Ok(()))
 				.expect("Cannot fail since receiver never dropped before receiving");
+			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted);
+			let stop = Box::pin(stop);
 
-			let stop = stop_receiver.map_err(|_| std::io::ErrorKind::Interrupted.into());
-			future::Either::B(
-				server
-					.buffer_unordered(1024)
-					.for_each(|_| Ok(()))
-					.select(stop)
-					.map(|(_, server)| {
-						// We drop the server first to prevent a situation where main thread terminates
-						// before the server is properly dropped (see #504 for more details)
-						drop(server);
-						let _ = wait_signal.send(());
-					})
-					.map_err(|_| ()),
-			)
-		}));
+			let server = server.try_buffer_unordered(1024).for_each(|_| async {});
+
+			let result = futures::future::select(Box::pin(server), stop).await;
+			// We drop the server first to prevent a situation where main thread terminates
+			// before the server is properly dropped (see #504 for more details)
+			drop(result);
+			let _ = wait_signal.send(());
+		};
+
+		use futures::FutureExt;
+		let fut = Box::pin(fut.map(drop));
+		executor.executor().spawn(fut);
 
 		let handle = InnerHandles {
 			executor: Some(executor),
@@ -266,7 +249,8 @@ where
 			path: path.to_owned(),
 		};
 
-		match start_receiver.wait().expect("Message should always be sent") {
+		use futures::TryFutureExt;
+		match start_receiver.recv().expect("Message should always be sent") {
 			Ok(()) => Ok(Server {
 				handles: Arc::new(Mutex::new(handle)),
 				wait_handle: Some(wait_receiver),
@@ -280,7 +264,7 @@ where
 #[derive(Debug)]
 pub struct Server {
 	handles: Arc<Mutex<InnerHandles>>,
-	wait_handle: Option<oneshot::Receiver<()>>,
+	wait_handle: Option<std::sync::mpsc::Receiver<()>>,
 }
 
 impl Server {
@@ -298,7 +282,9 @@ impl Server {
 
 	/// Wait for the server to finish
 	pub fn wait(mut self) {
-		self.wait_handle.take().map(|wait_receiver| wait_receiver.wait());
+		if let Some(wait_receiver) = self.wait_handle.take() {
+			let _ = wait_receiver.recv();
+		}
 	}
 }
 
@@ -342,13 +328,10 @@ impl CloseHandle {
 mod tests {
 	use super::*;
 
-	use futures01::{Future, Sink, Stream};
 	use jsonrpc_core::Value;
-	use jsonrpc_server_utils::tokio::{self, timer::Delay};
-	use jsonrpc_server_utils::tokio_codec::Decoder;
+	use std::os::unix::net::UnixStream;
 	use std::thread;
-	use std::time::{self, Duration, Instant};
-	use tokio_uds::UnixStream;
+	use std::time::{self, Duration};
 
 	fn server_builder() -> ServerBuilder {
 		let mut io = MetaIoHandler::<()>::default();
@@ -363,17 +346,22 @@ mod tests {
 	}
 
 	fn dummy_request_str(path: &str, data: &str) -> String {
-		let stream_future = UnixStream::connect(path);
-		let reply = stream_future.and_then(|stream| {
-			let stream = codecs::StreamCodec::stream_incoming().framed(stream);
-			let reply = stream
-				.send(data.to_owned())
-				.and_then(move |stream| stream.into_future().map_err(|(err, _)| err))
-				.and_then(|(reply, _)| future::ok(reply.expect("there should be one reply")));
-			reply
-		});
+		use futures::SinkExt;
 
-		reply.wait().expect("wait for reply")
+		let reply = async move {
+			use tokio::net::UnixStream;
+
+			let stream: UnixStream = UnixStream::connect(path).await?;
+			let codec = codecs::StreamCodec::stream_incoming();
+			let mut stream = tokio_util::codec::Decoder::framed(codec, stream);
+			stream.send(data.to_owned()).await?;
+			let (reply, _) = stream.into_future().await;
+
+			reply.expect("there should be one reply")
+		};
+
+		let mut rt = tokio::runtime::Runtime::new().unwrap();
+		rt.block_on(reply).expect("wait for reply")
 	}
 
 	#[test]
@@ -395,7 +383,7 @@ mod tests {
 		let path = "/tmp/test-ipc-30000";
 		let _server = run(path);
 
-		UnixStream::connect(path).wait().expect("Socket should connect");
+		UnixStream::connect(path).expect("Socket should connect");
 	}
 
 	#[test]
@@ -403,7 +391,7 @@ mod tests {
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-40000";
 		let server = run(path);
-		let (stop_signal, stop_receiver) = oneshot::channel();
+		let (stop_signal, stop_receiver) = std::sync::mpsc::channel();
 
 		let t = thread::spawn(move || {
 			let result = dummy_request_str(
@@ -414,15 +402,13 @@ mod tests {
 		});
 		t.join().unwrap();
 
-		let _ = stop_receiver
-			.map(move |result: String| {
-				assert_eq!(
-					result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
-					"Response does not exactly match the expected response",
-				);
-				server.close();
-			})
-			.wait();
+		let result = stop_receiver.recv().unwrap();
+
+		assert_eq!(
+			result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+			"Response does not exactly match the expected response",
+		);
+		server.close();
 	}
 
 	#[test]
@@ -430,7 +416,7 @@ mod tests {
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-45000";
 		let server = run(path);
-		let (stop_signal, stop_receiver) = futures01::sync::mpsc::channel(400);
+		let (stop_signal, stop_receiver) = futures::channel::mpsc::channel(400);
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
@@ -451,16 +437,20 @@ mod tests {
 			handle.join().unwrap();
 		}
 
-		let _ = stop_receiver
-			.map(|result| {
-				assert_eq!(
-					result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
-					"Response does not exactly match the expected response",
-				);
-			})
-			.take(400)
-			.collect()
-			.wait();
+		thread::spawn(move || {
+			let fut = stop_receiver
+				.map(|result| {
+					assert_eq!(
+						result, "{\"jsonrpc\":\"2.0\",\"result\":\"hello\",\"id\":1}",
+						"Response does not exactly match the expected response",
+					);
+				})
+				.take(400)
+				.for_each(|_| async {});
+			futures::executor::block_on(fut);
+		})
+		.join()
+		.unwrap();
 		server.close();
 	}
 
@@ -476,7 +466,7 @@ mod tests {
 			"There should be no socket file left"
 		);
 		assert!(
-			UnixStream::connect(path).wait().is_err(),
+			UnixStream::connect(path).is_err(),
 			"Connection to the closed socket should fail"
 		);
 	}
@@ -521,16 +511,19 @@ mod tests {
 		});
 		t.join().unwrap();
 
-		let _ = stop_receiver
-			.map(move |result: String| {
+		thread::spawn(move || {
+			futures::executor::block_on(async move {
+				let result = stop_receiver.await.unwrap();
 				assert_eq!(
 					result,
 					huge_response_test_json(),
 					"Response does not exactly match the expected response",
 				);
 				server.close();
-			})
-			.wait();
+			});
+		})
+		.join()
+		.unwrap();
 	}
 
 	#[test]
@@ -547,7 +540,7 @@ mod tests {
 		}
 
 		struct SessionEndExtractor {
-			drop_receivers: Arc<Mutex<futures01::sync::mpsc::Sender<oneshot::Receiver<()>>>>,
+			drop_receivers: Arc<Mutex<futures::channel::mpsc::Sender<oneshot::Receiver<()>>>>,
 		}
 
 		impl MetaExtractor<Arc<SessionEndMeta>> for SessionEndExtractor {
@@ -563,7 +556,7 @@ mod tests {
 
 		crate::logger::init_log();
 		let path = "/tmp/test-ipc-30009";
-		let (signal, receiver) = futures01::sync::mpsc::channel(16);
+		let (signal, receiver) = futures::channel::mpsc::channel(16);
 		let session_metadata_extractor = SessionEndExtractor {
 			drop_receivers: Arc::new(Mutex::new(signal)),
 		};
@@ -572,15 +565,17 @@ mod tests {
 		let builder = ServerBuilder::with_meta_extractor(io, session_metadata_extractor);
 		let server = builder.start(path).expect("Server must run with no issues");
 		{
-			let _ = UnixStream::connect(path).wait().expect("Socket should connect");
+			let _ = UnixStream::connect(path).expect("Socket should connect");
 		}
 
-		receiver
-			.into_future()
-			.map_err(|_| ())
-			.and_then(|drop_receiver| drop_receiver.0.unwrap().map_err(|_| ()))
-			.wait()
-			.unwrap();
+		thread::spawn(move || {
+			futures::executor::block_on(async move {
+				let (drop_receiver, ..) = receiver.into_future().await;
+				drop_receiver.unwrap().await.unwrap();
+			});
+		})
+		.join()
+		.unwrap();
 		server.close();
 	}
 
@@ -592,7 +587,7 @@ mod tests {
 		let handle = server.close_handle();
 		handle.close();
 		assert!(
-			UnixStream::connect(path).wait().is_err(),
+			UnixStream::connect(path).is_err(),
 			"Connection to the closed socket should fail"
 		);
 	}
@@ -614,23 +609,24 @@ mod tests {
 			tx.send(true).expect("failed to report that the server has stopped");
 		});
 
-		let delay = Delay::new(Instant::now() + Duration::from_millis(500))
-			.map(|_| false)
-			.map_err(|err| panic!("{:?}", err));
+		let mut rt = tokio::runtime::Runtime::new().unwrap();
+		rt.block_on(async move {
+			let timeout = tokio::time::delay_for(Duration::from_millis(500));
 
-		let result_fut = rx.map_err(|_| ()).select(delay).then(move |result| match result {
-			Ok((result, _)) => {
-				assert_eq!(result, true, "Wait timeout exceeded");
-				assert!(
-					UnixStream::connect(path).wait().is_err(),
-					"Connection to the closed socket should fail"
-				);
-				Ok(())
+			match futures::future::select(rx, timeout).await {
+				futures::future::Either::Left((result, _)) => {
+					assert!(result.is_ok(), "Rx failed");
+					assert_eq!(result, Ok(true), "Wait timeout exceeded");
+					assert!(
+						UnixStream::connect(path).is_err(),
+						"Connection to the closed socket should fail"
+					);
+					Ok(())
+				}
+				futures::future::Either::Right(_) => Err("timed out"),
 			}
-			Err(_) => Err(()),
-		});
-
-		tokio::run(result_fut);
+		})
+		.unwrap();
 	}
 
 	#[test]

@@ -1,10 +1,13 @@
-use futures01::stream::{Fuse, Stream};
-use futures01::{Async, Poll};
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+
+use futures::stream::{Fuse, Stream};
 
 pub trait SelectWithWeakExt: Stream {
 	fn select_with_weak<S>(self, other: S) -> SelectWithWeak<Self, S>
 	where
-		S: Stream<Item = Self::Item, Error = Self::Error>,
+		S: Stream<Item = Self::Item>,
 		Self: Sized;
 }
 
@@ -14,7 +17,7 @@ where
 {
 	fn select_with_weak<S>(self, other: S) -> SelectWithWeak<Self, S>
 	where
-		S: Stream<Item = Self::Item, Error = Self::Error>,
+		S: Stream<Item = Self::Item>,
 		Self: Sized,
 	{
 		new(self, other)
@@ -39,8 +42,9 @@ pub struct SelectWithWeak<S1, S2> {
 fn new<S1, S2>(stream1: S1, stream2: S2) -> SelectWithWeak<S1, S2>
 where
 	S1: Stream,
-	S2: Stream<Item = S1::Item, Error = S1::Error>,
+	S2: Stream<Item = S1::Item>,
 {
+	use futures::StreamExt;
 	SelectWithWeak {
 		strong: stream1.fuse(),
 		weak: stream2.fuse(),
@@ -50,36 +54,36 @@ where
 
 impl<S1, S2> Stream for SelectWithWeak<S1, S2>
 where
-	S1: Stream,
-	S2: Stream<Item = S1::Item, Error = S1::Error>,
+	S1: Stream + Unpin,
+	S2: Stream<Item = S1::Item> + Unpin,
 {
 	type Item = S1::Item;
-	type Error = S1::Error;
 
-	fn poll(&mut self) -> Poll<Option<S1::Item>, S1::Error> {
+	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+		let mut this = Pin::into_inner(self);
 		let mut checked_strong = false;
 		loop {
-			if self.use_strong {
-				match self.strong.poll()? {
-					Async::Ready(Some(item)) => {
-						self.use_strong = false;
-						return Ok(Some(item).into());
+			if this.use_strong {
+				match Pin::new(&mut this.strong).poll_next(cx) {
+					Poll::Ready(Some(item)) => {
+						this.use_strong = false;
+						return Poll::Ready(Some(item));
 					}
-					Async::Ready(None) => return Ok(None.into()),
-					Async::NotReady => {
+					Poll::Ready(None) => return Poll::Ready(None),
+					Poll::Pending => {
 						if !checked_strong {
-							self.use_strong = false;
+							this.use_strong = false;
 						} else {
-							return Ok(Async::NotReady);
+							return Poll::Pending;
 						}
 					}
 				}
 				checked_strong = true;
 			} else {
-				self.use_strong = true;
-				match self.weak.poll()? {
-					Async::Ready(Some(item)) => return Ok(Some(item).into()),
-					Async::Ready(None) | Async::NotReady => (),
+				this.use_strong = true;
+				match Pin::new(&mut this.strong).poll_next(cx) {
+					Poll::Ready(Some(item)) => return Poll::Ready(Some(item)),
+					Poll::Ready(None) | Poll::Pending => (),
 				}
 			}
 		}

@@ -2,10 +2,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use crate::core;
-use crate::server_utils;
 use crate::server_utils::cors::Origin;
 use crate::server_utils::hosts::{DomainsValidation, Host};
-use crate::server_utils::reactor::UninitializedExecutor;
+use crate::server_utils::reactor::{self, UninitializedExecutor};
 use crate::server_utils::session::SessionStats;
 
 use crate::error::Result;
@@ -69,7 +68,7 @@ where
 	}
 
 	/// Utilize existing event loop executor to poll RPC results.
-	pub fn event_loop_executor(mut self, executor: server_utils::tokio::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, executor: reactor::TaskExecutor) -> Self {
 		self.executor = UninitializedExecutor::Shared(executor);
 		self
 	}

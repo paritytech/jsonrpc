@@ -1,14 +1,13 @@
-use std;
+use std::io;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::Arc;
 
-use tokio_service::Service as TokioService;
+use tower_service::Service as _;
 
-use futures01::sync::oneshot;
-use futures01::{future, Future, Sink, Stream};
-
+use crate::futures::{self, future};
 use crate::jsonrpc::{middleware, MetaIoHandler, Metadata, Middleware};
-use crate::server_utils::{codecs, reactor, tokio, tokio_codec::Framed, SuspendableStream};
+use crate::server_utils::{codecs, reactor, tokio, tokio_util::codec::Framed, SuspendableStream};
 
 use crate::dispatch::{Dispatcher, PeerMessageQueue, SenderChannels};
 use crate::meta::{MetaExtractor, NoopExtractor, RequestContext};
@@ -60,7 +59,7 @@ where
 	}
 
 	/// Utilize existing event loop executor.
-	pub fn event_loop_executor(mut self, handle: tokio::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, handle: reactor::TaskExecutor) -> Self {
 		self.executor = reactor::UninitializedExecutor::Shared(handle);
 		self
 	}
@@ -79,7 +78,7 @@ where
 	}
 
 	/// Starts a new server
-	pub fn start(self, addr: &SocketAddr) -> std::io::Result<Server> {
+	pub fn start(self, addr: &SocketAddr) -> io::Result<Server> {
 		let meta_extractor = self.meta_extractor.clone();
 		let rpc_handler = self.handler.clone();
 		let channels = self.channels.clone();
@@ -87,25 +86,26 @@ where
 		let outgoing_separator = self.outgoing_separator;
 		let address = addr.to_owned();
 		let (tx, rx) = std::sync::mpsc::channel();
-		let (stop_tx, stop_rx) = oneshot::channel();
+		let (stop_tx, stop_rx) = futures::channel::oneshot::channel();
 
 		let executor = self.executor.initialize()?;
 
-		executor.spawn(future::lazy(move || {
-			let start = move || {
-				let listener = tokio::net::TcpListener::bind(&address)?;
-				let connections = SuspendableStream::new(listener.incoming());
+		use futures::{FutureExt, SinkExt, StreamExt, TryStreamExt};
+		executor.executor().spawn(async move {
+			let start = async {
+				let listener = tokio::net::TcpListener::bind(&address).await?;
+				let connections = SuspendableStream::new(listener);
 
-				let server = connections.map(move |socket| {
+				let server = connections.map(|socket| {
 					let peer_addr = match socket.peer_addr() {
 						Ok(addr) => addr,
 						Err(e) => {
 							warn!(target: "tcp", "Unable to determine socket peer address, ignoring connection {}", e);
-							return future::Either::A(future::ok(()));
+							return future::Either::Left(async { io::Result::Ok(()) });
 						}
 					};
 					trace!(target: "tcp", "Accepted incoming connection from {}", &peer_addr);
-					let (sender, receiver) = crate::jsonrpc::futures::channel::mpsc::unbounded();
+					let (sender, receiver) = futures::channel::mpsc::unbounded();
 
 					let context = RequestContext {
 						peer_addr,
@@ -113,31 +113,33 @@ where
 					};
 
 					let meta = meta_extractor.extract(&context);
-					let service = Service::new(peer_addr, rpc_handler.clone(), meta);
-					let (writer, reader) = Framed::new(
+					let mut service = Service::new(peer_addr, rpc_handler.clone(), meta);
+					let (mut writer, reader) = Framed::new(
 						socket,
 						codecs::StreamCodec::new(incoming_separator.clone(), outgoing_separator.clone()),
 					)
 					.split();
 
-					let responses = reader.and_then(move |req| {
-						service.call(req).then(|response| match response {
-							Err(e) => {
-								warn!(target: "tcp", "Error while processing request: {:?}", e);
-								future::ok(String::new())
-							}
-							Ok(None) => {
-								trace!(target: "tcp", "JSON RPC request produced no response");
-								future::ok(String::new())
-							}
-							Ok(Some(response_data)) => {
-								trace!(target: "tcp", "Sent response: {}", &response_data);
-								future::ok(response_data)
-							}
-						})
-					});
+					// Work around https://github.com/rust-lang/rust/issues/64552 by boxing the stream type
+					let responses: Pin<Box<dyn futures::Stream<Item = io::Result<String>> + Send>> =
+						Box::pin(reader.and_then(move |req| {
+							service.call(req).then(|response| match response {
+								Err(e) => {
+									warn!(target: "tcp", "Error while processing request: {:?}", e);
+									future::ok(String::new())
+								}
+								Ok(None) => {
+									trace!(target: "tcp", "JSON RPC request produced no response");
+									future::ok(String::new())
+								}
+								Ok(Some(response_data)) => {
+									trace!(target: "tcp", "Sent response: {}", &response_data);
+									future::ok(response_data)
+								}
+							})
+						}));
 
-					let peer_message_queue = {
+					let mut peer_message_queue = {
 						let mut channels = channels.lock();
 						channels.insert(peer_addr, sender.clone());
 
@@ -145,42 +147,33 @@ where
 					};
 
 					let shared_channels = channels.clone();
-					let writer = writer.send_all(peer_message_queue).then(move |_| {
+					let writer = async move {
+						writer.send_all(&mut peer_message_queue).await?;
 						trace!(target: "tcp", "Peer {}: service finished", peer_addr);
 						let mut channels = shared_channels.lock();
 						channels.remove(&peer_addr);
 						Ok(())
-					});
+					};
 
-					future::Either::B(writer)
+					future::Either::Right(writer)
 				});
 
 				Ok(server)
 			};
 
-			let stop = stop_rx.map_err(|_| ());
-			match start() {
+			match start.await {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
-					future::Either::A(
-						server
-							.buffer_unordered(1024)
-							.for_each(|_| Ok(()))
-							.select(stop)
-							.map(|_| ())
-							.map_err(|(e, _)| {
-								error!("Error while executing the server: {:?}", e);
-							}),
-					)
+					let server = server.buffer_unordered(1024).for_each(|_| async { () });
+
+					future::select(Box::pin(server), stop_rx).await;
 				}
 				Err(e) => {
 					tx.send(Err(e)).expect("Rx is blocking parent thread.");
-					future::Either::B(stop.map_err(|e| {
-						error!("Error while executing the server: {:?}", e);
-					}))
+					let _ = stop_rx.await;
 				}
 			}
-		}));
+		});
 
 		let res = rx.recv().expect("Response is always sent before tx is dropped.");
 
@@ -199,7 +192,7 @@ where
 /// TCP Server handle
 pub struct Server {
 	executor: Option<reactor::Executor>,
-	stop: Option<oneshot::Sender<()>>,
+	stop: Option<futures::channel::oneshot::Sender<()>>,
 }
 
 impl Server {

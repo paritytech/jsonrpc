@@ -35,8 +35,11 @@ mod response;
 mod tests;
 mod utils;
 
+use std::convert::Infallible;
+use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::{mpsc, Arc, Weak};
 use std::thread;
 
@@ -44,15 +47,15 @@ use parking_lot::Mutex;
 
 use crate::jsonrpc::MetaIoHandler;
 use crate::server_utils::reactor::{Executor, UninitializedExecutor};
-use futures01::sync::oneshot;
-use futures01::{future, Future, Stream};
-use hyper::{server, Body};
+use futures::{channel::oneshot, future};
+use hyper::Body;
 use jsonrpc_core as jsonrpc;
 
 pub use crate::handler::ServerHandler;
 pub use crate::response::Response;
 pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, AllowCors, Origin};
 pub use crate::server_utils::hosts::{DomainsValidation, Host};
+pub use crate::server_utils::reactor::TaskExecutor;
 pub use crate::server_utils::{tokio, SuspendableStream};
 pub use crate::utils::{cors_allow_headers, cors_allow_origin, is_host_allowed};
 
@@ -71,7 +74,7 @@ pub enum RequestMiddlewareAction {
 		/// Should standard hosts validation be performed?
 		should_validate_hosts: bool,
 		/// a future for server response
-		response: Box<dyn Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>,
+		response: Pin<Box<dyn Future<Output = hyper::Result<hyper::Response<Body>>> + Send>>,
 	},
 }
 
@@ -79,7 +82,7 @@ impl From<Response> for RequestMiddlewareAction {
 	fn from(o: Response) -> Self {
 		RequestMiddlewareAction::Respond {
 			should_validate_hosts: true,
-			response: Box::new(future::ok(o.into())),
+			response: Box::pin(async { Ok(o.into()) }),
 		}
 	}
 }
@@ -88,7 +91,7 @@ impl From<hyper::Response<Body>> for RequestMiddlewareAction {
 	fn from(response: hyper::Response<Body>) -> Self {
 		RequestMiddlewareAction::Respond {
 			should_validate_hosts: true,
-			response: Box::new(future::ok(response)),
+			response: Box::pin(async { Ok(response) }),
 		}
 	}
 }
@@ -251,6 +254,7 @@ impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M,
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -269,6 +273,7 @@ impl<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	/// Creates new `ServerBuilder` for given `IoHandler`.
 	///
@@ -300,7 +305,7 @@ where
 	/// Utilize existing event loop executor to poll RPC results.
 	///
 	/// Applies only to 1 of the threads. Other threads will spawn their own Event Loops.
-	pub fn event_loop_executor(mut self, executor: tokio::runtime::TaskExecutor) -> Self {
+	pub fn event_loop_executor(mut self, executor: TaskExecutor) -> Self {
 		self.executor = UninitializedExecutor::Shared(executor);
 		self
 	}
@@ -519,7 +524,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		mpsc::Sender<io::Result<SocketAddr>>,
 		oneshot::Sender<()>,
 	),
-	executor: tokio::runtime::TaskExecutor,
+	executor: TaskExecutor,
 	addr: SocketAddr,
 	cors_domains: CorsDomains,
 	cors_max_age: Option<u32>,
@@ -535,11 +540,10 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 ) where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
+	M: Unpin,
 {
 	let (shutdown_signal, local_addr_tx, done_tx) = signals;
-	executor.spawn({
-		let handle = tokio::reactor::Handle::default();
-
+	executor.spawn(async move {
 		let bind = move || {
 			let listener = match addr {
 				SocketAddr::V4(_) => net2::TcpBuilder::new_v4()?,
@@ -549,26 +553,37 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			listener.reuse_address(true)?;
 			listener.bind(&addr)?;
 			let listener = listener.listen(1024)?;
-			let listener = tokio::net::TcpListener::from_std(listener, &handle)?;
+			let local_addr = listener.local_addr()?;
+
+			// NOTE: Future-proof by explicitly setting the listener socket to
+			// non-blocking mode of operation (future Tokio/Hyper versions
+			// require for the callers to do that manually)
+			listener.set_nonblocking(true)?;
+			// HACK: See below.
+			#[cfg(windows)]
+			let raw_socket = std::os::windows::io::AsRawSocket::as_raw_socket(&listener);
+			#[cfg(not(windows))]
+			let raw_socket = ();
+
+			let server_builder =
+				hyper::Server::from_tcp(listener).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!
-			let local_addr = listener.local_addr()?;
-
-			Ok((listener, local_addr))
+			Ok((server_builder, local_addr, raw_socket))
 		};
 
 		let bind_result = match bind() {
-			Ok((listener, local_addr)) => {
+			Ok((server_builder, local_addr, raw_socket)) => {
 				// Send local address
 				match local_addr_tx.send(Ok(local_addr)) {
-					Ok(_) => future::ok((listener, local_addr)),
+					Ok(_) => Ok((server_builder, local_addr, raw_socket)),
 					Err(_) => {
 						warn!(
 							"Thread {:?} unable to reach receiver, closing server",
 							thread::current().name()
 						);
-						future::err(())
+						Err(())
 					}
 				}
 			}
@@ -576,54 +591,55 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				// Send error
 				let _send_result = local_addr_tx.send(Err(err));
 
-				future::err(())
+				Err(())
 			}
 		};
 
-		bind_result
-			.and_then(move |(listener, local_addr)| {
-				let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
+		let (server_builder, local_addr, _raw_socket) = bind_result?;
 
-				let mut http = server::conn::Http::new();
-				http.keep_alive(keep_alive);
-				let tcp_stream = SuspendableStream::new(listener.incoming());
+		let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
-				tcp_stream
-					.map(move |socket| {
-						let service = ServerHandler::new(
-							jsonrpc_handler.downgrade(),
-							cors_domains.clone(),
-							cors_max_age,
-							allowed_headers.clone(),
-							allowed_hosts.clone(),
-							request_middleware.clone(),
-							rest_api,
-							health_api.clone(),
-							max_request_body_size,
-							keep_alive,
-						);
+		let server_builder = server_builder
+			.http1_keepalive(keep_alive)
+			.tcp_nodelay(true)
+			// Explicitly attempt to recover from accept errors (e.g. too many
+			// files opened) instead of erroring out the entire server.
+			.tcp_sleep_on_accept_errors(true);
 
-						tokio::spawn(
-							http.serve_connection(socket, service)
-								.map_err(|e| error!("Error serving connection: {:?}", e))
-								.then(|_| Ok(())),
-						)
-					})
-					.for_each(|_| Ok(()))
-					.map_err(|e| {
-						warn!("Incoming streams error, closing sever: {:?}", e);
-					})
-					.select(shutdown_signal.map_err(|e| {
-						debug!("Shutdown signaller dropped, closing server: {:?}", e);
-					}))
-					.map_err(|_| ())
-			})
-			.and_then(|(_, server)| {
-				// We drop the server first to prevent a situation where main thread terminates
-				// before the server is properly dropped (see #504 for more details)
-				drop(server);
-				done_tx.send(())
-			})
+		let service_fn = hyper::service::make_service_fn(move |_addr_stream| {
+			let service = ServerHandler::new(
+				jsonrpc_handler.downgrade(),
+				cors_domains.clone(),
+				cors_max_age,
+				allowed_headers.clone(),
+				allowed_hosts.clone(),
+				request_middleware.clone(),
+				rest_api,
+				health_api.clone(),
+				max_request_body_size,
+				keep_alive,
+			);
+			async { Ok::<_, Infallible>(service) }
+		});
+
+		let server = server_builder.serve(service_fn).with_graceful_shutdown(async {
+			if let Err(err) = shutdown_signal.await {
+				debug!("Shutdown signaller dropped, closing server: {:?}", err);
+			}
+		});
+
+		if let Err(err) = server.await {
+			error!("Error running HTTP server: {:?}", err);
+		}
+
+		// FIXME: Work around TCP listener socket not being properly closed
+		// in mio v0.6. This runs the std::net::TcpListener's destructor,
+		// which closes the underlying OS socket.
+		// Remove this once we migrate to Tokio 1.0.
+		#[cfg(windows)]
+		let _: std::net::TcpListener = unsafe { std::os::windows::io::FromRawSocket::from_raw_socket(_raw_socket) };
+
+		done_tx.send(())
 	});
 }
 
@@ -654,8 +670,9 @@ impl CloseHandle {
 	pub fn close(self) {
 		if let Some(executors) = self.0.lock().take() {
 			for (executor, closer) in executors {
-				executor.close();
+				// First send shutdown signal so we can proceed with underlying select
 				let _ = closer.send(());
+				executor.close();
 			}
 		}
 	}
@@ -692,9 +709,9 @@ impl Server {
 
 	fn wait_internal(&mut self) {
 		if let Some(receivers) = self.done.take() {
-			for receiver in receivers {
-				let _ = receiver.wait();
-			}
+			// NOTE: Gracefully handle the case where we may wait on a *nested*
+			// local task pool (for now, wait on a dedicated, spawned thread)
+			let _ = std::thread::spawn(move || futures::executor::block_on(future::try_join_all(receivers))).join();
 		}
 	}
 }

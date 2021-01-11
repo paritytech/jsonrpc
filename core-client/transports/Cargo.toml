@@ -21,23 +21,22 @@ categories = [
 [features]
 default = ["http", "tls", "ws"]
 tls = ["hyper-tls", "http"]
-http = ["hyper", "futures01"]
+http = ["hyper", "tokio/full"]
 ws = [
 	"websocket",
 	"tokio",
-	"futures01",
+	"futures/compat"
 ]
 ipc = [
 	"parity-tokio-ipc",
 	"jsonrpc-server-utils",
 	"tokio",
-	"futures01",
 ]
 arbitrary_precision = ["serde_json/arbitrary_precision", "jsonrpc-core/arbitrary_precision"]
 
 [dependencies]
 derive_more = "0.99"
-futures = { version = "0.3", features = [ "compat" ] }
+futures = "0.3"
 jsonrpc-core = { version = "16.0", path = "../../core" }
 jsonrpc-pubsub = { version = "16.0", path = "../../pubsub" }
 log = "0.4"
@@ -45,12 +44,11 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 url = "1.7"
 
-futures01 = { version = "0.1.26", package = "futures", optional = true }
-hyper = { version = "0.12", optional = true }
-hyper-tls = { version = "0.3.2", optional = true }
+hyper = { version = "0.13", optional = true }
+hyper-tls = { version = "0.4", optional = true }
 jsonrpc-server-utils = { version = "16.0", path = "../../server-utils", optional = true }
-parity-tokio-ipc = { version = "0.2", optional = true }
-tokio = { version = "0.1", optional = true }
+parity-tokio-ipc = { version = "0.8", optional = true }
+tokio = { version = "0.2", optional = true }
 websocket = { version = "0.24", optional = true }
 
 [dev-dependencies]

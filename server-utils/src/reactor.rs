@@ -6,15 +6,16 @@
 //! that `tokio::runtime` can be multi-threaded.
 
 use std::io;
-use tokio;
 
-use futures01::Future;
+use tokio::runtime;
+/// Task executor for Tokio 0.2 runtime.
+pub type TaskExecutor = tokio::runtime::Handle;
 
 /// Possibly uninitialized event loop executor.
 #[derive(Debug)]
 pub enum UninitializedExecutor {
 	/// Shared instance of executor.
-	Shared(tokio::runtime::TaskExecutor),
+	Shared(TaskExecutor),
 	/// Event Loop should be spawned by the transport.
 	Unspawned,
 }
@@ -42,26 +43,18 @@ impl UninitializedExecutor {
 #[derive(Debug)]
 pub enum Executor {
 	/// Shared instance
-	Shared(tokio::runtime::TaskExecutor),
+	Shared(TaskExecutor),
 	/// Spawned Event Loop
 	Spawned(RpcEventLoop),
 }
 
 impl Executor {
 	/// Get tokio executor associated with this event loop.
-	pub fn executor(&self) -> tokio::runtime::TaskExecutor {
-		match *self {
+	pub fn executor(&self) -> TaskExecutor {
+		match self {
 			Executor::Shared(ref executor) => executor.clone(),
 			Executor::Spawned(ref eloop) => eloop.executor(),
 		}
-	}
-
-	/// Spawn a future onto the Tokio runtime.
-	pub fn spawn<F>(&self, future: F)
-	where
-		F: Future<Item = (), Error = ()> + Send + 'static,
-	{
-		self.executor().spawn(future)
 	}
 
 	/// Closes underlying event loop (if any!).
@@ -82,9 +75,9 @@ impl Executor {
 /// A handle to running event loop. Dropping the handle will cause event loop to finish.
 #[derive(Debug)]
 pub struct RpcEventLoop {
-	executor: tokio::runtime::TaskExecutor,
-	close: Option<futures01::Complete<()>>,
-	handle: Option<tokio::runtime::Shutdown>,
+	executor: TaskExecutor,
+	close: Option<futures::channel::oneshot::Sender<()>>,
+	runtime: Option<runtime::Runtime>,
 }
 
 impl Drop for RpcEventLoop {
@@ -101,36 +94,46 @@ impl RpcEventLoop {
 
 	/// Spawns a new named thread with the `EventLoop`.
 	pub fn with_name(name: Option<String>) -> io::Result<Self> {
-		let (stop, stopped) = futures01::oneshot();
+		let (stop, stopped) = futures::channel::oneshot::channel();
 
-		let mut tb = tokio::runtime::Builder::new();
+		let mut tb = runtime::Builder::new();
 		tb.core_threads(1);
+		tb.threaded_scheduler();
+		tb.enable_all();
 
 		if let Some(name) = name {
-			tb.name_prefix(name);
+			tb.thread_name(name);
 		}
 
-		let mut runtime = tb.build()?;
-		let executor = runtime.executor();
-		let terminate = futures01::empty().select(stopped).map(|_| ()).map_err(|_| ());
-		runtime.spawn(terminate);
-		let handle = runtime.shutdown_on_idle();
+		let runtime = tb.build()?;
+		let executor = runtime.handle().to_owned();
+
+		runtime.spawn(async {
+			let _ = stopped.await;
+		});
 
 		Ok(RpcEventLoop {
 			executor,
 			close: Some(stop),
-			handle: Some(handle),
+			runtime: Some(runtime),
 		})
 	}
 
 	/// Get executor for this event loop.
-	pub fn executor(&self) -> tokio::runtime::TaskExecutor {
-		self.executor.clone()
+	pub fn executor(&self) -> runtime::Handle {
+		self.runtime
+			.as_ref()
+			.expect("Runtime is only None if we're being dropped; qed")
+			.handle()
+			.clone()
 	}
 
 	/// Blocks current thread and waits until the event loop is finished.
 	pub fn wait(mut self) -> Result<(), ()> {
-		self.handle.take().ok_or(())?.wait()
+		// Dropping Tokio 0.2 runtime waits for all spawned tasks to terminate
+		let runtime = self.runtime.take().ok_or(())?;
+		drop(runtime);
+		Ok(())
 	}
 
 	/// Finishes this event loop.

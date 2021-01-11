@@ -1,6 +1,9 @@
 use crate::WeakRpc;
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{self, Poll};
 use std::{fmt, mem, str};
 
 use hyper::header::{self, HeaderMap, HeaderValue};
@@ -10,7 +13,6 @@ use crate::jsonrpc::serde_json;
 use crate::jsonrpc::{self as core, middleware, Metadata, Middleware};
 use crate::response::Response;
 use crate::server_utils::cors;
-use futures01::{Async, Future, Poll, Stream};
 
 use crate::{utils, AllowedHosts, CorsDomains, RequestMiddleware, RequestMiddlewareAction, RestApi};
 
@@ -57,17 +59,21 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 	}
 }
 
-impl<M: Metadata, S: Middleware<M>> Service for ServerHandler<M, S>
+impl<M: Metadata, S: Middleware<M>> Service<hyper::Request<Body>> for ServerHandler<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
+	M: Unpin,
 {
-	type ReqBody = Body;
-	type ResBody = Body;
+	type Response = hyper::Response<Body>;
 	type Error = hyper::Error;
 	type Future = Handler<M, S>;
 
-	fn call(&mut self, request: hyper::Request<Self::ReqBody>) -> Self::Future {
+	fn poll_ready(&mut self, _cx: &mut task::Context<'_>) -> task::Poll<hyper::Result<()>> {
+		task::Poll::Ready(Ok(()))
+	}
+
+	fn call(&mut self, request: hyper::Request<Body>) -> Self::Future {
 		let is_host_allowed = utils::is_host_allowed(&request, &self.allowed_hosts);
 		let action = self.middleware.on_request(request);
 
@@ -118,27 +124,25 @@ where
 pub enum Handler<M: Metadata, S: Middleware<M>> {
 	Rpc(RpcHandler<M, S>),
 	Err(Option<Response>),
-	Middleware(Box<dyn Future<Item = hyper::Response<Body>, Error = hyper::Error> + Send>),
+	Middleware(Pin<Box<dyn Future<Output = hyper::Result<hyper::Response<Body>>> + Send>>),
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for Handler<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
+	M: Unpin,
 {
-	type Item = hyper::Response<Body>;
-	type Error = hyper::Error;
+	type Output = hyper::Result<hyper::Response<Body>>;
 
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-		match *self {
-			Handler::Rpc(ref mut handler) => handler.poll(),
-			Handler::Middleware(ref mut middleware) => middleware.poll(),
-			Handler::Err(ref mut response) => Ok(Async::Ready(
-				response
-					.take()
-					.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
-					.into(),
-			)),
+	fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+		match Pin::into_inner(self) {
+			Handler::Rpc(ref mut handler) => Pin::new(handler).poll(cx),
+			Handler::Middleware(ref mut middleware) => Pin::new(middleware).poll(cx),
+			Handler::Err(ref mut response) => Poll::Ready(Ok(response
+				.take()
+				.expect("Response always Some initialy. Returning `Ready` so will never be polled again; qed")
+				.into())),
 		}
 	}
 }
@@ -181,8 +185,8 @@ enum RpcHandlerState<M> {
 		metadata: M,
 	},
 	Writing(Response),
-	Waiting(Box<dyn Future<Item = Option<String>, Error = ()> + Send>),
-	WaitingForResponse(Box<dyn Future<Item = Response, Error = ()> + Send>),
+	Waiting(Pin<Box<dyn Future<Output = Option<String>> + Send>>),
+	WaitingForResponse(Pin<Box<dyn Future<Output = Response> + Send>>),
 	Done,
 }
 
@@ -220,12 +224,14 @@ impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S>
 where
 	S::Future: Unpin,
 	S::CallFuture: Unpin,
+	M: Unpin,
 {
-	type Item = hyper::Response<Body>;
-	type Error = hyper::Error;
+	type Output = hyper::Result<hyper::Response<Body>>;
 
-	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-		let new_state = match mem::replace(&mut self.state, RpcHandlerState::Done) {
+	fn poll(self: Pin<&mut Self>, cx: &mut task::Context<'_>) -> Poll<Self::Output> {
+		let this = Pin::into_inner(self);
+
+		let new_state = match mem::replace(&mut this.state, RpcHandlerState::Done) {
 			RpcHandlerState::ReadingHeaders {
 				request,
 				cors_domains,
@@ -234,19 +240,19 @@ where
 				keep_alive,
 			} => {
 				// Read cors header
-				self.cors_allow_origin = utils::cors_allow_origin(&request, &cors_domains);
-				self.cors_allow_headers = utils::cors_allow_headers(&request, &cors_headers);
-				self.keep_alive = utils::keep_alive(&request, keep_alive);
-				self.is_options = *request.method() == Method::OPTIONS;
+				this.cors_allow_origin = utils::cors_allow_origin(&request, &cors_domains);
+				this.cors_allow_headers = utils::cors_allow_headers(&request, &cors_headers);
+				this.keep_alive = utils::keep_alive(&request, keep_alive);
+				this.is_options = *request.method() == Method::OPTIONS;
 				// Read other headers
-				RpcPollState::Ready(self.read_headers(request, continue_on_invalid_cors))
+				RpcPollState::Ready(this.read_headers(request, continue_on_invalid_cors))
 			}
 			RpcHandlerState::ReadingBody {
 				body,
 				request,
 				metadata,
 				uri,
-			} => match self.process_body(body, request, uri, metadata) {
+			} => match this.process_body(body, request, uri, metadata, cx) {
 				Err(BodyError::Utf8(ref e)) => {
 					let mesg = format!("utf-8 encoding error at byte {} in request body", e.valid_up_to());
 					let resp = Response::bad_request(mesg);
@@ -256,19 +262,18 @@ where
 					let resp = Response::too_large("request body size exceeds allowed maximum");
 					RpcPollState::Ready(RpcHandlerState::Writing(resp))
 				}
-				Err(BodyError::Hyper(e)) => return Err(e),
+				Err(BodyError::Hyper(e)) => return Poll::Ready(Err(e)),
 				Ok(state) => state,
 			},
-			RpcHandlerState::ProcessRest { uri, metadata } => self.process_rest(uri, metadata)?,
-			RpcHandlerState::ProcessHealth { method, metadata } => self.process_health(method, metadata)?,
-			RpcHandlerState::WaitingForResponse(mut waiting) => match waiting.poll() {
-				Ok(Async::Ready(response)) => RpcPollState::Ready(RpcHandlerState::Writing(response)),
-				Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::WaitingForResponse(waiting)),
-				Err(e) => RpcPollState::Ready(RpcHandlerState::Writing(Response::internal_error(format!("{:?}", e)))),
+			RpcHandlerState::ProcessRest { uri, metadata } => this.process_rest(uri, metadata)?,
+			RpcHandlerState::ProcessHealth { method, metadata } => this.process_health(method, metadata)?,
+			RpcHandlerState::WaitingForResponse(mut waiting) => match Pin::new(&mut waiting).poll(cx) {
+				Poll::Ready(response) => RpcPollState::Ready(RpcHandlerState::Writing(response)),
+				Poll::Pending => RpcPollState::NotReady(RpcHandlerState::WaitingForResponse(waiting)),
 			},
 			RpcHandlerState::Waiting(mut waiting) => {
-				match waiting.poll() {
-					Ok(Async::Ready(response)) => {
+				match Pin::new(&mut waiting).poll(cx) {
+					Poll::Ready(response) => {
 						RpcPollState::Ready(RpcHandlerState::Writing(match response {
 							// Notification, just return empty response.
 							None => Response::ok(String::new()),
@@ -276,10 +281,7 @@ where
 							Some(result) => Response::ok(format!("{}\n", result)),
 						}))
 					}
-					Ok(Async::NotReady) => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
-					Err(e) => {
-						RpcPollState::Ready(RpcHandlerState::Writing(Response::internal_error(format!("{:?}", e))))
-					}
+					Poll::Pending => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
 				}
 			}
 			state => RpcPollState::NotReady(state),
@@ -289,25 +291,25 @@ where
 		match new_state {
 			RpcHandlerState::Writing(res) => {
 				let mut response: hyper::Response<Body> = res.into();
-				let cors_allow_origin = mem::replace(&mut self.cors_allow_origin, cors::AllowCors::Invalid);
-				let cors_allow_headers = mem::replace(&mut self.cors_allow_headers, cors::AllowCors::Invalid);
+				let cors_allow_origin = mem::replace(&mut this.cors_allow_origin, cors::AllowCors::Invalid);
+				let cors_allow_headers = mem::replace(&mut this.cors_allow_headers, cors::AllowCors::Invalid);
 
 				Self::set_response_headers(
 					response.headers_mut(),
-					self.is_options,
-					self.cors_max_age,
+					this.is_options,
+					this.cors_max_age,
 					cors_allow_origin.into(),
 					cors_allow_headers.into(),
-					self.keep_alive,
+					this.keep_alive,
 				);
-				Ok(Async::Ready(response))
+				Poll::Ready(Ok(response))
 			}
 			state => {
-				self.state = state;
+				this.state = state;
 				if is_ready {
-					self.poll()
+					Pin::new(this).poll(cx)
 				} else {
-					Ok(Async::NotReady)
+					Poll::Pending
 				}
 			}
 		}
@@ -394,7 +396,6 @@ where
 
 	fn process_health(&self, method: String, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
 		use self::core::types::{Call, Failure, Id, MethodCall, Output, Params, Request, Success, Version};
-		use futures03::{FutureExt, TryFutureExt};
 
 		// Create a request
 		let call = Request::Single(Call::MethodCall(MethodCall {
@@ -408,28 +409,28 @@ where
 			Some(h) => h.handler.handle_rpc_request(call, metadata),
 			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
 		};
-		let response = response.map(Ok).compat();
 
-		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(Box::new(
-			response.map(|res| match res {
-				Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
-					let result = serde_json::to_string(&result).expect("Serialization of result is infallible;qed");
+		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(Box::pin(
+			async {
+				match response.await {
+					Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
+						let result = serde_json::to_string(&result).expect("Serialization of result is infallible;qed");
 
-					Response::ok(result)
+						Response::ok(result)
+					}
+					Some(core::Response::Single(Output::Failure(Failure { error, .. }))) => {
+						let result = serde_json::to_string(&error).expect("Serialization of error is infallible;qed");
+
+						Response::service_unavailable(result)
+					}
+					e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
 				}
-				Some(core::Response::Single(Output::Failure(Failure { error, .. }))) => {
-					let result = serde_json::to_string(&error).expect("Serialization of error is infallible;qed");
-
-					Response::service_unavailable(result)
-				}
-				e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
-			}),
+			},
 		))))
 	}
 
 	fn process_rest(&self, uri: hyper::Uri, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
 		use self::core::types::{Call, Id, MethodCall, Params, Request, Value, Version};
-		use futures03::{FutureExt, TryFutureExt};
 
 		// skip the initial /
 		let mut it = uri.path().split('/').skip(1);
@@ -456,11 +457,12 @@ where
 			Some(h) => h.handler.handle_rpc_request(call, metadata),
 			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
 		};
-		let response = response.map(Ok).compat();
 
-		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::new(response.map(
-			|res| res.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed")),
-		)))))
+		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::pin(async {
+			response
+				.await
+				.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed"))
+		}))))
 	}
 
 	fn process_body(
@@ -469,10 +471,14 @@ where
 		mut request: Vec<u8>,
 		uri: Option<hyper::Uri>,
 		metadata: M,
+		cx: &mut task::Context<'_>,
 	) -> Result<RpcPollState<M>, BodyError> {
+		use futures::Stream;
+
 		loop {
-			match body.poll()? {
-				Async::Ready(Some(chunk)) => {
+			let pinned_body = Pin::new(&mut body);
+			match pinned_body.poll_next(cx)? {
+				Poll::Ready(Some(chunk)) => {
 					if request
 						.len()
 						.checked_add(chunk.len())
@@ -483,8 +489,7 @@ where
 					}
 					request.extend_from_slice(&*chunk)
 				}
-				Async::Ready(None) => {
-					use futures03::{FutureExt, TryFutureExt};
+				Poll::Ready(None) => {
 					if let (Some(uri), true) = (uri, request.is_empty()) {
 						return Ok(RpcPollState::Ready(RpcHandlerState::ProcessRest { uri, metadata }));
 					}
@@ -503,10 +508,9 @@ where
 					};
 
 					// Content is ready
-					let response = response.map(Ok).compat();
-					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::new(response))));
+					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::pin(response))));
 				}
-				Async::NotReady => {
+				Poll::Pending => {
 					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {
 						body,
 						request,
