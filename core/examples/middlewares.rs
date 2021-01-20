@@ -1,4 +1,4 @@
-use jsonrpc_core::futures::{future::Either, FutureExt};
+use jsonrpc_core::futures_util::{future::Either, FutureExt};
 use jsonrpc_core::*;
 use std::future::Future;
 use std::sync::atomic::{self, AtomicUsize};

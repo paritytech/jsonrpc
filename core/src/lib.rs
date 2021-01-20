@@ -29,7 +29,7 @@ extern crate serde_derive;
 
 #[cfg(feature = "futures-executor")]
 pub use futures_executor;
-pub use futures;
+pub use futures_util;
 
 #[doc(hidden)]
 pub extern crate serde;

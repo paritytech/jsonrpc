@@ -7,7 +7,7 @@ use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::sync::Arc;
 
-use futures::{self, future, FutureExt};
+use futures_util::{self, future, FutureExt};
 use serde_json;
 
 use crate::calls::{
