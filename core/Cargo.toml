@@ -20,12 +20,14 @@ categories = [
 
 [dependencies]
 log = "0.4"
-futures = "0.3"
+futures = { version = "0.3", default-features = false, features = ["std"] }
+futures-executor = { version = "0.3", optional = true }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 
 [features]
+default = ["futures-executor"]
 arbitrary_precision = ["serde_json/arbitrary_precision"]
 
 [badges]

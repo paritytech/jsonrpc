@@ -198,8 +198,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
+	#[cfg(feature = "futures-executor")]
 	pub fn handle_request_sync(&self, request: &str, meta: T) -> Option<String> {
-		futures::executor::block_on(self.handle_request(request, meta))
+		futures_executor::block_on(self.handle_request(request, meta))
 	}
 
 	/// Handle given request asynchronously.
@@ -442,6 +443,7 @@ impl<M: Metadata + Default> IoHandler<M> {
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
+	#[cfg(feature = "futures-executor")]
 	pub fn handle_request_sync(&self, request: &str) -> Option<String> {
 		self.0.handle_request_sync(request, M::default())
 	}

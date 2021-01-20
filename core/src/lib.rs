@@ -27,6 +27,8 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(feature = "futures-executor")]
+pub use futures_executor;
 pub use futures;
 
 #[doc(hidden)]
