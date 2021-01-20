@@ -1,7 +1,7 @@
 use crate::types::{Error, Params, Value};
 use crate::BoxFuture;
-use futures::Future;
 use std::fmt;
+use std::future::Future;
 use std::sync::Arc;
 
 /// Metadata trait
@@ -19,7 +19,7 @@ pub trait WrapFuture<T, E> {
 
 impl<T: Send + 'static, E: Send + 'static> WrapFuture<T, E> for Result<T, E> {
 	fn into_future(self) -> BoxFuture<Result<T, E>> {
-		Box::pin(futures::future::ready(self))
+		Box::pin(async { self })
 	}
 }
 

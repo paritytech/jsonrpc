@@ -2,11 +2,12 @@ use std::collections::{
 	hash_map::{IntoIter, Iter},
 	HashMap,
 };
+use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::sync::Arc;
 
-use futures::{self, future, Future, FutureExt};
+use futures::{self, future, FutureExt};
 use serde_json;
 
 use crate::calls::{
@@ -485,7 +486,6 @@ fn write_response(response: Response) -> String {
 mod tests {
 	use super::{Compatibility, IoHandler};
 	use crate::types::Value;
-	use futures::future;
 
 	#[test]
 	fn test_io_handler() {
@@ -515,7 +515,7 @@ mod tests {
 	fn test_async_io_handler() {
 		let mut io = IoHandler::new();
 
-		io.add_method("say_hello", |_| future::ready(Ok(Value::String("hello".to_string()))));
+		io.add_method("say_hello", |_| async { Ok(Value::String("hello".to_string())) });
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;
