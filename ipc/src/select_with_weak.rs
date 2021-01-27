@@ -81,7 +81,7 @@ where
 				checked_strong = true;
 			} else {
 				this.use_strong = true;
-				match Pin::new(&mut this.strong).poll_next(cx) {
+				match Pin::new(&mut this.weak).poll_next(cx) {
 					Poll::Ready(Some(item)) => return Poll::Ready(Some(item)),
 					Poll::Ready(None) | Poll::Pending => (),
 				}
