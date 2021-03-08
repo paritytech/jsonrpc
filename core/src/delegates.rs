@@ -1,12 +1,12 @@
 //! Delegate rpc calls
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::Arc;
 
 use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
 use crate::types::{Error, Params, Value};
 use crate::BoxFuture;
-use futures::Future;
 
 struct DelegateAsyncMethod<T, F> {
 	delegate: Arc<T>,

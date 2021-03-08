@@ -27,7 +27,11 @@ extern crate log;
 #[macro_use]
 extern crate serde_derive;
 
+#[cfg(feature = "futures")]
 pub use futures;
+#[cfg(feature = "futures-executor")]
+pub use futures_executor;
+pub use futures_util;
 
 #[doc(hidden)]
 pub extern crate serde;
@@ -45,7 +49,7 @@ pub mod types;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// A `Future` trait object.
-pub type BoxFuture<T> = Pin<Box<dyn futures::Future<Output = T> + Send>>;
+pub type BoxFuture<T> = Pin<Box<dyn std::future::Future<Output = T> + Send>>;
 
 pub use crate::calls::{
 	Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcNotification, RpcNotificationSimple,

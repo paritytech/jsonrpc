@@ -2,11 +2,12 @@ use std::collections::{
 	hash_map::{IntoIter, Iter},
 	HashMap,
 };
+use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::pin::Pin;
 use std::sync::Arc;
 
-use futures::{self, future, Future, FutureExt};
+use futures_util::{self, future, FutureExt};
 use serde_json;
 
 use crate::calls::{
@@ -197,8 +198,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
+	#[cfg(feature = "futures-executor")]
 	pub fn handle_request_sync(&self, request: &str, meta: T) -> Option<String> {
-		futures::executor::block_on(self.handle_request(request, meta))
+		futures_executor::block_on(self.handle_request(request, meta))
 	}
 
 	/// Handle given request asynchronously.
@@ -441,6 +443,7 @@ impl<M: Metadata + Default> IoHandler<M> {
 	/// Handle given request synchronously - will block until response is available.
 	/// If you have any asynchronous methods in your RPC it is much wiser to use
 	/// `handle_request` instead and deal with asynchronous requests in a non-blocking fashion.
+	#[cfg(feature = "futures-executor")]
 	pub fn handle_request_sync(&self, request: &str) -> Option<String> {
 		self.0.handle_request_sync(request, M::default())
 	}
@@ -485,7 +488,6 @@ fn write_response(response: Response) -> String {
 mod tests {
 	use super::{Compatibility, IoHandler};
 	use crate::types::Value;
-	use futures::future;
 
 	#[test]
 	fn test_io_handler() {
@@ -515,7 +517,7 @@ mod tests {
 	fn test_async_io_handler() {
 		let mut io = IoHandler::new();
 
-		io.add_method("say_hello", |_| future::ready(Ok(Value::String("hello".to_string()))));
+		io.add_method("say_hello", |_| async { Ok(Value::String("hello".to_string())) });
 
 		let request = r#"{"jsonrpc": "2.0", "method": "say_hello", "params": [42, 23], "id": 1}"#;
 		let response = r#"{"jsonrpc":"2.0","result":"hello","id":1}"#;

@@ -20,12 +20,18 @@ categories = [
 
 [dependencies]
 log = "0.4"
-futures = "0.3"
+# FIXME: Currently a lot of jsonrpc-* crates depend on entire `futures` being
+# re-exported but it's not strictly required for this crate. Either adapt the
+# remaining crates or settle for this re-export to be a single, common dependency
+futures = { version = "0.3", optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+futures-executor = { version = "0.3", optional = true }
 serde = "1.0"
 serde_json = "1.0"
 serde_derive = "1.0"
 
 [features]
+default = ["futures-executor", "futures"]
 arbitrary_precision = ["serde_json/arbitrary_precision"]
 
 [badges]

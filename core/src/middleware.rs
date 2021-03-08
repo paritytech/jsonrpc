@@ -2,7 +2,8 @@
 
 use crate::calls::Metadata;
 use crate::types::{Call, Output, Request, Response};
-use futures::{future::Either, Future};
+use futures_util::future::Either;
+use std::future::Future;
 use std::pin::Pin;
 
 /// RPC middleware
