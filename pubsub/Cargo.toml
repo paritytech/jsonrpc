@@ -21,6 +21,7 @@ serde = "1.0"
 
 [dev-dependencies]
 jsonrpc-tcp-server = { version = "17.0", path = "../tcp" }
+serde_json = "1.0"
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
