@@ -1,8 +1,7 @@
 error: Invalid attribute parameter(s): 'Xmeta'. Expected 'meta, raw_params'
  --> $DIR/attr-invalid-meta-words.rs:5:2
   |
-5 |       /// Returns a protocol version
-  |  _____^
+5 | /     /// Returns a protocol version
 6 | |     #[rpc(name = "protocolVersion", Xmeta)]
 7 | |     fn protocol_version(&self) -> Result<String>;
   | |_________________________________________________^
