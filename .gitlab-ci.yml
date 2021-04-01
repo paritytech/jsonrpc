@@ -56,13 +56,6 @@ test-linux-stable:
   <<:                              *only
   <<:                              *test_and_build
 
-test-windows-stable:
-  stage:                           test
-  <<:                              *test_and_build
-  <<:                              *only
-  tags:
-    - rust-windows
-
 test-mac-stable:
   stage:                           test
   <<:                              *test_and_build

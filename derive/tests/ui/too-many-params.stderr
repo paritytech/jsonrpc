@@ -1,8 +1,7 @@
 error: Maximum supported number of params is 16
   --> $DIR/too-many-params.rs:5:2
    |
-5  |       /// Has too many params
-   |  _____^
+5  | /     /// Has too many params
 6  | |     #[rpc(name = "tooManyParams")]
 7  | |     fn to_many_params(
 8  | |         &self,
