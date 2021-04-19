@@ -47,6 +47,7 @@ checkstyle-linux-stable:
   script:
     - rustup component add rustfmt
     - cargo fmt --all -- --check
+    - cargo clippy
   allow_failure:                   true
 
 # test rust stable
