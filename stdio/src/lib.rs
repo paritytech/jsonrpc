@@ -13,7 +13,7 @@
 //! 	});
 //!
 //! 	let server = ServerBuilder::new(io).build();
-//!		server.await;
+//!     server.await;
 //! }
 //! ```
 

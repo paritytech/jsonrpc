@@ -11,10 +11,10 @@
 //! 	});
 //!
 //! 	let _server = ServerBuilder::new(io)
-//!		.start_http(&"127.0.0.1:3030".parse().unwrap())
-//!		.expect("Unable to start RPC server");
+//!     .start_http(&"127.0.0.1:3030".parse().unwrap())
+//!     .expect("Unable to start RPC server");
 //!
-//!	_server.wait();
+//! _server.wait();
 //! }
 //! ```
 

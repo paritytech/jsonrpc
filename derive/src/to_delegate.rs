@@ -154,7 +154,7 @@ pub fn generate_trait_item_method(
 	};
 
 	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
-	let mut method = method.clone();
+	let mut method = method;
 	method.sig.generics.make_where_clause().predicates.extend(predicates);
 	Ok(method)
 }
@@ -244,11 +244,10 @@ impl RpcMethod {
 				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
 			} else if self.attr.params_style == Some(ParamStyle::Positional) {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
-			} else
-			/* if self.attr.params_style == Some(ParamStyle::Named) */
-			{
+			} else {
 				unimplemented!("Server side named parameters are not implemented");
 			}
+			/* if self.attr.params_style == Some(ParamStyle::Named) */
 		};
 
 		let method_ident = self.ident();
@@ -324,10 +323,10 @@ impl RpcMethod {
 
 		let mut special_args = Vec::new();
 		if let Some(meta) = meta_arg {
-			special_args.push((ident(METADATA_CLOSURE_ARG), meta.clone()));
+			special_args.push((ident(METADATA_CLOSURE_ARG), meta));
 		}
 		if let Some(subscriber) = subscriber_arg {
-			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber.clone()));
+			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber));
 		}
 		special_args
 	}

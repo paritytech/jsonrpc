@@ -10,10 +10,10 @@
 //! 		Ok(Value::String("hello".to_string()))
 //! 	});
 //! 	let server = ServerBuilder::new(io)
-//!			.start(&"0.0.0.0:0".parse().unwrap())
-//!			.expect("Server must start with no issues.");
+//!         .start(&"0.0.0.0:0".parse().unwrap())
+//!         .expect("Server must start with no issues.");
 //!
-//!		server.wait();
+//!     server.wait();
 //! }
 //! ```
 

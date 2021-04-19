@@ -8,7 +8,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use futures_util::{self, future, FutureExt};
-use serde_json;
 
 use crate::calls::{
 	Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcNotification, RpcNotificationSimple,
@@ -237,7 +236,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		}
 
 		fn outputs_as_batch(outs: Vec<Option<Output>>) -> Option<Response> {
-			let outs: Vec<_> = outs.into_iter().filter_map(|v| v).collect();
+			let outs: Vec<_> = outs.into_iter().flatten().collect();
 			if outs.is_empty() {
 				None
 			} else {

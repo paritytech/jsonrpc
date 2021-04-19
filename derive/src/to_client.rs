@@ -215,7 +215,7 @@ fn compute_args(method: &syn::TraitItemMethod) -> Punctuated<syn::FnArg, syn::to
 		let ident = match &segments[0] {
 			syn::PathSegment { ident, .. } => ident,
 		};
-		if ident.to_string() == "Self" {
+		if *ident == "Self" {
 			continue;
 		}
 		args.push(arg.to_owned());
