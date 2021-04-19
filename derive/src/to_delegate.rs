@@ -220,7 +220,7 @@ impl RpcMethod {
 
 		// special args are those which are not passed directly via rpc params: metadata, subscriber
 		let special_args = Self::special_args(&param_types);
-		param_types.retain(|ty| special_args.iter().find(|(_, sty)| sty == ty).is_none());
+		param_types.retain(|ty| !special_args.iter().any(|(_, sty)| sty == ty));
 		if param_types.len() > TUPLE_FIELD_NAMES.len() {
 			return Err(syn::Error::new_spanned(
 				&self.trait_item,

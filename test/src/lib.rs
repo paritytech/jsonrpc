@@ -46,8 +46,6 @@
 #![deny(missing_docs)]
 
 extern crate jsonrpc_core as rpc;
-use serde;
-use serde_json;
 
 /// Test RPC options.
 #[derive(Default, Debug)]

@@ -5,7 +5,6 @@ use std::pin::Pin;
 
 use crate::subscription;
 use crate::types::{SinkResult, SubscriptionId, TransportError};
-use serde;
 
 use crate::core::futures::task::{Context, Poll};
 use crate::core::futures::{self, channel};

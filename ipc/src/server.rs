@@ -210,7 +210,7 @@ where
 					})
 					.try_buffer_unordered(client_buffer_size)
 					// Filter out previously ignored service errors as `None`s
-					.try_filter_map(|x| futures::future::ok(x))
+					.try_filter_map(futures::future::ok)
 					// we use `select_with_weak` here, instead of `select`, to close the stream
 					// as soon as the ipc pipe is closed
 					.select_with_weak(receiver.map(Ok));

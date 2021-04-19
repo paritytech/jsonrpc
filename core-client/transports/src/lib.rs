@@ -178,7 +178,7 @@ impl<T: DeserializeOwned + Unpin + 'static> Stream for TypedSubscriptionStream<T
 					.map_err(|error| RpcError::ParseError(self.returns.into(), Box::new(error))),
 			),
 			None => None,
-			Some(Err(err)) => Some(Err(err.into())),
+			Some(Err(err)) => Some(Err(err)),
 		}
 		.into()
 	}

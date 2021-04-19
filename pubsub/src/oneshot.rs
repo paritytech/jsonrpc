@@ -52,7 +52,7 @@ impl<T> Sender<T> {
 	pub fn send_and_wait(self, t: T) -> impl Future<Output = Result<(), ()>> {
 		let Self { sender, receipt } = self;
 
-		if let Err(_) = sender.send(t) {
+		if sender.send(t).is_err() {
 			return future::Either::Left(future::ready(Err(())));
 		}
 

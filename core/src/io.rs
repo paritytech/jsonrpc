@@ -207,10 +207,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		use self::future::Either::{Left, Right};
 		fn as_string(response: Option<Response>) -> Option<String> {
 			let res = response.map(write_response);
-			debug!(target: "rpc", "Response: {}.", match res {
-				Some(ref res) => res,
-				None => "None",
-			});
+			debug!(target: "rpc", "Response: {}.", res.as_ref().unwrap_or(&"None".to_string()));
 			res
 		}
 
