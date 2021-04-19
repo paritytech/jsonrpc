@@ -188,7 +188,7 @@ fn get_doc_comments(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
 				..
 			} => match &segments[0] {
 				syn::PathSegment { ident, .. } => {
-					if ident.to_string() == "doc" {
+					if *ident == "doc" {
 						doc_comments.push(attr.to_owned());
 					}
 				}

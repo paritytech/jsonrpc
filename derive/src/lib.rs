@@ -7,6 +7,7 @@
 //! ```
 //! use jsonrpc_core::{IoHandler, Result, BoxFuture};
 //! use jsonrpc_core::futures::future;
+//! use jsonrpc_derive::rpc;
 //!
 //! #[rpc(server)]
 //! pub trait Rpc {
