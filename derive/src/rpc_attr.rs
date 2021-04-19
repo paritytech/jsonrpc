@@ -111,7 +111,9 @@ impl RpcMethodAttribute {
 		let returns = get_meta_list(meta).and_then(|ml| get_name_value(RETURNS_META_WORD, ml));
 		let is_notification = match output {
 			syn::ReturnType::Default => true,
-			syn::ReturnType::Type(_, ret) => matches!(**ret, syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing()),
+			syn::ReturnType::Type(_, ret) => {
+				matches!(**ret, syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing())
+			}
 		};
 
 		if is_notification && returns.is_some() {
