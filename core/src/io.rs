@@ -59,10 +59,10 @@ impl Default for Compatibility {
 
 impl Compatibility {
 	fn is_version_valid(self, version: Option<Version>) -> bool {
-		match (self, version) {
-			(Compatibility::V1, None) | (Compatibility::V2, Some(Version::V2)) | (Compatibility::Both, _) => true,
-			_ => false,
-		}
+		matches!(
+			(self, version),
+			(Compatibility::V1, None) | (Compatibility::V2, Some(Version::V2)) | (Compatibility::Both, _)
+		)
 	}
 
 	fn default_version(self) -> Option<Version> {

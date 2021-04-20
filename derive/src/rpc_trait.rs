@@ -45,10 +45,9 @@ impl<'a> Fold for RpcTrait {
 		fold::fold_trait_item_method(self, foldable_method)
 	}
 
-	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
+	fn fold_trait_item_type(&mut self, mut ty: syn::TraitItemType) -> syn::TraitItemType {
 		if ty.ident == METADATA_TYPE {
 			self.has_metadata = true;
-			let mut ty = ty;
 			if self.has_pubsub_methods {
 				ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata))
 			} else {

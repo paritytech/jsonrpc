@@ -245,9 +245,9 @@ impl RpcMethod {
 			} else if self.attr.params_style == Some(ParamStyle::Positional) {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			} else {
+				/* if self.attr.params_style == Some(ParamStyle::Named) */
 				unimplemented!("Server side named parameters are not implemented");
 			}
-			/* if self.attr.params_style == Some(ParamStyle::Named) */
 		};
 
 		let method_ident = self.ident();
