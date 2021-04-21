@@ -236,6 +236,7 @@ impl RpcMethod {
 		let parse_params = {
 			// last arguments that are `Option`-s are optional 'trailing' arguments
 			let trailing_args_num = param_types.iter().rev().take_while(|t| is_option_type(t)).count();
+
 			if trailing_args_num != 0 {
 				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
 			} else if param_types.is_empty() {
@@ -245,7 +246,6 @@ impl RpcMethod {
 			} else if self.attr.params_style == Some(ParamStyle::Positional) {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
 			} else {
-				/* if self.attr.params_style == Some(ParamStyle::Named) */
 				unimplemented!("Server side named parameters are not implemented");
 			}
 		};
