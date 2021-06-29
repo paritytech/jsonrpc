@@ -566,7 +566,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			let raw_socket = ();
 
 			let server_builder =
-				hyper::Server::from_tcp(listener).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				hyper::server::Server::from_tcp(listener).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!

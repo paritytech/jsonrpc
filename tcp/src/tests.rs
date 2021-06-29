@@ -1,4 +1,4 @@
-use std::net::{Shutdown, SocketAddr};
+use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -23,7 +23,7 @@ fn casual_server() -> ServerBuilder {
 }
 
 fn run_future<O>(fut: impl std::future::Future<Output = O> + Send) -> O {
-	let mut rt = tokio::runtime::Runtime::new().unwrap();
+	let rt = tokio::runtime::Runtime::new().unwrap();
 	rt.block_on(fut)
 }
 
@@ -60,9 +60,9 @@ fn disconnect() {
 	let _server = server.start(&addr).expect("Server must run with no issues");
 
 	run_future(async move {
-		let stream = TcpStream::connect(&addr).await.unwrap();
+		let mut stream = TcpStream::connect(&addr).await.unwrap();
 		assert_eq!(stream.peer_addr().unwrap(), addr);
-		stream.shutdown(::std::net::Shutdown::Both).unwrap();
+		stream.shutdown().await.unwrap();
 	});
 
 	::std::thread::sleep(::std::time::Duration::from_millis(50));
@@ -76,7 +76,7 @@ fn dummy_request(addr: &SocketAddr, data: Vec<u8>) -> Vec<u8> {
 	let stream = async move {
 		let mut stream = TcpStream::connect(addr).await?;
 		stream.write_all(&data).await?;
-		stream.shutdown(Shutdown::Write)?;
+		stream.shutdown().await?;
 		let mut read_buf = vec![];
 		let _ = stream.read_to_end(&mut read_buf).await;
 
@@ -243,7 +243,7 @@ fn message() {
 
 	let client = async move {
 		let stream = TcpStream::connect(&addr);
-		let delay = tokio::time::delay_for(Duration::from_millis(500));
+		let delay = tokio::time::sleep(Duration::from_millis(500));
 		let (stream, _) = futures::join!(stream, delay);
 		let mut stream = stream?;
 
@@ -272,7 +272,7 @@ fn message() {
 		let data = b"{\"jsonrpc\": \"2.0\", \"method\": \"say_hello\", \"params\": [42, 23], \"id\": 1}\n";
 		stream.write_all(&data[..]).await?;
 
-		stream.shutdown(Shutdown::Write).unwrap();
+		stream.shutdown().await.unwrap();
 		let mut read_buf = vec![];
 		let _ = stream.read_to_end(&mut read_buf).await?;
 
