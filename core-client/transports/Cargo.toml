@@ -44,7 +44,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 url = "1.7"
 
-hyper = { version = "0.14", features = ["client", "http1", "server"], optional = true }
+hyper = { version = "0.14", features = ["client", "http1"], optional = true }
 hyper-tls = { version = "0.5", optional = true }
 jsonrpc-server-utils = { version = "17.1", path = "../../server-utils", optional = true }
 parity-tokio-ipc = { version = "0.8", optional = true }
