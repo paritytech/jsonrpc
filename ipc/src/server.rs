@@ -360,7 +360,7 @@ mod tests {
 			reply.expect("there should be one reply")
 		};
 
-		let mut rt = tokio::runtime::Runtime::new().unwrap();
+		let rt = tokio::runtime::Runtime::new().unwrap();
 		rt.block_on(reply).expect("wait for reply")
 	}
 
@@ -609,9 +609,10 @@ mod tests {
 			tx.send(true).expect("failed to report that the server has stopped");
 		});
 
-		let mut rt = tokio::runtime::Runtime::new().unwrap();
+		let rt = tokio::runtime::Runtime::new().unwrap();
 		rt.block_on(async move {
-			let timeout = tokio::time::delay_for(Duration::from_millis(500));
+			let timeout = tokio::time::sleep(Duration::from_millis(500));
+			futures::pin_mut!(timeout);
 
 			match futures::future::select(rx, timeout).await {
 				futures::future::Either::Left((result, _)) => {
