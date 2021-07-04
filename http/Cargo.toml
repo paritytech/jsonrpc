@@ -12,7 +12,7 @@ version = "17.1.0"
 
 [dependencies]
 futures = "0.3"
-hyper = { version = "0.14", features = ["client", "server", "stream"] }
+hyper = { version = "0.14", features = ["http1", "tcp", "server",  "stream"] }
 jsonrpc-core = { version = "17.1", path = "../core" }
 jsonrpc-server-utils = { version = "17.1", path = "../server-utils" }
 log = "0.4"
