@@ -15,5 +15,3 @@ members = [
 	"ws",
 ]
 
-[patch.crates-io]
-parity-tokio-ipc = { git = "https://github.com/paritytech/parity-tokio-ipc", branch = "master" }
