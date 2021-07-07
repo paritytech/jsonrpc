@@ -9,6 +9,7 @@ extern crate log;
 extern crate lazy_static;
 
 pub use tokio;
+pub use tokio_stream;
 pub use tokio_util;
 
 pub mod cors;

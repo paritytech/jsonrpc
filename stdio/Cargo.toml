@@ -13,11 +13,11 @@ version = "17.1.0"
 futures = "0.3"
 jsonrpc-core = { version = "17.1", path = "../core" }
 log = "0.4"
-tokio = { version = "0.2", features = ["io-std", "io-driver", "io-util"] }
-tokio-util = { version = "0.3", features = ["codec"] }
+tokio = { version = "1", features = ["io-std", "io-util"] }
+tokio-util = { version = "0.6", features = ["codec"] }
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["rt-core", "macros"] }
+tokio = { version = "1", features = ["rt", "macros"] }
 lazy_static = "1.0"
 env_logger = "0.7"
 

@@ -11,14 +11,15 @@ repository = "https://github.com/paritytech/jsonrpc"
 version = "17.1.0"
 
 [dependencies]
-bytes = "0.5"
+bytes = "1.0"
 futures = "0.3"
 globset = "0.4"
 jsonrpc-core = { version = "17.1", path = "../core" }
 lazy_static = "1.1.0"
 log = "0.4"
-tokio = { version = "0.2", features = ["rt-threaded", "io-driver", "io-util", "time", "tcp"] }
-tokio-util = { version = "0.3", features = ["codec"] }
+tokio = { version = "1", features = ["rt-multi-thread", "io-util", "time", "net"] }
+tokio-util = { version = "0.6", features = ["codec"] }
+tokio-stream = { version = "0.1", features = ["net"] }
 
 unicase = "2.0"
 

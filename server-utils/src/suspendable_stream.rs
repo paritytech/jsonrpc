@@ -2,9 +2,7 @@ use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::Poll;
-use std::time::Duration;
-
-use tokio::time::Delay;
+use std::time::{Duration, Instant};
 
 /// `Incoming` is a stream of incoming sockets
 /// Polling the stream may return a temporary io::Error (for instance if we can't open the connection because of "too many open files" limit)
@@ -19,7 +17,7 @@ pub struct SuspendableStream<S> {
 	next_delay: Duration,
 	initial_delay: Duration,
 	max_delay: Duration,
-	timeout: Option<Delay>,
+	suspended_until: Option<Instant>,
 }
 
 impl<S> SuspendableStream<S> {
@@ -31,7 +29,7 @@ impl<S> SuspendableStream<S> {
 			next_delay: Duration::from_millis(20),
 			initial_delay: Duration::from_millis(10),
 			max_delay: Duration::from_secs(5),
-			timeout: None,
+			suspended_until: None,
 		}
 	}
 }
@@ -44,10 +42,17 @@ where
 
 	fn poll_next(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Option<Self::Item>> {
 		loop {
-			if let Some(timeout) = self.timeout.as_mut() {
-				match Pin::new(timeout).poll(cx) {
+			// If we encountered a connection error before then we suspend
+			// polling from the underlying stream for a bit
+			if let Some(deadline) = &mut self.suspended_until {
+				let deadline = tokio::time::Instant::from_std(*deadline);
+				let sleep = tokio::time::sleep_until(deadline);
+				futures::pin_mut!(sleep);
+				match sleep.poll(cx) {
 					Poll::Pending => return Poll::Pending,
-					Poll::Ready(()) => {}
+					Poll::Ready(()) => {
+						self.suspended_until = None;
+					}
 				}
 			}
 
@@ -78,7 +83,7 @@ where
 					};
 					debug!("Error accepting connection: {}", err);
 					debug!("The server will stop accepting connections for {:?}", self.next_delay);
-					self.timeout = Some(tokio::time::delay_for(self.next_delay));
+					self.suspended_until = Some(Instant::now() + self.next_delay);
 				}
 			}
 		}
