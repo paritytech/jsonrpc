@@ -5,23 +5,22 @@
 //! use jsonrpc_http_server::*;
 //!
 //! fn main() {
-//! 	let mut io = IoHandler::new();
-//! 	io.add_sync_method("say_hello", |_: Params| {
-//! 		Ok(Value::String("hello".to_string()))
-//! 	});
+//!     let mut io = IoHandler::new();
+//!     io.add_sync_method("say_hello", |_: Params| {
+//!         Ok(Value::String("hello".to_string()))
+//!     });
 //!
-//! 	let _server = ServerBuilder::new(io)
-//!		.start_http(&"127.0.0.1:3030".parse().unwrap())
-//!		.expect("Unable to start RPC server");
+//!     let _server = ServerBuilder::new(io)
+//!     .start_http(&"127.0.0.1:3030".parse().unwrap())
+//!     .expect("Unable to start RPC server");
 //!
-//!	_server.wait();
+//! _server.wait();
 //! }
 //! ```
 
 #![deny(missing_docs)]
 
 use jsonrpc_server_utils as server_utils;
-use net2;
 
 pub use hyper;
 pub use jsonrpc_core;
@@ -678,10 +677,11 @@ impl CloseHandle {
 	}
 }
 
+type Executors = Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>;
 /// jsonrpc http server instance
 pub struct Server {
 	address: SocketAddr,
-	executors: Arc<Mutex<Option<Vec<(Executor, oneshot::Sender<()>)>>>>,
+	executors: Executors,
 	done: Option<Vec<oneshot::Receiver<()>>>,
 }
 

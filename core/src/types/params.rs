@@ -1,7 +1,6 @@
 //! jsonrpc params field
 
 use serde::de::DeserializeOwned;
-use serde_json;
 use serde_json::value::from_value;
 
 use super::{Error, Value};

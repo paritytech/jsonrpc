@@ -108,7 +108,12 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 				};
 				let returns_str = quote!(#returns).to_string();
 
-				let args_serialized = match method.attr.params_style.clone().unwrap_or(options.params_style.clone()) {
+				let args_serialized = match method
+					.attr
+					.params_style
+					.clone()
+					.unwrap_or_else(|| options.params_style.clone())
+				{
 					ParamStyle::Named => {
 						quote! {  // use object style serialization with field names taken from the function param names
 							serde_json::json!({
@@ -188,7 +193,7 @@ fn get_doc_comments(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
 				..
 			} => match &segments[0] {
 				syn::PathSegment { ident, .. } => {
-					if ident.to_string() == "doc" {
+					if *ident == "doc" {
 						doc_comments.push(attr.to_owned());
 					}
 				}
@@ -212,10 +217,9 @@ fn compute_args(method: &syn::TraitItemMethod) -> Punctuated<syn::FnArg, syn::to
 			}) => segments,
 			_ => continue,
 		};
-		let ident = match &segments[0] {
-			syn::PathSegment { ident, .. } => ident,
-		};
-		if ident.to_string() == "Self" {
+		let syn::PathSegment { ident, .. } = &segments[0];
+		let ident = ident;
+		if *ident == "Self" {
 			continue;
 		}
 		args.push(arg.to_owned());

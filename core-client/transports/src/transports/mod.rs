@@ -151,7 +151,7 @@ impl From<ClientResponse> for Result<Value, Error> {
 						(Some(_), _, Some(error)) => {
 							let error = serde_json::from_value::<Error>(error.to_owned())
 								.ok()
-								.unwrap_or_else(|| Error::parse_error());
+								.unwrap_or_else(Error::parse_error);
 							Err(error)
 						}
 						_ => Ok(n.params.into()),

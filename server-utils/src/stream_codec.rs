@@ -41,10 +41,7 @@ impl StreamCodec {
 }
 
 fn is_whitespace(byte: u8) -> bool {
-	match byte {
-		0x0D | 0x0A | 0x20 | 0x09 => true,
-		_ => false,
-	}
+	matches!(byte, 0x0D | 0x0A | 0x20 | 0x09)
 }
 
 impl tokio_util::codec::Decoder for StreamCodec {

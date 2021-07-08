@@ -59,12 +59,7 @@ pub fn cors_allow_headers(
 /// `false` indicates `Connection: close`.
 pub fn keep_alive(request: &hyper::Request<hyper::Body>, keep_alive: bool) -> bool {
 	read_header(request, "connection")
-		.map(|val| match (keep_alive, val) {
-			// indicate that connection should be closed
-			(false, _) | (_, "close") => false,
-			// don't include any headers otherwise
-			_ => true,
-		})
+		.map(|val| !matches!((keep_alive, val), (false, _) | (_, "close")))
 		// if the client header is not present, close connection if we don't keep_alive
 		.unwrap_or(keep_alive)
 }

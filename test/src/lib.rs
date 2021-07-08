@@ -8,16 +8,16 @@
 //!
 //! #[rpc]
 //! pub trait Test {
-//!     #[rpc(name = "rpc_some_method")]
-//!     fn some_method(&self, a: u64) -> Result<u64>;
+//!    #[rpc(name = "rpc_some_method")]
+//!    fn some_method(&self, a: u64) -> Result<u64>;
 //! }
 //!
 //!
 //! struct Dummy;
 //! impl Test for Dummy {
-//!     fn some_method(&self, x: u64) -> Result<u64> {
-//!         Ok(x * 2)
-//!     }
+//!    fn some_method(&self, x: u64) -> Result<u64> {
+//!        Ok(x * 2)
+//!    }
 //! }
 //!
 //! fn main() {
@@ -31,7 +31,7 @@
 //!   let rpc = {
 //!     let mut io = IoHandler::new();
 //!     io.add_sync_method("rpc_test_method", |_| {
-//!         Err(Error::internal_error())
+//!        Err(Error::internal_error())
 //!     });
 //!     test::Rpc::from(io)
 //!   };
@@ -46,8 +46,6 @@
 #![deny(missing_docs)]
 
 extern crate jsonrpc_core as rpc;
-use serde;
-use serde_json;
 
 /// Test RPC options.
 #[derive(Default, Debug)]

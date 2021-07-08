@@ -16,8 +16,8 @@ pub struct Service<M: Metadata = (), S: Middleware<M> = middleware::Noop> {
 impl<M: Metadata, S: Middleware<M>> Service<M, S> {
 	pub fn new(peer_addr: SocketAddr, handler: Arc<MetaIoHandler<M, S>>, meta: M) -> Self {
 		Service {
-			peer_addr,
 			handler,
+			peer_addr,
 			meta,
 		}
 	}

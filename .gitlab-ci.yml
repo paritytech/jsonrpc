@@ -45,8 +45,9 @@ checkstyle-linux-stable:
   <<:                              *only
   <<:                              *docker-env
   script:
-    - rustup component add rustfmt
+    - rustup component add rustfmt clippy
     - cargo fmt --all -- --check
+    - cargo clippy
   allow_failure:                   true
 
 # test rust stable

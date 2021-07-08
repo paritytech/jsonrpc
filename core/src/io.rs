@@ -8,7 +8,6 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use futures_util::{self, future, FutureExt};
-use serde_json;
 
 use crate::calls::{
 	Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcNotification, RpcNotificationSimple,
@@ -60,10 +59,10 @@ impl Default for Compatibility {
 
 impl Compatibility {
 	fn is_version_valid(self, version: Option<Version>) -> bool {
-		match (self, version) {
-			(Compatibility::V1, None) | (Compatibility::V2, Some(Version::V2)) | (Compatibility::Both, _) => true,
-			_ => false,
-		}
+		matches!(
+			(self, version),
+			(Compatibility::V1, None) | (Compatibility::V2, Some(Version::V2)) | (Compatibility::Both, _)
+		)
 	}
 
 	fn default_version(self) -> Option<Version> {
@@ -208,10 +207,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		use self::future::Either::{Left, Right};
 		fn as_string(response: Option<Response>) -> Option<String> {
 			let res = response.map(write_response);
-			debug!(target: "rpc", "Response: {}.", match res {
-				Some(ref res) => res,
-				None => "None",
-			});
+			debug!(target: "rpc", "Response: {}.", res.as_ref().unwrap_or(&"None".to_string()));
 			res
 		}
 
@@ -237,7 +233,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		}
 
 		fn outputs_as_batch(outs: Vec<Option<Output>>) -> Option<Response> {
-			let outs: Vec<_> = outs.into_iter().filter_map(|v| v).collect();
+			let outs: Vec<_> = outs.into_iter().flatten().collect();
 			if outs.is_empty() {
 				None
 			} else {

@@ -71,7 +71,7 @@ impl RpcMethodAttribute {
 	fn parse_meta(attr: &syn::Attribute, output: &syn::ReturnType) -> Option<Result<RpcMethodAttribute>> {
 		match attr.parse_meta().and_then(validate_attribute_meta) {
 			Ok(ref meta) => {
-				let attr_kind = match path_to_str(meta.path()).as_ref().map(String::as_str) {
+				let attr_kind = match path_to_str(meta.path()).as_deref() {
 					Some(RPC_ATTR_NAME) => Some(Self::parse_rpc(meta, output)),
 					Some(PUB_SUB_ATTR_NAME) => Some(Self::parse_pubsub(meta)),
 					_ => None,
@@ -89,9 +89,7 @@ impl RpcMethodAttribute {
 										// "`raw_params` will be deprecated in a future release. Use `params = \"raw\" instead`"
 										Ok(Some(ParamStyle::Raw))
 									}
-									false => {
-										get_meta_list(meta).map_or(Ok(None), |ml| get_params_style(ml).map(|s| Some(s)))
-									}
+									false => get_meta_list(meta).map_or(Ok(None), |ml| get_params_style(ml).map(Some)),
 								}?;
 								Ok(RpcMethodAttribute {
 									attr: attr.clone(),
@@ -110,13 +108,12 @@ impl RpcMethodAttribute {
 
 	fn parse_rpc(meta: &syn::Meta, output: &syn::ReturnType) -> Result<AttributeKind> {
 		let has_metadata = get_meta_list(meta).map_or(false, |ml| has_meta_word(METADATA_META_WORD, ml));
-		let returns = get_meta_list(meta).map_or(None, |ml| get_name_value(RETURNS_META_WORD, ml));
+		let returns = get_meta_list(meta).and_then(|ml| get_name_value(RETURNS_META_WORD, ml));
 		let is_notification = match output {
 			syn::ReturnType::Default => true,
-			syn::ReturnType::Type(_, ret) => match **ret {
-				syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing() => true,
-				_ => false,
-			},
+			syn::ReturnType::Type(_, ret) => {
+				matches!(**ret, syn::Type::Tuple(ref tup) if tup.elems.empty_or_trailing())
+			}
 		};
 
 		if is_notification && returns.is_some() {
@@ -188,7 +185,7 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 	visit::visit_meta(&mut visitor, &meta);
 
 	let ident = path_to_str(meta.path());
-	match ident.as_ref().map(String::as_str) {
+	match ident.as_deref() {
 		Some(RPC_ATTR_NAME) => {
 			validate_idents(&meta, &visitor.meta_words, &[METADATA_META_WORD, RAW_PARAMS_META_WORD])?;
 			validate_idents(

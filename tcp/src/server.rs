@@ -143,7 +143,7 @@ where
 
 					let mut peer_message_queue = {
 						let mut channels = channels.lock();
-						channels.insert(peer_addr, sender.clone());
+						channels.insert(peer_addr, sender);
 
 						PeerMessageQueue::new(responses, receiver, peer_addr)
 					};
@@ -166,7 +166,7 @@ where
 			match start.await {
 				Ok(server) => {
 					tx.send(Ok(())).expect("Rx is blocking parent thread.");
-					let server = server.buffer_unordered(1024).for_each(|_| async { () });
+					let server = server.buffer_unordered(1024).for_each(|_| async {});
 
 					future::select(Box::pin(server), stop_rx).await;
 				}

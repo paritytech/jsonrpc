@@ -1,11 +1,9 @@
 //! CORS handling utility functions
-use unicase;
-
-pub use self::unicase::Ascii;
 use crate::hosts::{Host, Port};
 use crate::matcher::{Matcher, Pattern};
 use std::collections::HashSet;
 use std::{fmt, ops};
+pub use unicase::Ascii;
 
 /// Origin Protocol
 #[derive(Clone, Hash, Debug, PartialEq, Eq)]

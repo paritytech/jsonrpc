@@ -45,10 +45,9 @@ impl<'a> Fold for RpcTrait {
 		fold::fold_trait_item_method(self, foldable_method)
 	}
 
-	fn fold_trait_item_type(&mut self, ty: syn::TraitItemType) -> syn::TraitItemType {
+	fn fold_trait_item_type(&mut self, mut ty: syn::TraitItemType) -> syn::TraitItemType {
 		if ty.ident == METADATA_TYPE {
 			self.has_metadata = true;
-			let mut ty = ty.clone();
 			if self.has_pubsub_methods {
 				ty.bounds.push(parse_quote!(_jsonrpc_pubsub::PubSubMetadata))
 			} else {
@@ -146,7 +145,7 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 								format!(
 									"Inconsistent signature for 'Subscriber' argument: {}, previously defined: {}",
 									next_method_arg.clone().into_token_stream(),
-									subscriber_arg.clone().into_token_stream()
+									subscriber_arg.into_token_stream()
 								),
 							));
 						}

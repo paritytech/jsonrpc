@@ -281,7 +281,7 @@ where
 			}
 			match self.outgoing.pop_front() {
 				Some(request) => {
-					if let Err(_) = self.sink.as_mut().start_send(request) {
+					if self.sink.as_mut().start_send(request).is_err() {
 						// the channel is disconnected.
 						return err().into();
 					}

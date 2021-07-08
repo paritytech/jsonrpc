@@ -154,7 +154,7 @@ pub fn generate_trait_item_method(
 	};
 
 	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
-	let mut method = method.clone();
+	let mut method = method;
 	method.sig.generics.make_where_clause().predicates.extend(predicates);
 	Ok(method)
 }
@@ -220,7 +220,7 @@ impl RpcMethod {
 
 		// special args are those which are not passed directly via rpc params: metadata, subscriber
 		let special_args = Self::special_args(&param_types);
-		param_types.retain(|ty| special_args.iter().find(|(_, sty)| sty == ty).is_none());
+		param_types.retain(|ty| !special_args.iter().any(|(_, sty)| sty == ty));
 		if param_types.len() > TUPLE_FIELD_NAMES.len() {
 			return Err(syn::Error::new_spanned(
 				&self.trait_item,
@@ -236,6 +236,7 @@ impl RpcMethod {
 		let parse_params = {
 			// last arguments that are `Option`-s are optional 'trailing' arguments
 			let trailing_args_num = param_types.iter().rev().take_while(|t| is_option_type(t)).count();
+
 			if trailing_args_num != 0 {
 				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
 			} else if param_types.is_empty() {
@@ -244,9 +245,7 @@ impl RpcMethod {
 				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
 			} else if self.attr.params_style == Some(ParamStyle::Positional) {
 				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
-			} else
-			/* if self.attr.params_style == Some(ParamStyle::Named) */
-			{
+			} else {
 				unimplemented!("Server side named parameters are not implemented");
 			}
 		};
@@ -324,10 +323,10 @@ impl RpcMethod {
 
 		let mut special_args = Vec::new();
 		if let Some(meta) = meta_arg {
-			special_args.push((ident(METADATA_CLOSURE_ARG), meta.clone()));
+			special_args.push((ident(METADATA_CLOSURE_ARG), meta));
 		}
 		if let Some(subscriber) = subscriber_arg {
-			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber.clone()));
+			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber));
 		}
 		special_args
 	}

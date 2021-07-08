@@ -38,7 +38,7 @@ mod client_server {
 			.add(3, 4)
 			.map_ok(move |res| client.notify(res).map(move |_| res))
 			.map(|res| {
-				assert_matches!(res, Ok(Ok(7)));
+				self::assert_matches!(res, Ok(Ok(7)));
 			});
 		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
 		exec.spawn_ok(async move {
@@ -82,7 +82,7 @@ mod named_params {
 			.call_with_named(3, String::from("test string"), json!({"key": ["value"]}))
 			.map_ok(move |res| client.notify(res.clone()).map(move |_| res))
 			.map(move |res| {
-				assert_matches!(res, Ok(Ok(x)) if x == expected);
+				self::assert_matches!(res, Ok(Ok(x)) if x == expected);
 			});
 		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
 		exec.spawn_ok(async move { futures::join!(fut, rpc_client).1.unwrap() });
@@ -120,7 +120,7 @@ mod raw_params {
 			.call_raw_single_param(expected.clone())
 			.map_ok(move |res| client.notify(res.clone()).map(move |_| res))
 			.map(move |res| {
-				assert_matches!(res, Ok(Ok(x)) if x == expected);
+				self::assert_matches!(res, Ok(Ok(x)) if x == expected);
 			});
 		let exec = futures::executor::ThreadPool::builder().pool_size(1).create().unwrap();
 		exec.spawn_ok(async move { futures::join!(fut, rpc_client).1.unwrap() });

@@ -43,8 +43,8 @@ impl Output {
 	/// Creates new output given `Result`, `Id` and `Version`.
 	pub fn from(result: CoreResult<Value>, id: Id, jsonrpc: Option<Version>) -> Self {
 		match result {
-			Ok(result) => Output::Success(Success { id, jsonrpc, result }),
-			Err(error) => Output::Failure(Failure { id, jsonrpc, error }),
+			Ok(result) => Output::Success(Success { jsonrpc, result, id }),
+			Err(error) => Output::Failure(Failure { jsonrpc, error, id }),
 		}
 	}
 
