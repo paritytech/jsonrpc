@@ -7,11 +7,11 @@ homepage = "https://github.com/paritytech/jsonrpc"
 license = "MIT"
 name = "jsonrpc-tcp-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "17.1.0"
+version = "18.0.0"
 
 [dependencies]
-jsonrpc-core = { version = "17.1", path = "../core" }
-jsonrpc-server-utils = { version = "17.1", path = "../server-utils" }
+jsonrpc-core = { version = "18.0.0", path = "../core" }
+jsonrpc-server-utils = { version = "18.0.0", path = "../server-utils" }
 log = "0.4"
 parking_lot = "0.11.0"
 tower-service = "0.3"

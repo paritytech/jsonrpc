@@ -8,7 +8,7 @@ keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
 license = "MIT"
 name = "jsonrpc-client-transports"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "17.1.0"
+version = "18.0.0"
 
 categories = [
 	"asynchronous",
@@ -37,8 +37,8 @@ arbitrary_precision = ["serde_json/arbitrary_precision", "jsonrpc-core/arbitrary
 [dependencies]
 derive_more = "0.99"
 futures = "0.3"
-jsonrpc-core = { version = "17.1", path = "../../core" }
-jsonrpc-pubsub = { version = "17.1", path = "../../pubsub" }
+jsonrpc-core = { version = "18.0.0", path = "../../core" }
+jsonrpc-pubsub = { version = "18.0.0", path = "../../pubsub" }
 log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -46,15 +46,15 @@ url = "1.7"
 
 hyper = { version = "0.14", features = ["client", "http1"], optional = true }
 hyper-tls = { version = "0.5", optional = true }
-jsonrpc-server-utils = { version = "17.1", path = "../../server-utils", optional = true }
+jsonrpc-server-utils = { version = "18.0.0", path = "../../server-utils", optional = true }
 parity-tokio-ipc = { version = "0.9", optional = true }
 tokio = { version = "1", optional = true }
 websocket = { version = "0.24", optional = true }
 
 [dev-dependencies]
 assert_matches = "1.1"
-jsonrpc-http-server = { version = "17.1", path = "../../http" }
-jsonrpc-ipc-server = { version = "17.1", path = "../../ipc" }
+jsonrpc-http-server = { version = "18.0.0", path = "../../http" }
+jsonrpc-ipc-server = { version = "18.0.0", path = "../../ipc" }
 lazy_static = "1.0"
 env_logger = "0.7"
 
