@@ -1,5 +1,4 @@
 use crate::options::DeriveOptions;
-use crate::params_style::ParamStyle;
 use crate::rpc_attr::{AttributeKind, PubSubMethodKind, RpcMethodAttribute};
 use crate::to_client::generate_client_module;
 use crate::to_delegate::{generate_trait_item_method, MethodRegistration, RpcMethod};
@@ -21,10 +20,6 @@ const MISSING_SUBSCRIBE_METHOD_ERR: &str = "Can't find subscribe method, expecte
 const MISSING_UNSUBSCRIBE_METHOD_ERR: &str =
 	"Can't find unsubscribe method, expected a method annotated with `unsubscribe` \
 	 e.g. `#[pubsub(subscription = \"hello\", unsubscribe, name = \"hello_unsubscribe\")]`";
-
-pub const USING_NAMED_PARAMS_WITH_SERVER_ERR: &str =
-	"`params = \"named\"` can only be used to generate a client (on a trait annotated with #[rpc(client)]). \
-	 At this time the server does not support named parameters.";
 
 const RPC_MOD_NAME_PREFIX: &str = "rpc_impl_";
 
@@ -222,12 +217,6 @@ fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 	syn::Ident::new(&mod_name, proc_macro2::Span::call_site())
 }
 
-fn has_named_params(methods: &[RpcMethod]) -> bool {
-	methods
-		.iter()
-		.any(|method| method.attr.params_style == Some(ParamStyle::Named))
-}
-
 pub fn crate_name(name: &str) -> Result<Ident> {
 	proc_macro_crate::crate_name(name)
 		.map(|name| Ident::new(&name, Span::call_site()))
@@ -264,9 +253,6 @@ pub fn rpc_impl(input: syn::Item, options: &DeriveOptions) -> Result<proc_macro2
 		});
 	}
 	if options.enable_server {
-		if has_named_params(&methods) {
-			return Err(syn::Error::new_spanned(rpc_trait, USING_NAMED_PARAMS_WITH_SERVER_ERR));
-		}
 		let rpc_server_module = generate_server_module(&method_registrations, &rpc_trait, &methods)?;
 		submodules.push(rpc_server_module);
 		exports.push(quote! {
