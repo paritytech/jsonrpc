@@ -10,6 +10,7 @@ variables:                         &default-vars
   script:
     - cargo build --all
     - cargo test --all
+    - cargo build --manifest-path ./core-client/Cargo.toml --no-default-features --features http
 
 .only:                             &only
   only:
