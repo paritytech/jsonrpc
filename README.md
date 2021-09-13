@@ -77,7 +77,7 @@ use jsonrpc_derive::rpc;
 pub trait Rpc {
 	/// Adds two numbers and returns a result
 	#[rpc(name = "add")]
-	fn add(&self, u64, u64) -> Result<u64>;
+	fn add(&self, a: u64, b: u64) -> Result<u64>;
 }
 
 pub struct RpcImpl;
@@ -97,7 +97,8 @@ fn main() {
 
 ```rust
 use jsonrpc_core_client::transports::local;
-use jsonrpc_core::{Error, IoHandler, Result};
+use jsonrpc_core::{BoxFuture, IoHandler, Result};
+use jsonrpc_core::futures::{self, future, TryFutureExt};
 use jsonrpc_derive::rpc;
 
 /// Rpc trait
@@ -113,7 +114,7 @@ pub trait Rpc {
 
 	/// Performs asynchronous operation
 	#[rpc(name = "callAsync")]
-	fn call(&self, a: u64) -> FutureResult<String, Error>;
+	fn call(&self, a: u64) -> BoxFuture<Result<String>>;
 }
 
 struct RpcImpl;
@@ -127,8 +128,8 @@ impl Rpc for RpcImpl {
 		Ok(a + b)
 	}
 
-	fn call(&self, _: u64) -> FutureResult<String, Error> {
-		future::ok("OK".to_owned())
+	fn call(&self, _: u64) -> BoxFuture<Result<String>> {
+		Box::pin(future::ready(Ok("OK".to_owned())))
 	}
 }
 
@@ -136,10 +137,10 @@ fn main() {
 	let mut io = IoHandler::new();
 	io.extend_with(RpcImpl.to_delegate());
 
-	let fut = {
-		let (client, server) = local::connect::<gen_client::Client, _, _>(io);
-		client.add(5, 6).map(|res| println!("5 + 6 = {}", res)).join(server)
-	};
-	fut.wait().unwrap();
+	let (client, server) = local::connect::<gen_client::Client, _, _>(io);
+	let fut = client.add(5, 6).map_ok(|res| println!("5 + 6 = {}", res));
+	futures::executor::block_on(async move { futures::join!(fut, server) })
+		.0
+		.unwrap();
 }
 ```
