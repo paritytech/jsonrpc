@@ -139,12 +139,16 @@ mod tests {
 	}
 
 	fn io() -> IoHandler {
+		use jsonrpc_core::Result;
+
 		let mut io = IoHandler::default();
 		io.add_sync_method("hello", |params: Params| match params.parse::<(String,)>() {
 			Ok((msg,)) => Ok(Value::String(format!("hello {}", msg))),
 			_ => Ok(Value::String("world".into())),
 		});
-		io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
+		io.add_sync_method("fail", |_: Params| -> Result<i64> {
+			Err(Error::new(ErrorCode::ServerError(-34)))
+		});
 		io.add_notification("notify", |params: Params| {
 			let (value,) = params.parse::<(u64,)>().expect("expected one u64 as param");
 			assert_eq!(value, 12);

@@ -395,33 +395,41 @@ where
 	}
 
 	fn process_health(&self, method: String, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
-		use self::core::types::{Call, Failure, Id, MethodCall, Output, Params, Request, Success, Version};
+		use self::core::types::{Call, Failure, Id, MethodCall, Output, Params, Success, Version};
 
 		// Create a request
-		let call = Request::Single(Call::MethodCall(MethodCall {
+		let call = Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method,
 			params: Params::None,
 			id: Id::Num(1),
-		}));
+		});
 
 		let response = match self.jsonrpc_handler.upgrade() {
-			Some(h) => h.handler.handle_rpc_request(call, metadata),
+			Some(h) => h.handler.handle_call(call, metadata),
 			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
 		};
 
 		Ok(RpcPollState::Ready(RpcHandlerState::WaitingForResponse(Box::pin(
 			async {
 				match response.await {
-					Some(core::Response::Single(Output::Success(Success { result, .. }))) => {
-						let result = serde_json::to_string(&result).expect("Serialization of result is infallible;qed");
-
-						Response::ok(result)
-					}
-					Some(core::Response::Single(Output::Failure(Failure { error, .. }))) => {
-						let result = serde_json::to_string(&error).expect("Serialization of error is infallible;qed");
-
-						Response::service_unavailable(result)
+					Some(wrap_output) => {
+						// Extract the "response" or "error" field from the response json which has already been serialized.
+						// Could use serde_json's RawValue to avoid parsing inside data.
+						let output: Output = serde_json::from_str(&wrap_output.response)
+							.expect("Deserialization of serialized response is infallible;qed");
+						match output {
+							Output::Success(Success { result, .. }) => {
+								let out = serde_json::to_string(&result)
+									.expect("Serialization of deserialized result is infallible;qed");
+								Response::ok(out)
+							}
+							Output::Failure(Failure { error, .. }) => {
+								let result = serde_json::to_string(&error)
+									.expect("Serialization of deserialized result is infallible;qed");
+								Response::service_unavailable(result)
+							}
+						}
 					}
 					e => Response::internal_error(format!("Invalid response for health request: {:?}", e)),
 				}
@@ -430,7 +438,7 @@ where
 	}
 
 	fn process_rest(&self, uri: hyper::Uri, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
-		use self::core::types::{Call, Id, MethodCall, Params, Request, Value, Version};
+		use self::core::types::{Call, Id, MethodCall, Params, Value, Version};
 
 		// skip the initial /
 		let mut it = uri.path().split('/').skip(1);
@@ -446,22 +454,20 @@ where
 		}
 
 		// Create a request
-		let call = Request::Single(Call::MethodCall(MethodCall {
+		let call = Call::MethodCall(MethodCall {
 			jsonrpc: Some(Version::V2),
 			method: method.into(),
 			params: Params::Array(params),
 			id: Id::Num(1),
-		}));
+		});
 
 		let response = match self.jsonrpc_handler.upgrade() {
-			Some(h) => h.handler.handle_rpc_request(call, metadata),
+			Some(h) => h.handler.handle_call(call, metadata),
 			None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
 		};
 
 		Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::pin(async {
-			response
-				.await
-				.map(|x| serde_json::to_string(&x).expect("Serialization of response is infallible;qed"))
+			response.await.map(|x| x.response)
 		}))))
 	}
 

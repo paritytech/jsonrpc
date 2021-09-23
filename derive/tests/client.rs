@@ -74,7 +74,9 @@ mod named_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_sync_method("call_with_named", |params: Params| Ok(params.into()));
+		handler.add_sync_method("call_with_named", |params: Params| {
+			Ok(jsonrpc_core::Value::from(params))
+		});
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client
@@ -112,7 +114,7 @@ mod raw_params {
 		});
 
 		let mut handler = IoHandler::new();
-		handler.add_sync_method("call_raw", |params: Params| Ok(params.into()));
+		handler.add_sync_method("call_raw", |params: Params| Ok(jsonrpc_core::Value::from(params)));
 
 		let (client, rpc_client) = local::connect::<gen_client::Client, _, _>(handler);
 		let fut = client

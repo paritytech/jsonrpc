@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::collections::{
 	hash_map::{IntoIter, Iter},
 	HashMap,
@@ -10,33 +11,34 @@ use std::sync::Arc;
 use futures_util::{self, future, FutureExt};
 
 use crate::calls::{
-	Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcNotification, RpcNotificationSimple,
+	rpc_wrap, Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcMethodWrapped, RpcNotification,
+	RpcNotificationSimple,
 };
 use crate::middleware::{self, Middleware};
-use crate::types::{Call, Output, Request, Response};
+use crate::types::{Call, Request, WrapOutput, WrapResponse};
 use crate::types::{Error, ErrorCode, Version};
 
 /// A type representing middleware or RPC response before serialization.
-pub type FutureResponse = Pin<Box<dyn Future<Output = Option<Response>> + Send>>;
+pub type FutureResponse = Pin<Box<dyn Future<Output = Option<WrapResponse>> + Send>>;
 
 /// A type representing middleware or RPC call output.
-pub type FutureOutput = Pin<Box<dyn Future<Output = Option<Output>> + Send>>;
+pub type FutureOutput = Pin<Box<dyn Future<Output = Option<WrapOutput>> + Send>>;
 
 /// A type representing future string response.
 pub type FutureResult<F, G> = future::Map<
-	future::Either<future::Ready<Option<Response>>, FutureRpcResult<F, G>>,
-	fn(Option<Response>) -> Option<String>,
+	future::Either<future::Ready<Option<WrapResponse>>, FutureRpcResult<F, G>>,
+	fn(Option<WrapResponse>) -> Option<String>,
 >;
 
 /// A type representing a result of a single method call.
-pub type FutureRpcOutput<F> = future::Either<F, future::Either<FutureOutput, future::Ready<Option<Output>>>>;
+pub type FutureRpcOutput<F> = future::Either<F, future::Either<FutureOutput, future::Ready<Option<WrapOutput>>>>;
 
-/// A type representing an optional `Response` for RPC `Request`.
+/// A type representing an optional `WrapResponse` for RPC `Request`.
 pub type FutureRpcResult<F, G> = future::Either<
 	F,
 	future::Either<
-		future::Map<FutureRpcOutput<G>, fn(Option<Output>) -> Option<Response>>,
-		future::Map<future::JoinAll<FutureRpcOutput<G>>, fn(Vec<Option<Output>>) -> Option<Response>>,
+		future::Map<FutureRpcOutput<G>, fn(Option<WrapOutput>) -> Option<WrapResponse>>,
+		future::Map<future::JoinAll<FutureRpcOutput<G>>, fn(Vec<Option<WrapOutput>>) -> Option<WrapResponse>>,
 	>,
 >;
 
@@ -145,17 +147,19 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Adds new supported synchronous method.
 	///
 	/// A backward-compatible wrapper.
-	pub fn add_sync_method<F>(&mut self, name: &str, method: F)
+	pub fn add_sync_method<F, R>(&mut self, name: &str, method: F)
 	where
-		F: RpcMethodSync,
+		F: RpcMethodSync<R>,
+		R: Serialize + Send + 'static,
 	{
 		self.add_method(name, move |params| method.call(params))
 	}
 
 	/// Adds new supported asynchronous method.
-	pub fn add_method<F>(&mut self, name: &str, method: F)
+	pub fn add_method<F, R>(&mut self, name: &str, method: F)
 	where
-		F: RpcMethodSimple,
+		F: RpcMethodSimple<R>,
+		R: Serialize + Send + 'static,
 	{
 		self.add_method_with_meta(name, move |params, _meta| method.call(params))
 	}
@@ -169,12 +173,13 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	}
 
 	/// Adds new supported asynchronous method with metadata support.
-	pub fn add_method_with_meta<F>(&mut self, name: &str, method: F)
+	pub fn add_method_with_meta<F, R>(&mut self, name: &str, method: F)
 	where
-		F: RpcMethod<T>,
+		F: RpcMethod<T, R>,
+		R: Serialize + Send + 'static,
 	{
 		self.methods
-			.insert(name.into(), RemoteProcedure::Method(Arc::new(method)));
+			.insert(name.into(), RemoteProcedure::Method(rpc_wrap(method)));
 	}
 
 	/// Adds new supported notification with metadata support.
@@ -205,7 +210,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Handle given request asynchronously.
 	pub fn handle_request(&self, request: &str, meta: T) -> FutureResult<S::Future, S::CallFuture> {
 		use self::future::Either::{Left, Right};
-		fn as_string(response: Option<Response>) -> Option<String> {
+		fn as_string(response: Option<WrapResponse>) -> Option<String> {
 			let res = response.map(write_response);
 			debug!(target: "rpc", "Response: {}.", res.as_ref().unwrap_or(&"None".to_string()));
 			res
@@ -214,7 +219,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		trace!(target: "rpc", "Request: {}.", request);
 		let request = read_request(request);
 		let result = match request {
-			Err(error) => Left(future::ready(Some(Response::from(
+			Err(error) => Left(future::ready(Some(WrapResponse::from(
 				error,
 				self.compatibility.default_version(),
 			)))),
@@ -228,16 +233,16 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	pub fn handle_rpc_request(&self, request: Request, meta: T) -> FutureRpcResult<S::Future, S::CallFuture> {
 		use self::future::Either::{Left, Right};
 
-		fn output_as_response(output: Option<Output>) -> Option<Response> {
-			output.map(Response::Single)
+		fn output_as_response(output: Option<WrapOutput>) -> Option<WrapResponse> {
+			output.map(WrapResponse::Single)
 		}
 
-		fn outputs_as_batch(outs: Vec<Option<Output>>) -> Option<Response> {
+		fn outputs_as_batch(outs: Vec<Option<WrapOutput>>) -> Option<WrapResponse> {
 			let outs: Vec<_> = outs.into_iter().flatten().collect();
 			if outs.is_empty() {
 				None
 			} else {
-				Some(Response::Batch(outs))
+				Some(WrapResponse::Batch(outs))
 			}
 		}
 
@@ -245,7 +250,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			.on_request(request, meta, |request, meta| match request {
 				Request::Single(call) => Left(
 					self.handle_call(call, meta)
-						.map(output_as_response as fn(Option<Output>) -> Option<Response>),
+						.map(output_as_response as fn(Option<WrapOutput>) -> Option<WrapResponse>),
 				),
 				Request::Batch(calls) => {
 					let futures: Vec<_> = calls
@@ -253,7 +258,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 						.map(move |call| self.handle_call(call, meta.clone()))
 						.collect();
 					Right(
-						future::join_all(futures).map(outputs_as_batch as fn(Vec<Option<Output>>) -> Option<Response>),
+						future::join_all(futures)
+							.map(outputs_as_batch as fn(Vec<Option<WrapOutput>>) -> Option<WrapResponse>),
 					)
 				}
 			})
@@ -270,7 +276,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				let jsonrpc = method.jsonrpc;
 				let valid_version = self.compatibility.is_version_valid(jsonrpc);
 
-				let call_method = |method: &Arc<dyn RpcMethod<T>>| method.call(params, meta);
+				let method_id = id.clone();
+				let call_method = |method: &Arc<dyn RpcMethodWrapped<T>>| method.call(params, meta, jsonrpc, method_id);
 
 				let result = match (valid_version, self.methods.get(&method.method)) {
 					(false, _) => Err(Error::invalid_version()),
@@ -283,10 +290,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				};
 
 				match result {
-					Ok(result) => Left(Box::pin(
-						result.then(move |result| future::ready(Some(Output::from(result, id, jsonrpc)))),
-					) as _),
-					Err(err) => Right(future::ready(Some(Output::from(Err(err), id, jsonrpc)))),
+					Ok(result) => Left(result),
+					Err(err) => Right(future::ready(Some(WrapOutput::from_error(err, id, jsonrpc)))),
 				}
 			}
 			Call::Notification(notification) => {
@@ -310,7 +315,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				Right(future::ready(None))
 			}
-			Call::Invalid { id } => Right(future::ready(Some(Output::invalid_request(
+			Call::Invalid { id } => Right(future::ready(Some(WrapOutput::invalid_request(
 				id,
 				self.compatibility.default_version(),
 			)))),
@@ -475,9 +480,32 @@ fn read_request(request_str: &str) -> Result<Request, Error> {
 	crate::serde_from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
-fn write_response(response: Response) -> String {
-	// this should never fail
-	serde_json::to_string(&response).unwrap()
+fn write_response(response: WrapResponse) -> String {
+	match response {
+		WrapResponse::Single(output) => output.response,
+		WrapResponse::Batch(outputs) => {
+			if outputs.len() == 0 {
+				return String::from("[]");
+			}
+
+			// "[" and comma-separated outputs and "]"
+			let commas = outputs.len() - 1;
+			let brackets = 2;
+			let length = brackets + commas + outputs.iter().map(|output| output.response.len()).sum::<usize>();
+
+			// Not elegant, but guaranteed to only copy responses once
+			let mut response = String::with_capacity(length);
+			response.push('[');
+			for output in outputs {
+				response.push_str(&output.response);
+				response.push(',');
+			}
+			response.pop();
+			response.push(']');
+
+			response
+		}
+	}
 }
 
 #[cfg(test)]

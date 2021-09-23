@@ -1,6 +1,6 @@
 use jsonrpc_core;
 
-use self::jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Value};
+use self::jsonrpc_core::{Error, ErrorCode, IoHandler, Params, Result, Value};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::str::Lines;
@@ -58,7 +58,9 @@ fn io() -> IoHandler {
 		Ok((num,)) => Ok(Value::String(format!("world: {}", num))),
 		_ => Ok(Value::String("world".into())),
 	});
-	io.add_sync_method("fail", |_: Params| Err(Error::new(ErrorCode::ServerError(-34))));
+	io.add_sync_method("fail", |_: Params| -> Result<i64> {
+		Err(Error::new(ErrorCode::ServerError(-34)))
+	});
 	io.add_method("hello_async", |_params: Params| {
 		futures::future::ready(Ok(Value::String("world".into())))
 	});

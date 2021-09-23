@@ -30,7 +30,7 @@
 //!   // You can also test RPC created without macros:
 //!   let rpc = {
 //!     let mut io = IoHandler::new();
-//!     io.add_sync_method("rpc_test_method", |_| {
+//!     io.add_sync_method("rpc_test_method", |_| -> Result<i64> {
 //!        Err(Error::internal_error())
 //!     });
 //!     test::Rpc::from(io)
@@ -118,17 +118,18 @@ impl Rpc {
 			.expect("We are sending a method call not notification.");
 
 		// extract interesting part from the response
-		let extracted = match rpc::serde_from_str(&response).expect("We will always get a single output.") {
-			response::Output::Success(response::Success { result, .. }) => match encoding {
-				Encoding::Compact => serde_json::to_string(&result),
-				Encoding::Pretty => serde_json::to_string_pretty(&result),
-			},
-			response::Output::Failure(response::Failure { error, .. }) => match encoding {
-				Encoding::Compact => serde_json::to_string(&error),
-				Encoding::Pretty => serde_json::to_string_pretty(&error),
-			},
-		}
-		.expect("Serialization is infallible; qed");
+		let extracted =
+			match rpc::serde_from_str::<response::Output>(&response).expect("We will always get a single output.") {
+				response::Output::Success(response::Success { result, .. }) => match encoding {
+					Encoding::Compact => serde_json::to_string(&result),
+					Encoding::Pretty => serde_json::to_string_pretty(&result),
+				},
+				response::Output::Failure(response::Failure { error, .. }) => match encoding {
+					Encoding::Compact => serde_json::to_string(&error),
+					Encoding::Pretty => serde_json::to_string_pretty(&error),
+				},
+			}
+			.expect("Serialization is infallible; qed");
 
 		println!("\n{}\n --> {}\n", request, extracted);
 

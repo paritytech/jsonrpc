@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -98,21 +99,23 @@ where
 
 	// TODO [ToDr] Consider sync?
 	/// Adds async method to the delegate.
-	pub fn add_method<F, I>(&mut self, name: &str, method: F)
+	pub fn add_method<F, I, R>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params) -> I,
-		I: Future<Output = core::Result<Value>> + Send + 'static,
+		I: Future<Output = core::Result<R>> + Send + 'static,
 		F: Send + Sync + 'static,
+		R: Serialize + Send + 'static,
 	{
 		self.inner.add_method(name, method)
 	}
 
 	/// Adds async method with metadata to the delegate.
-	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
+	pub fn add_method_with_meta<F, I, R>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params, M) -> I,
-		I: Future<Output = core::Result<Value>> + Send + 'static,
+		I: Future<Output = core::Result<R>> + Send + 'static,
 		F: Send + Sync + 'static,
+		R: Serialize + Send + 'static,
 	{
 		self.inner.add_method_with_meta(name, method)
 	}
