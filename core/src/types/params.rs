@@ -36,6 +36,12 @@ impl Params {
 			p => Err(Error::invalid_params_with_details("No parameters were expected", p)),
 		}
 	}
+
+	/// Check for None
+	pub fn is_none(&self) -> bool {
+		log::debug!("is_none called on {:?}", self);
+		matches!(*self, Params::None)
+	}
 }
 
 impl From<Params> for Value {

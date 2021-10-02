@@ -12,7 +12,7 @@ pub struct MethodCall {
 	pub method: String,
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
-	#[serde(default = "default_params")]
+	#[serde(default = "default_params", skip_serializing_if = "Params::is_none")]
 	pub params: Params,
 	/// An identifier established by the Client that MUST contain a String,
 	/// Number, or NULL value if included. If it is not included it is assumed
