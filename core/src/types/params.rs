@@ -115,4 +115,12 @@ mod tests {
 		let params: (u64,) = Params::Array(vec![Value::from(1)]).parse().unwrap();
 		assert_eq!(params, (1,));
 	}
+
+	#[test]
+	fn detect_none() {
+		let none = Params::None;
+		assert!(none.is_none());
+		let some = Params::Array(vec![]);
+		assert!(!some.is_none());
+	}
 }

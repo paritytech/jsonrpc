@@ -106,6 +106,21 @@ mod tests {
 	}
 
 	#[test]
+	fn call_serizalize_without_params() {
+		use serde_json;
+
+		let m = MethodCall {
+			jsonrpc: Some(Version::V2),
+			method: "status".to_owned(),
+			params: Params::None,
+			id: Id::Num(1),
+		};
+
+		let serialized = serde_json::to_string(&m).unwrap();
+		assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"status","id":1}"#);
+	}
+
+	#[test]
 	fn notification_serialize() {
 		use serde_json;
 		use serde_json::Value;
