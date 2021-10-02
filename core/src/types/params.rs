@@ -39,7 +39,6 @@ impl Params {
 
 	/// Check for None
 	pub fn is_none(&self) -> bool {
-		log::debug!("is_none called on {:?}", self);
 		matches!(*self, Params::None)
 	}
 }
