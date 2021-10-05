@@ -106,7 +106,7 @@ mod tests {
 	}
 
 	#[test]
-	fn call_serizalize_without_params() {
+	fn call_serialize_without_params() {
 		use serde_json;
 
 		let m = MethodCall {
