@@ -239,37 +239,39 @@ fn should_accept_optional_param() {
 
 	// when
 	let req1 = r#"{"jsonrpc":"2.0","id":1,"method":"sqr","params":[2]}"#;
-	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"sqr"}"#;
+	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"sqr","params":[]}"#;
+	let req3 = r#"{"jsonrpc":"2.0","id":1,"method":"sqr","params":null}"#;
+	let req4 = r#"{"jsonrpc":"2.0","id":1,"method":"sqr"}"#;
 
 	let res1 = io.handle_request_sync(req1);
 	let res2 = io.handle_request_sync(req2);
-
-	// then
-	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
-	assert_eq!(
-		result1,
-		serde_json::from_str(
-			r#"{
+	let res3 = io.handle_request_sync(req3);
+	let res4 = io.handle_request_sync(req4);
+	let expected1 = r#"{
 		"jsonrpc": "2.0",
 		"result": 4,
 		"id": 1
-	}"#
-		)
-		.unwrap()
-	);
-
-	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
-	assert_eq!(
-		result2,
-		serde_json::from_str(
-			r#"{
+	}"#;
+	let expected1: Response = serde_json::from_str(expected1).unwrap();
+	let expected2 = r#"{
 		"jsonrpc": "2.0",
 		"result": 1,
 		"id": 1
-	}"#
-		)
-		.unwrap()
-	);
+	}"#;
+	let expected2: Response = serde_json::from_str(expected2).unwrap();
+
+	// then
+	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
+	assert_eq!(expected1, result1);
+
+	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
+	assert_eq!(expected2, result2);
+
+	let result3: Response = serde_json::from_str(&res3.unwrap()).unwrap();
+	assert_eq!(expected2, result3);
+
+	let result4: Response = serde_json::from_str(&res4.unwrap()).unwrap();
+	assert_eq!(expected2, result4);
 }
 
 #[test]
