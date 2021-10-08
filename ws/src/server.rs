@@ -75,6 +75,10 @@ impl Server {
 			// don't grow non-final fragments (to prevent DOS)
 			config.fragments_grow = false;
 			config.fragments_capacity = cmp::max(1, max_payload_bytes / config.fragment_size);
+			if config.fragments_capacity > 4096 {
+				config.fragments_capacity = 4096;
+				config.fragments_grow = true;
+			}
 			// accept only handshakes beginning with GET
 			config.method_strict = true;
 			// require masking
