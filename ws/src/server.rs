@@ -70,6 +70,7 @@ impl Server {
 			config.max_connections = max_connections;
 			// don't accept super large requests
 			config.max_fragment_size = max_payload_bytes;
+			config.max_total_fragments_size = max_payload_bytes;
 			config.in_buffer_capacity_hard_limit = max_in_buffer_capacity;
 			config.out_buffer_capacity_hard_limit = max_out_buffer_capacity;
 			// don't grow non-final fragments (to prevent DOS)
