@@ -11,34 +11,37 @@ use std::sync::Arc;
 use futures_util::{self, future, FutureExt};
 
 use crate::calls::{
-	rpc_wrap, Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcMethodWrapped, RpcNotification,
-	RpcNotificationSimple,
+	rpc_wrap, Metadata, RemoteProcedure, RpcMethod, RpcMethodSimple, RpcMethodSync, RpcMethodWithSerializedOutput,
+	RpcNotification, RpcNotificationSimple,
 };
 use crate::middleware::{self, Middleware};
-use crate::types::{Call, Request, WrapOutput, WrapResponse};
+use crate::types::{Call, Request, SerializedOutput, SerializedResponse};
 use crate::types::{Error, ErrorCode, Version};
 
 /// A type representing middleware or RPC response before serialization.
-pub type FutureResponse = Pin<Box<dyn Future<Output = Option<WrapResponse>> + Send>>;
+pub type FutureResponse = Pin<Box<dyn Future<Output = Option<SerializedResponse>> + Send>>;
 
 /// A type representing middleware or RPC call output.
-pub type FutureOutput = Pin<Box<dyn Future<Output = Option<WrapOutput>> + Send>>;
+pub type FutureOutput = Pin<Box<dyn Future<Output = Option<SerializedOutput>> + Send>>;
 
 /// A type representing future string response.
 pub type FutureResult<F, G> = future::Map<
-	future::Either<future::Ready<Option<WrapResponse>>, FutureRpcResult<F, G>>,
-	fn(Option<WrapResponse>) -> Option<String>,
+	future::Either<future::Ready<Option<SerializedResponse>>, FutureRpcResult<F, G>>,
+	fn(Option<SerializedResponse>) -> Option<String>,
 >;
 
 /// A type representing a result of a single method call.
-pub type FutureRpcOutput<F> = future::Either<F, future::Either<FutureOutput, future::Ready<Option<WrapOutput>>>>;
+pub type FutureRpcOutput<F> = future::Either<F, future::Either<FutureOutput, future::Ready<Option<SerializedOutput>>>>;
 
-/// A type representing an optional `WrapResponse` for RPC `Request`.
+/// A type representing an optional `SerializedResponse` for RPC `Request`.
 pub type FutureRpcResult<F, G> = future::Either<
 	F,
 	future::Either<
-		future::Map<FutureRpcOutput<G>, fn(Option<WrapOutput>) -> Option<WrapResponse>>,
-		future::Map<future::JoinAll<FutureRpcOutput<G>>, fn(Vec<Option<WrapOutput>>) -> Option<WrapResponse>>,
+		future::Map<FutureRpcOutput<G>, fn(Option<SerializedOutput>) -> Option<SerializedResponse>>,
+		future::Map<
+			future::JoinAll<FutureRpcOutput<G>>,
+			fn(Vec<Option<SerializedOutput>>) -> Option<SerializedResponse>,
+		>,
 	>,
 >;
 
@@ -210,7 +213,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	/// Handle given request asynchronously.
 	pub fn handle_request(&self, request: &str, meta: T) -> FutureResult<S::Future, S::CallFuture> {
 		use self::future::Either::{Left, Right};
-		fn as_string(response: Option<WrapResponse>) -> Option<String> {
+		fn as_string(response: Option<SerializedResponse>) -> Option<String> {
 			let res = response.map(write_response);
 			debug!(target: "rpc", "Response: {}.", res.as_ref().unwrap_or(&"None".to_string()));
 			res
@@ -219,7 +222,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		trace!(target: "rpc", "Request: {}.", request);
 		let request = read_request(request);
 		let result = match request {
-			Err(error) => Left(future::ready(Some(WrapResponse::from(
+			Err(error) => Left(future::ready(Some(SerializedResponse::from(
 				error,
 				self.compatibility.default_version(),
 			)))),
@@ -233,16 +236,16 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 	pub fn handle_rpc_request(&self, request: Request, meta: T) -> FutureRpcResult<S::Future, S::CallFuture> {
 		use self::future::Either::{Left, Right};
 
-		fn output_as_response(output: Option<WrapOutput>) -> Option<WrapResponse> {
-			output.map(WrapResponse::Single)
+		fn output_as_response(output: Option<SerializedOutput>) -> Option<SerializedResponse> {
+			output.map(SerializedResponse::Single)
 		}
 
-		fn outputs_as_batch(outs: Vec<Option<WrapOutput>>) -> Option<WrapResponse> {
+		fn outputs_as_batch(outs: Vec<Option<SerializedOutput>>) -> Option<SerializedResponse> {
 			let outs: Vec<_> = outs.into_iter().flatten().collect();
 			if outs.is_empty() {
 				None
 			} else {
-				Some(WrapResponse::Batch(outs))
+				Some(SerializedResponse::Batch(outs))
 			}
 		}
 
@@ -250,7 +253,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 			.on_request(request, meta, |request, meta| match request {
 				Request::Single(call) => Left(
 					self.handle_call(call, meta)
-						.map(output_as_response as fn(Option<WrapOutput>) -> Option<WrapResponse>),
+						.map(output_as_response as fn(Option<SerializedOutput>) -> Option<SerializedResponse>),
 				),
 				Request::Batch(calls) => {
 					let futures: Vec<_> = calls
@@ -259,7 +262,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 						.collect();
 					Right(
 						future::join_all(futures)
-							.map(outputs_as_batch as fn(Vec<Option<WrapOutput>>) -> Option<WrapResponse>),
+							.map(outputs_as_batch as fn(Vec<Option<SerializedOutput>>) -> Option<SerializedResponse>),
 					)
 				}
 			})
@@ -277,7 +280,8 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				let valid_version = self.compatibility.is_version_valid(jsonrpc);
 
 				let method_id = id.clone();
-				let call_method = |method: &Arc<dyn RpcMethodWrapped<T>>| method.call(params, meta, jsonrpc, method_id);
+				let call_method =
+					|method: &Arc<dyn RpcMethodWithSerializedOutput<T>>| method.call(params, meta, jsonrpc, method_id);
 
 				let result = match (valid_version, self.methods.get(&method.method)) {
 					(false, _) => Err(Error::invalid_version()),
@@ -291,7 +295,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				match result {
 					Ok(result) => Left(result),
-					Err(err) => Right(future::ready(Some(WrapOutput::from_error(err, id, jsonrpc)))),
+					Err(err) => Right(future::ready(Some(SerializedOutput::from_error(err, id, jsonrpc)))),
 				}
 			}
 			Call::Notification(notification) => {
@@ -315,7 +319,7 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				Right(future::ready(None))
 			}
-			Call::Invalid { id } => Right(future::ready(Some(WrapOutput::invalid_request(
+			Call::Invalid { id } => Right(future::ready(Some(SerializedOutput::invalid_request(
 				id,
 				self.compatibility.default_version(),
 			)))),
@@ -480,10 +484,10 @@ fn read_request(request_str: &str) -> Result<Request, Error> {
 	crate::serde_from_str(request_str).map_err(|_| Error::new(ErrorCode::ParseError))
 }
 
-fn write_response(response: WrapResponse) -> String {
+fn write_response(response: SerializedResponse) -> String {
 	match response {
-		WrapResponse::Single(output) => output.response,
-		WrapResponse::Batch(outputs) => {
+		SerializedResponse::Single(output) => output.response,
+		SerializedResponse::Batch(outputs) => {
 			if outputs.len() == 0 {
 				return String::from("[]");
 			}

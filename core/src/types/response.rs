@@ -114,14 +114,16 @@ impl From<Success> for Response {
 	}
 }
 
-/// Represents output - failure or success
+/// Represents output, failure or success
+///
+/// This contains the full response string, including the jsonrpc envelope.
 #[derive(Debug, PartialEq, Clone)]
-pub struct WrapOutput {
+pub struct SerializedOutput {
 	/// Response jsonrpc json
 	pub response: String,
 }
 
-impl WrapOutput {
+impl SerializedOutput {
 	/// Creates new output given `Result`, `Id` and `Version`.
 	pub fn from<T>(result: CoreResult<T>, id: Id, jsonrpc: Option<Version>) -> Self
 	where
@@ -131,7 +133,7 @@ impl WrapOutput {
 			Ok(result) => {
 				let response = serde_json::to_string(&Success { jsonrpc, result, id })
 					.expect("Expected always-serializable type; qed");
-				WrapOutput { response }
+				SerializedOutput { response }
 			}
 			Err(error) => Self::from_error(error, id, jsonrpc),
 		}
@@ -141,7 +143,7 @@ impl WrapOutput {
 	pub fn from_error(error: Error, id: Id, jsonrpc: Option<Version>) -> Self {
 		let response =
 			serde_json::to_string(&Failure { jsonrpc, error, id }).expect("Expected always-serializable type; qed");
-		WrapOutput { response }
+		SerializedOutput { response }
 	}
 
 	/// Creates new failure output indicating malformed request.
@@ -150,19 +152,19 @@ impl WrapOutput {
 	}
 }
 
-/// Synchronous response
+/// Synchronous response, pre-serialized
 #[derive(Clone, Debug, PartialEq)]
-pub enum WrapResponse {
+pub enum SerializedResponse {
 	/// Single response
-	Single(WrapOutput),
+	Single(SerializedOutput),
 	/// Response to batch request (batch of responses)
-	Batch(Vec<WrapOutput>),
+	Batch(Vec<SerializedOutput>),
 }
 
-impl WrapResponse {
+impl SerializedResponse {
 	/// Creates new `Response` with given error and `Version`
 	pub fn from(error: Error, jsonrpc: Option<Version>) -> Self {
-		Self::Single(WrapOutput::from_error(error, Id::Null, jsonrpc))
+		Self::Single(SerializedOutput::from_error(error, Id::Null, jsonrpc))
 	}
 }
 

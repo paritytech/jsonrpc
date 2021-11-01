@@ -1,4 +1,4 @@
-use crate::types::{Error, Id, Params, Value, Version, WrapOutput};
+use crate::types::{Error, Id, Params, SerializedOutput, Value, Version};
 use crate::BoxFuture;
 use futures_util::{self, future, FutureExt};
 use serde::Serialize;
@@ -63,14 +63,16 @@ pub trait RpcNotification<T: Metadata>: Send + Sync + 'static {
 	fn execute(&self, params: Params, meta: T);
 }
 
-pub trait RpcMethodWrapped<T: Metadata>: Send + Sync + 'static {
-	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<WrapOutput>>;
+pub trait RpcMethodWithSerializedOutput<T: Metadata>: Send + Sync + 'static {
+	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<SerializedOutput>>;
 }
 
-pub fn rpc_wrap<T: Metadata, R: Serialize + Send + 'static, F: RpcMethod<T, R>>(f: F) -> Arc<dyn RpcMethodWrapped<T>> {
+pub fn rpc_wrap<T: Metadata, R: Serialize + Send + 'static, F: RpcMethod<T, R>>(
+	f: F,
+) -> Arc<dyn RpcMethodWithSerializedOutput<T>> {
 	Arc::new(move |params: Params, meta: T, jsonrpc: Option<Version>, id: Id| {
 		let result = f.call(params, meta);
-		result.then(move |r| future::ready(Some(WrapOutput::from(r, id, jsonrpc))))
+		result.then(move |r| future::ready(Some(SerializedOutput::from(r, id, jsonrpc))))
 	})
 }
 
@@ -78,7 +80,7 @@ pub fn rpc_wrap<T: Metadata, R: Serialize + Send + 'static, F: RpcMethod<T, R>>(
 #[derive(Clone)]
 pub enum RemoteProcedure<T: Metadata> {
 	/// A method call
-	Method(Arc<dyn RpcMethodWrapped<T>>),
+	Method(Arc<dyn RpcMethodWithSerializedOutput<T>>),
 	/// A notification
 	Notification(Arc<dyn RpcNotification<T>>),
 	/// An alias to other method,
@@ -147,13 +149,13 @@ where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethodWrapped<T> for F
+impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethodWithSerializedOutput<T> for F
 where
 	T: Metadata,
 	F: Fn(Params, T, Option<Version>, Id) -> X,
-	X: Future<Output = Option<WrapOutput>>,
+	X: Future<Output = Option<SerializedOutput>>,
 {
-	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<WrapOutput>> {
+	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<SerializedOutput>> {
 		Box::pin(self(params, meta, jsonrpc, id))
 	}
 }
