@@ -63,11 +63,13 @@ pub trait RpcNotification<T: Metadata>: Send + Sync + 'static {
 	fn execute(&self, params: Params, meta: T);
 }
 
+/// Asynchronous Method with Metadata, returning a serialized JSONRPC response
 pub trait RpcMethodWithSerializedOutput<T: Metadata>: Send + Sync + 'static {
 	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<SerializedOutput>>;
 }
 
-pub fn rpc_wrap<T: Metadata, R: Serialize + Send + 'static, F: RpcMethod<T, R>>(
+/// Wraps an RpcMethod into an RpcMethodWithSerializedOutput
+pub(crate) fn rpc_wrap<T: Metadata, R: Serialize + Send + 'static, F: RpcMethod<T, R>>(
 	f: F,
 ) -> Arc<dyn RpcMethodWithSerializedOutput<T>> {
 	Arc::new(move |params: Params, meta: T, jsonrpc: Option<Version>, id: Id| {
