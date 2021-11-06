@@ -7,6 +7,7 @@ use super::{Id, Params, Version};
 #[serde(deny_unknown_fields)]
 pub struct MethodCall {
 	/// A String specifying the version of the JSON-RPC protocol.
+	#[serde(alias = "JSONRPC")]
 	pub jsonrpc: Option<Version>,
 	/// A String containing the name of the method to be invoked.
 	pub method: String,
@@ -25,6 +26,7 @@ pub struct MethodCall {
 #[serde(deny_unknown_fields)]
 pub struct Notification {
 	/// A String specifying the version of the JSON-RPC protocol.
+	#[serde(alias = "JSONRPC")]
 	pub jsonrpc: Option<Version>,
 	/// A String containing the name of the method to be invoked.
 	pub method: String,
