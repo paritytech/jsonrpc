@@ -1,14 +1,15 @@
 [package]
+name = "jsonrpc-http-server"
+version = "18.0.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "Rust http server using JSONRPC 2.0."
 documentation = "https://docs.rs/jsonrpc-http-server/"
-edition = "2018"
 homepage = "https://github.com/paritytech/jsonrpc"
 keywords = ["jsonrpc", "json-rpc", "json", "rpc", "server"]
 license = "MIT"
-name = "jsonrpc-http-server"
 repository = "https://github.com/paritytech/jsonrpc"
-version = "18.0.0"
+edition = "2021"
+rust-version = "1.56.1"
 
 [dependencies]
 futures = "0.3"
