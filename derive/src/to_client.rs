@@ -58,12 +58,12 @@ pub fn generate_client_module(
 
 			/// The Client.
 			#[derive(Clone)]
-			pub struct Client#generics {
+			pub struct Client #generics {
 				inner: TypedClient,
 				#(#markers_decl),*
 			}
 
-			impl#generics Client#generics
+			impl #generics Client #generics
 			where
 				#(#where_clause),*
 			{
@@ -78,7 +78,7 @@ pub fn generate_client_module(
 				#(#client_methods)*
 			}
 
-			impl#generics From<RpcChannel> for Client#generics
+			impl #generics From<RpcChannel> for Client #generics
 			where
 				#(#where_clause2),*
 			{
