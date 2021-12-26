@@ -5,7 +5,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use crate::{RpcChannel, RpcError};
-use websocket::{ClientBuilder, OwnedMessage};
+use websocket::{url, ClientBuilder, OwnedMessage};
 
 /// Connect to a JSON-RPC websocket server.
 ///
