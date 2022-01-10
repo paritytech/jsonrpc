@@ -164,10 +164,10 @@ mod tests {
 
 	impl TestClient {
 		fn hello(&self, msg: &'static str) -> impl Future<Output = RpcResult<String>> {
-			self.0.call_method("hello", "String", (msg,))
+			self.0.call_method("hello", (msg,))
 		}
 		fn fail(&self) -> impl Future<Output = RpcResult<()>> {
-			self.0.call_method("fail", "()", ())
+			self.0.call_method("fail", ())
 		}
 		fn notify(&self, value: u64) -> RpcResult<()> {
 			self.0.notify("notify", (value,))
