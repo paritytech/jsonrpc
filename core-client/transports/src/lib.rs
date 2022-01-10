@@ -289,7 +289,8 @@ impl TypedClient {
 
 			log::debug!("response: {:?}", value);
 
-			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(type_name::<R>().into(), Box::new(error)))
+			serde_json::from_value::<R>(value)
+				.map_err(|error| RpcError::ParseError(type_name::<R>().into(), Box::new(error)))
 		}
 	}
 
@@ -452,8 +453,7 @@ mod tests {
 		let received = Arc::new(std::sync::Mutex::new(vec![]));
 		let r2 = received.clone();
 		let fut = async move {
-			let mut stream =
-				client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello")?;
+			let mut stream = client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello")?;
 			let result = stream.next().await;
 			r2.lock().unwrap().push(result.expect("Expected at least one item."));
 			tx.send(()).unwrap();
