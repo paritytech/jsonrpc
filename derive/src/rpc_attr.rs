@@ -201,7 +201,11 @@ fn validate_attribute_meta(meta: syn::Meta) -> Result<syn::Meta> {
 				&visitor.meta_words,
 				&[SUBSCRIBE_META_WORD, UNSUBSCRIBE_META_WORD, RAW_PARAMS_META_WORD],
 			)?;
-			validate_idents(&meta, &visitor.name_value_names, &[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY])?;
+			validate_idents(
+				&meta,
+				&visitor.name_value_names,
+				&[SUBSCRIPTION_NAME_KEY, RPC_NAME_KEY, PARAMS_STYLE_KEY],
+			)?;
 			validate_idents(&meta, &visitor.meta_list_names, &[ALIASES_KEY])
 		}
 		_ => Ok(meta), // ignore other attributes - compiler will catch unknown ones

@@ -152,13 +152,35 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					let returns_str = quote!(#returns).to_string();
 					let args = args.collect();
 					let arg_names = compute_arg_identifiers(&args)?;
+					let args_serialized = match subscribe
+						.attr
+						.params_style
+						.clone()
+						.unwrap_or_else(|| options.params_style.clone())
+					{
+						ParamStyle::Named => {
+							quote! {  // use object style serialization with field names taken from the function param names
+								serde_json::json!({
+									#(stringify!(#arg_names): #arg_names,)*
+								})
+							}
+						}
+						ParamStyle::Positional => quote! {  // use tuple style serialization
+							(#(#arg_names,)*)
+						},
+						ParamStyle::Raw => match arg_names.first() {
+							Some(arg_name) => quote! {#arg_name},
+							None => quote! {serde_json::Value::Null},
+						},
+					};
+
 					let subscribe = subscribe.name();
 					let unsubscribe = unsubscribe.name();
 					let client_method = syn::parse_quote!(
 						#(#attrs)*
 						pub fn #name(&self, #args) -> RpcResult<TypedSubscriptionStream<#returns>> {
-							let args_tuple = (#(#arg_names,)*);
-							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
+							let args = #args_serialized;
+							self.inner.subscribe(#subscribe, args, #subscription, #unsubscribe, #returns_str)
 						}
 					);
 					client_methods.push(client_method);
