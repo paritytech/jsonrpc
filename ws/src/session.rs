@@ -235,7 +235,7 @@ where
 				return Ok(response);
 			}
 		}
-
+		self.context.resource = Some(String::from(req.resource()));
 		self.context.origin = origin
 			.and_then(|origin| ::std::str::from_utf8(origin).ok())
 			.map(Into::into);
@@ -351,6 +351,7 @@ where
 			context: metadata::RequestContext {
 				session_id: self.session_id,
 				origin: None,
+				resource: None,
 				protocols: Vec::new(),
 				out: metadata::Sender::new(sender, active),
 				executor: self.executor.clone(),

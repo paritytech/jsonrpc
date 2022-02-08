@@ -70,6 +70,8 @@ pub struct RequestContext {
 	pub session_id: session::SessionId,
 	/// Request Origin
 	pub origin: Option<Origin>,
+	/// Requested resource
+	pub resource: Option<String>,
 	/// Requested protocols
 	pub protocols: Vec<String>,
 	/// Direct channel to send messages to a client.
