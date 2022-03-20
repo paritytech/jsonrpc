@@ -24,6 +24,7 @@ http = ["jsonrpc-client-transports/http"]
 ws = ["jsonrpc-client-transports/ws"]
 ipc = ["jsonrpc-client-transports/ipc"]
 arbitrary_precision = ["jsonrpc-client-transports/arbitrary_precision"]
+wasmhttp = ["jsonrpc-client-transports/wasmhttp"]
 
 [dependencies]
 jsonrpc-client-transports = { version = "18.0.0", path = "./transports", default-features = false }
