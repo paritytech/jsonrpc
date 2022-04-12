@@ -346,23 +346,12 @@ where
 	/// Sets number of threads of the server to run.
 	///
 	/// Panics when set to `0`.
-	#[cfg(not(unix))]
-	#[allow(unused_mut)]
-	pub fn threads(mut self, _threads: usize) -> Self {
-		warn!("Multi-threaded server is not available on Windows. Falling back to single thread.");
-		self
-	}
-
-	/// Sets number of threads of the server to run.
-	///
-	/// Panics when set to `0`.
 	/// The first thread will use provided `Executor` instance
 	/// and all other threads will use `UninitializedExecutor` to spawn
 	/// a new runtime for futures.
 	/// So it's also possible to run a multi-threaded server by
 	/// passing the default `tokio::runtime` executor to this builder
 	/// and setting `threads` to 1.
-	#[cfg(unix)]
 	pub fn threads(mut self, threads: usize) -> Self {
 		self.threads = threads;
 		self
@@ -558,25 +547,20 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			// non-blocking mode of operation (future Tokio/Hyper versions
 			// require for the callers to do that manually)
 			listener.set_nonblocking(true)?;
-			// HACK: See below.
-			#[cfg(windows)]
-			let raw_socket = std::os::windows::io::AsRawSocket::as_raw_socket(&listener);
-			#[cfg(not(windows))]
-			let raw_socket = ();
 
 			let server_builder =
 				hyper::Server::from_tcp(listener).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			// Add current host to allowed headers.
 			// NOTE: we need to use `l.local_addr()` instead of `addr`
 			// it might be different!
-			Ok((server_builder, local_addr, raw_socket))
+			Ok((server_builder, local_addr))
 		};
 
 		let bind_result = match bind() {
-			Ok((server_builder, local_addr, raw_socket)) => {
+			Ok((server_builder, local_addr)) => {
 				// Send local address
 				match local_addr_tx.send(Ok(local_addr)) {
-					Ok(_) => Ok((server_builder, local_addr, raw_socket)),
+					Ok(_) => Ok((server_builder, local_addr)),
 					Err(_) => {
 						warn!(
 							"Thread {:?} unable to reach receiver, closing server",
@@ -594,7 +578,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			}
 		};
 
-		let (server_builder, local_addr, _raw_socket) = bind_result?;
+		let (server_builder, local_addr) = bind_result?;
 
 		let allowed_hosts = server_utils::hosts::update(allowed_hosts, &local_addr);
 
@@ -630,13 +614,6 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 		if let Err(err) = server.await {
 			error!("Error running HTTP server: {:?}", err);
 		}
-
-		// FIXME: Work around TCP listener socket not being properly closed
-		// in mio v0.6. This runs the std::net::TcpListener's destructor,
-		// which closes the underlying OS socket.
-		// Remove this once we migrate to Tokio 1.0.
-		#[cfg(windows)]
-		let _: std::net::TcpListener = unsafe { std::os::windows::io::FromRawSocket::from_raw_socket(_raw_socket) };
 
 		done_tx.send(())
 	});
