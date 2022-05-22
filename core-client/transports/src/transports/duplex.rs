@@ -158,6 +158,7 @@ where
 		// Handle stream.
 		// Reads from stream and queues to incoming queue.
 		log::debug!("handle stream");
+		let mut stream_eof = false;
 		loop {
 			let response_str = match self.stream.as_mut().poll_next(cx) {
 				Poll::Ready(Some(response_str)) => response_str,
@@ -166,7 +167,9 @@ where
 					// can be shutdown. Reopening closed connections must
 					// be handled by the transport.
 					debug!("connection closed");
-					return Poll::Ready(Ok(()));
+					// We still have to process the incoming queue.
+					stream_eof = true;
+					break;
 				}
 				Poll::Pending => break,
 			};
@@ -304,6 +307,7 @@ where
 			&& self.pending_requests.is_empty()
 			&& self.subscriptions.is_empty()
 			&& sink_empty
+			&& stream_eof
 		{
 			log::debug!("close");
 			Poll::Ready(Ok(()))
