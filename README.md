@@ -1,5 +1,9 @@
 # Parity JSON-RPC
 
+**NOTE: This crate is no longer actively developed; please have a look at our 
+[jsonrpsee](https://github.com/paritytech/jsonrpsee) crate if you're looking for an actively 
+maintained JSON RPC implementation.**
+
 Rust implementation of JSON-RPC 2.0 Specification.
 Transport-agnostic `core` and transport servers for `http`, `ipc`, `websockets` and `tcp`.
 
