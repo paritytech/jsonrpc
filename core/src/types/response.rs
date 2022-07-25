@@ -1,8 +1,12 @@
 //! jsonrpc response
+#[cfg(feature = "nonstrict")]
+use std::collections::HashMap;
+
 use super::{Error, ErrorCode, Id, Value, Version};
 use crate::Result as CoreResult;
 
 /// Successful response
+#[cfg(not(feature = "nonstrict"))]
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Success {
@@ -15,7 +19,24 @@ pub struct Success {
 	pub id: Id,
 }
 
+/// Successful response
+#[cfg(feature = "nonstrict")]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct Success {
+	/// Protocol version
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub jsonrpc: Option<Version>,
+	/// Result
+	pub result: Value,
+	/// Correlation id
+	pub id: Id,
+	/// Other fields
+	#[serde(flatten)]
+	pub other: HashMap<String, Value>,
+}
+
 /// Unsuccessful response
+#[cfg(not(feature = "nonstrict"))]
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Failure {
@@ -26,6 +47,22 @@ pub struct Failure {
 	pub error: Error,
 	/// Correlation id
 	pub id: Id,
+}
+
+/// Unsuccessful response
+#[cfg(feature = "nonstrict")]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct Failure {
+	/// Protocol Version
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub jsonrpc: Option<Version>,
+	/// Error
+	pub error: Error,
+	/// Correlation id
+	pub id: Id,
+	/// Other fields
+	#[serde(flatten)]
+	pub other: HashMap<String, Value>,
 }
 
 /// Represents output - failure or success
@@ -42,9 +79,16 @@ pub enum Output {
 impl Output {
 	/// Creates new output given `Result`, `Id` and `Version`.
 	pub fn from(result: CoreResult<Value>, id: Id, jsonrpc: Option<Version>) -> Self {
+		#[cfg(not(feature = "nonstrict"))]
 		match result {
 			Ok(result) => Output::Success(Success { jsonrpc, result, id }),
 			Err(error) => Output::Failure(Failure { jsonrpc, error, id }),
+		}
+
+		#[cfg(feature = "nonstrict")]
+		match result {
+			Ok(result) => Output::Success(Success { jsonrpc, result, id, other: HashMap::new() }),
+			Err(error) => Output::Failure(Failure { jsonrpc, error, id, other: HashMap::new() }),
 		}
 	}
 
@@ -54,6 +98,8 @@ impl Output {
 			id,
 			jsonrpc,
 			error: Error::new(ErrorCode::InvalidRequest),
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		})
 	}
 
@@ -102,6 +148,8 @@ impl Response {
 			id: Id::Null,
 			jsonrpc,
 			error,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		}
 		.into()
 	}
@@ -139,6 +187,8 @@ fn success_output_serialize() {
 		jsonrpc: Some(Version::V2),
 		result: Value::from(1),
 		id: Id::Num(1),
+		#[cfg(feature = "nonstrict")]
+		other: HashMap::new(),
 	});
 
 	let serialized = serde_json::to_string(&so).unwrap();
@@ -158,7 +208,9 @@ fn success_output_deserialize() {
 		Output::Success(Success {
 			jsonrpc: Some(Version::V2),
 			result: Value::from(1),
-			id: Id::Num(1)
+			id: Id::Num(1),
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		})
 	);
 }
@@ -171,6 +223,8 @@ fn failure_output_serialize() {
 		jsonrpc: Some(Version::V2),
 		error: Error::parse_error(),
 		id: Id::Num(1),
+		#[cfg(feature = "nonstrict")]
+		other: HashMap::new(),
 	});
 
 	let serialized = serde_json::to_string(&fo).unwrap();
@@ -188,6 +242,8 @@ fn failure_output_serialize_jsonrpc_1() {
 		jsonrpc: None,
 		error: Error::parse_error(),
 		id: Id::Num(1),
+		#[cfg(feature = "nonstrict")]
+		other: HashMap::new(),
 	});
 
 	let serialized = serde_json::to_string(&fo).unwrap();
@@ -209,7 +265,9 @@ fn failure_output_deserialize() {
 		Output::Failure(Failure {
 			jsonrpc: Some(Version::V2),
 			error: Error::parse_error(),
-			id: Id::Num(1)
+			id: Id::Num(1),
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		})
 	);
 }
@@ -227,7 +285,9 @@ fn single_response_deserialize() {
 		Response::Single(Output::Success(Success {
 			jsonrpc: Some(Version::V2),
 			result: Value::from(1),
-			id: Id::Num(1)
+			id: Id::Num(1),
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		}))
 	);
 }
@@ -246,12 +306,16 @@ fn batch_response_deserialize() {
 			Output::Success(Success {
 				jsonrpc: Some(Version::V2),
 				result: Value::from(1),
-				id: Id::Num(1)
+				id: Id::Num(1),
+				#[cfg(feature = "nonstrict")]
+				other: HashMap::new(),
 			}),
 			Output::Failure(Failure {
 				jsonrpc: Some(Version::V2),
 				error: Error::parse_error(),
-				id: Id::Num(1)
+				id: Id::Num(1),
+				#[cfg(feature = "nonstrict")]
+				other: HashMap::new(),
 			})
 		])
 	);
