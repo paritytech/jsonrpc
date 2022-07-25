@@ -166,7 +166,7 @@ impl From<ClientResponse> for Result<Value, Error> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use jsonrpc_core::{Failure, Notification, Output, Params, Success, Value, Version};
+	use jsonrpc_core::{Notification, Output, Params, Value, Version};
 
 	#[test]
 	fn notification_deserialize() {
@@ -190,11 +190,7 @@ mod tests {
 		let deserialized: ClientResponse = jsonrpc_core::serde_from_str(dsr).unwrap();
 		assert_eq!(
 			deserialized,
-			ClientResponse::Output(Output::Success(Success {
-				jsonrpc: Some(Version::V2),
-				id: Id::Num(1),
-				result: 1.into(),
-			}))
+			ClientResponse::Output(Output::success(Value::from(1), Id::Num(1), Some(Version::V2)))
 		);
 	}
 
@@ -205,11 +201,7 @@ mod tests {
 		let deserialized: ClientResponse = jsonrpc_core::serde_from_str(dfo).unwrap();
 		assert_eq!(
 			deserialized,
-			ClientResponse::Output(Output::Failure(Failure {
-				jsonrpc: Some(Version::V2),
-				error: Error::parse_error(),
-				id: Id::Num(1)
-			}))
+			ClientResponse::Output(Output::failure(Error::parse_error(), Id::Num(1), Some(Version::V2)))
 		);
 	}
 }

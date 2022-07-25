@@ -70,25 +70,40 @@ pub struct Failure {
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum Output {
-	/// Success
-	Success(Success),
 	/// Failure
 	Failure(Failure),
+	/// Success
+	Success(Success),
 }
 
 impl Output {
+	/// Creates new Success given `Result`, `Id` and `Version`.
+	pub fn success(result: Value, id: Id, jsonrpc: Option<Version>) -> Self {
+		Output::Success(Success {
+			jsonrpc,
+			result,
+			id,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
+		})
+	}
+
+	/// Creates new Failure given `Error`, `Id` and `Version`.
+	pub fn failure(error: Error, id: Id, jsonrpc: Option<Version>) -> Self {
+		Output::Failure(Failure {
+			jsonrpc,
+			error,
+			id,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
+		})
+	}
+
 	/// Creates new output given `Result`, `Id` and `Version`.
 	pub fn from(result: CoreResult<Value>, id: Id, jsonrpc: Option<Version>) -> Self {
-		#[cfg(not(feature = "nonstrict"))]
 		match result {
-			Ok(result) => Output::Success(Success { jsonrpc, result, id }),
-			Err(error) => Output::Failure(Failure { jsonrpc, error, id }),
-		}
-
-		#[cfg(feature = "nonstrict")]
-		match result {
-			Ok(result) => Output::Success(Success { jsonrpc, result, id, other: HashMap::new() }),
-			Err(error) => Output::Failure(Failure { jsonrpc, error, id, other: HashMap::new() }),
+			Ok(result) => Output::success(result, id, jsonrpc),
+			Err(error) => Output::failure(error, id, jsonrpc),
 		}
 	}
 
@@ -205,13 +220,7 @@ fn success_output_deserialize() {
 	let deserialized: Output = serde_json::from_str(dso).unwrap();
 	assert_eq!(
 		deserialized,
-		Output::Success(Success {
-			jsonrpc: Some(Version::V2),
-			result: Value::from(1),
-			id: Id::Num(1),
-			#[cfg(feature = "nonstrict")]
-			other: HashMap::new(),
-		})
+		Output::success(Value::from(1), Id::Num(1), Some(Version::V2))
 	);
 }
 
@@ -219,13 +228,7 @@ fn success_output_deserialize() {
 fn failure_output_serialize() {
 	use serde_json;
 
-	let fo = Output::Failure(Failure {
-		jsonrpc: Some(Version::V2),
-		error: Error::parse_error(),
-		id: Id::Num(1),
-		#[cfg(feature = "nonstrict")]
-		other: HashMap::new(),
-	});
+	let fo = Output::failure(Error::parse_error(), Id::Num(1), Some(Version::V2));
 
 	let serialized = serde_json::to_string(&fo).unwrap();
 	assert_eq!(
@@ -238,13 +241,7 @@ fn failure_output_serialize() {
 fn failure_output_serialize_jsonrpc_1() {
 	use serde_json;
 
-	let fo = Output::Failure(Failure {
-		jsonrpc: None,
-		error: Error::parse_error(),
-		id: Id::Num(1),
-		#[cfg(feature = "nonstrict")]
-		other: HashMap::new(),
-	});
+	let fo = Output::failure(Error::parse_error(), Id::Num(1), None);
 
 	let serialized = serde_json::to_string(&fo).unwrap();
 	assert_eq!(
@@ -262,13 +259,7 @@ fn failure_output_deserialize() {
 	let deserialized: Output = serde_json::from_str(dfo).unwrap();
 	assert_eq!(
 		deserialized,
-		Output::Failure(Failure {
-			jsonrpc: Some(Version::V2),
-			error: Error::parse_error(),
-			id: Id::Num(1),
-			#[cfg(feature = "nonstrict")]
-			other: HashMap::new(),
-		})
+		Output::failure(Error::parse_error(), Id::Num(1), Some(Version::V2))
 	);
 }
 
@@ -282,13 +273,7 @@ fn single_response_deserialize() {
 	let deserialized: Response = serde_json::from_str(dsr).unwrap();
 	assert_eq!(
 		deserialized,
-		Response::Single(Output::Success(Success {
-			jsonrpc: Some(Version::V2),
-			result: Value::from(1),
-			id: Id::Num(1),
-			#[cfg(feature = "nonstrict")]
-			other: HashMap::new(),
-		}))
+		Response::Single(Output::success(Value::from(1), Id::Num(1), Some(Version::V2)))
 	);
 }
 
@@ -303,20 +288,8 @@ fn batch_response_deserialize() {
 	assert_eq!(
 		deserialized,
 		Response::Batch(vec![
-			Output::Success(Success {
-				jsonrpc: Some(Version::V2),
-				result: Value::from(1),
-				id: Id::Num(1),
-				#[cfg(feature = "nonstrict")]
-				other: HashMap::new(),
-			}),
-			Output::Failure(Failure {
-				jsonrpc: Some(Version::V2),
-				error: Error::parse_error(),
-				id: Id::Num(1),
-				#[cfg(feature = "nonstrict")]
-				other: HashMap::new(),
-			})
+			Output::success(Value::from(1), Id::Num(1), Some(Version::V2)),
+			Output::failure(Error::parse_error(), Id::Num(1), Some(Version::V2))
 		])
 	);
 }
@@ -338,10 +311,23 @@ fn handle_incorrect_responses() {
 }"#;
 
 	let deserialized: Result<Response, _> = serde_json::from_str(dsr);
+	#[cfg(not(feature = "nonstrict"))]
 	assert!(
 		deserialized.is_err(),
 		"Expected error when deserializing invalid payload."
 	);
+
+	#[cfg(feature = "nonstrict")]
+	assert_eq!(deserialized.unwrap(), Response::Single(Output::Failure(Failure {
+		error: Error {
+			code: ErrorCode::ServerError(-32000),
+			message: "VM Exception while processing transaction: revert".to_string(),
+			data: Some(serde_json::from_str("{}").unwrap()),
+		},
+		jsonrpc: Some(Version::V2),
+		id: Id::Num(2),
+		other: serde_json::from_str("{\"result\": \"0x62d3776be72cc7fa62cad6fe8ed873d9bc7ca2ee576e400d987419a3f21079d5\"}").unwrap(),
+	})));
 }
 
 #[test]
