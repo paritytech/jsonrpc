@@ -91,11 +91,10 @@
 //!
 //!     fn subscribe(&self, _meta: Self::Metadata, subscriber: Subscriber<String>, param: u64) {
 //!         if param != 10 {
-//!             subscriber.reject(Error {
-//!                  code: ErrorCode::InvalidParams,
-//!                  message: "Rejecting subscription - invalid parameters provided.".into(),
-//!                  data: None,
-//!             }).unwrap();
+//!             subscriber.reject(Error::new_with_message(
+//!                  ErrorCode::InvalidParams,
+//!                  "Rejecting subscription - invalid parameters provided.",
+//!             )).unwrap();
 //!             return;
 //!         }
 //!
@@ -106,15 +105,14 @@
 //!     }
 //!
 //!     fn unsubscribe(&self, _meta: Option<Self::Metadata>, id: SubscriptionId) -> Result<bool> {
-//!          let removed = self.active.write().unwrap().remove(&id);
-//!          if removed.is_some() {
-//!              Ok(true)
-//!          } else {
-//!              Err(Error {
-//!                  code: ErrorCode::InvalidParams,
-//!                  message: "Invalid subscription.".into(),
-//!                  data: None,
-//!          })
+//!         let removed = self.active.write().unwrap().remove(&id);
+//!         if removed.is_some() {
+//!             Ok(true)
+//!         } else {
+//!             Err(Error::new_with_message(
+//!                 ErrorCode::InvalidParams,
+//!                 "Invalid subscription.",
+//!             ))
 //!         }
 //!     }
 //! }

@@ -2,6 +2,8 @@
 use super::Value;
 use serde::de::{Deserialize, Deserializer};
 use serde::ser::{Serialize, Serializer};
+#[cfg(feature = "nonstrict")]
+use std::collections::HashMap;
 use std::fmt;
 
 /// JSONRPC error code
@@ -81,6 +83,7 @@ impl Serialize for ErrorCode {
 	}
 }
 
+#[cfg(not(feature = "nonstrict"))]
 /// Error object as defined in Spec
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -94,6 +97,22 @@ pub struct Error {
 	pub data: Option<Value>,
 }
 
+#[cfg(feature = "nonstrict")]
+/// Error object as defined in Spec
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+pub struct Error {
+	/// Code
+	pub code: ErrorCode,
+	/// Message
+	pub message: String,
+	/// Optional data
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub data: Option<Value>,
+	/// Other fields
+	#[serde(flatten)]
+	pub other: HashMap<String, Value>,
+}
+
 impl Error {
 	/// Wraps given `ErrorCode`
 	pub fn new(code: ErrorCode) -> Self {
@@ -101,6 +120,19 @@ impl Error {
 			message: code.description(),
 			code,
 			data: None,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
+		}
+	}
+
+	/// Wraps given `ErrorCode` and `Message`
+	pub fn new_with_message<S: ToString>(code: ErrorCode, message: S) -> Self {
+		Error {
+			message: message.to_string(),
+			code,
+			data: None,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		}
 	}
 
@@ -128,6 +160,8 @@ impl Error {
 			code: ErrorCode::InvalidParams,
 			message: message.into(),
 			data: None,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		}
 	}
 
@@ -141,6 +175,8 @@ impl Error {
 			code: ErrorCode::InvalidParams,
 			message: format!("Invalid parameters: {}", message.into()),
 			data: Some(Value::String(format!("{:?}", details))),
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		}
 	}
 
@@ -155,6 +191,8 @@ impl Error {
 			code: ErrorCode::InvalidRequest,
 			message: "Unsupported JSON-RPC protocol version".to_owned(),
 			data: None,
+			#[cfg(feature = "nonstrict")]
+			other: HashMap::new(),
 		}
 	}
 }

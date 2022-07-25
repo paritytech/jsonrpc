@@ -323,6 +323,7 @@ fn handle_incorrect_responses() {
 			code: ErrorCode::ServerError(-32000),
 			message: "VM Exception while processing transaction: revert".to_string(),
 			data: Some(serde_json::from_str("{}").unwrap()),
+			other: HashMap::new(),
 		},
 		jsonrpc: Some(Version::V2),
 		id: Id::Num(2),

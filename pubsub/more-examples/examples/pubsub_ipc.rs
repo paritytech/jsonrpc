@@ -25,11 +25,10 @@ fn main() {
 		("subscribe_hello", |params: Params, _, subscriber: Subscriber| {
 			if params != Params::None {
 				subscriber
-					.reject(Error {
-						code: ErrorCode::ParseError,
-						message: "Invalid parameters. Subscription rejected.".into(),
-						data: None,
-					})
+					.reject(Error::new_with_message(
+						ErrorCode::ParseError,
+						"Invalid parameters. Subscription rejected.",
+					))
 					.unwrap();
 				return;
 			}
