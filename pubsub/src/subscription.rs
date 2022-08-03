@@ -253,19 +253,14 @@ where
 }
 
 fn subscription_rejected() -> core::Error {
-	core::Error {
-		code: core::ErrorCode::ServerError(-32091),
-		message: "Subscription rejected".into(),
-		data: None,
-	}
+	core::Error::new_with_message(core::ErrorCode::ServerError(-32091), "Subscription rejected")
 }
 
 fn subscriptions_unavailable() -> core::Error {
-	core::Error {
-		code: core::ErrorCode::ServerError(-32090),
-		message: "Subscriptions are not available on this transport.".into(),
-		data: None,
-	}
+	core::Error::new_with_message(
+		core::ErrorCode::ServerError(-32090),
+		"Subscriptions are not available on this transport.",
+	)
 }
 
 /// Subscribe RPC implementation.
@@ -498,11 +493,7 @@ mod tests {
 			transport,
 			sender: tx,
 		};
-		let error = core::Error {
-			code: core::ErrorCode::InvalidRequest,
-			message: "Cannot start subscription now.".into(),
-			data: None,
-		};
+		let error = core::Error::new_with_message(core::ErrorCode::InvalidRequest, "Cannot start subscription now.");
 
 		// when
 		let reject = subscriber.reject_async(error.clone());
@@ -591,11 +582,10 @@ mod tests {
 		// then
 		assert_eq!(
 			futures::executor::block_on(result),
-			Err(core::Error {
-				code: core::ErrorCode::InvalidParams,
-				message: "Invalid subscription id.".into(),
-				data: None,
-			})
+			Err(core::Error::new_with_message(
+				core::ErrorCode::InvalidParams,
+				"Invalid subscription id.",
+			))
 		);
 	}
 }

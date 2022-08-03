@@ -249,11 +249,7 @@ mod tests {
 		if let Err(RpcError::JsonRpcError(err)) = res {
 			assert_eq!(
 				err,
-				Error {
-					code: ErrorCode::ServerError(-34),
-					message: "Server error".into(),
-					data: None
-				}
+				Error::new_with_message(ErrorCode::ServerError(-34), "Server error")
 			)
 		} else {
 			panic!("Expected JsonRpcError. Received {:?}", res)

@@ -31,11 +31,10 @@ impl Rpc for RpcImpl {
 	fn subscribe(&self, _meta: Self::Metadata, subscriber: typed::Subscriber<String>, param: u64) {
 		if param != 10 {
 			subscriber
-				.reject(Error {
-					code: ErrorCode::InvalidParams,
-					message: "Rejecting subscription - invalid parameters provided.".into(),
-					data: None,
-				})
+				.reject(Error::new_with_message(
+					ErrorCode::InvalidParams,
+					"Rejecting subscription - invalid parameters provided.",
+				))
 				.unwrap();
 			return;
 		}
@@ -51,11 +50,10 @@ impl Rpc for RpcImpl {
 		if removed.is_some() {
 			Ok(true)
 		} else {
-			Err(Error {
-				code: ErrorCode::InvalidParams,
-				message: "Invalid subscription.".into(),
-				data: None,
-			})
+			Err(Error::new_with_message(
+				ErrorCode::InvalidParams,
+				"Invalid subscription.",
+			))
 		}
 	}
 }

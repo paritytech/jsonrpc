@@ -33,6 +33,7 @@ serde_derive = "1.0"
 [features]
 default = ["futures-executor", "futures"]
 arbitrary_precision = ["serde_json/arbitrary_precision"]
+nonstrict = []
 
 [badges]
 travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
