@@ -253,10 +253,7 @@ where
 }
 
 fn subscription_rejected() -> core::Error {
-	core::Error::new_with_message(
-		core::ErrorCode::ServerError(-32091),
-		"Subscription rejected",
-	)
+	core::Error::new_with_message(core::ErrorCode::ServerError(-32091), "Subscription rejected")
 }
 
 fn subscriptions_unavailable() -> core::Error {
@@ -496,10 +493,7 @@ mod tests {
 			transport,
 			sender: tx,
 		};
-		let error = core::Error::new_with_message(
-			core::ErrorCode::InvalidRequest,
-			"Cannot start subscription now.",
-		);
+		let error = core::Error::new_with_message(core::ErrorCode::InvalidRequest, "Cannot start subscription now.");
 
 		// when
 		let reject = subscriber.reject_async(error.clone());

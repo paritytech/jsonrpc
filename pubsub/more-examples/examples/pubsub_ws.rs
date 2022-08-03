@@ -43,7 +43,7 @@ fn main() {
 				subscriber
 					.reject(Error::new_with_message(
 						ErrorCode::ParseError,
-						"Invalid parameters. Subscription rejected."
+						"Invalid parameters. Subscription rejected.",
 					))
 					.unwrap();
 				return;

@@ -318,17 +318,23 @@ fn handle_incorrect_responses() {
 	);
 
 	#[cfg(feature = "nonstrict")]
-	assert_eq!(deserialized.unwrap(), Response::Single(Output::Failure(Failure {
-		error: Error {
-			code: ErrorCode::ServerError(-32000),
-			message: "VM Exception while processing transaction: revert".to_string(),
-			data: Some(serde_json::from_str("{}").unwrap()),
-			other: HashMap::new(),
-		},
-		jsonrpc: Some(Version::V2),
-		id: Id::Num(2),
-		other: serde_json::from_str("{\"result\": \"0x62d3776be72cc7fa62cad6fe8ed873d9bc7ca2ee576e400d987419a3f21079d5\"}").unwrap(),
-	})));
+	assert_eq!(
+		deserialized.unwrap(),
+		Response::Single(Output::Failure(Failure {
+			error: Error {
+				code: ErrorCode::ServerError(-32000),
+				message: "VM Exception while processing transaction: revert".to_string(),
+				data: Some(serde_json::from_str("{}").unwrap()),
+				other: HashMap::new(),
+			},
+			jsonrpc: Some(Version::V2),
+			id: Id::Num(2),
+			other: serde_json::from_str(
+				"{\"result\": \"0x62d3776be72cc7fa62cad6fe8ed873d9bc7ca2ee576e400d987419a3f21079d5\"}"
+			)
+			.unwrap(),
+		}))
+	);
 }
 
 #[test]

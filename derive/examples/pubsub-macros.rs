@@ -33,7 +33,7 @@ impl Rpc for RpcImpl {
 			subscriber
 				.reject(Error::new_with_message(
 					ErrorCode::InvalidParams,
-					"Rejecting subscription - invalid parameters provided."
+					"Rejecting subscription - invalid parameters provided.",
 				))
 				.unwrap();
 			return;
@@ -52,7 +52,7 @@ impl Rpc for RpcImpl {
 		} else {
 			Err(Error::new_with_message(
 				ErrorCode::InvalidParams,
-				"Invalid subscription."
+				"Invalid subscription.",
 			))
 		}
 	}
