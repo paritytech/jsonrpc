@@ -272,6 +272,11 @@ where
 			}
 		}
 
+		// Input stream handling is done, the future is ready.
+		if stream_eof {
+			return Poll::Ready(Ok(()));
+		}
+
 		// Handle outgoing queue.
 		// Writes queued messages to sink.
 		log::debug!("handle outgoing");
@@ -307,7 +312,6 @@ where
 			&& self.pending_requests.is_empty()
 			&& self.subscriptions.is_empty()
 			&& sink_empty
-			&& stream_eof
 		{
 			log::debug!("close");
 			Poll::Ready(Ok(()))
