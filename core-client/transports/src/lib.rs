@@ -301,9 +301,10 @@ impl TypedClient {
 		let params = match args {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
+			Value::Object(map) => Params::Map(map),
 			_ => {
 				return Err(RpcError::Client(
-					"RPC params should serialize to a JSON array, or null".into(),
+					"RPC params should serialize to a JSON array, object or null".into(),
 				))
 			}
 		};
@@ -326,9 +327,10 @@ impl TypedClient {
 		let params = match args {
 			Value::Array(vec) => Params::Array(vec),
 			Value::Null => Params::None,
+			Value::Object(map) => Params::Map(map),
 			_ => {
 				return Err(RpcError::Client(
-					"RPC params should serialize to a JSON array, or null".into(),
+					"RPC params should serialize to a JSON array, object or null".into(),
 				))
 			}
 		};
