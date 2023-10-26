@@ -206,21 +206,37 @@ impl RpcMethod {
 	}
 
 	fn generate_delegate_closure(&self, is_subscribe: bool) -> Result<proc_macro2::TokenStream> {
-		let mut param_types: Vec<_> = self
+		let args = self
 			.trait_item
 			.sig
 			.inputs
 			.iter()
 			.cloned()
 			.filter_map(|arg| match arg {
-				syn::FnArg::Typed(ty) => Some(*ty.ty),
+				syn::FnArg::Typed(pat_type) => Some(pat_type),
 				_ => None,
 			})
-			.collect();
+			.enumerate();
 
-		// special args are those which are not passed directly via rpc params: metadata, subscriber
-		let special_args = Self::special_args(&param_types);
-		param_types.retain(|ty| !special_args.iter().any(|(_, sty)| sty == ty));
+		let (special_args, fn_args) = {
+			// special args are those which are not passed directly via rpc params: metadata, subscriber
+			let mut special_args = vec![];
+			let mut fn_args = vec![];
+
+			for (i, arg) in args {
+				if let Some(sarg) = Self::special_arg(i, arg.clone()) {
+					special_args.push(sarg);
+				} else {
+					fn_args.push(arg);
+				}
+			}
+
+			(special_args, fn_args)
+		};
+
+		let param_types: Vec<_> = fn_args.iter().map(|arg| *arg.ty.clone()).collect();
+		let arg_names: Vec<_> = fn_args.iter().map(|arg| *arg.pat.clone()).collect();
+
 		if param_types.len() > TUPLE_FIELD_NAMES.len() {
 			return Err(syn::Error::new_spanned(
 				&self.trait_item,
@@ -232,28 +248,38 @@ impl RpcMethod {
 			.take(param_types.len())
 			.map(|name| ident(name))
 			.collect());
-		let param_types = &param_types;
-		let parse_params = {
-			// last arguments that are `Option`-s are optional 'trailing' arguments
-			let trailing_args_num = param_types.iter().rev().take_while(|t| is_option_type(t)).count();
-
-			if trailing_args_num != 0 {
-				self.params_with_trailing(trailing_args_num, param_types, tuple_fields)
-			} else if param_types.is_empty() {
-				quote! { let params = params.expect_no_params(); }
-			} else if self.attr.params_style == Some(ParamStyle::Raw) {
-				quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); }
-			} else if self.attr.params_style == Some(ParamStyle::Positional) {
-				quote! { let params = params.parse::<(#(#param_types, )*)>(); }
-			} else {
-				unimplemented!("Server side named parameters are not implemented");
+		let parse_params = if param_types.is_empty() {
+			quote! { let params = params.expect_no_params(); }
+		} else {
+			match self.attr.params_style.as_ref().unwrap() {
+				ParamStyle::Raw => quote! { let params: _jsonrpc_core::Result<_> = Ok((params,)); },
+				ParamStyle::Positional => {
+					// last arguments that are `Option`-s are optional 'trailing' arguments
+					let trailing_args_num = param_types.iter().rev().take_while(|t| is_option_type(t)).count();
+					if trailing_args_num != 0 {
+						self.params_with_trailing(trailing_args_num, &param_types, tuple_fields)
+					} else {
+						quote! { let params = params.parse::<(#(#param_types, )*)>(); }
+					}
+				}
+				ParamStyle::Named => quote! {
+					#[derive(serde::Deserialize)]
+					#[allow(non_camel_case_types)]
+					struct __Params {
+						#(
+							#fn_args,
+						)*
+					}
+					let params = params.parse::<__Params>()
+						.map(|__Params { #(#arg_names, )* }| (#(#arg_names, )*));
+				},
 			}
 		};
 
 		let method_ident = self.ident();
 		let result = &self.trait_item.sig.output;
-		let extra_closure_args: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.0).collect();
-		let extra_method_types: &Vec<_> = &special_args.iter().cloned().map(|arg| arg.1).collect();
+		let extra_closure_args: Vec<_> = special_args.iter().map(|arg| *arg.pat.clone()).collect();
+		let extra_method_types: Vec<_> = special_args.iter().map(|arg| *arg.ty.clone()).collect();
 
 		let closure_args = quote! { base, params, #(#extra_closure_args), * };
 		let method_sig = quote! { fn(&Self, #(#extra_method_types, ) * #(#param_types), *) #result };
@@ -301,34 +327,35 @@ impl RpcMethod {
 		})
 	}
 
-	fn special_args(param_types: &[syn::Type]) -> Vec<(syn::Ident, syn::Type)> {
-		let meta_arg = param_types.first().and_then(|ty| {
-			if *ty == parse_quote!(Self::Metadata) {
-				Some(ty.clone())
-			} else {
-				None
-			}
-		});
-		let subscriber_arg = param_types.get(1).and_then(|ty| {
-			if let syn::Type::Path(path) = ty {
-				if path.path.segments.iter().any(|s| s.ident == SUBSCRIBER_TYPE_IDENT) {
-					Some(ty.clone())
-				} else {
-					None
+	fn special_arg(index: usize, arg: syn::PatType) -> Option<syn::PatType> {
+		match index {
+			0 if arg.ty == parse_quote!(Self::Metadata) => Some(syn::PatType {
+				pat: Box::new(syn::Pat::Ident(syn::PatIdent {
+					attrs: vec![],
+					by_ref: None,
+					mutability: None,
+					ident: ident(METADATA_CLOSURE_ARG),
+					subpat: None,
+				})),
+				..arg
+			}),
+			1 => match *arg.ty {
+				syn::Type::Path(ref path) if path.path.segments.iter().any(|s| s.ident == SUBSCRIBER_TYPE_IDENT) => {
+					Some(syn::PatType {
+						pat: Box::new(syn::Pat::Ident(syn::PatIdent {
+							attrs: vec![],
+							by_ref: None,
+							mutability: None,
+							ident: ident(SUBSCRIBER_CLOSURE_ARG),
+							subpat: None,
+						})),
+						..arg
+					})
 				}
-			} else {
-				None
-			}
-		});
-
-		let mut special_args = Vec::new();
-		if let Some(meta) = meta_arg {
-			special_args.push((ident(METADATA_CLOSURE_ARG), meta));
+				_ => None,
+			},
+			_ => None,
 		}
-		if let Some(subscriber) = subscriber_arg {
-			special_args.push((ident(SUBSCRIBER_CLOSURE_ARG), subscriber));
-		}
-		special_args
 	}
 
 	fn params_with_trailing(

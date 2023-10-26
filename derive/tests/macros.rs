@@ -1,6 +1,7 @@
 use jsonrpc_core::types::params::Params;
 use jsonrpc_core::{IoHandler, Response};
 use jsonrpc_derive::rpc;
+use serde;
 use serde_json;
 
 pub enum MyError {}
@@ -14,6 +15,8 @@ type Result<T> = ::std::result::Result<T, MyError>;
 
 #[rpc]
 pub trait Rpc {
+	type Metadata;
+
 	/// Returns a protocol version.
 	#[rpc(name = "protocolVersion")]
 	fn protocol_version(&self) -> Result<String>;
@@ -30,6 +33,18 @@ pub trait Rpc {
 	#[rpc(name = "raw", params = "raw")]
 	fn raw(&self, params: Params) -> Result<String>;
 
+	/// Adds two numbers and returns a result.
+	#[rpc(name = "named_add", params = "named")]
+	fn named_add(&self, a: u64, b: u64) -> Result<u64>;
+
+	/// Adds one or two numbers and returns a result.
+	#[rpc(name = "option_named_add", params = "named")]
+	fn option_named_add(&self, a: u64, b: Option<u64>) -> Result<u64>;
+
+	/// Adds two numbers and returns a result.
+	#[rpc(meta, name = "meta_named_add", params = "named")]
+	fn meta_named_add(&self, meta: Self::Metadata, a: u64, b: u64) -> Result<u64>;
+
 	/// Handles a notification.
 	#[rpc(name = "notify")]
 	fn notify(&self, a: u64);
@@ -39,6 +54,8 @@ pub trait Rpc {
 struct RpcImpl;
 
 impl Rpc for RpcImpl {
+	type Metadata = Metadata;
+
 	fn protocol_version(&self) -> Result<String> {
 		Ok("version1".into())
 	}
@@ -55,14 +72,30 @@ impl Rpc for RpcImpl {
 		Ok("OK".into())
 	}
 
+	fn named_add(&self, a: u64, b: u64) -> Result<u64> {
+		Ok(a + b)
+	}
+
+	fn option_named_add(&self, a: u64, b: Option<u64>) -> Result<u64> {
+		Ok(a + b.unwrap_or_default())
+	}
+
+	fn meta_named_add(&self, _meta: Self::Metadata, a: u64, b: u64) -> Result<u64> {
+		Ok(a + b)
+	}
+
 	fn notify(&self, a: u64) {
 		println!("Received `notify` with value: {}", a);
 	}
 }
 
+#[derive(Clone, Default)]
+struct Metadata;
+impl jsonrpc_core::Metadata for Metadata {}
+
 #[test]
 fn should_accept_empty_array_as_no_params() {
-	let mut io = IoHandler::new();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl::default();
 	io.extend_with(rpc.to_delegate());
 
@@ -94,7 +127,7 @@ fn should_accept_empty_array_as_no_params() {
 
 #[test]
 fn should_accept_single_param() {
-	let mut io = IoHandler::new();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl::default();
 	io.extend_with(rpc.to_delegate());
 
@@ -120,7 +153,7 @@ fn should_accept_single_param() {
 
 #[test]
 fn should_accept_multiple_params() {
-	let mut io = IoHandler::new();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl::default();
 	io.extend_with(rpc.to_delegate());
 
@@ -146,7 +179,7 @@ fn should_accept_multiple_params() {
 
 #[test]
 fn should_use_method_name_aliases() {
-	let mut io = IoHandler::new();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl::default();
 	io.extend_with(rpc.to_delegate());
 
@@ -187,7 +220,7 @@ fn should_use_method_name_aliases() {
 
 #[test]
 fn should_accept_any_raw_params() {
-	let mut io = IoHandler::new();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl::default();
 	io.extend_with(rpc.to_delegate());
 
@@ -223,8 +256,64 @@ fn should_accept_any_raw_params() {
 }
 
 #[test]
+fn should_accept_named_params() {
+	let mut io = IoHandler::default();
+	let rpc = RpcImpl::default();
+	io.extend_with(rpc.to_delegate());
+
+	// when
+	let req1 = r#"{"jsonrpc":"2.0","id":1,"method":"named_add","params":{"a":1,"b":2}}"#;
+	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"named_add","params":{"b":2,"a":1}}"#;
+
+	let res1 = io.handle_request_sync(req1);
+	let res2 = io.handle_request_sync(req2);
+
+	let expected = r#"{
+	    "jsonrpc": "2.0",
+		"result": 3,
+		"id": 1
+    }"#;
+	let expected: Response = serde_json::from_str(expected).unwrap();
+
+	// then
+	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
+	assert_eq!(expected, result1);
+
+	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
+	assert_eq!(expected, result2);
+}
+
+#[test]
+fn should_accept_option_named_params() {
+	let mut io = IoHandler::default();
+	let rpc = RpcImpl::default();
+	io.extend_with(rpc.to_delegate());
+
+	// when
+	let req1 = r#"{"jsonrpc":"2.0","id":1,"method":"option_named_add","params":{"a":1,"b":2}}"#;
+	let req2 = r#"{"jsonrpc":"2.0","id":1,"method":"option_named_add","params":{"a":3}}"#;
+
+	let res1 = io.handle_request_sync(req1);
+	let res2 = io.handle_request_sync(req2);
+
+	let expected = r#"{
+	    "jsonrpc": "2.0",
+		"result": 3,
+		"id": 1
+    }"#;
+	let expected: Response = serde_json::from_str(expected).unwrap();
+
+	// then
+	let result1: Response = serde_json::from_str(&res1.unwrap()).unwrap();
+	assert_eq!(expected, result1);
+
+	let result2: Response = serde_json::from_str(&res2.unwrap()).unwrap();
+	assert_eq!(expected, result2);
+}
+
+#[test]
 fn should_accept_only_notifications() {
-	let mut io = IoHandler::new();
+	let mut io = IoHandler::default();
 	let rpc = RpcImpl::default();
 	io.extend_with(rpc.to_delegate());
 
