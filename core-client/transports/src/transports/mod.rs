@@ -15,6 +15,8 @@ pub mod ipc;
 pub mod local;
 #[cfg(feature = "ws")]
 pub mod ws;
+#[cfg(feature = "wasmhttp")]
+pub mod wasmhttp;
 
 pub use duplex::duplex;
 
