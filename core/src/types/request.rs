@@ -13,6 +13,7 @@ pub struct MethodCall {
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
 	#[serde(default = "default_params")]
+	#[serde(skip_serializing_if = "omit_params")]
 	pub params: Params,
 	/// An identifier established by the Client that MUST contain a String,
 	/// Number, or NULL value if included. If it is not included it is assumed
@@ -31,6 +32,7 @@ pub struct Notification {
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
 	#[serde(default = "default_params")]
+	#[serde(skip_serializing_if = "omit_params")]
 	pub params: Params,
 }
 
@@ -52,6 +54,10 @@ pub enum Call {
 
 fn default_params() -> Params {
 	Params::None
+}
+
+fn omit_params(param: &Params) -> bool {
+	&Params::None == param
 }
 
 fn default_id() -> Id {
@@ -91,18 +97,39 @@ mod tests {
 		use serde_json;
 		use serde_json::Value;
 
-		let m = MethodCall {
-			jsonrpc: Some(Version::V2),
-			method: "update".to_owned(),
-			params: Params::Array(vec![Value::from(1), Value::from(2)]),
-			id: Id::Num(1),
-		};
+		struct Testcase {
+			name: &'static str,
+			call: MethodCall,
+			expect: &'static str,
+		}
 
-		let serialized = serde_json::to_string(&m).unwrap();
-		assert_eq!(
-			serialized,
-			r#"{"jsonrpc":"2.0","method":"update","params":[1,2],"id":1}"#
-		);
+		vec![
+			Testcase {
+				name: "normal",
+				call: MethodCall {
+					jsonrpc: Some(Version::V2),
+					method: "update".to_owned(),
+					params: Params::Array(vec![Value::from(1), Value::from(2)]),
+					id: Id::Num(1),
+				},
+				expect: r#"{"jsonrpc":"2.0","method":"update","params":[1,2],"id":1}"#,
+			},
+			Testcase {
+				name: "skip",
+				call: MethodCall {
+					jsonrpc: Some(Version::V2),
+					method: "update".to_owned(),
+					params: Params::None,
+					id: Id::Num(1),
+				},
+				expect: r#"{"jsonrpc":"2.0","method":"update","id":1}"#,
+			},
+		]
+		.iter()
+		.for_each(|testcase| {
+			let serialized = serde_json::to_string(&testcase.call).unwrap();
+			assert_eq!(testcase.expect, serialized, "{} failed", testcase.name);
+		});
 	}
 
 	#[test]
@@ -110,14 +137,37 @@ mod tests {
 		use serde_json;
 		use serde_json::Value;
 
-		let n = Notification {
-			jsonrpc: Some(Version::V2),
-			method: "update".to_owned(),
-			params: Params::Array(vec![Value::from(1), Value::from(2)]),
-		};
+		struct Testcase {
+			name: &'static str,
+			notify: Notification,
+			expect: &'static str,
+		}
 
-		let serialized = serde_json::to_string(&n).unwrap();
-		assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"update","params":[1,2]}"#);
+		vec![
+			Testcase {
+				name: "normal",
+				notify: Notification {
+					jsonrpc: Some(Version::V2),
+					method: "update".to_owned(),
+					params: Params::Array(vec![Value::from(1), Value::from(2)]),
+				},
+				expect: r#"{"jsonrpc":"2.0","method":"update","params":[1,2]}"#,
+			},
+			Testcase {
+				name: "skip",
+				notify: Notification {
+					jsonrpc: Some(Version::V2),
+					method: "update".to_owned(),
+					params: Params::None,
+				},
+				expect: r#"{"jsonrpc":"2.0","method":"update"}"#,
+			},
+		]
+		.iter()
+		.for_each(|testcase| {
+			let serialized = serde_json::to_string(&testcase.notify).unwrap();
+			assert_eq!(testcase.expect, serialized, "{} failed", testcase.name);
+		});
 	}
 
 	#[test]
