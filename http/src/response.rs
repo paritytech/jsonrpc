@@ -23,7 +23,7 @@ impl Response {
 	pub fn ok<T: Into<String>>(response: T) -> Self {
 		Response {
 			code: StatusCode::OK,
-			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
+			content_type: application_json(),
 			content: response.into(),
 		}
 	}
@@ -41,7 +41,7 @@ impl Response {
 	pub fn service_unavailable<T: Into<String>>(msg: T) -> Self {
 		Response {
 			code: StatusCode::SERVICE_UNAVAILABLE,
-			content_type: HeaderValue::from_static("application/json; charset=utf-8"),
+			content_type: application_json(),
 			content: msg.into(),
 		}
 	}
@@ -121,6 +121,10 @@ impl Response {
 
 fn plain_text() -> HeaderValue {
 	HeaderValue::from_static("text/plain; charset=utf-8")
+}
+
+fn application_json() -> HeaderValue {
+	HeaderValue::from_static("application/json; charset=utf-8")
 }
 
 // TODO: Consider switching to a `TryFrom` conversion once it stabilizes.
