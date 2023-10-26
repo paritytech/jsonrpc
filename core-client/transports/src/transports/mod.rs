@@ -98,16 +98,19 @@ pub fn parse_response(
 #[serde(deny_unknown_fields)]
 #[serde(untagged)]
 pub enum ClientResponse {
-	/// A regular JSON-RPC request output (single response).
+	/// A regular JSON-RPC 2.0 request output (single response).
 	Output(jsonrpc_core::Output),
 	/// A notification.
 	Notification(jsonrpc_core::Notification),
+	/// A regular JSON-RPC 1.0 request output (single response).
+	OutputVersionOne(jsonrpc_core::OutputVersionOne),
 }
 
 impl ClientResponse {
 	/// Get the id of the response (if any).
 	pub fn id(&self) -> Option<Id> {
 		match *self {
+			ClientResponse::OutputVersionOne(ref output) => Some(output.id().clone()),
 			ClientResponse::Output(ref output) => Some(output.id().clone()),
 			ClientResponse::Notification(_) => None,
 		}
@@ -117,7 +120,7 @@ impl ClientResponse {
 	pub fn method(&self) -> Option<String> {
 		match *self {
 			ClientResponse::Notification(ref n) => Some(n.method.to_owned()),
-			ClientResponse::Output(_) => None,
+			ClientResponse::Output(_) | ClientResponse::OutputVersionOne(_) => None,
 		}
 	}
 
@@ -140,6 +143,7 @@ impl From<ClientResponse> for Result<Value, Error> {
 	fn from(res: ClientResponse) -> Self {
 		match res {
 			ClientResponse::Output(output) => output.into(),
+			ClientResponse::OutputVersionOne(output) => output.into(),
 			ClientResponse::Notification(n) => match &n.params {
 				Params::Map(map) => {
 					let subscription = map.get("subscription");

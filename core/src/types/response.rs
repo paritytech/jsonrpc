@@ -84,6 +84,57 @@ impl From<Output> for CoreResult<Value> {
 	}
 }
 
+/// Represents JSON-RPC v1.x output - failure or success
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OutputVersionOne {
+	/// Result
+	pub result: Option<Value>,
+	/// Error
+	pub error: Option<Error>,
+	/// Correlation id
+	pub id: Id,
+}
+
+impl OutputVersionOne {
+	/// Creates new output given `Result`, `Id` and `Version`.
+	pub fn from(result: CoreResult<Value>, id: Id) -> Self {
+		match result {
+			Ok(result) => OutputVersionOne {
+				id,
+				result: Some(result),
+				error: None,
+			},
+			Err(error) => OutputVersionOne {
+				id,
+				error: Some(error),
+				result: None,
+			},
+		}
+	}
+
+	/// Creates new failure output indicating malformed request.
+	pub fn invalid_request(id: Id) -> Self {
+		OutputVersionOne {
+			id,
+			error: Some(Error::new(ErrorCode::InvalidRequest)),
+			result: None,
+		}
+	}
+
+	/// Get the correlation id.
+	pub fn id(&self) -> &Id {
+		&self.id
+	}
+}
+
+impl From<OutputVersionOne> for CoreResult<Value> {
+	/// Convert into a result. Will be `Ok` if `result` is `Some` and `Err` if `result` is `None`.
+	fn from(output: OutputVersionOne) -> CoreResult<Value> {
+		output.result.ok_or(output.error.unwrap_or(Error::parse_error()))
+	}
+}
+
 /// Synchronous response
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -143,6 +194,20 @@ fn success_output_serialize() {
 
 	let serialized = serde_json::to_string(&so).unwrap();
 	assert_eq!(serialized, r#"{"jsonrpc":"2.0","result":1,"id":1}"#);
+}
+
+#[test]
+fn success_output_serialize_1point0() {
+	use serde_json::Value;
+
+	let so = OutputVersionOne {
+		result: Some(Value::from(1)),
+		error: None,
+		id: Id::Num(1),
+	};
+
+	let serialized = serde_json::to_string(&so).unwrap();
+	assert_eq!(serialized, r#"{"result":1,"error":null,"id":1}"#);
 }
 
 #[test]
@@ -229,6 +294,24 @@ fn single_response_deserialize() {
 			result: Value::from(1),
 			id: Id::Num(1)
 		}))
+	);
+}
+
+#[test]
+fn single_response_deserialize_1point0() {
+	use serde_json;
+	use serde_json::Value;
+
+	let dsr = r#"{"result":1,"error":null,"id":1}"#;
+
+	let deserialized: OutputVersionOne = serde_json::from_str(dsr).unwrap();
+	assert_eq!(
+		deserialized,
+		OutputVersionOne {
+			result: Some(Value::from(1)),
+			error: None,
+			id: Id::Num(1)
+		}
 	);
 }
 
