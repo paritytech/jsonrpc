@@ -36,6 +36,11 @@ impl Params {
 			p => Err(Error::invalid_params_with_details("No parameters were expected", p)),
 		}
 	}
+
+	/// Check for None
+	pub fn is_none(&self) -> bool {
+		matches!(*self, Params::None)
+	}
 }
 
 impl From<Params> for Value {
@@ -109,5 +114,13 @@ mod tests {
 	fn single_param_parsed_as_tuple() {
 		let params: (u64,) = Params::Array(vec![Value::from(1)]).parse().unwrap();
 		assert_eq!(params, (1,));
+	}
+
+	#[test]
+	fn detect_none() {
+		let none = Params::None;
+		assert!(none.is_none());
+		let some = Params::Array(vec![]);
+		assert!(!some.is_none());
 	}
 }

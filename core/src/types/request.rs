@@ -12,7 +12,7 @@ pub struct MethodCall {
 	pub method: String,
 	/// A Structured value that holds the parameter values to be used
 	/// during the invocation of the method. This member MAY be omitted.
-	#[serde(default = "default_params")]
+	#[serde(default = "default_params", skip_serializing_if = "Params::is_none")]
 	pub params: Params,
 	/// An identifier established by the Client that MUST contain a String,
 	/// Number, or NULL value if included. If it is not included it is assumed
@@ -103,6 +103,21 @@ mod tests {
 			serialized,
 			r#"{"jsonrpc":"2.0","method":"update","params":[1,2],"id":1}"#
 		);
+	}
+
+	#[test]
+	fn call_serialize_without_params() {
+		use serde_json;
+
+		let m = MethodCall {
+			jsonrpc: Some(Version::V2),
+			method: "status".to_owned(),
+			params: Params::None,
+			id: Id::Num(1),
+		};
+
+		let serialized = serde_json::to_string(&m).unwrap();
+		assert_eq!(serialized, r#"{"jsonrpc":"2.0","method":"status","id":1}"#);
 	}
 
 	#[test]
