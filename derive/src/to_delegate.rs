@@ -281,8 +281,6 @@ impl RpcMethod {
 				Ok((#(#tuple_fields, )*)) => {
 					use self::_futures::{FutureExt, TryFutureExt};
 					let fut = self::_jsonrpc_core::WrapFuture::into_future((method)#method_call)
-						.map_ok(|value| _jsonrpc_core::to_value(value)
-							.expect("Expected always-serializable type; qed"))
 						.map_err(Into::into as fn(_) -> _jsonrpc_core::Error);
 					_futures::future::Either::Left(fut)
 				},

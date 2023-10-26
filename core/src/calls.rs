@@ -1,5 +1,7 @@
-use crate::types::{Error, Params, Value};
+use crate::types::{Error, Id, Params, SerializedOutput, Value, Version};
 use crate::BoxFuture;
+use futures_util::{self, future, FutureExt};
+use serde::Serialize;
 use std::fmt;
 use std::future::Future;
 use std::sync::Arc;
@@ -30,23 +32,23 @@ impl<T, E> WrapFuture<T, E> for BoxFuture<Result<T, E>> {
 }
 
 /// A synchronous or asynchronous method.
-pub trait RpcMethodSync: Send + Sync + 'static {
+pub trait RpcMethodSync<R = Value>: Send + Sync + 'static {
 	/// Call method
-	fn call(&self, params: Params) -> BoxFuture<crate::Result<Value>>;
+	fn call(&self, params: Params) -> BoxFuture<crate::Result<R>>;
 }
 
 /// Asynchronous Method
-pub trait RpcMethodSimple: Send + Sync + 'static {
+pub trait RpcMethodSimple<R = Value>: Send + Sync + 'static {
 	/// Output future
-	type Out: Future<Output = Result<Value, Error>> + Send;
+	type Out: Future<Output = Result<R, Error>> + Send;
 	/// Call method
 	fn call(&self, params: Params) -> Self::Out;
 }
 
 /// Asynchronous Method with Metadata
-pub trait RpcMethod<T: Metadata>: Send + Sync + 'static {
+pub trait RpcMethod<T: Metadata, R = Value>: Send + Sync + 'static {
 	/// Call method
-	fn call(&self, params: Params, meta: T) -> BoxFuture<crate::Result<Value>>;
+	fn call(&self, params: Params, meta: T) -> BoxFuture<crate::Result<R>>;
 }
 
 /// Notification
@@ -61,11 +63,27 @@ pub trait RpcNotification<T: Metadata>: Send + Sync + 'static {
 	fn execute(&self, params: Params, meta: T);
 }
 
+/// Asynchronous Method with Metadata, returning a serialized JSON-RPC response.
+pub trait RpcMethodWithSerializedOutput<T: Metadata>: Send + Sync + 'static {
+    /// Executes the RPC method and returns [`SerializedOutput`].
+	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<SerializedOutput>>;
+}
+
+/// Wraps an RpcMethod into an RpcMethodWithSerializedOutput
+pub(crate) fn rpc_wrap<T: Metadata, R: Serialize + Send + 'static, F: RpcMethod<T, R>>(
+	f: F,
+) -> Arc<dyn RpcMethodWithSerializedOutput<T>> {
+	Arc::new(move |params: Params, meta: T, jsonrpc: Option<Version>, id: Id| {
+		let result = f.call(params, meta);
+		result.then(move |r| future::ready(Some(SerializedOutput::from(r, id, jsonrpc))))
+	})
+}
+
 /// Possible Remote Procedures with Metadata
 #[derive(Clone)]
 pub enum RemoteProcedure<T: Metadata> {
 	/// A method call
-	Method(Arc<dyn RpcMethod<T>>),
+	Method(Arc<dyn RpcMethodWithSerializedOutput<T>>),
 	/// A notification
 	Notification(Arc<dyn RpcNotification<T>>),
 	/// An alias to other method,
@@ -83,10 +101,10 @@ impl<T: Metadata> fmt::Debug for RemoteProcedure<T> {
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static> RpcMethodSimple for F
+impl<F: Send + Sync + 'static, X: Send + 'static, R> RpcMethodSimple<R> for F
 where
 	F: Fn(Params) -> X,
-	X: Future<Output = Result<Value, Error>>,
+	X: Future<Output = Result<R, Error>>,
 {
 	type Out = X;
 	fn call(&self, params: Params) -> Self::Out {
@@ -94,12 +112,12 @@ where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static> RpcMethodSync for F
+impl<F: Send + Sync + 'static, X: Send + 'static, R> RpcMethodSync<R> for F
 where
 	F: Fn(Params) -> X,
-	X: WrapFuture<Value, Error>,
+	X: WrapFuture<R, Error>,
 {
-	fn call(&self, params: Params) -> BoxFuture<crate::Result<Value>> {
+	fn call(&self, params: Params) -> BoxFuture<crate::Result<R>> {
 		self(params).into_future()
 	}
 }
@@ -113,13 +131,13 @@ where
 	}
 }
 
-impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethod<T> for F
+impl<F: Send + Sync + 'static, X: Send + 'static, T, R> RpcMethod<T, R> for F
 where
 	T: Metadata,
 	F: Fn(Params, T) -> X,
-	X: Future<Output = Result<Value, Error>>,
+	X: Future<Output = Result<R, Error>>,
 {
-	fn call(&self, params: Params, meta: T) -> BoxFuture<crate::Result<Value>> {
+	fn call(&self, params: Params, meta: T) -> BoxFuture<crate::Result<R>> {
 		Box::pin(self(params, meta))
 	}
 }
@@ -131,5 +149,16 @@ where
 {
 	fn execute(&self, params: Params, meta: T) {
 		self(params, meta)
+	}
+}
+
+impl<F: Send + Sync + 'static, X: Send + 'static, T> RpcMethodWithSerializedOutput<T> for F
+where
+	T: Metadata,
+	F: Fn(Params, T, Option<Version>, Id) -> X,
+	X: Future<Output = Option<SerializedOutput>>,
+{
+	fn call(&self, params: Params, meta: T, jsonrpc: Option<Version>, id: Id) -> BoxFuture<Option<SerializedOutput>> {
+		Box::pin(self(params, meta, jsonrpc, id))
 	}
 }

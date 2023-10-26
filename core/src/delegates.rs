@@ -1,11 +1,12 @@
 //! Delegate rpc calls
 
+use serde::Serialize;
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
-use crate::calls::{Metadata, RemoteProcedure, RpcMethod, RpcNotification};
-use crate::types::{Error, Params, Value};
+use crate::calls::{rpc_wrap, Metadata, RemoteProcedure, RpcMethod, RpcNotification};
+use crate::types::{Error, Params};
 use crate::BoxFuture;
 
 struct DelegateAsyncMethod<T, F> {
@@ -13,15 +14,15 @@ struct DelegateAsyncMethod<T, F> {
 	closure: F,
 }
 
-impl<T, M, F, I> RpcMethod<M> for DelegateAsyncMethod<T, F>
+impl<T, M, F, I, R> RpcMethod<M, R> for DelegateAsyncMethod<T, F>
 where
 	M: Metadata,
 	F: Fn(&T, Params) -> I,
-	I: Future<Output = Result<Value, Error>> + Send + 'static,
+	I: Future<Output = Result<R, Error>> + Send + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 {
-	fn call(&self, params: Params, _meta: M) -> BoxFuture<crate::Result<Value>> {
+	fn call(&self, params: Params, _meta: M) -> BoxFuture<crate::Result<R>> {
 		let closure = &self.closure;
 		Box::pin(closure(&self.delegate, params))
 	}
@@ -32,15 +33,15 @@ struct DelegateMethodWithMeta<T, F> {
 	closure: F,
 }
 
-impl<T, M, F, I> RpcMethod<M> for DelegateMethodWithMeta<T, F>
+impl<T, M, F, I, R> RpcMethod<M, R> for DelegateMethodWithMeta<T, F>
 where
 	M: Metadata,
 	F: Fn(&T, Params, M) -> I,
-	I: Future<Output = Result<Value, Error>> + Send + 'static,
+	I: Future<Output = Result<R, Error>> + Send + 'static,
 	T: Send + Sync + 'static,
 	F: Send + Sync + 'static,
 {
-	fn call(&self, params: Params, meta: M) -> BoxFuture<crate::Result<Value>> {
+	fn call(&self, params: Params, meta: M) -> BoxFuture<crate::Result<R>> {
 		let closure = &self.closure;
 		Box::pin(closure(&self.delegate, params, meta))
 	}
@@ -112,15 +113,16 @@ where
 	}
 
 	/// Adds async method to the delegate.
-	pub fn add_method<F, I>(&mut self, name: &str, method: F)
+	pub fn add_method<F, I, R>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params) -> I,
-		I: Future<Output = Result<Value, Error>> + Send + 'static,
+		I: Future<Output = Result<R, Error>> + Send + 'static,
 		F: Send + Sync + 'static,
+		R: Serialize + Send + 'static,
 	{
 		self.methods.insert(
 			name.into(),
-			RemoteProcedure::Method(Arc::new(DelegateAsyncMethod {
+			RemoteProcedure::Method(rpc_wrap(DelegateAsyncMethod {
 				delegate: self.delegate.clone(),
 				closure: method,
 			})),
@@ -128,15 +130,16 @@ where
 	}
 
 	/// Adds async method with metadata to the delegate.
-	pub fn add_method_with_meta<F, I>(&mut self, name: &str, method: F)
+	pub fn add_method_with_meta<F, I, R>(&mut self, name: &str, method: F)
 	where
 		F: Fn(&T, Params, M) -> I,
-		I: Future<Output = Result<Value, Error>> + Send + 'static,
+		I: Future<Output = Result<R, Error>> + Send + 'static,
 		F: Send + Sync + 'static,
+		R: Serialize + Send + 'static,
 	{
 		self.methods.insert(
 			name.into(),
-			RemoteProcedure::Method(Arc::new(DelegateMethodWithMeta {
+			RemoteProcedure::Method(rpc_wrap(DelegateMethodWithMeta {
 				delegate: self.delegate.clone(),
 				closure: method,
 			})),

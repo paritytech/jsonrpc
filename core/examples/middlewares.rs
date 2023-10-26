@@ -17,7 +17,7 @@ impl Middleware<Meta> for MyMiddleware {
 	fn on_request<F, X>(&self, request: Request, meta: Meta, next: F) -> Either<Self::Future, X>
 	where
 		F: FnOnce(Request, Meta) -> X + Send,
-		X: Future<Output = Option<Response>> + Send + 'static,
+		X: Future<Output = Option<SerializedResponse>> + Send + 'static,
 	{
 		let start = Instant::now();
 		let request_number = self.0.fetch_add(1, atomic::Ordering::SeqCst);
