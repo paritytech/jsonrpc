@@ -12,6 +12,7 @@ use jsonrpc_core::{Error, Params};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use std::any::type_name;
 use std::marker::PhantomData;
 use std::pin::Pin;
 
@@ -269,10 +270,8 @@ impl TypedClient {
 	pub fn call_method<T: Serialize, R: DeserializeOwned>(
 		&self,
 		method: &str,
-		returns: &str,
 		args: T,
 	) -> impl Future<Output = RpcResult<R>> {
-		let returns = returns.to_owned();
 		let args =
 			serde_json::to_value(args).expect("Only types with infallible serialisation can be used for JSON-RPC");
 		let params = match args {
@@ -290,7 +289,8 @@ impl TypedClient {
 
 			log::debug!("response: {:?}", value);
 
-			serde_json::from_value::<R>(value).map_err(|error| RpcError::ParseError(returns, Box::new(error)))
+			serde_json::from_value::<R>(value)
+				.map_err(|error| RpcError::ParseError(type_name::<R>().into(), Box::new(error)))
 		}
 	}
 
@@ -318,7 +318,6 @@ impl TypedClient {
 		subscribe_params: T,
 		topic: &str,
 		unsubscribe: &str,
-		returns: &'static str,
 	) -> RpcResult<TypedSubscriptionStream<R>> {
 		let args = serde_json::to_value(subscribe_params)
 			.expect("Only types with infallible serialisation can be used for JSON-RPC");
@@ -335,7 +334,7 @@ impl TypedClient {
 
 		self.0
 			.subscribe(subscribe, params, topic, unsubscribe)
-			.map(move |stream| TypedSubscriptionStream::new(stream, returns))
+			.map(move |stream| TypedSubscriptionStream::new(stream, type_name::<R>()))
 	}
 }
 
@@ -361,7 +360,7 @@ mod tests {
 
 	impl AddClient {
 		fn add(&self, a: u64, b: u64) -> impl Future<Output = RpcResult<u64>> {
-			self.0.call_method("add", "u64", (a, b))
+			self.0.call_method("add", (a, b))
 		}
 
 		fn completed(&self, success: bool) -> RpcResult<()> {
@@ -454,8 +453,7 @@ mod tests {
 		let received = Arc::new(std::sync::Mutex::new(vec![]));
 		let r2 = received.clone();
 		let fut = async move {
-			let mut stream =
-				client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello", "u32")?;
+			let mut stream = client.subscribe::<_, (u32,)>("subscribe_hello", (), "hello", "unsubscribe_hello")?;
 			let result = stream.next().await;
 			r2.lock().unwrap().push(result.expect("Expected at least one item."));
 			tx.send(()).unwrap();

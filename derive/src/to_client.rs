@@ -106,7 +106,6 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					AttributeKind::Rpc { returns, .. } => compute_returns(&method.trait_item, returns)?,
 					AttributeKind::PubSub { .. } => continue,
 				};
-				let returns_str = quote!(#returns).to_string();
 
 				let args_serialized = match method
 					.attr
@@ -134,7 +133,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					#(#attrs)*
 					pub fn #name(&self, #args) -> impl Future<Output = RpcResult<#returns>> {
 						let args = #args_serialized;
-						self.inner.call_method(#rpc_name, #returns_str, args)
+						self.inner.call_method(#rpc_name, args)
 					}
 				};
 				client_methods.push(client_method);
@@ -149,7 +148,6 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 					let name = &subscribe.trait_item.sig.ident;
 					let mut args = compute_args(&subscribe.trait_item).into_iter();
 					let returns = compute_subscription_type(&args.next().unwrap());
-					let returns_str = quote!(#returns).to_string();
 					let args = args.collect();
 					let arg_names = compute_arg_identifiers(&args)?;
 					let subscribe = subscribe.name();
@@ -158,7 +156,7 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 						#(#attrs)*
 						pub fn #name(&self, #args) -> RpcResult<TypedSubscriptionStream<#returns>> {
 							let args_tuple = (#(#arg_names,)*);
-							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe, #returns_str)
+							self.inner.subscribe(#subscribe, args_tuple, #subscription, #unsubscribe)
 						}
 					);
 					client_methods.push(client_method);
