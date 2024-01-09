@@ -26,7 +26,7 @@ impl Sender {
 	}
 
 	fn check_active(&self) -> error::Result<()> {
-		if self.active.load(atomic::Ordering::SeqCst) {
+		if self.active.load(atomic::Ordering::Relaxed) {
 			Ok(())
 		} else {
 			Err(error::Error::ConnectionClosed)

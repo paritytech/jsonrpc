@@ -163,7 +163,7 @@ pub struct Session<M: core::Metadata, S: core::Middleware<M>> {
 
 impl<M: core::Metadata, S: core::Middleware<M>> Drop for Session<M, S> {
 	fn drop(&mut self) {
-		self.active.store(false, atomic::Ordering::SeqCst);
+		self.active.store(false, atomic::Ordering::Relaxed);
 		if let Some(stats) = self.stats.as_ref() {
 			stats.close_session(self.context.session_id)
 		}
@@ -274,14 +274,14 @@ where
 		let response = self.handler.handle_request(req, metadata);
 
 		let future = response.map(move |response| {
-			if !active_lock.load(atomic::Ordering::SeqCst) {
+			if !active_lock.load(atomic::Ordering::Relaxed) {
 				return;
 			}
 			if let Some(result) = response {
 				let res = out.send(result);
 				match res {
 					Err(error::Error::ConnectionClosed) => {
-						active_lock.store(false, atomic::Ordering::SeqCst);
+						active_lock.store(false, atomic::Ordering::Relaxed);
 					}
 					Err(e) => {
 						warn!("Error while sending response: {:?}", e);
