@@ -8,12 +8,14 @@ use std::{fmt, mem, str};
 
 use hyper::header::{self, HeaderMap, HeaderValue};
 use hyper::{self, service::Service, Body, Method};
+use jsonrpc_core::Output;
 
 use crate::jsonrpc::serde_json;
 use crate::jsonrpc::{self as core, middleware, Metadata, Middleware};
 use crate::response::Response;
 use crate::server_utils::cors;
 
+use crate::response_middleware::ResponseMiddleware;
 use crate::{utils, AllowedHosts, CorsDomains, RequestMiddleware, RequestMiddlewareAction, RestApi};
 
 /// jsonrpc http request handler.
@@ -28,6 +30,7 @@ pub struct ServerHandler<M: Metadata = (), S: Middleware<M> = middleware::Noop> 
 	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
 	keep_alive: bool,
+	response_middleware: Arc<dyn ResponseMiddleware>,
 }
 
 impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
@@ -43,6 +46,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 		health_api: Option<(String, String)>,
 		max_request_body_size: usize,
 		keep_alive: bool,
+		response_middleware: Arc<dyn ResponseMiddleware>,
 	) -> Self {
 		ServerHandler {
 			jsonrpc_handler,
@@ -55,6 +59,7 @@ impl<M: Metadata, S: Middleware<M>> ServerHandler<M, S> {
 			health_api,
 			max_request_body_size,
 			keep_alive,
+			response_middleware,
 		}
 	}
 }
@@ -115,6 +120,7 @@ where
 					max_request_body_size: self.max_request_body_size,
 					// initial value, overwritten when reading client headers
 					keep_alive: true,
+					response_middleware: self.response_middleware.clone(),
 				})
 			}
 		}
@@ -186,6 +192,7 @@ enum RpcHandlerState<M> {
 	},
 	Writing(Response),
 	Waiting(Pin<Box<dyn Future<Output = Option<String>> + Send>>),
+	WaitingUnmodifiedResponse(Pin<Box<dyn Future<Output = Option<jsonrpc_core::types::response::Response>> + Send>>),
 	WaitingForResponse(Pin<Box<dyn Future<Output = Response> + Send>>),
 	Done,
 }
@@ -202,6 +209,7 @@ impl<M> fmt::Debug for RpcHandlerState<M> {
 			Writing(ref res) => write!(fmt, "Writing({:?})", res),
 			WaitingForResponse(_) => write!(fmt, "WaitingForResponse"),
 			Waiting(_) => write!(fmt, "Waiting"),
+			WaitingUnmodifiedResponse(_) => write!(fmt, "WaitingUnmodifiedResponse"),
 			Done => write!(fmt, "Done"),
 		}
 	}
@@ -218,6 +226,7 @@ pub struct RpcHandler<M: Metadata, S: Middleware<M>> {
 	health_api: Option<(String, String)>,
 	max_request_body_size: usize,
 	keep_alive: bool,
+	response_middleware: Arc<dyn ResponseMiddleware>,
 }
 
 impl<M: Metadata, S: Middleware<M>> Future for RpcHandler<M, S>
@@ -282,6 +291,19 @@ where
 						}))
 					}
 					Poll::Pending => RpcPollState::NotReady(RpcHandlerState::Waiting(waiting)),
+				}
+			}
+			RpcHandlerState::WaitingUnmodifiedResponse(mut waiting) => {
+				match Pin::new(&mut waiting).poll(cx) {
+					Poll::Ready(response) => {
+						RpcPollState::Ready(RpcHandlerState::Writing(match response {
+							// Notification, just return empty response.
+							None => Response::ok(String::new()),
+							// Add new line to have nice output when using CLI clients (curl)
+							Some(response) => this.response_middleware.on_response(response),
+						}))
+					}
+					Poll::Pending => RpcPollState::NotReady(RpcHandlerState::WaitingUnmodifiedResponse(waiting)),
 				}
 			}
 			state => RpcPollState::NotReady(state),
@@ -395,7 +417,7 @@ where
 	}
 
 	fn process_health(&self, method: String, metadata: M) -> Result<RpcPollState<M>, hyper::Error> {
-		use self::core::types::{Call, Failure, Id, MethodCall, Output, Params, Request, Success, Version};
+		use self::core::types::{Call, Failure, Id, MethodCall, Params, Request, Success, Version};
 
 		// Create a request
 		let call = Request::Single(Call::MethodCall(MethodCall {
@@ -503,12 +525,14 @@ where
 					};
 
 					let response = match self.jsonrpc_handler.upgrade() {
-						Some(h) => h.handler.handle_request(content, metadata),
+						Some(h) => h.handler.handle_request_unmodified(content, metadata),
 						None => return Ok(RpcPollState::Ready(RpcHandlerState::Writing(Response::closing()))),
 					};
 
 					// Content is ready
-					return Ok(RpcPollState::Ready(RpcHandlerState::Waiting(Box::pin(response))));
+					return Ok(RpcPollState::Ready(RpcHandlerState::WaitingUnmodifiedResponse(
+						Box::pin(response),
+					)));
 				}
 				Poll::Pending => {
 					return Ok(RpcPollState::NotReady(RpcHandlerState::ReadingBody {

@@ -18,8 +18,6 @@
 //! }
 //! ```
 
-#![deny(missing_docs)]
-
 use jsonrpc_server_utils as server_utils;
 
 pub use hyper;
@@ -30,6 +28,7 @@ extern crate log;
 
 mod handler;
 mod response;
+pub mod response_middleware;
 #[cfg(test)]
 mod tests;
 mod utils;
@@ -52,6 +51,7 @@ use jsonrpc_core as jsonrpc;
 
 pub use crate::handler::ServerHandler;
 pub use crate::response::Response;
+use crate::response_middleware::{NoopResponseMiddleware, ResponseMiddleware};
 pub use crate::server_utils::cors::{self, AccessControlAllowOrigin, AllowCors, Origin};
 pub use crate::server_utils::hosts::{DomainsValidation, Host};
 pub use crate::server_utils::reactor::TaskExecutor;
@@ -247,6 +247,7 @@ pub struct ServerBuilder<M: jsonrpc::Metadata = (), S: jsonrpc::Middleware<M> = 
 	keep_alive: bool,
 	threads: usize,
 	max_request_body_size: usize,
+	response_middleware: Arc<dyn ResponseMiddleware>,
 }
 
 impl<M: jsonrpc::Metadata + Default, S: jsonrpc::Middleware<M>> ServerBuilder<M, S>
@@ -298,6 +299,7 @@ where
 			keep_alive: true,
 			threads: 1,
 			max_request_body_size: 5 * 1024 * 1024,
+			response_middleware: Arc::new(NoopResponseMiddleware::default()),
 		}
 	}
 
@@ -384,6 +386,12 @@ where
 		self
 	}
 
+	/// Configures response middleware
+	pub fn response_middleware<T: ResponseMiddleware>(mut self, middleware: T) -> Self {
+		self.response_middleware = Arc::new(middleware);
+		self
+	}
+
 	/// Configures metadata extractor
 	pub fn meta_extractor<T: MetaExtractor<M>>(mut self, extractor: T) -> Self {
 		self.meta_extractor = Arc::new(extractor);
@@ -414,6 +422,7 @@ where
 		let cors_max_age = self.cors_max_age;
 		let allowed_headers = self.allowed_headers;
 		let request_middleware = self.request_middleware;
+		let response_middleware = self.response_middleware;
 		let allowed_hosts = self.allowed_hosts;
 		let jsonrpc_handler = Rpc {
 			handler: self.handler,
@@ -438,6 +447,7 @@ where
 			cors_max_age,
 			allowed_headers.clone(),
 			request_middleware.clone(),
+			response_middleware.clone(),
 			allowed_hosts.clone(),
 			jsonrpc_handler.clone(),
 			rest_api,
@@ -460,6 +470,7 @@ where
 					cors_max_age,
 					allowed_headers.clone(),
 					request_middleware.clone(),
+					response_middleware.clone(),
 					allowed_hosts.clone(),
 					jsonrpc_handler.clone(),
 					rest_api,
@@ -518,6 +529,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 	cors_max_age: Option<u32>,
 	allowed_headers: cors::AccessControlAllowHeaders,
 	request_middleware: Arc<dyn RequestMiddleware>,
+	response_middleware: Arc<dyn ResponseMiddleware>,
 	allowed_hosts: AllowedHosts,
 	jsonrpc_handler: Rpc<M, S>,
 	rest_api: RestApi,
@@ -601,6 +613,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 				health_api.clone(),
 				max_request_body_size,
 				keep_alive,
+				response_middleware.clone(),
 			);
 			async { Ok::<_, Infallible>(service) }
 		});

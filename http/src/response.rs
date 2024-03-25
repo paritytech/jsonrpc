@@ -1,6 +1,6 @@
 //! Basic Request/Response structures used internally.
 
-pub use hyper::{self, header::HeaderValue, Body, Method, StatusCode};
+pub use hyper::{self, header::HeaderValue, Body, StatusCode};
 
 /// Simple server response structure
 #[derive(Debug)]

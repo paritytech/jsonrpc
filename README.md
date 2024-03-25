@@ -1,7 +1,9 @@
+# This repository contains fork of [JSON-RPC](https://github.com/paritytech/jsonrpc) library with added ResponseMiddleware
+
 # Parity JSON-RPC
 
-**NOTE: This crate is no longer actively developed; please have a look at our 
-[jsonrpsee](https://github.com/paritytech/jsonrpsee) crate if you're looking for an actively 
+**NOTE: This crate is no longer actively developed; please have a look at our
+[jsonrpsee](https://github.com/paritytech/jsonrpsee) crate if you're looking for an actively
 maintained JSON RPC implementation.**
 
 Rust implementation of JSON-RPC 2.0 Specification.

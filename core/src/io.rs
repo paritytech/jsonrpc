@@ -28,6 +28,9 @@ pub type FutureResult<F, G> = future::Map<
 	fn(Option<Response>) -> Option<String>,
 >;
 
+/// A type representing future unmodified response.
+pub type FutureUnmodifiedResult<F, G> = future::Either<future::Ready<Option<Response>>, FutureRpcResult<F, G>>;
+
 /// A type representing a result of a single method call.
 pub type FutureRpcOutput<F> = future::Either<F, future::Either<FutureOutput, future::Ready<Option<Output>>>>;
 
@@ -222,6 +225,25 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 		};
 
 		result.map(as_string)
+	}
+
+	/// Handle given request asynchronously.
+	pub fn handle_request_unmodified(
+		&self,
+		request: &str,
+		meta: T,
+	) -> FutureUnmodifiedResult<S::Future, S::CallFuture> {
+		use self::future::Either::{Left, Right};
+
+		trace!(target: "rpc", "Request: {}.", request);
+		let request = read_request(request);
+		match request {
+			Err(error) => Left(future::ready(Some(Response::from(
+				error,
+				self.compatibility.default_version(),
+			)))),
+			Ok(request) => Right(self.handle_rpc_request(request, meta)),
+		}
 	}
 
 	/// Handle deserialized RPC request.

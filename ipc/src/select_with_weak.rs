@@ -60,7 +60,7 @@ where
 	type Item = S1::Item;
 
 	fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-		let mut this = Pin::into_inner(self);
+		let this = Pin::into_inner(self);
 		let mut checked_strong = false;
 		loop {
 			if this.use_strong {
