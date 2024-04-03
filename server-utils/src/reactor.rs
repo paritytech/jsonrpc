@@ -75,7 +75,7 @@ impl Executor {
 /// A handle to running event loop. Dropping the handle will cause event loop to finish.
 #[derive(Debug)]
 pub struct RpcEventLoop {
-	executor: TaskExecutor,
+	_executor: TaskExecutor,
 	close: Option<futures::channel::oneshot::Sender<()>>,
 	runtime: Option<runtime::Runtime>,
 }
@@ -112,7 +112,7 @@ impl RpcEventLoop {
 		});
 
 		Ok(RpcEventLoop {
-			executor,
+			_executor: executor,
 			close: Some(stop),
 			runtime: Some(runtime),
 		})
