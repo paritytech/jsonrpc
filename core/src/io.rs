@@ -41,20 +41,15 @@ pub type FutureRpcResult<F, G> = future::Either<
 >;
 
 /// `IoHandler` json-rpc protocol compatibility
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Compatibility {
 	/// Compatible only with JSON-RPC 1.x
 	V1,
 	/// Compatible only with JSON-RPC 2.0
+	#[default]
 	V2,
 	/// Compatible with both
 	Both,
-}
-
-impl Default for Compatibility {
-	fn default() -> Self {
-		Compatibility::V2
-	}
 }
 
 impl Compatibility {
@@ -274,9 +269,9 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 
 				let result = match (valid_version, self.methods.get(&method.method)) {
 					(false, _) => Err(Error::invalid_version()),
-					(true, Some(&RemoteProcedure::Method(ref method))) => Ok(call_method(method)),
-					(true, Some(&RemoteProcedure::Alias(ref alias))) => match self.methods.get(alias) {
-						Some(&RemoteProcedure::Method(ref method)) => Ok(call_method(method)),
+					(true, Some(RemoteProcedure::Method(method))) => Ok(call_method(method)),
+					(true, Some(RemoteProcedure::Alias(alias))) => match self.methods.get(alias) {
+						Some(RemoteProcedure::Method(method)) => Ok(call_method(method)),
 						_ => Err(Error::method_not_found()),
 					},
 					(true, _) => Err(Error::method_not_found()),
@@ -297,11 +292,11 @@ impl<T: Metadata, S: Middleware<T>> MetaIoHandler<T, S> {
 				}
 
 				match self.methods.get(&notification.method) {
-					Some(&RemoteProcedure::Notification(ref notification)) => {
+					Some(RemoteProcedure::Notification(notification)) => {
 						notification.execute(params, meta);
 					}
-					Some(&RemoteProcedure::Alias(ref alias)) => {
-						if let Some(&RemoteProcedure::Notification(ref notification)) = self.methods.get(alias) {
+					Some(RemoteProcedure::Alias(alias)) => {
+						if let Some(RemoteProcedure::Notification(notification)) = self.methods.get(alias) {
 							notification.execute(params, meta);
 						}
 					}

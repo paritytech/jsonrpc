@@ -160,7 +160,7 @@ fn compute_method_registrations(item_trait: &syn::ItemTrait) -> Result<(Vec<Meth
 			}
 			(_, None) => {
 				return Err(syn::Error::new_spanned(
-					&item_trait,
+					item_trait,
 					format!("subscription '{}'. {}", name, MISSING_UNSUBSCRIBE_METHOD_ERR),
 				));
 			}
@@ -185,7 +185,7 @@ fn generate_server_module(
 	let mut rpc_server_trait = fold::fold_item_trait(&mut rpc_trait, item_trait.clone());
 
 	let to_delegate_method = generate_trait_item_method(
-		&method_registrations,
+		method_registrations,
 		&rpc_server_trait,
 		rpc_trait.has_metadata,
 		has_pubsub_methods,
@@ -218,7 +218,7 @@ fn generate_server_module(
 
 fn rpc_wrapper_mod_name(rpc_trait: &syn::ItemTrait) -> syn::Ident {
 	let name = rpc_trait.ident.clone();
-	let mod_name = format!("{}{}", RPC_MOD_NAME_PREFIX, name.to_string());
+	let mod_name = format!("{}{}", RPC_MOD_NAME_PREFIX, name);
 	syn::Ident::new(&mod_name, proc_macro2::Span::call_site())
 }
 
@@ -231,7 +231,7 @@ fn has_named_params(methods: &[RpcMethod]) -> bool {
 pub fn crate_name(name: &str) -> Result<Ident> {
 	proc_macro_crate::crate_name(name)
 		.map(|name| Ident::new(&name, Span::call_site()))
-		.map_err(|e| Error::new(Span::call_site(), &e))
+		.map_err(|e| Error::new(Span::call_site(), e))
 }
 
 pub fn rpc_impl(input: syn::Item, options: &DeriveOptions) -> Result<proc_macro2::TokenStream> {

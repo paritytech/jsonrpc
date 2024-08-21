@@ -205,7 +205,7 @@ impl RawClient {
 		};
 		let result = self.0.send(msg.into());
 		async move {
-			let () = result.map_err(|e| RpcError::Other(Box::new(e)))?;
+			result.map_err(|e| RpcError::Other(Box::new(e)))?;
 
 			receiver.await.map_err(|e| RpcError::Other(Box::new(e)))?
 		}

@@ -86,9 +86,9 @@ impl<T: PubSubMetadata, S: core::Middleware<T>> ::std::ops::DerefMut for PubSubH
 	}
 }
 
-impl<T: PubSubMetadata, S: core::Middleware<T>> Into<core::MetaIoHandler<T, S>> for PubSubHandler<T, S> {
-	fn into(self) -> core::MetaIoHandler<T, S> {
-		self.handler
+impl<T: PubSubMetadata, S: core::Middleware<T>> From<PubSubHandler<T, S>> for core::MetaIoHandler<T, S> {
+	fn from(val: PubSubHandler<T, S>) -> Self {
+		val.handler
 	}
 }
 

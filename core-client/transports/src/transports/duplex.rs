@@ -101,12 +101,9 @@ where
 	fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
 		// Handle requests from the client.
 		log::debug!("handle requests from client");
-		loop {
-			// Check that the client channel is open
-			let channel = match self.channel.as_mut() {
-				Some(channel) => channel,
-				None => break,
-			};
+
+		// Check that the client channel is open
+		while let Some(channel) = self.channel.as_mut() {
 			let msg = match channel.poll_next_unpin(cx) {
 				Poll::Ready(Some(msg)) => msg,
 				Poll::Ready(None) => {
@@ -185,87 +182,79 @@ where
 
 		// Handle incoming queue.
 		log::debug!("handle incoming");
-		loop {
-			match self.incoming.pop_front() {
-				Some((id, result, method, sid)) => {
-					let sid_and_method = sid.and_then(|sid| method.map(|method| (sid, method)));
-					// Handle the response to a pending request.
-					match self.pending_requests.remove(&id) {
-						// It's a regular Req-Res call, so just answer.
-						Some(PendingRequest::Call(tx)) => {
-							tx.send(result)
-								.map_err(|_| RpcError::Client("oneshot channel closed".into()))?;
-							continue;
-						}
-						// It was a subscription request,
-						// turn it into a proper subscription.
-						Some(PendingRequest::Subscription(mut subscription)) => {
-							let sid = result.as_ref().ok().and_then(|res| SubscriptionId::parse_value(res));
-							let method = subscription.notification.clone();
-
-							if let Some(sid) = sid {
-								subscription.id = Some(sid.clone());
-								if self
-									.subscriptions
-									.insert((sid.clone(), method.clone()), subscription)
-									.is_some()
-								{
-									log::warn!(
-										"Overwriting existing subscription under {:?} ({:?}). \
-										 Seems that server returned the same subscription id.",
-										sid,
-										method,
-									);
-								}
-							} else {
-								let err = RpcError::Client(format!(
-									"Subscription {:?} ({:?}) rejected: {:?}",
-									id, method, result,
-								));
-
-								if subscription.channel.unbounded_send(result).is_err() {
-									log::warn!("{}, but the reply channel has closed.", err);
-								}
-							}
-							continue;
-						}
-						// It's not a pending request nor a notification
-						None if sid_and_method.is_none() => {
-							log::warn!("Got unexpected response with id {:?} ({:?})", id, sid_and_method);
-							continue;
-						}
-						// just fall-through in case it's a notification
-						None => {}
-					};
-
-					let sid_and_method = if let Some(x) = sid_and_method {
-						x
-					} else {
-						continue;
-					};
-
-					if let Some(subscription) = self.subscriptions.get_mut(&sid_and_method) {
-						let res = subscription.channel.unbounded_send(result);
-						if res.is_err() {
-							let subscription = self
-								.subscriptions
-								.remove(&sid_and_method)
-								.expect("Subscription was just polled; qed");
-							let sid = subscription.id.expect(
-								"Every subscription that ends up in `self.subscriptions` has id already \
-								 assigned; assignment happens during response to subscribe request.",
-							);
-							let (_id, request_str) =
-								self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
-							log::debug!("outgoing: {}", request_str);
-							self.outgoing.push_back(request_str);
-							log::debug!("unsubscribed from {:?}", sid_and_method);
-						}
-					} else {
-						log::warn!("Received unexpected subscription notification: {:?}", sid_and_method);
-					}
+		while let Some((id, result, method, sid)) = self.incoming.pop_front() {
+			let sid_and_method = sid.and_then(|sid| method.map(|method| (sid, method)));
+			// Handle the response to a pending request.
+			match self.pending_requests.remove(&id) {
+				// It's a regular Req-Res call, so just answer.
+				Some(PendingRequest::Call(tx)) => {
+					tx.send(result)
+						.map_err(|_| RpcError::Client("oneshot channel closed".into()))?;
+					continue;
 				}
-				None => break,
+				// It was a subscription request,
+				// turn it into a proper subscription.
+				Some(PendingRequest::Subscription(mut subscription)) => {
+					let sid = result.as_ref().ok().and_then(SubscriptionId::parse_value);
+					let method = subscription.notification.clone();
+
+					if let Some(sid) = sid {
+						subscription.id = Some(sid.clone());
+						if self
+							.subscriptions
+							.insert((sid.clone(), method.clone()), subscription)
+							.is_some()
+						{
+							log::warn!(
+								"Overwriting existing subscription under {:?} ({:?}). \
+										 Seems that server returned the same subscription id.",
+								sid,
+								method,
+							);
+						}
+					} else {
+						let err =
+							RpcError::Client(format!("Subscription {:?} ({:?}) rejected: {:?}", id, method, result,));
+
+						if subscription.channel.unbounded_send(result).is_err() {
+							log::warn!("{}, but the reply channel has closed.", err);
+						}
+					}
+					continue;
+				}
+				// It's not a pending request nor a notification
+				None if sid_and_method.is_none() => {
+					log::warn!("Got unexpected response with id {:?} ({:?})", id, sid_and_method);
+					continue;
+				}
+				// just fall-through in case it's a notification
+				None => {}
+			};
+
+			let sid_and_method = if let Some(x) = sid_and_method {
+				x
+			} else {
+				continue;
+			};
+
+			if let Some(subscription) = self.subscriptions.get_mut(&sid_and_method) {
+				let res = subscription.channel.unbounded_send(result);
+				if res.is_err() {
+					let subscription = self
+						.subscriptions
+						.remove(&sid_and_method)
+						.expect("Subscription was just polled; qed");
+					let sid = subscription.id.expect(
+						"Every subscription that ends up in `self.subscriptions` has id already \
+								 assigned; assignment happens during response to subscribe request.",
+					);
+					let (_id, request_str) = self.request_builder.unsubscribe_request(subscription.unsubscribe, sid);
+					log::debug!("outgoing: {}", request_str);
+					self.outgoing.push_back(request_str);
+					log::debug!("unsubscribed from {:?}", sid_and_method);
+				}
+			} else {
+				log::warn!("Received unexpected subscription notification: {:?}", sid_and_method);
 			}
 		}
 

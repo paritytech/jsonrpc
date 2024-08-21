@@ -487,7 +487,7 @@ where
 					{
 						return Err(BodyError::TooLarge);
 					}
-					request.extend_from_slice(&*chunk)
+					request.extend_from_slice(&chunk)
 				}
 				Poll::Ready(None) => {
 					if let (Some(uri), true) = (uri, request.is_empty()) {
@@ -578,7 +578,7 @@ where
 	/// message.
 	fn is_json(content_type: Option<&header::HeaderValue>) -> bool {
 		match content_type.and_then(|val| val.to_str().ok()) {
-			Some(ref content)
+			Some(content)
 				if content.eq_ignore_ascii_case("application/json")
 					|| content.eq_ignore_ascii_case("application/json; charset=utf-8")
 					|| content.eq_ignore_ascii_case("application/json;charset=utf-8") =>

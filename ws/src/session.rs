@@ -243,12 +243,12 @@ where
 			.protocols()
 			.ok()
 			.map(|protos| protos.into_iter().map(Into::into).collect())
-			.unwrap_or_else(Vec::new);
+			.unwrap_or_default();
 		self.metadata = Some(self.meta_extractor.extract(&self.context));
 
 		match action {
 			MiddlewareAction::Proceed => ws::Response::from_request(req).map(|mut res| {
-				if let Some(protocol) = self.context.protocols.get(0) {
+				if let Some(protocol) = self.context.protocols.first() {
 					res.set_protocol(protocol);
 				}
 				res

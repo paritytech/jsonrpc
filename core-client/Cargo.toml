@@ -1,14 +1,13 @@
 [package]
-authors = ["Parity Technologies <admin@parity.io>"]
 description = "Transport agnostic JSON-RPC 2.0 client implementation."
 documentation = "https://docs.rs/jsonrpc-core-client/"
-edition = "2018"
-homepage = "https://github.com/paritytech/jsonrpc"
-keywords = ["jsonrpc", "json-rpc", "json", "rpc", "serde"]
-license = "MIT"
 name = "jsonrpc-core-client"
-repository = "https://github.com/paritytech/jsonrpc"
-version = "18.0.0"
+version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+edition.workspace = true
 
 categories = [
 	"asynchronous",
@@ -26,8 +25,8 @@ ipc = ["jsonrpc-client-transports/ipc"]
 arbitrary_precision = ["jsonrpc-client-transports/arbitrary_precision"]
 
 [dependencies]
-jsonrpc-client-transports = { version = "18.0.0", path = "./transports", default-features = false }
-futures = { version = "0.3", features = [ "compat" ] }
+jsonrpc-client-transports = { workspace = true, default-features = false }
+futures = { workspace = true, features = ["compat"] }
 
 [badges]
-travis-ci = { repository = "paritytech/jsonrpc", branch = "master"}
+travis-ci = { repository = "paritytech/jsonrpc", branch = "master" }

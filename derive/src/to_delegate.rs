@@ -153,7 +153,7 @@ pub fn generate_trait_item_method(
 		}
 	};
 
-	let predicates = generate_where_clause_serialization_predicates(&trait_item, false);
+	let predicates = generate_where_clause_serialization_predicates(trait_item, false);
 	let mut method = method;
 	method.sig.generics.make_where_clause().predicates.extend(predicates);
 	Ok(method)
@@ -224,7 +224,7 @@ impl RpcMethod {
 		if param_types.len() > TUPLE_FIELD_NAMES.len() {
 			return Err(syn::Error::new_spanned(
 				&self.trait_item,
-				&format!("Maximum supported number of params is {}", TUPLE_FIELD_NAMES.len()),
+				format!("Maximum supported number of params is {}", TUPLE_FIELD_NAMES.len()),
 			));
 		}
 		let tuple_fields: &Vec<_> = &(TUPLE_FIELD_NAMES
@@ -440,7 +440,7 @@ pub fn generate_where_clause_serialization_predicates(
 			self.visiting_subscriber_arg = self.visiting_subscriber_arg && segment.ident != SUBSCRIBER_TYPE_IDENT;
 		}
 		fn visit_ident(&mut self, ident: &'ast syn::Ident) {
-			if self.trait_generics.contains(&ident) {
+			if self.trait_generics.contains(ident) {
 				if self.visiting_return_type || self.visiting_subscriber_arg {
 					self.server_to_client_type_params.insert(ident.clone());
 				}

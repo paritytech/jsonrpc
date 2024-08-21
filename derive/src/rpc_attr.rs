@@ -58,7 +58,7 @@ impl RpcMethodAttribute {
 		let attrs = method
 			.attrs
 			.iter()
-			.filter_map(|attr| Self::parse_meta(attr, &output))
+			.filter_map(|attr| Self::parse_meta(attr, output))
 			.collect::<Result<Vec<_>>>()?;
 
 		if attrs.len() <= 1 {
@@ -81,7 +81,7 @@ impl RpcMethodAttribute {
 						get_meta_list(meta)
 							.and_then(|ml| get_name_value(RPC_NAME_KEY, ml))
 							.map_or(Err(Error::new_spanned(attr, MISSING_NAME_ERR)), |name| {
-								let aliases = get_meta_list(&meta).map_or(Vec::new(), |ml| get_aliases(ml));
+								let aliases = get_meta_list(meta).map_or(Vec::new(), get_aliases);
 								let raw_params =
 									get_meta_list(meta).map_or(false, |ml| has_meta_word(RAW_PARAMS_META_WORD, ml));
 								let params_style = match raw_params {
@@ -117,7 +117,7 @@ impl RpcMethodAttribute {
 		};
 
 		if is_notification && returns.is_some() {
-			return Err(syn::Error::new_spanned(output, &"Notifications must return ()"));
+			return Err(syn::Error::new_spanned(output, "Notifications must return ()"));
 		}
 
 		Ok(AttributeKind::Rpc {
@@ -257,7 +257,7 @@ fn get_name_value(key: &str, ml: &syn::MetaList) -> Option<String> {
 fn has_meta_word(word: &str, ml: &syn::MetaList) -> bool {
 	ml.nested.iter().any(|nested| {
 		if let syn::NestedMeta::Meta(syn::Meta::Path(p)) = nested {
-			path_eq_str(&p, word)
+			path_eq_str(p, word)
 		} else {
 			false
 		}

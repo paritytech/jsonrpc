@@ -288,7 +288,7 @@ where
 			handler: Arc::new(handler.into()),
 			executor: UninitializedExecutor::Unspawned,
 			meta_extractor: Arc::new(extractor),
-			request_middleware: Arc::new(NoopRequestMiddleware::default()),
+			request_middleware: Arc::new(NoopRequestMiddleware),
 			cors_domains: None,
 			cors_max_age: None,
 			allowed_headers: cors::AccessControlAllowHeaders::Any,
@@ -539,7 +539,7 @@ fn serve<M: jsonrpc::Metadata, S: jsonrpc::Middleware<M>>(
 			};
 			configure_port(reuse_port, &listener)?;
 			listener.reuse_address(true)?;
-			listener.bind(&addr)?;
+			listener.bind(addr)?;
 			let listener = listener.listen(1024)?;
 			let local_addr = listener.local_addr()?;
 

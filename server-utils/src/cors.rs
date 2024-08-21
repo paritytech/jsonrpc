@@ -172,11 +172,11 @@ impl<T> AllowCors<T> {
 	}
 }
 
-impl<T> Into<Option<T>> for AllowCors<T> {
-	fn into(self) -> Option<T> {
+impl<T> From<AllowCors<T>> for Option<T> {
+	fn from(val: AllowCors<T>) -> Self {
 		use self::AllowCors::*;
 
-		match self {
+		match val {
 			NotRequired | Invalid => None,
 			Ok(header) => Some(header),
 		}
@@ -206,13 +206,13 @@ pub fn get_cors_allow_origin(
 			match allowed.as_ref() {
 				None if *origin == "null" => AllowCors::Ok(AccessControlAllowOrigin::Null),
 				None => AllowCors::Ok(AccessControlAllowOrigin::Value(Origin::parse(origin))),
-				Some(ref allowed) if *origin == "null" => allowed
+				Some(allowed) if *origin == "null" => allowed
 					.iter()
 					.find(|cors| **cors == AccessControlAllowOrigin::Null)
 					.cloned()
 					.map(AllowCors::Ok)
 					.unwrap_or(AllowCors::Invalid),
-				Some(ref allowed) => allowed
+				Some(allowed) => allowed
 					.iter()
 					.find(|cors| match **cors {
 						AccessControlAllowOrigin::Any => true,
@@ -238,7 +238,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 	if let AccessControlAllowHeaders::Only(only) = cors_allow_headers {
 		let are_all_allowed = headers.all(|header| {
 			let name = &Ascii::new(header.as_ref());
-			only.iter().any(|h| Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
+			only.iter().any(|h| Ascii::new(h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
 		});
 
 		if !are_all_allowed {
@@ -258,7 +258,7 @@ pub fn get_cors_allow_headers<T: AsRef<str>, O, F: Fn(T) -> O>(
 				.filter(|header| {
 					let name = &Ascii::new(header.as_ref());
 					filtered = true;
-					only.iter().any(|h| Ascii::new(&*h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
+					only.iter().any(|h| Ascii::new(h) == name) || ALWAYS_ALLOWED_HEADERS.contains(name)
 				})
 				.map(to_result)
 				.collect();

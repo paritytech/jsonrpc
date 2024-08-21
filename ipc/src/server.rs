@@ -420,7 +420,7 @@ mod tests {
 
 		let mut handles = Vec::new();
 		for _ in 0..4 {
-			let path = path.clone();
+			let path = path;
 			let mut stop_signal = stop_signal.clone();
 			handles.push(thread::spawn(move || {
 				for _ in 0..100 {

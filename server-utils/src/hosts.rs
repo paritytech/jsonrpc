@@ -128,10 +128,10 @@ pub enum DomainsValidation<T> {
 	Disabled,
 }
 
-impl<T> Into<Option<Vec<T>>> for DomainsValidation<T> {
-	fn into(self) -> Option<Vec<T>> {
+impl<T> From<DomainsValidation<T>> for Option<Vec<T>> {
+	fn from(val: DomainsValidation<T>) -> Self {
 		use self::DomainsValidation::*;
-		match self {
+		match val {
 			AllowOnly(list) => Some(list),
 			Disabled => None,
 		}

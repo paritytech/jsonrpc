@@ -13,9 +13,9 @@ pub fn generate_client_module(
 	item_trait: &syn::ItemTrait,
 	options: &DeriveOptions,
 ) -> Result<TokenStream> {
-	let client_methods = generate_client_methods(methods, &options)?;
+	let client_methods = generate_client_methods(methods, options)?;
 	let generics = &item_trait.generics;
-	let where_clause = generate_where_clause_serialization_predicates(&item_trait, true);
+	let where_clause = generate_where_clause_serialization_predicates(item_trait, true);
 	let where_clause2 = where_clause.clone();
 	let markers = generics
 		.params
@@ -187,17 +187,13 @@ fn generate_client_methods(methods: &[MethodRegistration], options: &DeriveOptio
 fn get_doc_comments(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
 	let mut doc_comments = vec![];
 	for attr in attrs {
-		match attr {
-			syn::Attribute {
-				path: syn::Path { segments, .. },
-				..
-			} => match &segments[0] {
-				syn::PathSegment { ident, .. } => {
-					if *ident == "doc" {
-						doc_comments.push(attr.to_owned());
-					}
-				}
-			},
+		let syn::Attribute {
+			path: syn::Path { segments, .. },
+			..
+		} = attr;
+		let syn::PathSegment { ident, .. } = &segments[0];
+		if *ident == "doc" {
+			doc_comments.push(attr.to_owned());
 		}
 	}
 	doc_comments
@@ -218,7 +214,6 @@ fn compute_args(method: &syn::TraitItemMethod) -> Punctuated<syn::FnArg, syn::to
 			_ => continue,
 		};
 		let syn::PathSegment { ident, .. } = &segments[0];
-		let ident = ident;
 		if *ident == "Self" {
 			continue;
 		}
@@ -279,16 +274,15 @@ fn try_infer_returns(output: &syn::ReturnType) -> Option<syn::Type> {
 
 	match output {
 		syn::ReturnType::Type(_, ty) => {
-			let segments = extract_path_segments(&**ty)?;
-			let check_segment = |seg: &syn::PathSegment| match seg {
-				syn::PathSegment { ident, arguments, .. } => {
-					let id = ident.to_string();
-					let inner = get_first_type_argument(arguments);
-					if id.ends_with("Result") {
-						Ok(inner)
-					} else {
-						Err(inner)
-					}
+			let segments = extract_path_segments(ty)?;
+			let check_segment = |seg: &syn::PathSegment| {
+				let syn::PathSegment { ident, arguments, .. } = seg;
+				let id = ident.to_string();
+				let inner = get_first_type_argument(arguments);
+				if id.ends_with("Result") {
+					Ok(inner)
+				} else {
+					Err(inner)
 				}
 			};
 			// Try out first argument (Result<X>) or nested types like:

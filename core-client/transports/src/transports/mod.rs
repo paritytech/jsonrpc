@@ -19,6 +19,7 @@ pub mod ws;
 pub use duplex::duplex;
 
 /// Creates JSON-RPC requests
+#[derive(Default)]
 pub struct RequestBuilder {
 	id: u64,
 }
@@ -26,7 +27,7 @@ pub struct RequestBuilder {
 impl RequestBuilder {
 	/// Create a new RequestBuilder
 	pub fn new() -> Self {
-		RequestBuilder { id: 0 }
+		Self::default()
 	}
 
 	fn next_id(&mut self) -> Id {

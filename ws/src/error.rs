@@ -1,6 +1,5 @@
-use std::{error, fmt, io, result};
-
 use crate::ws;
+use std::{error, fmt, io, result};
 
 /// WebSockets Server Error
 #[derive(Debug)]
@@ -8,7 +7,7 @@ pub enum Error {
 	/// Io Error
 	Io(io::Error),
 	/// WebSockets Error
-	WsError(ws::Error),
+	WsError(Box<ws::Error>),
 	/// Connection Closed
 	ConnectionClosed,
 }
@@ -46,7 +45,7 @@ impl From<ws::Error> for Error {
 	fn from(err: ws::Error) -> Self {
 		match err.kind {
 			ws::ErrorKind::Io(err) => Error::Io(err),
-			_ => Error::WsError(err),
+			_ => Error::WsError(err.into()),
 		}
 	}
 }

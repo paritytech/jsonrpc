@@ -111,9 +111,9 @@ impl IdProvider for RandomStringIdProvider {
 	fn next_id(&self) -> Self::Id {
 		let mut rng = thread_rng();
 		let id: String = iter::repeat(())
-			.map(|()| rng.sample(Alphanumeric))
+			.map(|()| rng.sample(Alphanumeric) as char)
 			.take(self.len)
-			.collect();
+			.collect::<String>();
 		id
 	}
 }
